@@ -179,6 +179,20 @@ describe('opsi peran joker untuk UI', () => {
     expect(opsi[0].kartu[2].sebagai).toEqual({ rank: 4, bunga: 'love' });
   });
 
+  it('joker 2: 2 Love jadi kartu asli, 2 Kriting menggantikan 3 Love', () => {
+    const opsi = opsiPeranJoker(kartuSemua('2 love', '2 kriting', '4 love'), ctx(2));
+    expect(opsi).toHaveLength(1);
+    expect(opsi[0].kartu.map((d) => [d.kartu.id, d.sebagai.rank, d.pengganti])).toEqual([
+      [kartu('2 love').id, 2, false],
+      [kartu('2 kriting').id, 3, true],
+      [kartu('4 love').id, 4, false],
+    ]);
+  });
+
+  it('joker 2 yang sudah mati (pernah dibuang) tidak bisa menggantikan: 2 Love + 2 Kriting mati + 4 Love tidak sah', () => {
+    expect(opsiPeranJoker(kartuSemua('2 love', '2 kriting', '4 love'), ctx(2, [kartu('2 kriting').id]))).toHaveLength(0);
+  });
+
   it('tidak ada tafsiran sah → kosong', () => {
     expect(opsiPeranJoker(kartuSemua('2 love', '7 waru', '7 wajik'), ctx(7))).toHaveLength(0);
   });
