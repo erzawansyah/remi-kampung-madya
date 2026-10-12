@@ -819,3 +819,43 @@ details.akordion[open] > summary::after {
   80% { opacity: 1; transform: translate(-50%, -110%); }
   100% { opacity: 0; transform: translate(-50%, -130%); }
 }
+
+/* ---------- Panel mentung ---------- */
+.kotak-status {
+  text-align: center;
+  font-weight: 900;
+  font-size: 20px;
+  padding: 12px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kotak-status small {
+  font-size: 13px;
+  font-weight: 600;
+}
+.kotak-status.emas {
+  background: var(--emas);
+  color: #1d1600;
+}
+.kotak-status.merah {
+  background: #6b1f1b;
+  color: #ffe0dc;
+  animation: goyang 0.45s;
+}
+.kotak-status.aman {
+  background: #1f4a2f;
+  color: #c9f2c9;
+}
+.lencana-deret {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.lencana-deret .lencana {
+  font-size: 13px;
+  font-weight: 800;
+  padding: 4px 10px;
+}

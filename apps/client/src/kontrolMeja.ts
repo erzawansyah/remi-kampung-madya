@@ -19,13 +19,14 @@ import {
   type Kartu,
   type KonteksJoker,
   type SpesifikasiKartuJadi,
+  type Peristiwa,
   type ViewPemain,
   berikutnya,
 } from '@remi/engine';
 import type { InfoMeja, PesanKlien } from '@remi/meja';
 import type { AksiAdegan, MejaScene, ModelMeja } from './game/MejaScene';
 import { bukaModal, esc, modalTerbuka, toast, tutupModal } from './ui/dom';
-import { htmlPeringkat, htmlRincianPutaran, htmlRiwayat } from './ui/rincianSkor';
+import { htmlKartuJadiAsal, htmlPeringkat, htmlRincianPutaran, htmlRiwayat } from './ui/rincianSkor';
 import { simpan } from './penyimpanan';
 import { PemutarPeristiwa } from './efek/pemutar';
 import { bersihkanSorak } from './efek/sorak';
@@ -79,6 +80,8 @@ export class KontrolMeja implements AksiAdegan {
   private aksiTerakhir: Record<number, string> = {};
   /** Kartu yang sedang dianimasikan; tidak digambar di tangan/buangan sampai view berikutnya tampil. */
   private disembunyikan = new Set<string>();
+  /** View yang kejadiannya sedang diputar (belum tampil). */
+  private viewTertunda: ViewPemain | null = null;
   /** Sedang memutar animasi kejadian: tombol aksi dikunci supaya tidak menekan keadaan lama. */
   private animasi = false;
   private timerAksi = new Map<number, ReturnType<typeof setTimeout>>();
@@ -107,6 +110,14 @@ export class KontrolMeja implements AksiAdegan {
         ids.forEach((id) => this.disembunyikan.add(id));
         this.render();
       },
+      tampakkan: (ids) => {
+        ids.forEach((id) => this.disembunyikan.delete(id));
+        this.render();
+      },
+      viewSekarang: () => this.view,
+      viewBerikut: () => this.viewTertunda,
+      terapkanViewBerikut: (sembunyi) => this.terapkanViewBerikut(sembunyi),
+      panelMentung: (e) => this.panelMentung(e),
     });
   }
 
@@ -144,13 +155,16 @@ export class KontrolMeja implements AksiAdegan {
             this.animasi = true;
             this.render();
           }
+          this.viewTertunda = v;
           for (let i = 0; i < baru.length; i++) {
             if (this.hancur) return;
             await this.pemutar.putar(baru[i], this.antrian.length > 2, baru[i + 1]);
           }
+          this.viewTertunda = null;
         }
         if (v.peristiwa.length) this.idPeristiwa = v.peristiwa[v.peristiwa.length - 1].id;
         else this.idPeristiwa = Math.max(this.idPeristiwa, 0);
+        if (this.view !== v) this.pertahankanUrutan(v);
         this.view = v;
         this.disembunyikan.clear();
         this.animasi = false;
@@ -164,6 +178,101 @@ export class KontrolMeja implements AksiAdegan {
       }
       this.lepasEmoteTertunda();
     }
+  }
+
+  /** Tampilkan view yang sedang diputar sekarang juga (dipakai pemutar untuk tahu posisi tujuan). */
+  private terapkanViewBerikut(sembunyi: string[]) {
+    const v = this.viewTertunda;
+    if (v && this.view !== v) {
+      this.pertahankanUrutan(v);
+      this.view = v;
+    }
+    sembunyi.forEach((id) => this.disembunyikan.add(id));
+    this.render();
+  }
+
+  /** Kartu yang baru masuk tangan (dari deck atau pungutan) ditaruh di ujung kanan; urutan lain tetap. */
+  private pertahankanUrutan(baru: ViewPemain) {
+    const pl = this.view?.putaran;
+    const pb = baru.putaran;
+    if (!pl || !pb || pl.nomor !== pb.nomor) return;
+    const idLama = new Set(this.tanganServer().map((k) => k.id));
+    const tambah = (pb.tangan[this.saya] ?? []).filter((k) => !idLama.has(k.id)).map((k) => k.id);
+    if (!tambah.length) return;
+    this.urutanManual = [...this.tanganUrut().map((k) => k.id), ...tambah];
+    this.urutan = 'manual';
+    simpan.setUrutanTangan(this.urutanManual);
+  }
+
+  /**
+   * Panel mentung: tiap pemain langsung tahu dia kepentung atau tidak. Rincian (kartu siapa yang
+   * dipungut dan dipasangkan jadi apa) dibuka kalau diklik. Selesai saat pemain menekan Lanjut.
+   */
+  private panelMentung(e: Extract<Peristiwa, { jenis: 'mentung' }>): Promise<void> {
+    return new Promise((selesai) => {
+      const v = this.viewTertunda ?? this.view;
+      if (this.hancur || !v?.putaran) return selesai();
+      const saya = this.saya;
+      const nama = (i: number) => v.pemain[i]?.nama ?? '';
+      const namaAtauKamu = (i: number) => (i === saya ? 'Kamu' : nama(i));
+      // Kartu jadi yang dibentuk di giliran mentung: dari mulung terakhir + turunkan sesudahnya.
+      const semua = new Map<number, Peristiwa>();
+      for (const x of [...(this.view?.peristiwa ?? []), ...v.peristiwa]) semua.set(x.id, x);
+      const urut = [...semua.values()].filter((x) => x.putaran === e.putaran && x.id < e.id).sort((a, b) => a.id - b.id);
+      const mulung = [...urut].reverse().find((x) => x.jenis === 'mulung' && x.pemain === e.pemain);
+      const idKj = new Set<string>();
+      if (mulung && mulung.jenis === 'mulung') {
+        mulung.idKartuJadi.forEach((id) => idKj.add(id));
+        for (const x of urut) if (x.jenis === 'turunkan' && x.pemain === e.pemain && x.id > mulung.id) x.idKartuJadi.forEach((id) => idKj.add(id));
+      }
+      const kjGiliran = v.putaran.kartuJadi[e.pemain].filter((kj) => idKj.has(kj.id));
+      const kartuDari = (pemilik: number) =>
+        kjGiliran.flatMap((kj) => kj.kartu).filter((d) => d.dari === pemilik).map((d) => labelKartu(d.kartu));
+
+      let status: string;
+      if (e.pemain === saya) status = `<div class="kotak-status emas">Kamu MENTUNG! +${e.nilai}</div>`;
+      else if (e.kepentung.includes(saya)) {
+        status = `<div class="kotak-status merah">Kamu KEPENTUNG −${e.nilai}
+          <small>Kartumu yang dipakai: ${esc(kartuDari(saya).join(', ') || '-')}</small></div>`;
+      } else status = '<div class="kotak-status aman">Kamu aman, nggak kepentung.</div>';
+
+      const sebutan = { 2: 'DOUBLE PENTUNG!', 3: 'TRIPLE PENTUNG!', 4: 'QUADRA PENTUNG!', 5: 'PENTUNG MASSAL!' }[Math.min(e.kepentung.length, 5)];
+      const lencana = [
+        sebutan ? `<span class="lencana merah">${sebutan}</span>` : '',
+        e.dibalik ? '<span class="lencana">↺ BALIK ARAH</span>' : e.kepentung.length ? '<span class="lencana">LOMPAT · arah tetap</span>' : '',
+      ].join('');
+      const daftarKepentung = e.kepentung.length
+        ? e.kepentung.map((k) => `<b>${esc(namaAtauKamu(k))}</b> (${esc(kartuDari(k).join(', '))})`).join(' · ')
+        : 'nggak ada';
+
+      bukaModal(
+        `<div data-mentung></div>
+         <h2 style="text-align:center">${e.pentunganJoker ? 'PENTUNG JOKER!' : 'MENTUNG!'}</h2>
+         <p style="text-align:center;margin:0">${esc(namaAtauKamu(e.pemain))} nutup pakai <b>${esc(namaKartu(e.pentungan))}</b> · nilai <b>${e.nilai}</b></p>
+         ${htmlKartu(e.pentungan)}
+         ${status}
+         ${lencana ? `<div class="lencana-deret">${lencana}</div>` : ''}
+         <p class="redup" style="margin:0">Kepentung: ${daftarKepentung}</p>
+         <details class="akordion">
+           <summary><span class="nama-skor"><b>Lihat kartu yang dipungut &amp; dipasangkan</b></span></summary>
+           <div class="komponen">
+             ${htmlKartuJadiAsal(kjGiliran, nama, saya)}
+             <div class="komp"><span>Pentungan: ${esc(namaKartu(e.pentungan))}${e.pentunganJoker ? ' (joker)' : ''}, dari ${e.pemain === saya ? 'tanganmu' : `tangan ${esc(nama(e.pemain))}`}. Pemilik kartu pentungan tidak kena karena kartu itu.</span></div>
+           </div>
+         </details>
+         <button class="utama" data-lanjut>Lanjut</button>`,
+        (dlg) =>
+          dlg.querySelector('[data-lanjut]')!.addEventListener('click', () => {
+            tutupModal();
+            selesai();
+          }),
+        { bisaDitutup: false },
+      );
+      if (e.kepentung.includes(saya)) {
+        bunyi('kepentung');
+        getar([220, 90, 220]);
+      }
+    });
   }
 
   private catatAksi(pemain: number, teks: string) {
@@ -569,7 +678,7 @@ export class KontrolMeja implements AksiAdegan {
       info,
       aksiTerakhir: this.aksiTerakhir,
       disembunyikan: this.disembunyikan,
-      tangan: this.tanganUrut().filter((k) => !idMulung.has(k.id) && !this.disembunyikan.has(k.id)),
+      tangan: this.tanganUrut().filter((k) => !idMulung.has(k.id)),
       dipilih: this.dipilih,
       pilihJumlahMulung: this.pilihJumlah,
       bisaPungut: !this.pilihJumlah && !this.mulung && this.statusTombol().mulung.aktif,

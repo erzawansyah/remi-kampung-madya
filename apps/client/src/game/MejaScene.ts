@@ -146,6 +146,8 @@ export class MejaScene extends Phaser.Scene {
     let cx = x;
     for (const kj of daftar) {
       kj.kartu.forEach((d, i) => {
+        this.titik.kartu.set(d.kartu.id, { x: cx + i * w * 0.62 + w / 2, y: y + h / 2, w });
+        if (this.model?.disembunyikan.has(d.kartu.id)) return;
         this.kartu(cx + i * w * 0.62, y, w, d.kartu);
         if (d.dari !== undefined && d.dari === this.model?.view.saya) {
           const tag = this.teks(cx + i * w * 0.62 + w * 0.06, y + 1 * this.d, 'kamu', Math.max(8, w / this.d / 4.2), '#ffffff', true);
@@ -182,31 +184,70 @@ export class MejaScene extends Phaser.Scene {
   }
 
   /**
-   * Kartu pungutan dipamerkan besar di tengah layar dulu (supaya semua tahu apa yang diambil),
-   * lalu terbang ke pemain yang mungut.
+   * Naikkan kartu ke panggung (tengah layar, besar) supaya semua sempat melihatnya.
+   * `tertutup`: kartu datang tertutup lalu dibalik (misalnya kartu yang baru diambil dari deck).
+   * Selesai setelah kartu tiba (dan dibalik), lalu ditahan `tahan` ms. Hasilnya dipakai `turunPanggung`.
    */
-  pamerLaluTerbang(daftar: { kartu: Kartu; dari?: Titik }[], ke: Titik | undefined, tahan = 1100): Promise<void> {
-    if (!daftar.length || !this.sys.isActive() || document.hidden) return Promise.resolve();
+  naikPanggung(daftar: { kartu: Kartu; dari?: Titik; tertutup?: boolean }[], tahan = 900): Promise<Phaser.GameObjects.Image[]> {
+    if (!daftar.length || !this.sys.isActive() || document.hidden) return Promise.resolve([]);
     const pg = this.panggung(daftar.length);
-    const imgs = daftar.map(({ kartu, dari }, i) => {
+    const imgs = daftar.map(({ kartu, dari, tertutup }) => {
       const asal = dari ?? this.titik.buangan ?? { ...pg, w: pg.w / 2 };
-      const img = this.add.image(asal.x, asal.y, kunciMuka(kartu.bunga, kartu.rank)).setOrigin(0.5);
+      const img = this.add.image(asal.x, asal.y, tertutup ? KUNCI_PUNGGUNG : kunciMuka(kartu.bunga, kartu.rank)).setOrigin(0.5);
       img.setDisplaySize(asal.w, asal.w * RASIO_KARTU);
       this.lapisan.add(img);
-      const skalaBesar = (pg.w / asal.w) * img.scaleX;
-      this.tweens.add({
-        targets: img,
-        x: pg.x + (i - (daftar.length - 1) / 2) * pg.w * 1.12,
-        y: pg.y,
-        scaleX: skalaBesar,
-        scaleY: skalaBesar,
-        duration: 320,
-        delay: i * 90,
-        ease: 'Back.easeOut',
-      });
       return img;
     });
+    const tiba = 340 + daftar.length * 90;
+    const balik = daftar.some((x) => x.tertutup) ? 320 : 0;
     return new Promise((resolve) => {
+      let selesai = false;
+      const ok = () => {
+        if (selesai) return;
+        selesai = true;
+        resolve(imgs);
+      };
+      setTimeout(ok, tiba + balik + tahan + 400);
+      imgs.forEach((img, i) => {
+        const skala = (pg.w / img.displayWidth) * img.scaleX;
+        this.tweens.add({
+          targets: img,
+          x: pg.x + (i - (daftar.length - 1) / 2) * pg.w * 1.12,
+          y: pg.y,
+          scaleX: skala,
+          scaleY: skala,
+          duration: 340,
+          delay: i * 90,
+          ease: 'Back.easeOut',
+          onComplete: () => {
+            if (!daftar[i].tertutup) return;
+            // Dibalik: lebar ke nol, ganti muka, lebar kembali.
+            this.tweens.add({
+              targets: img,
+              scaleX: 0,
+              duration: 150,
+              ease: 'Sine.easeIn',
+              onComplete: () => {
+                const k = daftar[i].kartu;
+                img.setTexture(kunciMuka(k.bunga, k.rank));
+                img.setDisplaySize(pg.w, pg.w * RASIO_KARTU);
+                const sy = img.scaleY;
+                img.scaleX = 0;
+                this.tweens.add({ targets: img, scaleX: sy, duration: 170, ease: 'Back.easeOut' });
+              },
+            });
+          },
+        });
+      });
+      setTimeout(ok, tiba + balik + tahan);
+    });
+  }
+
+  /** Turunkan kartu dari panggung ke tujuan masing-masing (undefined = menghilang di tempat). */
+  turunPanggung(imgs: Phaser.GameObjects.Image[], tujuan: (Titik | undefined)[]): Promise<void> {
+    if (!imgs.length) return Promise.resolve();
+    return new Promise((resolve) => {
+      let sisa = imgs.length;
       let selesai = false;
       const ok = () => {
         if (selesai) return;
@@ -214,27 +255,30 @@ export class MejaScene extends Phaser.Scene {
         imgs.forEach((img) => img.active && img.destroy());
         resolve();
       };
-      const muncul = 320 + daftar.length * 90;
-      // Cadangan kalau frame animasi tertahan.
-      setTimeout(ok, muncul + tahan + 450 + daftar.length * 80 + 500);
-      setTimeout(() => {
-        if (selesai) return;
-        if (!ke) return ok();
-        imgs.forEach((img, i) => {
-          const skalaKecil = (ke.w / pg.w) * img.scaleX;
-          this.tweens.add({
-            targets: img,
-            x: ke.x,
-            y: ke.y,
-            scaleX: skalaKecil,
-            scaleY: skalaKecil,
-            duration: 420,
-            delay: i * 80,
-            ease: 'Cubic.easeIn',
-            onComplete: i === imgs.length - 1 ? ok : undefined,
-          });
+      setTimeout(ok, 450 + imgs.length * 90 + 500);
+      imgs.forEach((img, i) => {
+        const ke = tujuan[i];
+        const selesaiSatu = () => {
+          if (img.active) img.destroy();
+          if (--sisa === 0) ok();
+        };
+        if (!ke || !img.active) {
+          this.tweens.add({ targets: img, alpha: 0, duration: 300, delay: i * 90, onComplete: selesaiSatu });
+          return;
+        }
+        const skala = (ke.w / img.displayWidth) * img.scaleX;
+        this.tweens.add({
+          targets: img,
+          x: ke.x,
+          y: ke.y,
+          scaleX: skala,
+          scaleY: skala,
+          duration: 450,
+          delay: i * 90,
+          ease: 'Cubic.easeInOut',
+          onComplete: selesaiSatu,
         });
-      }, muncul + tahan);
+      });
     });
   }
 
@@ -711,8 +755,10 @@ export class MejaScene extends Phaser.Scene {
     tangan.forEach((kt, i) => {
       const dipilih = m.dipilih.has(kt.id);
       const pos = posisi[i];
-      const img = this.kartu(pos.x, pos.y - (dipilih ? angkat : 0), cw, kt);
-      this.titik.kartu.set(kt.id, { x: img.x + cw / 2, y: img.y + ch / 2, w: cw });
+      const yKartu = pos.y - (dipilih ? angkat : 0);
+      this.titik.kartu.set(kt.id, { x: pos.x + cw / 2, y: yKartu + ch / 2, w: cw });
+      if (m.disembunyikan.has(kt.id)) return;
+      const img = this.kartu(pos.x, yKartu, cw, kt);
       img.setInteractive({ useHandCursor: true, draggable: true });
       img.setName(namaKartu(kt));
       let awalX = 0;

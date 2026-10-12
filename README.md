@@ -139,8 +139,13 @@ Ini perilaku aplikasi, bukan aturan main. Semuanya bisa diubah kalau perlu.
   - Kartu terbang: deck → pemain, dan pemain → buangan. Kartu yang dibuang membesar sebentar.
   - Kartu yang sedang bergerak disembunyikan dari tangan dan buangan, jadi tidak terlihat dobel.
   - Tombol aksi dikunci selama animasi berjalan.
-- **Mungut:** kartu yang dipungut dipamerkan besar di tengah layar dulu, baru pindah ke pemain yang mungut.
-- **Mentung:** pentungan dibuang tertutup ke tengah meja, bergetar sebentar (dengan bunyi tegang), lalu dibuka. Setelah itu nilainya muncul (+50 / +100 / +150 / +250), baru disusul sorakan.
+- **Mungut:** kartu yang dipungut dipamerkan besar di tengah layar dulu. Setelah itu kartu pungutan dan kartu modal dari tangan terbang bersama ke kartu jadi barunya, dan sisa pungutan masuk ke tangan.
+- **Turunkan:** kartu dari tangan terbang ke tempatnya di kartu jadi.
+- **Ambil deck:** kartu yang kamu ambil dibalik dan diperlihatkan besar (hanya di layarmu), lalu ditaruh di **ujung kanan** tangan. Urutan kartu lain tidak berubah. Lawan hanya melihat kartu tertutup terbang ke panelnya.
+- **Mentung:** pentungan dibuang tertutup ke tengah meja, bergetar sebentar (dengan bunyi tegang), lalu dibuka dan nilainya muncul (+50 / +100 / +150 / +250). Setelah itu muncul **panel mentung** yang menunggu sampai ditekan Lanjut:
+  - Status tiap pemain langsung terlihat: "Kamu MENTUNG!", "Kamu KEPENTUNG −50" (beserta kartumu yang dipakai), atau "Kamu aman".
+  - Lencana DOUBLE PENTUNG / BALIK ARAH / LOMPAT, dan daftar siapa saja yang kepentung.
+  - Rincian kartu yang dipungut dan dipasangkan (asal tiap kartu: dari siapa atau modal, dan peran joker) baru terbuka kalau diklik.
 - **Panel pemain:**
   - Menampilkan aksi giliran ini, misalnya "mungut 9♦ · buang A♠".
   - Berkedip merah dengan tulisan **TINGGAL 1!** kalau pemain itu tinggal satu kartu.

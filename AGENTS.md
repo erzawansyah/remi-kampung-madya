@@ -98,7 +98,9 @@ Pekerjaan dianggap selesai kalau `npm test` dan `npm run typecheck` lolos.
 
 **Antrian dan animasi**
 - View dari meja **diantrikan**. Peristiwa baru diputar dulu (animasi + sorakan), baru view-nya ditampilkan.
-- Kartu yang sedang dianimasikan dimasukkan ke `disembunyikan` supaya tidak terlihat dobel. Selama animasi, tombol aksi dikunci.
+- Kartu yang sedang dianimasikan dimasukkan ke `disembunyikan` supaya tidak terlihat dobel. Kartu tersembunyi tetap memesan tempat di tangan dan kartu jadi, sehingga `posisiKartu(id)` bisa dipakai sebagai tujuan terbang. Selama animasi, tombol aksi dikunci.
+- Pemutar bisa memanggil `terapkanViewBerikut(sembunyi)` di tengah animasi untuk menampilkan meja sesudah kejadian, lalu menerbangkan kartu ke posisi barunya. Contohnya kartu pungutan dan modal yang mendarat di kartu jadi baru.
+- `naikPanggung`/`turunPanggung` (MejaScene) memamerkan kartu besar di tengah, bisa tertutup lalu dibalik. Panel mentung (`kontrolMeja.panelMentung`) menahan antrian sampai pemain menekan Lanjut.
 - **Setiap promise animasi wajib punya timeout cadangan.** `requestAnimationFrame` bisa berhenti (aplikasi di latar belakang, atau browser pane alat pengembang), dan tanpa cadangan antrian akan macet.
 
 **Lain-lain**

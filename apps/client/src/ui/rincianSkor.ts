@@ -1,6 +1,6 @@
 // Rincian skor dalam bentuk akordion: per putaran (diurutkan dari tertinggi) dan peringkat.
 
-import { namaKartu, namaRank, nilaiKartuDiMeja, teksPerhitungan, type Bunga, type HasilPutaran, type Kartu, type RincianSkor } from '@remi/engine';
+import { namaKartu, namaRank, nilaiKartuDiMeja, teksPerhitungan, type Bunga, type HasilPutaran, type Kartu, type KartuJadi, type RincianSkor } from '@remi/engine';
 import { esc } from './dom';
 
 const SIMBOL: Record<Bunga, string> = { love: '♥', wajik: '♦', waru: '♠', kriting: '♣' };
@@ -12,6 +12,26 @@ function chip(k: Kartu, nilai: number, catatan?: string): string {
   return `<span class="chip${merah(k.bunga) ? ' merah' : ''}"><b>${esc(namaRank(k.rank))}${SIMBOL[k.bunga]}</b>${
     catatan ? `<i>${esc(catatan)}</i>` : ''
   }<small>${nilai}</small></span>`;
+}
+
+/**
+ * Kartu jadi dengan asal tiap kartunya: "dari Budi" (pungutan), "modal" (dari tangan sendiri),
+ * plus peran joker "→4".
+ */
+export function htmlKartuJadiAsal(daftar: KartuJadi[], nama: (i: number) => string, saya: number | null): string {
+  if (!daftar.length) return '<div class="chips redup">Nggak ada kartu jadi baru di giliran ini.</div>';
+  return `<div class="chips">${daftar
+    .map(
+      (kj) =>
+        `<span class="kelompok">${kj.kartu
+          .map((d) => {
+            const asal = d.dari === undefined ? 'modal' : d.dari === saya ? 'dari kamu' : `dari ${nama(d.dari)}`;
+            const peran = d.pengganti ? ` · →${namaRank(d.sebagai.rank)}` : '';
+            return chip(d.kartu, nilaiKartuDiMeja(d), `${asal}${peran}`);
+          })
+          .join('')}</span>`,
+    )
+    .join('')}</div>`;
 }
 
 const LABEL_STATUS = { mentung: 'MENTUNG', kepentung: 'kepentung', aman: 'aman' } as const;
