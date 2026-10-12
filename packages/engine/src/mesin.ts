@@ -1,0 +1,494 @@
+// Mesin aturan: state masuk + aksi → state baru. Murni dan deterministik (RNG ada di state).
+
+import { klon } from './klon.js';
+import { buatDeck, namaKartu, namaRank } from './kartu.js';
+import { AturanError, langgar } from './error.js';
+import { isJokerHidup, type KartuJadi, type KonteksJoker, type SpesifikasiKartuJadi } from './kartuJadi.js';
+import { validasiBuang, validasiMulung, validasiTurunkan, type HasilTurunkan } from './giliran.js';
+import { hitungSkorPemain, nilaiPentungan } from './skor.js';
+import { Rng, seedKeState } from './rng.js';
+import { daftarNama, deskripsiKartuJadi } from './deskripsi.js';
+import {
+  KONFIGURASI_BAWAAN,
+  type Aksi,
+  type Arah,
+  type GameState,
+  type HasilPutaran,
+  type IsiPeristiwa,
+  type KonfigurasiPermainan,
+  type Peristiwa,
+  type StatePutaran,
+} from './state.js';
+import type { Kartu } from './kartu.js';
+
+export type HasilAksi =
+  | { ok: true; state: GameState }
+  | { ok: false; error: { kode: AturanError['kode']; pesan: string } };
+
+/** Tabel Bagian 3. */
+export function aturanPembagian(
+  jumlahPemain: number,
+  duaDeckUntukEmpat: boolean,
+): { jumlahDeck: number; kartuPerPemain: number } {
+  if (jumlahPemain === 4 && duaDeckUntukEmpat) return { jumlahDeck: 2, kartuPerPemain: 12 };
+  if (jumlahPemain >= 2 && jumlahPemain <= 4) return { jumlahDeck: 1, kartuPerPemain: 6 };
+  if (jumlahPemain >= 5 && jumlahPemain <= 6) return { jumlahDeck: 2, kartuPerPemain: 9 };
+  return langgar('KONFIGURASI_TIDAK_SAH', 'Jumlah pemain harus 2 sampai 6.');
+}
+
+export function totalKartu(konfigurasi: KonfigurasiPermainan): number {
+  return aturanPembagian(konfigurasi.jumlahPemain, konfigurasi.duaDeckUntukEmpat).jumlahDeck * 52;
+}
+
+export function berikutnya(pemain: number, arah: Arah, jumlahPemain: number): number {
+  return (((pemain + arah) % jumlahPemain) + jumlahPemain) % jumlahPemain;
+}
+
+export function ctxPutaran(p: Pick<StatePutaran, 'rankJoker' | 'jokerMati'>): KonteksJoker {
+  return { rankJoker: p.rankJoker, jokerMati: p.jokerMati };
+}
+
+export function buatPermainan(opsi: {
+  pemain: string[];
+  seed: number | string;
+  konfigurasi?: Partial<Omit<KonfigurasiPermainan, 'jumlahPemain'>>;
+}): GameState {
+  const konfigurasi: KonfigurasiPermainan = {
+    ...KONFIGURASI_BAWAAN,
+    ...opsi.konfigurasi,
+    jumlahPemain: opsi.pemain.length,
+  };
+  aturanPembagian(konfigurasi.jumlahPemain, konfigurasi.duaDeckUntukEmpat);
+  return {
+    versi: 1,
+    konfigurasi,
+    pemain: opsi.pemain.map((nama) => ({ nama })),
+    skor: opsi.pemain.map(() => 0),
+    status: 'menungguPutaran',
+    putaran: null,
+    riwayat: [],
+    arah: konfigurasi.arahAwal,
+    rng: seedKeState(opsi.seed),
+    log: [],
+    peristiwa: [],
+    alasanSelesai: null,
+  };
+}
+
+/**
+ * Calon pengocok: putaran pertama semua pemain; berikutnya pemain dengan skor akumulasi terendah.
+ * Bila lebih dari satu, bebas (dipilih atau diacak).
+ */
+export function kandidatPengocok(state: GameState): number[] {
+  const semua = state.pemain.map((_, i) => i);
+  if (state.riwayat.length === 0) return semua;
+  const min = Math.min(...state.skor);
+  return semua.filter((i) => state.skor[i] === min);
+}
+
+/**
+ * Salinan untuk diubah. Entri `riwayat` dan `log` tidak pernah diubah setelah ditulis,
+ * jadi cukup array-nya yang disalin; sisanya disalin dalam.
+ */
+function salinState(state: GameState): GameState {
+  return {
+    ...state,
+    konfigurasi: { ...state.konfigurasi },
+    pemain: state.pemain.map((p) => ({ ...p })),
+    skor: [...state.skor],
+    putaran: state.putaran && klon(state.putaran),
+    riwayat: [...state.riwayat],
+    log: [...state.log],
+    peristiwa: [...state.peristiwa],
+  };
+}
+
+export function terapkanAksi(state: GameState, aksi: Aksi): HasilAksi {
+  const s = salinState(state);
+  try {
+    jalankan(s, aksi);
+    return { ok: true, state: s };
+  } catch (e) {
+    if (e instanceof AturanError) return { ok: false, error: { kode: e.kode, pesan: e.pesan } };
+    throw e;
+  }
+}
+
+/**
+ * Lengkapi state yang disimpan oleh versi lama (field yang ditambahkan belakangan diberi nilai awal).
+ * Dipakai saat melanjutkan permainan dari simpanan.
+ */
+export function migrasiState(state: GameState): GameState {
+  const s = state as GameState & Partial<Pick<GameState, 'peristiwa'>>;
+  const n = s.pemain.length;
+  const p = s.putaran as (StatePutaran & Partial<Pick<StatePutaran, 'selesaiSusun' | 'mulungBeruntun' | 'mentung' | 'asalKartu'>>) | null;
+  return {
+    ...s,
+    peristiwa: s.peristiwa ?? [],
+    putaran: p && {
+      ...p,
+      selesaiSusun: p.selesaiSusun ?? Array(n).fill(false),
+      mulungBeruntun: p.mulungBeruntun ?? Array(n).fill(0),
+      mentung: p.mentung ?? null,
+      asalKartu: p.asalKartu ?? {},
+    },
+  };
+}
+
+/** Versi yang melempar AturanError, praktis untuk test dan simulasi. */
+export function terapkan(state: GameState, aksi: Aksi): GameState {
+  const h = terapkanAksi(state, aksi);
+  if (!h.ok) throw new AturanError(h.error.kode, h.error.pesan);
+  return h.state;
+}
+
+function jalankan(s: GameState, aksi: Aksi): void {
+  switch (aksi.jenis) {
+    case 'mulaiPutaran':
+      return mulaiPutaran(s, aksi.pengocok);
+    case 'akhiriPermainan':
+      return akhiriPermainan(s);
+    case 'ambilDeck':
+      return ambilDeck(s, aksi.pemain);
+    case 'mulung':
+      return mulung(s, aksi.pemain, aksi.jumlah, aksi.kartuJadi);
+    case 'turunkan':
+      if (s.status === 'susunAkhir') return turunkanAkhir(s, aksi.pemain, aksi.kartuJadi);
+      return turunkan(s, aksi.pemain, aksi.kartuJadi);
+    case 'selesaiSusun':
+      return selesaiSusun(s, aksi.pemain);
+    case 'buang':
+      return buang(s, aksi.pemain, aksi.kartuId);
+  }
+}
+
+function catat(s: GameState, pesan: string): void {
+  s.log.push({ putaran: s.putaran?.nomor ?? s.riwayat.length + 1, pesan });
+}
+
+function terjadi(s: GameState, isi: IsiPeristiwa): void {
+  const id = (s.peristiwa.at(-1)?.id ?? 0) + 1;
+  s.peristiwa.push({ ...isi, id, putaran: s.putaran?.nomor ?? s.riwayat.length + 1 } as Peristiwa);
+}
+
+const isKembarAsEmpat = (kj: { jenis: string; kartu: unknown[] }) => kj.jenis === 'kembarAs' && kj.kartu.length === 4;
+
+function nama(s: GameState, i: number): string {
+  return s.pemain[i].nama;
+}
+
+function mulaiPutaran(s: GameState, pengocokDipilih: number | undefined): void {
+  if (s.status !== 'menungguPutaran' && s.status !== 'putaranSelesai') {
+    langgar('STATUS_SALAH', 'Putaran masih berjalan.');
+  }
+  const rng = new Rng(s.rng);
+  const kandidat = kandidatPengocok(s);
+  let pengocok: number;
+  if (pengocokDipilih === undefined) pengocok = rng.pick(kandidat);
+  else if (kandidat.includes(pengocokDipilih)) pengocok = pengocokDipilih;
+  else langgar('PENGOCOK_TIDAK_SAH', 'Pengocok harus pemain dengan skor akumulasi terendah.');
+
+  const n = s.konfigurasi.jumlahPemain;
+  const { jumlahDeck, kartuPerPemain } = aturanPembagian(n, s.konfigurasi.duaDeckUntukEmpat);
+  const deck = rng.shuffle(buatDeck(jumlahDeck));
+  const tangan: Kartu[][] = s.pemain.map(() => []);
+  for (let i = 0; i < kartuPerPemain; i++) {
+    for (let p = 0; p < n; p++) tangan[(pengocok + p) % n].push(deck.pop()!);
+  }
+  // Kartu dibuka, angkanya jadi angka joker, lalu diselipkan kembali ke posisi acak.
+  const kartuDibuka = deck.pop()!;
+  deck.splice(rng.int(deck.length + 1), 0, kartuDibuka);
+
+  s.rng = rng.state;
+  s.putaran = {
+    nomor: s.riwayat.length + 1,
+    pengocok,
+    arah: s.arah,
+    kartuDibuka,
+    rankJoker: kartuDibuka.rank,
+    deck,
+    buangan: [],
+    tangan,
+    kartuJadi: s.pemain.map(() => []),
+    giliran: pengocok,
+    tahap: 'ambil',
+    sumberAmbil: null,
+    pungutan: [],
+    jokerMati: [],
+    jokerDibuang: s.pemain.map(() => 0),
+    deckHabis: false,
+    selesaiSusun: s.pemain.map(() => false),
+    mulungBeruntun: s.pemain.map(() => 0),
+    mentung: null,
+    asalKartu: {},
+    urutanKartuJadi: 0,
+  };
+  s.status = 'putaranBerjalan';
+  catat(
+    s,
+    // Angka joker hanya diumumkan sekali di awal putaran, jadi tidak dicatat di log.
+    `Putaran ${s.putaran.nomor} dimulai. ${nama(s, pengocok)} ngocok.`,
+  );
+  terjadi(s, { jenis: 'mulaiPutaran', pengocok, rankJoker: kartuDibuka.rank });
+}
+
+function akhiriPermainan(s: GameState): void {
+  if (s.status !== 'menungguPutaran' && s.status !== 'putaranSelesai') {
+    langgar('STATUS_SALAH', 'Permainan cuma bisa diakhiri di antara putaran.');
+  }
+  s.status = 'selesai';
+  s.alasanSelesai = 'sepakat';
+  catat(s, 'Semua sepakat berhenti. Permainan selesai.');
+}
+
+function putaranAktif(s: GameState, pemain: number, tahap: StatePutaran['tahap']): StatePutaran {
+  if (s.status !== 'putaranBerjalan' || !s.putaran) langgar('STATUS_SALAH', 'Belum ada putaran yang berjalan.');
+  const p = s.putaran;
+  if (p.giliran !== pemain) langgar('BUKAN_GILIRAN', `Sabar, sekarang gilirannya ${nama(s, p.giliran)}.`);
+  if (p.tahap !== tahap) {
+    langgar('TAHAP_SALAH', tahap === 'ambil' ? 'Kamu sudah ambil kartu giliran ini.' : 'Ambil kartu dulu (dari deck atau mulung).');
+  }
+  return p;
+}
+
+function ambilDeck(s: GameState, pemain: number): void {
+  const p = putaranAktif(s, pemain, 'ambil');
+  const kartu = p.deck.pop();
+  if (!kartu) langgar('DECK_KOSONG', 'Deck sudah habis.');
+  p.tangan[pemain].push(kartu);
+  p.sumberAmbil = 'deck';
+  p.tahap = 'main';
+  if (p.deck.length === 0) p.deckHabis = true;
+  p.mulungBeruntun[pemain] = 0;
+  terjadi(s, { jenis: 'ambilDeck', pemain, deckHabis: p.deckHabis });
+  catat(s, `${nama(s, pemain)} ambil kartu dari deck.${p.deckHabis ? ' Deck habis. Setelah giliran ini semua pemain dapat kesempatan terakhir menurunkan kartu jadi.' : ''}`);
+}
+
+function pasangKartuJadi(p: StatePutaran, pemain: number, hasil: HasilTurunkan): KartuJadi[] {
+  p.tangan[pemain] = hasil.sisaTangan;
+  const baru = hasil.kartuJadi.map((kj) => ({
+    id: `kj${++p.urutanKartuJadi}`,
+    pemilik: pemain,
+    jenis: kj.jenis,
+    kartu: kj.kartu.map((d) => {
+      const dari = p.asalKartu[d.kartu.id];
+      return dari === undefined || dari === pemain ? d : { ...d, dari };
+    }),
+  }));
+  p.kartuJadi[pemain].push(...baru);
+  return baru;
+}
+
+function mulung(s: GameState, pemain: number, jumlah: number, spesifikasi: SpesifikasiKartuJadi[]): void {
+  const p = putaranAktif(s, pemain, 'ambil');
+  const hasil = validasiMulung({
+    tangan: p.tangan[pemain],
+    buangan: p.buangan,
+    punyaKartuJadi: p.kartuJadi[pemain].length > 0,
+    jumlahPemain: s.konfigurasi.jumlahPemain,
+    jumlah,
+    spesifikasi,
+    ctx: ctxPutaran(p),
+  });
+  p.buangan.splice(p.buangan.length - jumlah, jumlah);
+  for (const e of hasil.diambil) p.asalKartu[e.kartu.id] = e.pemilik;
+  p.pungutan = hasil.diambil;
+  p.sumberAmbil = 'buangan';
+  p.tahap = 'main';
+  const baru = pasangKartuJadi(p, pemain, hasil);
+  p.mulungBeruntun[pemain]++;
+  catat(
+    s,
+    `${nama(s, pemain)} mulung ${jumlah} kartu dari buangan, menjadikan ${baru.map(deskripsiKartuJadi).join(' dan ')}.`,
+  );
+  const n = s.konfigurasi.jumlahPemain;
+  terjadi(s, {
+    jenis: 'mulung',
+    pemain,
+    kartu: hasil.diambil,
+    idKartuJadi: baru.map((kj) => kj.id),
+    sapuBersih: n >= 3 && jumlah === n - 1,
+    beruntun: p.mulungBeruntun[pemain],
+    kembarAs: baru.some(isKembarAsEmpat),
+  });
+}
+
+function turunkan(s: GameState, pemain: number, spesifikasi: SpesifikasiKartuJadi[]): void {
+  const p = putaranAktif(s, pemain, 'main');
+  const hasil = validasiTurunkan(
+    p.tangan[pemain],
+    spesifikasi,
+    p.kartuJadi[pemain].length > 0,
+    p.sumberAmbil!,
+    ctxPutaran(p),
+  );
+  const baru = pasangKartuJadi(p, pemain, hasil);
+  catat(s, `${nama(s, pemain)} menurunkan ${baru.map(deskripsiKartuJadi).join(' dan ')}.`);
+  terjadi(s, { jenis: 'turunkan', pemain, idKartuJadi: baru.map((kj) => kj.id), kembarAs: baru.some(isKembarAsEmpat) });
+}
+
+function buang(s: GameState, pemain: number, kartuId: string): void {
+  const p = putaranAktif(s, pemain, 'main');
+  const ctx = ctxPutaran(p);
+  const hasil = validasiBuang({
+    tangan: p.tangan[pemain],
+    punyaKartuJadi: p.kartuJadi[pemain].length > 0,
+    sumberAmbil: p.sumberAmbil!,
+    kartuId,
+    ctx,
+    asJokerBolehDibuangTanpaJadi: s.konfigurasi.asJokerBolehDibuangTanpaJadi,
+  });
+  const { kartu } = hasil;
+  const jokerHidup = isJokerHidup(kartu, ctx);
+  p.tangan[pemain] = p.tangan[pemain].filter((k) => k.id !== kartuId);
+  // Joker yang dibuang kehilangan status jokernya.
+  if (jokerHidup) p.jokerMati.push(kartu.id);
+  if (hasil.kenaPenaltiJoker) p.jokerDibuang[pemain]++;
+  p.buangan.push({ kartu, pemilik: pemain });
+  terjadi(s, { jenis: 'buang', pemain, kartu, jokerDibuang: hasil.kenaPenaltiJoker, sisaTangan: p.tangan[pemain].length });
+
+  if (hasil.mentung) {
+    catat(s, `${nama(s, pemain)} mentung pakai ${namaKartu(kartu)}!`);
+    // Kepentung dan arah ditentukan sekarang; skor dihitung setelah susun akhir.
+    const kepentung = hitungKepentung(p, pemain);
+    p.mentung = { pemain, pentungan: kartu, pentunganJoker: jokerHidup, kepentung };
+    const tepatSebelum = berikutnya(pemain, (-p.arah) as Arah, s.konfigurasi.jumlahPemain);
+    terjadi(s, {
+      jenis: 'mentung',
+      pemain,
+      pentungan: kartu,
+      pentunganJoker: jokerHidup,
+      nilai: nilaiPentungan(kartu, jokerHidup),
+      kepentung,
+      dibalik: kepentung.includes(tepatSebelum),
+    });
+    return mulaiSusunAkhir(s, 'mentung');
+  }
+  // Seperti di meja asli: kartu yang dibuang tidak dicatat di log, harus diingat sendiri.
+  catat(s, `${nama(s, pemain)} buang kartu.`);
+  if (p.deckHabis) return mulaiSusunAkhir(s, 'deckHabis');
+
+  p.giliran = berikutnya(pemain, p.arah, s.konfigurasi.jumlahPemain);
+  p.tahap = 'ambil';
+  p.sumberAmbil = null;
+  p.pungutan = [];
+}
+
+/**
+ * Susun akhir (deck habis atau ada yang mentung): semua pemain boleh menurunkan kartu jadi dari
+ * tangan tanpa mulung, lalu Selesai. Pemain yang tangannya sudah kosong (yang mentung) langsung selesai.
+ */
+function mulaiSusunAkhir(s: GameState, sebab: 'deckHabis' | 'mentung'): void {
+  const p = s.putaran!;
+  s.status = 'susunAkhir';
+  p.selesaiSusun = p.tangan.map((t) => t.length === 0);
+  p.sumberAmbil = null;
+  p.pungutan = [];
+  catat(
+    s,
+    `${sebab === 'mentung' ? 'Sebelum dihitung' : 'Deck habis'}. Semua pemain boleh menurunkan kartu jadi dari tangan (tanpa mulung), lalu tekan Selesai.`,
+  );
+  terjadi(s, { jenis: 'susunAkhir', sebab });
+  if (p.selesaiSusun.every(Boolean)) selesaiSemuaSusun(s);
+}
+
+function selesaiSemuaSusun(s: GameState): void {
+  const m = s.putaran!.mentung;
+  if (m) selesaikanPutaran(s, m.pemain, m.pentungan, m.pentunganJoker);
+  else selesaikanPutaran(s, null, null, false);
+}
+
+function pemainSusunAkhir(s: GameState, pemain: number): StatePutaran {
+  if (s.status !== 'susunAkhir' || !s.putaran) langgar('STATUS_SALAH', 'Belum waktunya susun akhir.');
+  if (!Number.isInteger(pemain) || pemain < 0 || pemain >= s.pemain.length) langgar('BUKAN_GILIRAN', 'Pemain tidak dikenal.');
+  if (s.putaran.selesaiSusun[pemain]) langgar('TAHAP_SALAH', 'Kamu sudah selesai menyusun.');
+  return s.putaran;
+}
+
+function turunkanAkhir(s: GameState, pemain: number, spesifikasi: SpesifikasiKartuJadi[]): void {
+  const p = pemainSusunAkhir(s, pemain);
+  const hasil = validasiTurunkan(p.tangan[pemain], spesifikasi, p.kartuJadi[pemain].length > 0, 'akhir', ctxPutaran(p));
+  const baru = pasangKartuJadi(p, pemain, hasil);
+  catat(s, `${nama(s, pemain)} menurunkan ${baru.map(deskripsiKartuJadi).join(' dan ')}.`);
+  terjadi(s, { jenis: 'turunkan', pemain, idKartuJadi: baru.map((kj) => kj.id), kembarAs: baru.some(isKembarAsEmpat) });
+}
+
+function selesaiSusun(s: GameState, pemain: number): void {
+  const p = pemainSusunAkhir(s, pemain);
+  p.selesaiSusun[pemain] = true;
+  if (p.selesaiSusun.every(Boolean)) selesaiSemuaSusun(s);
+}
+
+/** Siapa yang kepentung: pemilik kartu pungutan (giliran mentung) yang dipakai di kartu jadi. */
+export function hitungKepentung(p: StatePutaran, pementung: number): number[] {
+  const diKartuJadi = new Set(p.kartuJadi[pementung].flatMap((kj) => kj.kartu.map((d) => d.kartu.id)));
+  const pemilik = new Set(
+    p.pungutan.filter((e) => diKartuJadi.has(e.kartu.id) && e.pemilik !== pementung).map((e) => e.pemilik),
+  );
+  return [...pemilik].sort((a, b) => a - b);
+}
+
+function selesaikanPutaran(
+  s: GameState,
+  pementung: number | null,
+  pentungan: Kartu | null,
+  pentunganJoker: boolean,
+): void {
+  const p = s.putaran!;
+  const n = s.konfigurasi.jumlahPemain;
+  const ctx = ctxPutaran(p);
+  const kepentung = pementung === null ? [] : (p.mentung?.kepentung ?? hitungKepentung(p, pementung));
+  const nilai = pentungan ? nilaiPentungan(pentungan, pentunganJoker) : 0;
+  const tepatSebelum = pementung === null ? null : berikutnya(pementung, (-p.arah) as Arah, n);
+  const dibalik = tepatSebelum !== null && kepentung.includes(tepatSebelum);
+  const arahBerikutnya = (dibalik ? -p.arah : p.arah) as Arah;
+
+  const rincian = s.pemain.map((_, i) =>
+    hitungSkorPemain({
+      pemain: i,
+      status: i === pementung ? 'mentung' : kepentung.includes(i) ? 'kepentung' : 'aman',
+      kartuJadi: p.kartuJadi[i],
+      tangan: p.tangan[i],
+      nilaiPentungan: nilai,
+      jumlahJokerDibuang: p.jokerDibuang[i],
+      ctx,
+    }),
+  );
+  rincian.forEach((r) => (s.skor[r.pemain] += r.total));
+
+  const hasil: HasilPutaran = {
+    nomor: p.nomor,
+    pengocok: p.pengocok,
+    rankJoker: p.rankJoker,
+    cara: pementung === null ? 'deckHabis' : 'mentung',
+    pementung,
+    pentungan,
+    pentunganJoker,
+    nilaiPentungan: nilai,
+    kepentung,
+    rincian,
+    arahSebelumnya: p.arah,
+    arahBerikutnya,
+    dibalik,
+    skorAkumulasi: [...s.skor],
+  };
+  s.riwayat.push(hasil);
+  s.arah = arahBerikutnya;
+  terjadi(s, { jenis: 'putaranSelesai', cara: hasil.cara });
+
+  if (pementung === null) catat(s, `Deck habis. Putaran ${p.nomor} selesai, semua dihitung skor dasar.`);
+  else if (kepentung.length === 0) catat(s, `Nggak ada yang kepentung. Arah tetap.`);
+  else {
+    catat(
+      s,
+      `${daftarNama(kepentung.map((i) => nama(s, i)))} kepentung. ${dibalik ? 'Arah putaran berikutnya dibalik.' : 'Lompat, arah tetap.'}`,
+    );
+  }
+
+  const k = s.konfigurasi;
+  if (k.batasSkorAtas !== null && s.skor.some((x) => x >= k.batasSkorAtas!)) s.alasanSelesai = 'batasSkor';
+  else if (k.batasSkorBawah !== null && s.skor.some((x) => x <= k.batasSkorBawah!)) s.alasanSelesai = 'batasSkor';
+  else if (k.batasPutaran !== null && s.riwayat.length >= k.batasPutaran) s.alasanSelesai = 'batasPutaran';
+  s.status = s.alasanSelesai ? 'selesai' : 'putaranSelesai';
+  if (s.status === 'selesai') catat(s, 'Permainan selesai.');
+}

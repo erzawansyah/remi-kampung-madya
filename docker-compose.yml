@@ -1,0 +1,15 @@
+services:
+  remi:
+    build: .
+    image: remi-kampung-madya:latest
+    restart: unless-stopped
+    ports:
+      - "2567:2567"
+    environment:
+      - PORT=2567
+    volumes:
+      # Database klasemen akhir (SQLite). Tetap ada walaupun container dibuat ulang.
+      - remi-data:/app/data
+
+volumes:
+  remi-data:
