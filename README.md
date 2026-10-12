@@ -72,7 +72,7 @@ packages/meja/          Satu meja/room: kursi, host, bot, timer giliran, sambung
   src/validasi.ts       Validasi pesan dari jaringan (data tidak dipercaya)
   src/meja.ts           Kelas Meja (tanpa jaringan; dipakai server dan mode offline)
 apps/server/            HTTP + WebSocket (ws). Melayani file PWA, /healthz, dan /ws
-apps/client/            Phaser 3 + Vite + vite-plugin-pwa
+apps/client/            Phaser 4 + Vite + vite-plugin-pwa
   src/game/             Scene meja Phaser dan gambar kartu (dibuat dengan Canvas, tanpa file gambar)
   src/kontrolMeja.ts    Alur Ambil → (Turunkan) → Buang, mulung, modal hasil/skor/log
   src/ui/               Layar beranda, lobi, daftar meja publik (HTML)

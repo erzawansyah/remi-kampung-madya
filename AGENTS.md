@@ -1,6 +1,6 @@
 # AGENTS.md: petunjuk untuk agent/sesi yang mengubah proyek ini
 
-**Remi Kampung Madya**: game kartu remi dengan aturan yang berlaku di Kedai Madya (tempat pemilik dan teman-temannya berkumpul), yaitu **aturan tongkrongan** lokal yang **berbeda dari remi/rummy umum**. Monorepo TypeScript: rules engine murni, modul meja/room, server WebSocket, dan client Phaser 3 + PWA.
+**Remi Kampung Madya**: game kartu remi dengan aturan yang berlaku di Kedai Madya (tempat pemilik dan teman-temannya berkumpul), yaitu **aturan tongkrongan** lokal yang **berbeda dari remi/rummy umum**. Monorepo TypeScript: rules engine murni, modul meja/room, server WebSocket, dan client Phaser 4 + PWA.
 
 Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main.
 
@@ -38,7 +38,7 @@ Pekerjaan dianggap selesai kalau `npm test` dan `npm run typecheck` lolos.
 | `packages/engine` | Rules engine **murni & deterministik** (RNG di-seed, state di `GameState.rng`). Validasi, skor, bot, view. | Tidak ada (tanpa DOM, tanpa Node API) |
 | `packages/meja` | Satu meja/room: kursi, host, bot, timer giliran, sambung ulang, voting, pengumuman joker. **Tanpa jaringan.** Waktu lewat `Penjadwal`. Dipakai server **dan** mode offline di browser. | engine |
 | `apps/server` | HTTP + WebSocket (`ws`) tipis. Memetakan sambungan → `pemainId` → `Meja`. | engine, meja |
-| `apps/client` | Phaser 3 (scene meja) + HTML (beranda, lobi, modal, bar aksi). | engine, meja |
+| `apps/client` | Phaser 4 (scene meja) + HTML (beranda, lobi, modal, bar aksi). | engine, meja |
 
 **Di mana mengubah apa:**
 - **Aturan main:** `packages/engine/src/kartuJadi.ts` (seri/kembar/joker), `giliran.ts` (validasi mulung/turunkan/buang), `mesin.ts` (alur, mentung, skor putaran), `skor.ts`.
