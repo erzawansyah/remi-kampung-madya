@@ -6,3 +6,5 @@ apps/server/data
 *.db
 *.db-wal
 *.db-shm
+# Hasil E2E smoke (screenshot, build sementara)
+apps/client/e2e/hasil/
