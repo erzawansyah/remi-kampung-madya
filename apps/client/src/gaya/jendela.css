@@ -1,0 +1,466 @@
+/* =============================================================================================
+   JENDELA PRODUK: Pengaturan (ui/pengaturan.ts), Bantuan (ui/bantuan.ts), Tentang (ui/tentang.ts).
+   Semuanya dialog lapisan (bukaDialog) di atas modal utama. Memakai token di gaya/token.css.
+   ============================================================================================= */
+
+/* ---------- Pengaturan ---------- */
+.dialog.pengaturan {
+  gap: var(--ruang-2);
+}
+.dialog.pengaturan .panel-terang {
+  gap: var(--ruang-1);
+}
+/* Baris label (+ keterangan) di kiri, kontrol di kanan */
+.atur-baris {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ruang-3);
+  min-height: var(--sentuh);
+}
+.atur-baris > label,
+.atur-baris > span {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 600;
+}
+.atur-baris > label {
+  cursor: pointer;
+}
+.atur-baris .bantuan {
+  font-weight: 400;
+}
+.atur-baris > button.kecil {
+  flex: none;
+}
+.atur-baris + .atur-baris {
+  border-top: 1px dashed var(--garis);
+  padding-top: var(--ruang-1);
+}
+/* Penggeser volume tepat di bawah saklarnya */
+.atur-volume {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 3.2em;
+  align-items: center;
+  gap: var(--ruang-3);
+  padding: 0 0 var(--ruang-2) var(--ruang-2);
+  transition: opacity var(--durasi-cepat) var(--ease-keluar);
+}
+.atur-volume label {
+  font-size: var(--teks-sm);
+  color: var(--teks-redup);
+}
+.atur-volume output {
+  text-align: right;
+  font-size: var(--teks-sm);
+}
+.atur-volume.mati {
+  opacity: 0.55;
+}
+.atur-volume + .atur-baris {
+  border-top: 1px dashed var(--garis);
+  padding-top: var(--ruang-1);
+}
+/* Pilihan bersegmen: label di atas, segmen penuh, keterangan di bawah */
+.atur-blok {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-block: var(--ruang-1);
+}
+.atur-blok + .atur-blok {
+  border-top: 1px dashed var(--garis);
+  padding-top: var(--ruang-3);
+}
+.atur-label {
+  font-weight: 600;
+}
+.pratinjau-warna {
+  display: flex;
+  justify-content: center;
+  gap: var(--ruang-2);
+  padding-top: var(--ruang-2);
+}
+.pratinjau-warna canvas {
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.45));
+}
+
+/* ---------- Bantuan ---------- */
+.dialog.bantuan {
+  gap: var(--ruang-3);
+}
+.bantuan-tata[data-mode='daftar'] .bantuan-isi,
+.bantuan-tata[data-mode='isi'] .bantuan-nav,
+.bantuan-tata[data-mode='cari'] .bantuan-nav {
+  display: none;
+}
+.bab-item {
+  align-items: flex-start;
+  text-align: left;
+}
+.bab-ikon {
+  flex: none;
+  width: 1.6em;
+  font-size: 1.25rem;
+  line-height: 1.3;
+  text-align: center;
+}
+.bab-teks {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.bab-teks small {
+  font-size: var(--teks-xs);
+  font-weight: 400;
+  color: var(--teks-redup);
+}
+.bab-item[aria-current='page'] {
+  background: rgba(var(--emas-rgb), 0.14);
+  box-shadow: inset 3px 0 0 var(--emas);
+}
+.bantuan-isi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-3);
+}
+.bantuan-isi:focus-visible {
+  outline: none;
+}
+.balik-daftar {
+  align-self: flex-start;
+}
+.judul-bab {
+  margin: 0;
+  font-size: var(--teks-xl);
+  color: var(--krem);
+}
+.badan-bab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-3);
+}
+.badan-bab p {
+  line-height: var(--baris-longgar);
+}
+.badan-bab strong {
+  color: var(--emas-muda);
+}
+.bantuan-butir,
+.bantuan-langkah {
+  margin: 0;
+  padding-left: 1.4em;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  line-height: var(--baris-normal);
+}
+.bantuan-butir li::marker,
+.bantuan-langkah li::marker {
+  color: var(--emas);
+  font-weight: 700;
+}
+.bantuan-catatan {
+  display: flex;
+  gap: var(--ruang-2);
+  padding: var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  background: rgba(var(--emas-rgb), 0.08);
+  border-left: 3px solid var(--emas);
+  font-size: var(--teks-sm);
+}
+.bantuan-tabel th,
+.bantuan-tabel td {
+  text-align: left;
+  vertical-align: top;
+}
+.bantuan-tabel td {
+  font-variant-numeric: normal;
+}
+/* Contoh kartu: di atas "laken" kecil seperti di meja */
+.contoh {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+  padding: var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  border: 1px solid var(--garis);
+  background: radial-gradient(ellipse 90% 80% at 50% 30%, var(--laken-terang), var(--laken) 60%, var(--laken-gelap));
+}
+.contoh.sah {
+  border-color: rgba(139, 226, 139, 0.4);
+}
+.contoh.tidak-sah {
+  border-color: var(--bahaya-garis);
+}
+.contoh figcaption {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ruang-2);
+  font-size: var(--teks-sm);
+}
+.contoh figcaption .lencana {
+  flex: none;
+  background: var(--panel);
+  border: 1px solid currentColor;
+}
+.contoh figcaption .lencana.hijau {
+  color: var(--positif);
+}
+.contoh figcaption .lencana.merah {
+  color: var(--negatif);
+}
+.contoh > p {
+  font-size: var(--teks-sm);
+  color: var(--teks);
+  line-height: var(--baris-normal);
+}
+.contoh-kartu {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: var(--ruang-2);
+  padding: var(--ruang-1) 0 0 14px;
+}
+.sel-kartu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-left: -14px;
+}
+.sel-kartu canvas {
+  filter: drop-shadow(-2px 2px 3px rgba(0, 0, 0, 0.45));
+}
+.sel-kartu .peran {
+  margin-top: 3px;
+  padding: 0 6px;
+  border-radius: var(--radius-pil);
+  font-size: var(--teks-xs);
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--teks-di-emas);
+  background: var(--emas);
+}
+details.faq > summary {
+  font-weight: 600;
+}
+details.faq > p {
+  padding: 0 var(--ruang-3) var(--ruang-3);
+  color: var(--teks-redup);
+}
+details.faq + details.faq {
+  margin-top: var(--ruang-1);
+}
+.glosarium {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+}
+.glosarium > div {
+  padding: var(--ruang-2) var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  background: var(--permukaan-1);
+}
+.glosarium dt {
+  font-weight: 700;
+  color: var(--emas-muda);
+}
+.glosarium dd {
+  margin: 0;
+  font-size: var(--teks-sm);
+  color: var(--teks-redup);
+}
+.hasil-cari .bab-teks small + small {
+  margin-top: 2px;
+}
+mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  color: inherit;
+  background: rgba(var(--emas-rgb), 0.35);
+}
+.bab-geser {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--ruang-2);
+  margin-top: var(--ruang-2);
+  padding-top: var(--ruang-3);
+  border-top: 1px solid var(--garis);
+}
+@media (min-width: 768px) {
+  .dialog.bantuan {
+    --lebar-dialog: 900px;
+  }
+  /* Layar lebar: daftar bab jadi sidebar, isi selalu terlihat di sampingnya. */
+  .bantuan-tata {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: var(--ruang-5);
+    align-items: start;
+  }
+  .bantuan-tata[data-mode] .bantuan-nav,
+  .bantuan-tata[data-mode] .bantuan-isi {
+    display: flex;
+  }
+  .bantuan-nav {
+    position: sticky;
+    top: 0;
+  }
+  .bantuan-nav .bab-teks small,
+  .balik-daftar {
+    display: none;
+  }
+  .bantuan-nav .bab-item {
+    min-height: var(--sentuh);
+    padding-block: 6px;
+  }
+}
+
+/* ---------- Tentang ---------- */
+.tentang-kepala {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ruang-3) var(--ruang-4);
+}
+/* Logo Kedai Madya V1: tinta hitam di pelat putih (gaya stiker), seperti logo aslinya.
+   Varian 'lengkap' minimal 160 px; di layar sempit nama & versi turun ke bawah logo. */
+.tentang-logo {
+  flex: none;
+  width: 196px;
+  padding: var(--ruang-2);
+  background: var(--madya-kertas);
+  color: var(--madya-tinta);
+  border: 2px solid var(--madya-tinta);
+  border-radius: var(--radius-sedang);
+  box-shadow: 3px 3px 0 var(--madya-tinta);
+}
+.tentang-logo svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* Bagian Kedai Madya di Tentang: tautan sama dengan kartu kedai di beranda, tapi di atas dialog gelap. */
+.tentang-kedai {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+}
+.tentang-kedai p {
+  margin: 0;
+}
+.tentang-kutipan {
+  margin: 0;
+  padding: var(--ruang-2) var(--ruang-3);
+  border-left: 3px solid var(--emas);
+  background: var(--permukaan-1);
+  border-radius: 0 var(--radius-kecil) var(--radius-kecil) 0;
+}
+.tentang-kutipan p {
+  font-style: italic;
+}
+.tentang-kutipan small {
+  color: var(--teks-redup);
+}
+.tentang-kedai .kedai-tautan a {
+  border-color: var(--garis-kuat);
+  background: var(--permukaan-2);
+  color: var(--teks);
+}
+.tentang-kedai .kedai-tautan a:hover {
+  background: var(--permukaan-3);
+}
+.tentang-nama {
+  margin: 0;
+  font-size: var(--teks-xl);
+  font-weight: 800;
+  line-height: var(--baris-rapat);
+  color: var(--krem);
+}
+.tentang-kredit {
+  margin: 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--teks-sm);
+  color: var(--teks-redup);
+}
+.tentang-changelog .md {
+  padding: 0 var(--ruang-3) var(--ruang-3);
+}
+/* Satu versi: judul, ringkasan, "Untuk pemain", lalu catatan teknis yang dilipat. */
+.changelog-versi + .changelog-versi {
+  margin-top: var(--ruang-4);
+  border-top: 1px solid var(--garis);
+}
+.tentang-changelog .changelog-teknis {
+  margin-top: var(--ruang-3);
+}
+.tentang-changelog .changelog-teknis > summary {
+  font-size: var(--teks-sm);
+}
+/* Markdown mini (catatan perubahan) */
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  margin: var(--ruang-4) 0 var(--ruang-1);
+  color: var(--krem);
+}
+.md h4 {
+  font-size: var(--teks-lg);
+  color: var(--emas-muda);
+}
+.md h5 {
+  font-size: var(--teks-md);
+}
+.md h6 {
+  font-size: var(--teks-sm);
+  font-family: var(--font-teks);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--emas);
+}
+.md p,
+.md li {
+  font-size: var(--teks-sm);
+  line-height: var(--baris-normal);
+  color: var(--teks-redup);
+}
+.md p + p {
+  margin-top: var(--ruang-2);
+}
+.md ul,
+.md ol {
+  margin: var(--ruang-1) 0;
+  padding-left: 1.3em;
+}
+.md code {
+  font-family: var(--font-angka);
+  font-size: 0.88em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  /* Teks penuh (bukan --teks-redup warisan .md p/li): kontras ≥ 4,5:1 di atas chip. */
+  color: var(--teks);
+  background: var(--permukaan-2);
+  overflow-wrap: anywhere;
+}
+.md pre {
+  overflow-x: auto;
+  padding: var(--ruang-2);
+  border-radius: var(--radius-kecil);
+  background: var(--permukaan-1);
+}
+.md blockquote {
+  margin: var(--ruang-2) 0;
+  padding-left: var(--ruang-3);
+  border-left: 3px solid var(--garis-emas);
+}

@@ -1,5 +1,9 @@
-// Mengubah peristiwa dari mesin aturan menjadi sesuatu yang terasa: kartu terbang, teks aksi
-// di panel pemain, suara, getar, dan sorakan besar.
+// Mengubah peristiwa dari mesin aturan menjadi sesuatu yang terasa: kartu dikocok dan dibagikan,
+// kartu terbang, teks aksi di panel pemain, suara, getar, dan sorakan besar.
+//
+// Info rahasia: tidak pernah membaca angka joker (rankJoker/kartuDibuka); kartu yang dibagikan atau
+// diambil lawan dari deck selalu tertutup; teks hanya menyebut kartu yang memang terbuka di peristiwa itu.
+// Durasi di sini durasi DASAR; scene menyesuaikannya dengan preferensi kecepatan/gerak.
 
 import { namaKartu, namaRank, type Bunga, type Kartu, type Peristiwa, type ViewPemain } from '@remi/engine';
 import type { MejaScene, Titik } from '../game/MejaScene';
@@ -34,21 +38,61 @@ export interface KonteksPemutar {
 export class PemutarPeristiwa {
   /** Sorakan "tinggal 1 kartu" cukup sekali per pemain per putaran. */
   private sudahTinggalSatu = new Set<string>();
+  /** Timer milik pemutar (mis. goyang layar) yang dibatalkan hentikan(). */
+  private timer = new Set<ReturnType<typeof setTimeout>>();
+  private berhenti = false;
 
   constructor(private readonly k: KonteksPemutar) {}
 
+  /**
+   * Hentikan pemutar untuk selamanya: semua timer dibatalkan dan peristiwa yang sedang/akan diputar tidak
+   * lagi menyentuh scene, DOM, atau konteks (kecuali `tampakkan` di blok finally kocok & bagi, yang aman
+   * karena KontrolMeja mengabaikan render sesudah dihancurkan). Dipanggil KontrolMeja.hancurkan().
+   */
+  hentikan() {
+    this.berhenti = true;
+    this.timer.forEach((t) => clearTimeout(t));
+    this.timer.clear();
+    if (typeof document !== 'undefined') document.body?.classList.remove('goyang');
+  }
+
+  /** setTimeout yang ikut dibatalkan hentikan(), dan tidak jalan kalau pemutar sudah berhenti. */
+  private nanti(fn: () => void, ms: number) {
+    if (this.berhenti) return;
+    const t = setTimeout(() => {
+      this.timer.delete(t);
+      if (!this.berhenti) fn();
+    }, ms);
+    this.timer.add(t);
+  }
+
   /** Putar satu peristiwa. `cepat` dipakai saat antrian menumpuk (misalnya habis sambung ulang). */
   async putar(e: Peristiwa, cepat: boolean, berikut?: Peristiwa): Promise<void> {
+    if (this.berhenti) return;
     const { scene } = this.k;
     const saya = this.k.saya();
-    const durasi = cepat ? 140 : 400;
+    const durasi = cepat ? 140 : 420;
     const nama = (i: number) => (i === saya ? 'Kamu' : this.k.nama(i));
 
     switch (e.jenis) {
-      case 'mulaiPutaran':
-        // Joker diumumkan lewat popup (sekali), bukan sorakan.
+      case 'mulaiPutaran': {
+        // Kocok & bagi kartu (tertutup), urutan bagi sama dengan engine (mulai dari pengocok, kursi naik).
+        // Angka joker diumumkan lewat popup (sekali), bukan di sini.
+        // Bisa diputar di view PERTAMA (putaran 1, scene baru dibuat): terapkanViewBerikut memasang model
+        // dulu supaya posisi deck/slot tangan sudah dihitung sebelum bagiKartu membaca posisinya.
         this.sudahTinggalSatu.clear();
+        const p = this.k.viewBerikut()?.putaran;
+        if (cepat || !p || p.nomor !== e.putaran) return;
+        const idTanganku = (p.tangan[saya] ?? []).map((x) => x.id);
+        this.k.terapkanViewBerikut(idTanganku);
+        try {
+          await scene.bagiKartu({ pengocok: e.pengocok, jumlah: [...p.jumlahKartuTangan], idTanganku });
+        } finally {
+          // Apa pun yang terjadi, kartu tanganku tidak boleh tertinggal tersembunyi.
+          this.k.tampakkan(idTanganku);
+        }
         return;
+      }
 
       case 'ambilDeck': {
         bunyi('kartu');
@@ -58,14 +102,16 @@ export class PemutarPeristiwa {
           const lama = new Set((this.k.viewSekarang()?.putaran?.tangan[saya] ?? []).map((k) => k.id));
           const baru = this.k.viewBerikut()?.putaran?.tangan[saya]?.find((k) => !lama.has(k.id));
           if (baru) {
-            const imgs = await scene.naikPanggung([{ kartu: baru, dari: scene.posisiDeck, tertutup: true }], 900);
+            const imgs = await scene.naikPanggung([{ kartu: baru, dari: scene.posisiDeck, tertutup: true }], 700);
+            if (this.berhenti) return;
             this.k.terapkanViewBerikut([baru.id]);
             await scene.turunPanggung(imgs, [scene.posisiKartu(baru.id)]);
             this.k.tampakkan([baru.id]);
             return;
           }
         }
-        await scene.terbang(null, scene.posisiDeck, scene.posisiPemain(e.pemain), { durasi });
+        // Kartu lawan tetap tertutup dan masuk ke panelnya.
+        await scene.terbang(null, scene.posisiDeck, scene.posisiPemain(e.pemain), { durasi, hilang: e.pemain !== saya });
         return;
       }
 
@@ -81,6 +127,7 @@ export class PemutarPeristiwa {
         this.k.sembunyikan(idPungut);
         // 1. Kartu pungutan dipamerkan besar di tengah supaya semua tahu apa yang diambil.
         const imgs = cepat ? [] : await scene.naikPanggung(daftar, 900 + 250 * daftar.length);
+        if (this.berhenti) return;
         // 2. Tampilkan meja sesudahnya; kartu yang akan mendarat disembunyikan dulu.
         this.k.terapkanViewBerikut([...idPungut, ...kjBaru.map((d) => d.kartu.id)]);
         const tujuan = e.kartu.map((x) => scene.posisiKartu(x.kartu.id) ?? scene.posisiPemain(e.pemain));
@@ -93,13 +140,14 @@ export class PemutarPeristiwa {
             scene.terbang(d.kartu, asalModal[i], scene.posisiKartu(d.kartu.id), { durasi: cepat ? durasi : 520, jeda: cepat ? 0 : 150 + i * 90 }),
           ),
         ]);
+        if (this.berhenti) return;
         this.k.tampakkan([...idPungut, ...kjBaru.map((d) => d.kartu.id)]);
 
         if (e.pemain !== saya) {
           const punyaku = e.kartu.filter((x) => x.pemilik === saya).map((x) => labelKartu(x.kartu));
           if (punyaku.length) {
             bunyi('bahaya');
-            getar([90, 50, 90]);
+            getar('bahaya');
             void sorak({
               judul: 'KARTUMU DIPUNGUT!',
               sub: `${this.k.nama(e.pemain)} mungut ${punyaku.join(', ')} punyamu`,
@@ -117,16 +165,16 @@ export class PemutarPeristiwa {
       }
 
       case 'turunkan': {
-        bunyi('kartu');
         this.k.catatAksi(e.pemain, 'turun kartu jadi');
-        // Kartu dari tangan terbang ke tempatnya di kartu jadi.
+        // Kartu dari tangan terbang ke tempatnya di kartu jadi, satu per satu.
         const kartu = this.kartuJadiBaru(e.pemain, e.idKartuJadi);
         const asal = kartu.map((d) => this.asalDariTangan(e.pemain, d.kartu.id));
         const ids = kartu.map((d) => d.kartu.id);
         this.k.terapkanViewBerikut(ids);
         await Promise.all(
-          kartu.map((d, i) => scene.terbang(d.kartu, asal[i], scene.posisiKartu(d.kartu.id), { durasi: cepat ? durasi : 480, jeda: cepat ? 0 : i * 70 })),
+          kartu.map((d, i) => scene.terbang(d.kartu, asal[i], scene.posisiKartu(d.kartu.id), { durasi: cepat ? durasi : 460, jeda: cepat ? 0 : i * 80 })),
         );
+        if (this.berhenti) return;
         this.k.tampakkan(ids);
         if (e.kembarAs) void this.heboh({ judul: 'KEMBAR AS!', sub: `${nama(e.pemain)} nurunin 4 As`, gaya: 'emas' });
         return;
@@ -137,9 +185,15 @@ export class PemutarPeristiwa {
         if (berikut?.jenis === 'mentung') return;
         bunyi('buang');
         this.k.catatAksi(e.pemain, `buang ${labelKartu(e.kartu)}`);
-        const dari = (e.pemain === saya ? scene.posisiKartu(e.kartu.id) : undefined) ?? scene.posisiPemain(e.pemain);
-        this.k.sembunyikan([e.kartu.id]);
-        await scene.terbang(e.kartu, dari, scene.posisiBuangan, { durasi, besar: !cepat });
+        const id = e.kartu.id;
+        // Asal: titik lepas (kartu diseret ke buangan), kartu di tanganku, atau panel lawan.
+        const dari = (e.pemain === saya ? (scene.posisiLepas(id) ?? scene.posisiKartu(id)) : undefined) ?? scene.posisiPemain(e.pemain);
+        this.k.sembunyikan([id]);
+        // Tujuan tepat: tempat kartu itu di tumpukan buangan sesudah kejadian.
+        this.k.terapkanViewBerikut([id]);
+        await scene.terbang(e.kartu, dari, scene.posisiKartu(id) ?? scene.posisiBuangan, { durasi, besar: !cepat });
+        if (this.berhenti) return;
+        this.k.tampakkan([id]);
         if (e.jokerDibuang) {
           bunyi('joker');
           void sorak({ judul: 'JOKER DIBUANG?!', sub: `${nama(e.pemain)} buang ${namaKartu(e.kartu)} · −25`, gaya: 'bahaya', durasi: 1400 });
@@ -155,16 +209,20 @@ export class PemutarPeristiwa {
 
       case 'mentung': {
         this.k.catatAksi(e.pemain, 'MENTUNG!');
-        const dari = (e.pemain === saya ? scene.posisiKartu(e.pentungan.id) : undefined) ?? scene.posisiPemain(e.pemain);
-        this.k.sembunyikan([e.pentungan.id]);
+        const id = e.pentungan.id;
+        const dari = (e.pemain === saya ? (scene.posisiLepas(id) ?? scene.posisiKartu(id)) : undefined) ?? scene.posisiPemain(e.pemain);
+        this.k.sembunyikan([id]);
         // Pentungan dibuang tertutup, tegang sebentar, lalu dibuka: baru ketahuan nilainya.
         bunyi('tegang');
         await scene.pentung(e.pentungan, dari, e.nilai, e.pentunganJoker, () => {
+          if (this.berhenti) return;
           bunyi('mentung');
           document.body.classList.add('goyang');
-          setTimeout(() => document.body.classList.remove('goyang'), 500);
-          if (e.pemain === saya) getar([60, 40, 160]);
+          // Cadangan bila hentikan() belum dipanggil saat lingkungan DOM dibongkar (test): jangan sentuh DOM yang hilang.
+          this.nanti(() => typeof document !== 'undefined' && document.body?.classList.remove('goyang'), 500);
+          if (e.pemain === saya) getar('mentung');
         });
+        if (this.berhenti) return;
         // Setelah itu panel mentung: tiap pemain langsung tahu kepentung atau tidak,
         // rinciannya dibuka kalau diklik. Permainan lanjut setelah ditekan Lanjut.
         await this.k.panelMentung(e);
@@ -173,7 +231,8 @@ export class PemutarPeristiwa {
 
       case 'susunAkhir':
         bunyi('giliran');
-        await sorak({
+        // Tidak di-await: sorakan lain yang masih antri tidak boleh menahan antrian peristiwa.
+        void sorak({
           judul: e.sebab === 'mentung' ? 'SUSUN KARTU!' : 'DECK HABIS!',
           sub: e.sebab === 'mentung' ? 'Turunkan kartu jadi terakhir sebelum dihitung' : 'Susun kartu jadi terakhirmu',
           gaya: 'biru',
@@ -181,8 +240,21 @@ export class PemutarPeristiwa {
         });
         return;
 
-      case 'putaranSelesai':
+      case 'putaranSelesai': {
+        // Perubahan skor (angka publik) melayang dari panel tiap pemain.
+        const v = this.k.viewBerikut();
+        const riwayat = v?.riwayat ?? [];
+        const akhir = riwayat[riwayat.length - 1]?.skorAkumulasi;
+        if (!akhir || cepat) return;
+        const sebelum = riwayat[riwayat.length - 2]?.skorAkumulasi ?? akhir.map(() => 0);
+        await scene.skorMelayang(akhir.map((s, i) => s - (sebelum[i] ?? 0)));
+        if (this.berhenti) return;
+        if (v?.status === 'selesai') {
+          const tertinggi = Math.max(...v.skor);
+          await Promise.all(v.skor.map((s, i) => (s === tertinggi ? scene.rayakan(i) : Promise.resolve())));
+        }
         return;
+      }
     }
   }
 

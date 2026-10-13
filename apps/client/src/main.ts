@@ -1,28 +1,67 @@
-// Aplikasi: memilih layar (beranda, daftar publik, lobi, meja) berdasarkan pesan dari meja,
-// dan mengelola koneksi online/offline.
+// Aplikasi: memilih layar (beranda, daftar publik, riwayat, lobi, meja) berdasarkan pesan dari meja,
+// mengelola koneksi online/offline, pembaruan PWA, tombol Back, musik latar, dan wake lock.
 
 import './gaya.css';
 import { registerSW } from 'virtual:pwa-register';
 import type { ViewPemain } from '@remi/engine';
 import type { InfoMeja, PengaturanMeja, PesanKlien, PesanServer } from '@remi/meja';
-import { KoneksiOffline, KoneksiOnline, urlServer, type Koneksi } from './koneksi';
-import { simpan } from './penyimpanan';
-import { buatGame, type PenampungGame } from './game/game';
+import { pasangPreferensi } from './preferensi';
+import { KoneksiOffline, KoneksiOnline, urlServer, type Koneksi, type StatusKoneksi } from './koneksi';
+import { catatanDariView, kunciPermainan, simpan } from './penyimpanan';
+import { bangunkanGame, buatGame, tidurkanGame, type PenampungGame } from './game/game';
 import { KontrolMeja, type AppUntukMeja } from './kontrolMeja';
-import { renderBeranda, renderDaftarPublik } from './ui/beranda';
-import { renderLobi } from './ui/lobi';
+import { konfirmasiTimpaSimpanan, renderBeranda, renderDaftarPublik, type BerandaTerpasang, type StatusOnline } from './ui/beranda';
+import { opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
 import { renderRiwayat } from './ui/riwayat';
-import { toast, tutupModal } from './ui/dom';
-import { siapkanAudio } from './efek/suara';
+import { bukaPengaturan } from './ui/pengaturan';
+import { bukaBantuan, bukaTentang, siapkanJendelaMalas } from './ui/jendelaMalas';
+import { adaJendelaTerbuka, konfirmasi, pasangLandmarkUtama, toast, tutupModal, tutupSemuaJendela, umumkan } from './ui/dom';
+import { siapkanAudio, suasanaMusik } from './efek/suara';
 
-registerSW({ immediate: true });
+// Sedini mungkin: atribut tampilan (<html data-*>) sebelum layar pertama digambar, lalu audio.
+pasangPreferensi();
 siapkanAudio();
+
+/** Cek versi baru berkala (service worker). */
+const PERIKSA_UPDATE_MS = 60 * 60 * 1000;
+/** Kalau reload dari pembaruan SW tidak terjadi (mis. SW lama sudah hilang), muat ulang manual. */
+const CADANGAN_MUAT_ULANG_MS = 4000;
+
+/** Pengaturan permainan latihan: tiga pemain (kamu + 2 warga kedai mudah), satu putaran, kamu ngocok & jalan duluan. */
+const PENGATURAN_LATIHAN: Partial<PengaturanMeja> = {
+  jumlahPemain: 3,
+  duaDeckUntukEmpat: false,
+  levelBot: 'mudah',
+  tempoBot: 'santai',
+  batasPutaran: 1,
+  batasSkorAtas: null,
+  batasSkorBawah: null,
+};
+
+const PESAN_SERVER_GAGAL = 'Server-nya belum bisa dihubungi, Bos. Coba lagi nanti.';
+/**
+ * Di beranda, pesan gagal + "Coba lagi" tampil menetap di panel online. Toast hanya cadangan
+ * singkat (tanpa tombol) kalau panel itu sedang tergulir keluar layar, jadi tidak lama menutupi
+ * tombol "Buat meja baru".
+ */
+const TOAST_GAGAL_BERANDA_MS = 4500;
+/**
+ * Keluar meja saat sinyal putus: pesan 'keluar' tidak bisa sampai ke server (koneksi langsung
+ * ditutup), jadi server masih menganggap kursinya sekadar terputus. Pemain diberi tahu apa adanya.
+ */
+const PESAN_KELUAR_TAK_SAMPAI: Record<'lobi' | 'meja', string> = {
+  lobi: 'Sinyalnya lagi putus, jadi server belum tahu kamu keluar. Kursimu di lobi tercatat terputus sampai host mengosongkannya.',
+  meja: 'Sinyalnya lagi putus, jadi server belum tahu kamu keluar. Selama itu kursimu tercatat terputus dan dimainkan warga kedai.',
+};
 
 interface PromptPasang extends Event {
   prompt(): Promise<void>;
 }
 
 type Layar = 'beranda' | 'publik' | 'riwayat' | 'lobi' | 'meja';
+
+const bacaLatihan = simpan.latihanTersimpan;
+const tulisLatihan = simpan.setLatihanTersimpan;
 
 class Aplikasi implements AppUntukMeja {
   private koneksi: Koneksi | null = null;
@@ -31,30 +70,194 @@ class Aplikasi implements AppUntukMeja {
   private view: ViewPemain | null = null;
   private kontrol: KontrolMeja | null = null;
   private game: PenampungGame | null = null;
+  private beranda: BerandaTerpasang | null = null;
   private promptPasang: PromptPasang | null = null;
   private sudahDicatat = false;
   private wakeLock: { release(): Promise<void> } | null = null;
   private readonly ui = document.getElementById('ui')!;
   private readonly elGame = document.getElementById('game')!;
   private kodeAwal = new URLSearchParams(location.search).get('meja')?.toUpperCase() ?? '';
+  /** Permainan offline yang sedang jalan adalah latihan dengan panduan. */
+  private modeLatihan = false;
+  private statusKini: StatusKoneksi = 'tersambung';
+  /** Aksi online terakhir dari beranda, untuk tombol "Coba lagi" saat server tidak terjangkau. */
+  private niatOnline: (() => void) | null = null;
+  /** Sudah ada entri riwayat "penjaga" untuk menangkap tombol Back. */
+  private adaJaga = false;
+  // Pembaruan PWA
+  private perbaruiSW: ((muatUlang?: boolean) => Promise<void>) | null = null;
+  private versiBaru = false;
+  private versiBaruDitawarkan = false;
+  /** Pesan 'keluar' barusan tidak terkirim karena sinyal putus (dari layar mana). */
+  private keluarTakSampai: 'lobi' | 'meja' | null = null;
 
   get jenis(): 'online' | 'offline' {
     return this.koneksi?.jenis ?? 'online';
+  }
+
+  get tutorial(): boolean {
+    return this.modeLatihan && this.jenis === 'offline';
+  }
+
+  statusKoneksi(): StatusKoneksi {
+    return this.koneksi?.jenis === 'online' ? this.statusKini : 'tersambung';
   }
 
   mulai() {
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       this.promptPasang = e as PromptPasang;
-      if (this.layar === 'beranda') this.tampilkanBeranda();
+      // Cukup sisipkan ubin "Pasang": beranda tidak digambar ulang, isian yang sedang diketik aman.
+      if (this.layar === 'beranda') this.beranda?.aturPasang(this.aksiPasang());
     });
-    window.addEventListener('online', () => this.layar === 'beranda' && this.tampilkanBeranda());
-    window.addEventListener('offline', () => this.layar === 'beranda' && this.tampilkanBeranda());
+    window.addEventListener('appinstalled', () => {
+      this.promptPasang = null;
+      if (this.layar === 'beranda') this.beranda?.aturPasang(null);
+    });
+    // Escape di layar penuh (Riwayat, daftar meja publik) = kembali ke beranda, sama seperti Back.
+    // dom.ts menangkap Escape lebih dulu (fase capture) untuk menutup dialog yang terbuka.
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || e.repeat || adaJendelaTerbuka()) return;
+      if (this.layar !== 'riwayat' && this.layar !== 'publik') return;
+      e.preventDefault();
+      const dari = this.layar;
+      this.tampilkanBeranda();
+      if (dari === 'riwayat') this.beranda?.fokusNav('riwayat');
+    });
+    window.addEventListener('online', () => this.layar === 'beranda' && this.beranda?.aturStatusOnline('siap'));
+    window.addEventListener('offline', () => this.layar === 'beranda' && this.beranda?.aturStatusOnline('offline'));
+    document.addEventListener('visibilitychange', () => {
+      // Wake lock otomatis dilepas browser saat tab tersembunyi; minta lagi saat kembali ke meja.
+      if (document.visibilityState === 'visible' && this.layar === 'meja') this.mintaWakeLock();
+    });
+    this.pasangTombolKembali();
+    this.pasangPembaruan();
     this.tampilkanBeranda();
     // Ada sesi online yang belum selesai (misalnya aplikasi tertutup saat main): sambung lagi.
     if (simpan.sesi() && navigator.onLine) {
       toast('Menyambung lagi ke meja terakhir…');
+      this.niatOnline = () => this.pakaiOnline();
       this.pakaiOnline();
+    } else if (bacaLatihan() && !simpan.mejaOffline()) tulisLatihan(false);
+  }
+
+  // ---------- pembaruan PWA ----------
+
+  private pasangPembaruan() {
+    this.perbaruiSW = registerSW({
+      immediate: true,
+      onNeedRefresh: () => {
+        this.versiBaru = true;
+        this.tawarkanVersiBaru();
+      },
+      onOfflineReady: () => toast('Aplikasinya sudah tersimpan di HP, Bos. Main bareng warga kedai tetap jalan tanpa sinyal.', false, 5000),
+      onRegisteredSW: (swUrl, r) => {
+        if (!r) return;
+        const periksa = async () => {
+          if (r.installing || !navigator.onLine) return;
+          try {
+            const resp = await fetch(swUrl, { cache: 'no-store', headers: { 'cache-control': 'no-cache' } });
+            if (resp.status === 200) await r.update();
+          } catch {
+            // Server tidak terjangkau: coba lagi di jadwal berikutnya.
+          }
+        };
+        setInterval(() => void periksa(), PERIKSA_UPDATE_MS);
+      },
+    });
+  }
+
+  /** Putaran sedang berjalan: jangan ganggu dengan tawaran muat ulang. */
+  private sedangSeru(): boolean {
+    if (this.layar !== 'meja') return false;
+    const s = this.view?.status;
+    return s === 'putaranBerjalan' || s === 'susunAkhir';
+  }
+
+  /** Tawarkan muat ulang sekali, di saat yang aman (tidak di tengah putaran). Tidak pernah reload sendiri. */
+  private tawarkanVersiBaru() {
+    if (!this.versiBaru) return;
+    // Tombol muat ulang yang menetap di kaki beranda: disisipkan saja, beranda tidak digambar ulang.
+    if (this.layar === 'beranda') this.beranda?.aturMuatUlang(() => this.muatUlang());
+    if (this.versiBaruDitawarkan || this.sedangSeru()) return;
+    this.versiBaruDitawarkan = true;
+    toast('Ada versi baru, Bos.', false, 20000, { label: 'Muat ulang', jalankan: () => this.muatUlang() });
+  }
+
+  private muatUlang() {
+    void this.perbaruiSW?.(true);
+    setTimeout(() => location.reload(), CADANGAN_MUAT_ULANG_MS);
+  }
+
+  // ---------- tombol Back ----------
+
+  /**
+   * Back (Android/browser) tidak langsung keluar aplikasi: tutup dialog teratas → tutup modal yang
+   * boleh ditutup → di meja/lobi minta konfirmasi keluar → layar lain kembali ke beranda.
+   * Caranya: selalu ada satu entri riwayat "penjaga" di atas entri dasar; Back memakan penjaga itu,
+   * lalu penjaga dipasang lagi. Di beranda tanpa jendela terbuka, penjaga tidak dipasang lagi,
+   * jadi Back berikutnya keluar seperti biasa.
+   */
+  private pasangTombolKembali() {
+    window.addEventListener('popstate', () => {
+      this.adaJaga = false;
+      void this.tanganiKembali();
+    });
+    // Jendela baru (modal/dialog) atau pindah layar: pastikan Back tertangkap lagi.
+    const amati = new MutationObserver(() => {
+      if (adaJendelaTerbuka()) this.pastikanJaga();
+    });
+    for (const id of ['modal', 'lapisan-dialog']) {
+      const el = document.getElementById(id);
+      if (el) amati.observe(el, { childList: true });
+    }
+  }
+
+  private pastikanJaga() {
+    if (this.adaJaga) return;
+    this.adaJaga = true;
+    history.pushState({ remiJaga: true }, '');
+  }
+
+  /** Tutup jendela teratas kalau boleh ditutup. True kalau ada yang ditutup. */
+  private tutupJendelaTeratas(): boolean {
+    const lapisan = document.getElementById('lapisan-dialog');
+    const modal = document.getElementById('modal');
+    const wadah = lapisan?.lastElementChild ? lapisan : modal?.firstElementChild ? modal : null;
+    const latar = wadah?.lastElementChild as HTMLElement | null | undefined;
+    if (!wadah || !latar) return false;
+    const sebelum = wadah.childElementCount;
+    // Sama seperti mengetuk latar: jendela wajib (popup joker, panel mentung) tidak ikut tertutup.
+    latar.click();
+    return wadah.childElementCount < sebelum || !latar.isConnected;
+  }
+
+  private async tanganiKembali() {
+    if (adaJendelaTerbuka()) {
+      if (this.tutupJendelaTeratas() || this.layar !== 'meja') return this.pastikanJaga();
+    }
+    switch (this.layar) {
+      case 'beranda':
+        // Penjaga sudah terpakai: Back berikutnya keluar dari aplikasi.
+        return toast('Tekan Back sekali lagi untuk keluar.', false, 2000);
+      case 'publik':
+      case 'riwayat':
+        this.pastikanJaga();
+        return this.tampilkanBeranda();
+      case 'lobi':
+      case 'meja': {
+        this.pastikanJaga();
+        const asal = this.layar;
+        const offline = this.jenis === 'offline';
+        // Teks sama dengan tombol keluar di lobi dan menu meja (ui/lobi.ts).
+        const ya = await konfirmasi(opsiKonfirmasiKeluar({ asal, offline, selesai: asal === 'meja' && this.view?.status === 'selesai' }));
+        // Layar sudah berganti selagi dialog terbuka (mis. host memulai permainan dari lobi):
+        // teks konfirmasinya sudah tidak berlaku, jadi jangan keluar.
+        if (!ya || this.layar !== asal) return;
+        if (!offline) this.kirim({ t: 'keluar' });
+        this.keluarMeja();
+        return;
+      }
     }
   }
 
@@ -65,13 +268,51 @@ class Aplikasi implements AppUntukMeja {
     this.koneksi = k;
     this.info = null;
     this.view = null;
+    this.statusKini = 'menyambung';
     k.saatPesan((p) => {
       if (this.koneksi === k) this.terimaPesan(p);
     });
     k.saatStatus((s) => {
       if (this.koneksi !== k || k.jenis === 'offline') return;
-      if (s === 'terputus' && this.layar !== 'beranda') toast('Koneksi putus, mencoba menyambung lagi…', true);
+      const sebelum = this.statusKini;
+      this.statusKini = s;
+      this.saatStatusBerubah(s, sebelum);
     });
+  }
+
+  private saatStatusBerubah(s: StatusKoneksi, sebelum: StatusKoneksi) {
+    if (this.layar === 'beranda' || this.layar === 'publik') {
+      if (s !== 'gagal') {
+        this.beranda?.aturStatusOnline(s === 'terputus' ? 'menyambung' : s);
+        return;
+      }
+      // Jangan coba terus di belakang layar dari beranda: niat yang tertahan bisa tiba-tiba
+      // terkirim lama kemudian. Pemain bisa menekan "Coba lagi" kapan saja.
+      this.koneksi?.tutup();
+      this.koneksi = null;
+      const cobaLagi = this.niatOnline ? () => this.cobaLagiOnline() : null;
+      if (this.layar === 'beranda' && this.beranda) {
+        this.beranda.aturStatusOnline('gagal', cobaLagi);
+        // Pembaca layar tetap diberi tahu; toast (identik tidak menumpuk) hanya kalau pesannya tak terlihat.
+        if (this.beranda.pesanGagalTerlihat()) umumkan(PESAN_SERVER_GAGAL, true);
+        else toast(PESAN_SERVER_GAGAL, true, TOAST_GAGAL_BERANDA_MS);
+      } else {
+        toast(PESAN_SERVER_GAGAL, true, 8000, cobaLagi ? { label: 'Coba lagi', jalankan: cobaLagi } : undefined);
+      }
+      return;
+    }
+    // Di meja, indikator koneksi di bar atas (KontrolMeja membaca statusKoneksi()) sudah memberi tahu.
+    if (this.layar === 'meja') return;
+    if (s === 'terputus' && sebelum !== 'terputus') toast('Koneksi putus, mencoba menyambung lagi…', true);
+    if (s === 'tersambung' && (sebelum === 'terputus' || sebelum === 'gagal')) toast('Tersambung lagi.');
+  }
+
+  private cobaLagiOnline() {
+    const niat = this.niatOnline;
+    // Tombol "Coba lagi" yang basi (pemain sudah pindah ke meja/lobi) tidak boleh mengganti koneksi.
+    if (!niat || (this.layar !== 'beranda' && this.layar !== 'publik')) return;
+    if (this.layar === 'beranda') this.beranda?.aturStatusOnline('menyambung');
+    niat();
   }
 
   private pakaiOnline(): Koneksi {
@@ -79,39 +320,69 @@ class Aplikasi implements AppUntukMeja {
     return this.koneksi!;
   }
 
+  /** Kirim pesan online dari beranda; diingat untuk "Coba lagi" kalau server tidak terjangkau. */
+  private kirimOnline(p: PesanKlien) {
+    this.niatOnline = () => this.pakaiOnline().kirim(p);
+    this.niatOnline();
+  }
+
   kirim(p: PesanKlien) {
-    this.koneksi?.kirim(p);
+    const k = this.koneksi;
+    if (p.t === 'keluar' && k?.jenis === 'online' && !k.siapKirim()) {
+      // Tidak diantrikan: pemanggil langsung menutup koneksi lewat keluarMeja(). Ingat untuk
+      // memberi tahu pemain bahwa kursinya belum dilepas.
+      this.keluarTakSampai = this.layar === 'lobi' ? 'lobi' : 'meja';
+      return;
+    }
+    k?.kirim(p);
   }
 
   private terimaPesan(p: PesanServer) {
     switch (p.t) {
       case 'meja':
         this.info = p.info;
+        this.niatOnline = null;
         if (p.info.status === 'lobi') this.tampilkanLobi();
         else this.tampilkanMeja();
+        // View 'selesai' bisa datang lebih dulu dari info meja (kode & kursi bot): catat sekarang.
+        this.catatJikaSelesai();
         break;
       case 'view':
         this.view = p.view;
         this.catatJikaSelesai();
         if (this.layar === 'meja') this.kontrol?.perbarui(null, p.view);
+        this.tawarkanVersiBaru();
         break;
       case 'error':
         if (p.pesan.includes('nggak ketemu') && simpan.sesi()) {
           simpan.setSesi(null);
-          if (this.layar === 'beranda') return toast('Meja terakhir sudah tidak ada.');
+          if (this.layar === 'beranda') {
+            this.beranda?.aturStatusOnline('siap');
+            return toast('Meja terakhir sudah tidak ada.');
+          }
+          // Meja hilang (mis. server baru dinyalakan ulang) padahal layar lobi/meja masih tampil.
+          if (this.layar === 'lobi' || this.layar === 'meja') {
+            toast('Mejanya sudah bubar, Bos. Balik ke beranda ya.', true);
+            return this.keluarMeja();
+          }
         }
+        if (this.layar === 'beranda') this.beranda?.aturStatusOnline('tersambung');
         toast(p.pesan, true);
         break;
       case 'daftar':
         this.layar = 'publik';
+        this.niatOnline = null;
         this.sembunyikanGame();
+        suasanaMusik('beranda');
         renderDaftarPublik(
           this.ui,
           p.meja,
           (kode) => this.gabung(simpan.nama() || 'Pemain', kode),
-          () => this.kirim({ t: 'daftar' }),
+          // Lewat kirimOnline: kalau koneksi sudah ditutup karena gagal, "Segarkan" menyambung lagi.
+          () => this.kirimOnline({ t: 'daftar' }),
           () => this.tampilkanBeranda(),
         );
+        this.pastikanJaga();
         break;
       case 'emote':
         this.kontrol?.terimaEmote(p.kursi, p.isi);
@@ -133,22 +404,38 @@ class Aplikasi implements AppUntukMeja {
       return;
     }
     if (this.sudahDicatat) return;
+    // Butuh info meja (kode untuk penanda online, kursi untuk tanda bot); dicoba lagi saat datang.
+    if (!this.info) return;
     this.sudahDicatat = true;
-    simpan.tambahRiwayat({
-      waktu: Date.now(),
-      mode: this.jenis,
-      putaran: v.riwayat.length,
-      klasemen: v.pemain.map((pm, i) => ({ nama: pm.nama, skor: v.skor[i] })).sort((a, b) => b.skor - a.skor),
-    });
+    if (this.tutorial) {
+      // Latihan tidak dicatat di riwayat/statistik. Tutorial baru ditandai tuntas oleh KontrolMeja
+      // setelah penutupnya tampil di klasemen akhir (keluar sebelum itu: latihan ditawarkan lagi).
+      tulisLatihan(false);
+    } else {
+      // Online: meja yang selesai tetap ada di server dan sesinya disambung lagi tiap aplikasi
+      // dibuka, jadi view 'selesai' yang sama bisa datang berkali-kali. Penanda persisten
+      // mencegah klasemennya tercatat ulang. Offline tidak perlu: simpanannya dihapus di bawah.
+      const kunci = this.jenis === 'online' ? kunciPermainan(this.info.kode, v) : null;
+      simpan.tambahRiwayat(catatanDariView(v, this.jenis, this.info.kursi, Date.now()), kunci);
+    }
     if (this.jenis === 'offline') simpan.setMejaOffline(null);
   }
 
   // ---------- layar ----------
 
+  /** Beranda ditinggalkan / diganti: lepas pendengarnya supaya tidak menumpuk. */
+  private tinggalkanBeranda() {
+    this.beranda?.lepas();
+    this.beranda = null;
+  }
+
   private sembunyikanGame() {
     this.kontrol?.hancurkan();
     this.kontrol = null;
+    this.tinggalkanBeranda();
     this.elGame.style.visibility = 'hidden';
+    // Meja tidak tampil: hentikan loop Phaser supaya HP tidak menggambar kanvas tersembunyi.
+    if (this.game) tidurkanGame(this.game.game);
     void this.wakeLock?.release().catch(() => undefined);
     this.wakeLock = null;
   }
@@ -157,46 +444,87 @@ class Aplikasi implements AppUntukMeja {
     this.layar = 'beranda';
     this.sembunyikanGame();
     tutupModal();
-    renderBeranda(
+    suasanaMusik('beranda');
+    const online: StatusOnline = !navigator.onLine
+      ? 'offline'
+      : this.koneksi?.jenis === 'online' && this.statusKini !== 'tersambung'
+        ? 'menyambung'
+        : 'siap';
+    this.beranda = renderBeranda(
       this.ui,
       {
-        buatMeja: (nama) => this.pakaiOnline().kirim({ t: 'buat', nama, pengaturan: { jumlahPemain: 4 } }),
+        buatMeja: (nama) => this.kirimOnline({ t: 'buat', nama, pengaturan: { jumlahPemain: 4 } }),
         gabung: (nama, kode) => this.gabung(nama, kode),
-        lihatPublik: () => this.pakaiOnline().kirim({ t: 'daftar' }),
+        lihatPublik: () => this.kirimOnline({ t: 'daftar' }),
         lihatRiwayat: () => {
           this.layar = 'riwayat';
+          this.tinggalkanBeranda();
           renderRiwayat(this.ui, () => this.tampilkanBeranda());
+          this.pastikanJaga();
         },
         mainOffline: (nama, pengaturan, pengocokSaya) => this.mainOffline(nama, pengaturan, pengocokSaya),
-        lanjutOffline: () => {
-          const k = KoneksiOffline.lanjutkan();
-          if (!k) {
-            toast('Simpanan permainan offline tidak bisa dilanjutkan, jadi dihapus.', true);
-            return this.tampilkanBeranda();
-          }
-          this.pasangKoneksi(k);
-        },
-        pasangAplikasi: this.promptPasang
-          ? () => {
-              void this.promptPasang?.prompt();
-              this.promptPasang = null;
-            }
-          : null,
+        lanjutOffline: () => this.lanjutOffline(),
+        latihan: (nama) => this.mulaiLatihan(nama),
+        bantuan: () => bukaBantuan(),
+        pengaturan: () =>
+          bukaPengaturan({
+            mulaiLatihan: () => this.mulaiLatihan(simpan.nama() || 'Pemain'),
+            // Gerbang yang sama dengan tombol latihan di beranda: simpanan offline tidak hilang diam-diam.
+            bolehLatihan: () => konfirmasiTimpaSimpanan('Latihan pakai slot simpanan yang sama.'),
+          }),
+        tentang: () => bukaTentang(),
+        pasangAplikasi: this.aksiPasang(),
+        muatUlang: this.versiBaru ? () => this.muatUlang() : null,
       },
-      this.kodeAwal,
+      { kodeAwal: this.kodeAwal, statusOnline: online },
     );
+    // Tawaran versi baru yang tertunda (mis. keluar dari meja di tengah putaran) muncul sekarang.
+    this.tawarkanVersiBaru();
+  }
+
+  /** Aksi tombol "Pasang ke layar utama", atau null kalau browser belum menawarkan pemasangan. */
+  private aksiPasang(): (() => void) | null {
+    if (!this.promptPasang) return null;
+    return () => {
+      void this.promptPasang?.prompt();
+      this.promptPasang = null;
+      this.beranda?.aturPasang(null);
+    };
   }
 
   private gabung(nama: string, kodeMentah: string) {
     const kode = kodeMentah.trim().toUpperCase();
-    if (!/^[A-Z0-9]{5}$/.test(kode)) return toast('Kode meja 5 huruf/angka, Bos.', true);
+    if (!/^[A-Z0-9]{5}$/.test(kode)) {
+      this.beranda?.aturStatusOnline(navigator.onLine ? 'siap' : 'offline');
+      return toast('Kode meja 5 huruf/angka, Bos.', true);
+    }
     const sesi = simpan.sesi();
-    this.pakaiOnline().kirim({ t: 'gabung', kode, nama, token: sesi?.kode === kode ? sesi.token : undefined });
+    this.kirimOnline({ t: 'gabung', kode, nama, token: sesi?.kode === kode ? sesi.token : undefined });
   }
 
-  private mainOffline(nama: string, pengaturan: Partial<PengaturanMeja>, pengocokSaya: boolean) {
+  private mainOffline(nama: string, pengaturan: Partial<PengaturanMeja>, pengocokSaya: boolean, latihan = false) {
+    this.niatOnline = null;
     simpan.setMejaOffline(null);
-    this.pasangKoneksi(KoneksiOffline.baru(nama, pengaturan, pengocokSaya ? 0 : undefined));
+    this.modeLatihan = latihan;
+    tulisLatihan(latihan);
+    // Latihan: nama warga kedai urutan tetap (lawannya selalu sama); main biasa: urutan acak.
+    this.pasangKoneksi(KoneksiOffline.baru(nama, pengaturan, pengocokSaya ? 0 : undefined, { urutanNamaTetap: latihan }));
+  }
+
+  private mulaiLatihan(nama: string) {
+    this.mainOffline(nama, PENGATURAN_LATIHAN, true, true);
+  }
+
+  private lanjutOffline() {
+    const k = KoneksiOffline.lanjutkan();
+    if (!k) {
+      toast('Simpanan permainannya sudah nggak bisa dilanjutkan, jadi dihapus.', true);
+      tulisLatihan(false);
+      return this.tampilkanBeranda();
+    }
+    this.modeLatihan = bacaLatihan();
+    this.niatOnline = null;
+    this.pasangKoneksi(k);
   }
 
   mainLagiOffline() {
@@ -204,24 +532,33 @@ class Aplikasi implements AppUntukMeja {
   }
 
   keluarMeja(hapusSesi = true) {
+    const takSampai = this.keluarTakSampai;
+    this.keluarTakSampai = null;
     if (this.koneksi?.jenis === 'online' && hapusSesi) simpan.setSesi(null);
     this.koneksi?.tutup();
     this.koneksi = null;
     this.info = null;
     this.view = null;
     this.kodeAwal = '';
-    history.replaceState(null, '', location.pathname);
+    this.niatOnline = null;
+    history.replaceState(history.state, '', location.pathname);
     this.tampilkanBeranda();
+    if (takSampai) toast(PESAN_KELUAR_TAK_SAMPAI[takSampai], true, 9000);
   }
 
   private tampilkanLobi() {
+    // Dialog dari layar lain (mis. menu meja) tidak ikut terbawa ke lobi.
+    if (this.layar !== 'lobi') tutupSemuaJendela();
     this.layar = 'lobi';
     this.sembunyikanGame();
     tutupModal();
+    suasanaMusik('beranda');
     renderLobi(this.ui, this.info!, (p) => this.kirim(p), () => {
       this.kirim({ t: 'keluar' });
       this.keluarMeja();
     });
+    this.pastikanJaga();
+    this.tawarkanVersiBaru();
   }
 
   private tampilkanMeja() {
@@ -229,23 +566,50 @@ class Aplikasi implements AppUntukMeja {
       this.kontrol.perbarui(this.info, null);
       return;
     }
+    // Dialog milik layar sebelumnya (mis. konfirmasi "Keluar dari meja?" di lobi saat host
+    // memulai) tidak boleh ikut melayang di atas meja dengan teks yang sudah tidak berlaku.
+    if (this.layar !== 'meja') tutupSemuaJendela();
     this.layar = 'meja';
+    this.tinggalkanBeranda();
     this.ui.innerHTML = '';
     this.elGame.style.visibility = 'visible';
-    this.game ??= buatGame(this.elGame);
+    suasanaMusik('meja');
+    // Game yang sudah ada dibangunkan; game baru menyalakan loop-nya sendiri saat boot.
+    if (this.game) bangunkanGame(this.game.game);
+    else this.game = buatGame(this.elGame);
     const akar = this.ui;
     void this.game.scene.then((scene) => {
-      if (this.layar !== 'meja' || this.kontrol) return;
+      // Sudah pindah layar sebelum Phaser siap: tidurkan lagi loop yang baru menyala.
+      if (this.layar !== 'meja') return this.game && tidurkanGame(this.game.game);
+      if (this.kontrol) return;
       this.kontrol = new KontrolMeja(this, scene, akar);
       this.kontrol.perbarui(this.info, this.view);
     });
     window.dispatchEvent(new Event('resize'));
+    this.mintaWakeLock();
+    this.pastikanJaga();
+  }
+
+  private mintaWakeLock() {
+    if (this.wakeLock) return;
     const nav = navigator as Navigator & { wakeLock?: { request(t: 'screen'): Promise<{ release(): Promise<void> }> } };
     void nav.wakeLock
       ?.request('screen')
-      .then((w) => (this.wakeLock = w))
+      .then((w) => {
+        // Sudah pindah layar selagi menunggu izin: lepas lagi.
+        if (this.layar !== 'meja') return void w.release().catch(() => undefined);
+        this.wakeLock = w;
+        (w as unknown as EventTarget).addEventListener?.('release', () => {
+          if (this.wakeLock === w) this.wakeLock = null;
+        });
+      })
       .catch(() => undefined);
   }
 }
 
-new Aplikasi().mulai();
+pasangLandmarkUtama();
+const aplikasi = new Aplikasi();
+aplikasi.mulai();
+siapkanJendelaMalas();
+// Untuk debug/uji saat pengembangan (mis. cek aplikasi.tutorial dari Playwright).
+if (import.meta.env.DEV) (window as unknown as { __remiApp: Aplikasi }).__remiApp = aplikasi;

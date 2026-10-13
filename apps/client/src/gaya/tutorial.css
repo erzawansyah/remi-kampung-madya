@@ -1,0 +1,185 @@
+/* =============================================================================================
+   TUTORIAL (coach mark): ui/tutorial.ts
+   .tutorial (lapisan di #ui, tembus sentuh) > .tutorial-sorot (lubang sorot) + .tutorial-gelembung
+   .tutorial.tengah: tanpa sorotan, latar diredupkan rata dan gelembung di tengah.
+   .tutorial-catatan: catatan tutorial di dalam popup joker / modal hasil.
+   Lapisan ini tidak menghalangi input: hanya gelembungnya yang bisa disentuh.
+   ============================================================================================= */
+
+#ui > .tutorial {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-palet) - 1);
+  pointer-events: none;
+}
+#ui > .tutorial.tengah {
+  background: var(--tirai);
+}
+
+.tutorial-sorot {
+  position: fixed;
+  border-radius: var(--radius-sedang);
+  border: 2px solid var(--emas);
+  box-shadow:
+    0 0 0 200vmax rgba(3, 12, 7, 0.45),
+    0 0 18px 2px var(--garis-emas);
+  pointer-events: none;
+  transition:
+    left var(--durasi-sedang) var(--ease-keluar),
+    top var(--durasi-sedang) var(--ease-keluar),
+    width var(--durasi-sedang) var(--ease-keluar),
+    height var(--durasi-sedang) var(--ease-keluar);
+}
+.tutorial.tengah .tutorial-sorot {
+  display: none;
+}
+
+.tutorial-gelembung {
+  position: fixed;
+  width: min(340px, calc(100vw - 2 * var(--ruang-2)));
+  padding: var(--ruang-3) var(--ruang-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+  background: linear-gradient(180deg, var(--krem), var(--krem-redup));
+  color: var(--tinta);
+  border: 1px solid var(--krem-garis);
+  border-radius: var(--radius-besar);
+  box-shadow: var(--bayangan-4);
+  pointer-events: auto;
+}
+.tutorial-gelembung.masuk {
+  animation: tutorial-masuk var(--durasi-lambat) var(--ease-pegas);
+}
+.tutorial-judul {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--teks-lg);
+  line-height: var(--baris-rapat);
+}
+.tutorial-teks {
+  margin: 0;
+  font-size: var(--teks-sm);
+  line-height: var(--baris-normal);
+}
+.tutorial-tombol {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ruang-2);
+}
+/* Tombol hantu di atas kertas krem: teks tinta supaya terbaca. */
+.tutorial-gelembung button.hantu {
+  color: var(--tinta-redup);
+  border-color: var(--krem-garis);
+}
+
+/* "Baca semua": hanya di mode ringkas yang teksnya terlipat. */
+.tutorial-gelembung .tutorial-selengkapnya {
+  display: none;
+}
+
+/* Mode ringkas (layar pendek/lanskap, tidak ada tempat untuk gelembung penuh tanpa menutupi
+   sasaran): gelembung lebar, judul + tombol satu baris, teks dilipat dua baris. */
+.tutorial-gelembung.ringkas {
+  width: min(560px, calc(100vw - 2 * var(--ruang-2)));
+  padding: var(--ruang-2) var(--ruang-3);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'judul tombol'
+    'teks teks';
+  align-items: center;
+  gap: var(--ruang-1) var(--ruang-2);
+}
+.tutorial-gelembung.ringkas.luap {
+  grid-template-areas:
+    'judul tombol'
+    'teks lagi';
+}
+.ringkas .tutorial-judul {
+  grid-area: judul;
+  font-size: var(--teks-md);
+}
+.ringkas .tutorial-tombol {
+  grid-area: tombol;
+}
+.ringkas .tutorial-teks {
+  grid-area: teks;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.ringkas.luap .tutorial-selengkapnya {
+  grid-area: lagi;
+  display: inline-flex;
+  align-self: end;
+}
+
+/* Panah ke sasaran. data-panah = arah ujungnya; --panah-x/--panah-y = posisi di tepi gelembung. */
+.tutorial-gelembung[data-panah]::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: var(--krem-redup);
+  border: 1px solid var(--krem-garis);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+.tutorial-gelembung[data-panah='bawah']::before {
+  bottom: -8px;
+  left: calc(var(--panah-x, 50%) - 7px);
+  border-top: none;
+  border-left: none;
+}
+.tutorial-gelembung[data-panah='atas']::before {
+  top: -8px;
+  left: calc(var(--panah-x, 50%) - 7px);
+  background: var(--krem);
+  border-bottom: none;
+  border-right: none;
+}
+.tutorial-gelembung[data-panah='kiri']::before {
+  left: -8px;
+  top: calc(var(--panah-y, 50%) - 7px);
+  border-top: none;
+  border-right: none;
+}
+.tutorial-gelembung[data-panah='kanan']::before {
+  right: -8px;
+  top: calc(var(--panah-y, 50%) - 7px);
+  border-bottom: none;
+  border-left: none;
+}
+
+.tutorial-catatan {
+  padding: var(--ruang-2) var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  background: var(--info-latar);
+  border: 1px solid var(--info);
+  color: var(--teks-di-info);
+  font-size: var(--teks-sm);
+  line-height: var(--baris-normal);
+}
+.tutorial-catatan p {
+  margin: var(--ruang-1) 0 0;
+}
+
+@keyframes tutorial-masuk {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-gerak='penuh']) .tutorial-gelembung.masuk {
+    animation-name: pudar-masuk;
+  }
+}
+html[data-gerak='kurang'] .tutorial-gelembung.masuk {
+  animation-name: pudar-masuk;
+}

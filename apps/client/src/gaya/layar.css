@@ -1,0 +1,701 @@
+/* =============================================================================================
+   LAYAR MENU (beranda, lobi, riwayat) & RINCIAN SKOR
+   ============================================================================================= */
+
+/* .layar: layar penuh yang bisa digulir; .kolom: kolom isi terpusat. */
+.layar {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: calc(var(--ruang-4) + var(--aman-atas)) calc(var(--ruang-4) + var(--aman-kanan))
+    calc(var(--ruang-6) + var(--aman-bawah)) calc(var(--ruang-4) + var(--aman-kiri));
+  /* Laken body tetap terlihat; sedikit cahaya tambahan di atas judul. */
+  background: radial-gradient(ellipse 70% 40% at 50% 0%, rgba(255, 214, 140, 0.08), rgba(255, 214, 140, 0) 70%);
+}
+.kolom {
+  max-width: var(--lebar-kolom);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-4);
+}
+
+/* Judul layar: papan nama kedai */
+.judul {
+  text-align: center;
+  margin: var(--ruang-3) 0 var(--ruang-1);
+}
+.judul h1 {
+  margin: 0;
+  font-size: var(--teks-3xl);
+  color: var(--krem);
+  letter-spacing: 0.01em;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.45),
+    0 0 26px rgba(var(--emas-rgb), 0.28);
+}
+/* Garis kuningan kecil di bawah judul */
+.judul h1::after {
+  content: '';
+  display: block;
+  width: 72px;
+  height: 3px;
+  margin: var(--ruang-2) auto 0;
+  border-radius: var(--radius-pil);
+  background: linear-gradient(90deg, transparent, var(--emas), transparent);
+}
+.judul p {
+  margin: var(--ruang-2) 0 0;
+  color: var(--teks-redup);
+  font-size: var(--teks-md);
+}
+
+/* ---------- Lobi ---------- */
+.kode-besar {
+  font-family: var(--font-angka);
+  font-size: var(--teks-3xl);
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-align: center;
+  color: var(--teks-emas);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+  user-select: text;
+}
+
+/* ---------- Rincian skor ---------- */
+.rincian {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+}
+.rincian .baris-skor {
+  background: var(--permukaan-1);
+  border-radius: var(--radius-sedang);
+  padding: var(--ruang-2) var(--ruang-3);
+}
+.baris-skor .atas {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--ruang-2);
+  align-items: center;
+}
+.baris-skor .hitung {
+  font-family: var(--font-angka);
+  font-size: var(--teks-sm);
+  color: var(--teks-redup);
+  margin-top: var(--ruang-1);
+  word-break: break-word;
+}
+.log {
+  font-size: var(--teks-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.log div {
+  padding: 6px var(--ruang-2);
+  border-radius: var(--radius-kecil);
+  background: var(--permukaan-1);
+  border-left: 3px solid var(--garis-kuat);
+}
+.peringkat {
+  flex: none;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: var(--radius-pil);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--permukaan-3);
+  font-weight: 800;
+  font-size: var(--teks-sm);
+  font-variant-numeric: tabular-nums;
+}
+.nama-skor {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.nama-skor small {
+  font-size: var(--teks-xs);
+}
+.komponen {
+  padding: 0 var(--ruang-3) var(--ruang-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-1);
+}
+.komp {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--ruang-2);
+  font-size: var(--teks-sm);
+  padding-top: 6px;
+  border-top: 1px dashed var(--garis);
+  font-variant-numeric: tabular-nums;
+}
+.komp.total-komp {
+  font-size: var(--teks-md);
+  font-weight: 700;
+}
+.akumulasi {
+  padding: 0 var(--ruang-3) var(--ruang-3);
+  font-size: var(--teks-sm);
+}
+.putaran-akordion .rincian {
+  padding: 0 var(--ruang-2) var(--ruang-2);
+}
+.isi-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+}
+.baris-peringkat {
+  display: flex;
+  align-items: center;
+  gap: var(--ruang-3);
+  padding: var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  background: var(--permukaan-1);
+}
+.baris-peringkat.saya {
+  outline: 1px solid var(--emas);
+  background: rgba(var(--emas-rgb), 0.08);
+}
+.medali {
+  font-size: 1.375rem;
+  min-width: 30px;
+  text-align: center;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.kanan-peringkat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+/* ---------- Chip kartu mini (rincian skor) ----------
+   .chip: kartu kertas mini · .chip.merah: bunga merah · .bunga-*: kartu 4 warna (opsional)
+   .chips .kelompok: satu kartu jadi */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: var(--teks-sm);
+}
+.chips .kelompok {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-kecil);
+  background: rgba(139, 226, 139, 0.14);
+}
+.chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 34px;
+  padding: 3px 5px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, var(--krem), var(--krem-redup));
+  border: 1px solid var(--krem-garis);
+  color: var(--tinta);
+  line-height: 1.1;
+  box-shadow: var(--bayangan-1);
+}
+.chip.merah {
+  color: var(--tinta-merah);
+}
+.chip i {
+  font-style: normal;
+  font-size: var(--teks-xs);
+  font-weight: 700;
+  color: var(--teks-di-emas);
+  background: var(--emas);
+  border-radius: 4px;
+  padding: 0 3px;
+}
+.chip small {
+  font-size: var(--teks-xs);
+  color: var(--tinta-redup);
+}
+
+/* =============================================================================================
+   BERANDA: "pintu masuk Kedai Madya" (ui/beranda.ts)
+   HP: satu kolom mengikuti urutan DOM (hero → tawaran → main → online → menu → kaki), jadi
+   urutan Tab dan pembaca layar sama dengan urutan visual.
+   Desktop ≥ 1100px / HP lanskap: dua kolom lewat grid-area (kiri: hero, lalu menu & kaki ·
+   kanan: tawaran, main, online), tanpa mengubah urutan DOM.
+   Beranda tidak memakai .kolom/.judul (aturan kolom lama di responsif.css sudah dibuang).
+   ============================================================================================= */
+.layar.beranda {
+  padding-top: calc(var(--ruang-3) + var(--aman-atas));
+  background:
+    radial-gradient(ellipse 80% 42% at 50% 0%, rgba(255, 214, 140, 0.13), rgba(255, 214, 140, 0) 72%),
+    radial-gradient(ellipse 60% 30% at 50% 18%, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0) 70%);
+}
+.beranda-isi {
+  max-width: var(--lebar-kolom);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-4);
+}
+/* Kelompok aksi (tawaran, main, online) dan sisi (menu, kaki): di HP bertumpuk biasa. */
+.beranda-aksi,
+.beranda-sisi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-4);
+}
+/* Dua kolom (desktop & HP lanskap): hero di kiri atas, menu & kaki di bawahnya, aksi di kanan. */
+.beranda-hero {
+  grid-area: hero;
+}
+.beranda-aksi {
+  grid-area: aksi;
+}
+.beranda-sisi {
+  grid-area: sisi;
+}
+
+/* ---------- Hero: kipas kartu + papan nama ---------- */
+.beranda-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-top: var(--ruang-2);
+}
+.kipas {
+  --lebar-kipas: 62px;
+  position: relative;
+  width: calc(var(--lebar-kipas) * 3.6);
+  height: calc(var(--lebar-kipas) * 1.9);
+  margin: 0 auto var(--ruang-2);
+}
+.kipas canvas {
+  position: absolute;
+  left: 50%;
+  /* Sudut bawah kartu yang dimiringkan turun sedikit: beri ruang supaya tidak menimpa teks. */
+  bottom: calc(var(--lebar-kipas) * 0.3);
+  width: var(--lebar-kipas);
+  height: auto;
+  margin-left: calc(var(--lebar-kipas) / -2);
+  border-radius: calc(var(--lebar-kipas) * 0.07);
+  /* Poros jauh di bawah kartu: kartu membuka seperti kipas di tangan. */
+  transform-origin: 50% 165%;
+  transform: rotate(calc(var(--i) * 13deg));
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.45));
+  transition: transform var(--durasi-sedang) var(--ease-pegas);
+  /* backwards: setelah animasi selesai, transform kembali ke nilai di atas (hover tetap jalan). */
+  animation: kipas-buka 640ms var(--ease-pegas) backwards;
+  animation-delay: calc((var(--i) + 2) * 70ms + 120ms);
+}
+@keyframes kipas-buka {
+  from {
+    opacity: 0;
+    transform: translateY(18px) rotate(0deg);
+  }
+}
+@media (hover: hover) {
+  .beranda-hero:hover .kipas canvas {
+    transform: rotate(calc(var(--i) * 16deg)) translateY(-4px);
+  }
+}
+html[data-gerak='kurang'] .kipas canvas {
+  animation: none;
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-gerak='penuh']) .kipas canvas {
+    animation: none;
+    transition: none;
+  }
+}
+html[data-efek='hemat'] .kipas canvas {
+  filter: none;
+  box-shadow: var(--bayangan-2);
+}
+/* Logo Kedai Madya (V2: krem di atas laken, fill = currentColor). Varian 'lengkap' (rasio
+   ±2,3:1) minimal 160 px supaya tulisan EST. 2026 masih terbaca; tinggi ikut viewBox. */
+.hero-logo {
+  display: block;
+  width: clamp(164px, 46vw, 208px);
+  height: auto;
+  margin: 0 auto var(--ruang-2);
+  color: var(--krem);
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35));
+}
+.hero-sapa {
+  margin: 0;
+  font-size: var(--teks-xs);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--teks-emas);
+}
+.hero-judul {
+  margin: var(--ruang-1) 0 0;
+  font-size: var(--teks-3xl);
+  color: var(--krem);
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.45),
+    0 0 28px rgba(var(--emas-rgb), 0.3);
+}
+.hero-judul::after {
+  content: '';
+  display: block;
+  width: 88px;
+  height: 3px;
+  margin: var(--ruang-2) auto 0;
+  border-radius: var(--radius-pil);
+  background: linear-gradient(90deg, transparent, var(--emas), transparent);
+}
+.hero-tagline {
+  margin: var(--ruang-2) 0 0;
+  color: var(--teks-redup);
+  font-size: var(--teks-md);
+}
+
+/* ---------- Panel main & online ---------- */
+.panel-main h2,
+.panel-online h2,
+.tawaran-latihan h2 {
+  font-size: var(--teks-lg);
+}
+/* Tombol besar dua baris: label + ringkasan kecil */
+.tombol-dua-baris {
+  flex-direction: column;
+  gap: 2px;
+}
+.tombol-dua-baris small {
+  font-size: var(--teks-xs);
+  font-weight: 500;
+  opacity: 0.85;
+}
+.atur-meja > summary {
+  font-weight: 650;
+}
+.isi-atur {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-1);
+  padding: 0 var(--ruang-3) var(--ruang-3);
+}
+.kepala-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ruang-2) var(--ruang-3);
+}
+/* Judul di kiri; lencana status (+ tombol "Coba lagi" saat gagal) merapat ke kanan. */
+.kepala-panel > h2 {
+  margin-right: auto;
+}
+/* Pesan "server belum bisa dihubungi" di panel online (beranda), dengan tombol Coba lagi. */
+.info-gagal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ruang-2) var(--ruang-3);
+  padding: var(--ruang-2) var(--ruang-3);
+  font-size: var(--teks-sm);
+  font-weight: 600;
+  color: var(--teks-di-bahaya);
+  background: rgba(122, 37, 32, 0.45);
+  border: 1px solid var(--bahaya-garis);
+  border-left: 4px solid var(--bahaya);
+  border-radius: var(--radius-sedang);
+}
+.info-gagal > span {
+  flex: 1 1 12rem;
+}
+.gabung-deret {
+  display: flex;
+  gap: var(--ruang-2);
+}
+.gabung-deret input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.gabung-deret button {
+  flex: none;
+  min-width: 104px;
+}
+.tawaran-latihan {
+  border-color: var(--garis-emas);
+  background:
+    radial-gradient(ellipse 90% 80% at 0% 0%, rgba(var(--emas-rgb), 0.16), rgba(var(--emas-rgb), 0) 70%),
+    var(--panel);
+}
+.tawaran-latihan p {
+  color: var(--teks-redup);
+}
+
+/* ---------- Menu ubin & kaki ---------- */
+.beranda-nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ruang-2);
+}
+.nav-ubin {
+  flex-direction: column;
+  gap: var(--ruang-1);
+  min-height: 78px;
+  padding: var(--ruang-3) var(--ruang-2);
+  font-size: var(--teks-sm);
+  background: linear-gradient(180deg, rgba(255, 246, 225, 0.06), rgba(255, 246, 225, 0)), var(--panel);
+  border-radius: var(--radius-besar);
+}
+.nav-ikon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.nav-ubin.nav-lebar {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  min-height: var(--sentuh);
+}
+/* ---------- Kartu info Kedai Madya (soft selling, ui/beranda.ts) ----------
+   Pelat krem bergaris tinta seperti stiker logo kedai. Hanya di beranda (setelah menu), tidak
+   pernah di layar meja. Tautan = pil bergaris tinta, target sentuh 44px. */
+.kartu-kedai {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+  padding: var(--ruang-3) var(--ruang-4) var(--ruang-4);
+  background: var(--madya-kertas);
+  color: var(--madya-tinta);
+  border: 2px solid var(--madya-tinta);
+  border-radius: var(--radius-besar);
+  box-shadow: 3px 3px 0 var(--madya-tinta), var(--bayangan-2);
+  font-size: var(--teks-sm);
+  line-height: var(--baris-normal);
+}
+.kartu-kedai p {
+  margin: 0;
+}
+.kartu-kedai h2 {
+  margin: 0;
+  font-size: var(--teks-lg);
+  color: var(--madya-tinta);
+}
+.kedai-kepala {
+  display: flex;
+  align-items: center;
+  gap: var(--ruang-3);
+}
+.kedai-logo {
+  flex: none;
+  width: 64px;
+  height: auto;
+  max-height: 48px;
+  color: var(--madya-tinta);
+}
+.kedai-bio {
+  font-size: var(--teks-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.kedai-alamat {
+  font-weight: 600;
+}
+.kedai-catatan {
+  font-size: var(--teks-xs);
+  color: var(--tinta-redup);
+}
+.kedai-tautan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ruang-2);
+}
+.kedai-tautan a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--sentuh);
+  padding: 0 var(--ruang-3);
+  border: 2px solid var(--madya-tinta);
+  border-radius: var(--radius-pil);
+  background: var(--madya-kertas);
+  color: var(--madya-tinta);
+  font-weight: 700;
+  text-decoration: none;
+}
+.kedai-tautan a:hover {
+  background: var(--madya-kuning);
+}
+.kartu-kedai a:focus-visible {
+  outline-color: var(--madya-tinta);
+}
+.beranda-kaki {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ruang-2) var(--ruang-3);
+  font-size: var(--teks-xs);
+  color: var(--teks-redup);
+}
+
+/* ---------- Tablet ---------- */
+@media (min-width: 768px) {
+  .kipas {
+    --lebar-kipas: 84px;
+  }
+  .beranda-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* ---------- Desktop: dua kolom ---------- */
+@media (min-width: 1100px) {
+  .beranda-isi {
+    max-width: 1080px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    /* Baris kedua menyerap sisa tinggi kolom kanan: menu langsung di bawah hero. */
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      'hero aksi'
+      'sisi aksi';
+    gap: var(--ruang-5) var(--ruang-8);
+    align-items: start;
+    padding-top: var(--ruang-6);
+  }
+  .beranda-aksi,
+  .beranda-sisi {
+    gap: var(--ruang-5);
+  }
+  .beranda-sisi {
+    position: sticky;
+    top: 0;
+  }
+  .beranda-hero {
+    padding-top: var(--ruang-6);
+  }
+  .kipas {
+    --lebar-kipas: 112px;
+    margin-bottom: var(--ruang-5);
+  }
+  .hero-judul {
+    font-size: clamp(2.75rem, 1.6rem + 2.2vw, 3.75rem);
+  }
+  .hero-logo {
+    width: 240px;
+  }
+  .beranda-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ---------- HP landscape / layar pendek ---------- */
+@media (max-height: 480px) and (orientation: landscape) {
+  /* Layar pendek: hero di kiri (menempel), aksi di kanan, supaya tombol main langsung terlihat. */
+  .beranda-isi {
+    max-width: 920px;
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      'hero aksi'
+      'sisi aksi';
+    gap: var(--ruang-3) var(--ruang-5);
+    align-items: start;
+  }
+  .beranda-aksi,
+  .beranda-sisi {
+    gap: var(--ruang-3);
+  }
+  /* Kolom kanan lebih panjang dari layar: menu ikut menempel di kiri selagi digulir. */
+  .beranda-sisi {
+    position: sticky;
+    top: 0;
+  }
+  .hero-sapa,
+  .hero-tagline {
+    display: none;
+  }
+  .hero-logo {
+    width: 160px;
+    margin-bottom: var(--ruang-1);
+  }
+  .kipas {
+    --lebar-kipas: 44px;
+    margin-bottom: var(--ruang-1);
+  }
+  .hero-judul {
+    font-size: var(--teks-2xl);
+  }
+  .beranda-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .nav-ubin {
+    min-height: var(--sentuh);
+    flex-direction: row;
+  }
+}
+
+/* =============================================================================================
+   DAFTAR MEJA PUBLIK, RIWAYAT, STATISTIK
+   ============================================================================================= */
+.daftar-meja button.kursi {
+  width: 100%;
+  justify-content: flex-start;
+  font-weight: 400;
+  box-shadow: none;
+}
+/* Tab Riwayat: padding samping dirapatkan supaya keempat label muat satu baris di HP 360 dengan
+   teks besar (sisa ruang tetap dibagi rata oleh flex). Di layar yang lebih sempit deret tab tetap
+   bisa digulir, lengkap dengan pudaran tepi (komponen.css, [data-luap]). */
+.layar-riwayat [role='tablist'] [role='tab'] {
+  padding-inline: var(--ruang-1);
+}
+/* Tabel lebar bisa digeser sendiri tanpa menggeser layar. */
+.tabel-gulir {
+  width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ruang-2);
+}
+.stat-kotak {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  background: var(--permukaan-1);
+  border: 1px solid var(--garis);
+}
+.stat-kotak b {
+  font-size: var(--teks-xl);
+  line-height: var(--baris-rapat);
+  color: var(--emas-muda);
+}
+.stat-kotak small {
+  color: var(--teks-redup);
+}
+.stat-saya {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+}
+@media (min-width: 768px) {
+  .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
