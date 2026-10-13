@@ -1,0 +1,931 @@
+{
+  "konfigurasi": {
+    "label": "6-pemain",
+    "n": 6,
+    "duaDeck": false
+  },
+  "batasPutaran": 3,
+  "sidikJariGabungan": "be48729bf686defa6799053705035d42bef8217b51cffef379844e3557ac453a",
+  "rekaman": [
+    {
+      "seed": 1,
+      "level": [
+        "normal",
+        "normal",
+        "mudah",
+        "normal",
+        "normal",
+        "mudah"
+      ],
+      "jumlahAksi": 305,
+      "jumlahView": 149,
+      "putaran": [
+        {
+          "nomor": 1,
+          "pengocok": 3,
+          "rankJoker": 8,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            -10,
+            15,
+            -10,
+            -15,
+            30,
+            -20
+          ],
+          "skorAkumulasi": [
+            -10,
+            15,
+            -10,
+            -15,
+            30,
+            -20
+          ]
+        },
+        {
+          "nomor": 2,
+          "pengocok": 5,
+          "rankJoker": 1,
+          "cara": "mentung",
+          "pementung": 3,
+          "nilaiPentungan": 50,
+          "kepentung": [
+            1,
+            2
+          ],
+          "dibalik": true,
+          "total": [
+            -15,
+            -55,
+            -55,
+            100,
+            -15,
+            -25
+          ],
+          "skorAkumulasi": [
+            -25,
+            -40,
+            -65,
+            85,
+            15,
+            -45
+          ]
+        },
+        {
+          "nomor": 3,
+          "pengocok": 2,
+          "rankJoker": 1,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            20,
+            -10,
+            -30,
+            25,
+            -5,
+            20
+          ],
+          "skorAkumulasi": [
+            -5,
+            -50,
+            -95,
+            110,
+            10,
+            -25
+          ]
+        }
+      ],
+      "skorAkhir": [
+        -5,
+        -50,
+        -95,
+        110,
+        10,
+        -25
+      ],
+      "pemenang": [
+        3
+      ],
+      "alasanSelesai": "batasPutaran",
+      "hash": {
+        "aksi": "e79ddbb797d9570bf98e7c8d988c8ac6612966e3c571ee387e0633a67096ec8e",
+        "view": "2d1388e77ad9dcfc2daa9e403af0676884594b179b0bf8871712c7178fdab0a2",
+        "peristiwa": "ab66241dfaff562b32d3e3fdbf0951dbaf56b5f5da4e8e9ce21d45db4bbd690a",
+        "log": "9891d1eea395a8273f34be065e29c112126371aa88e67f508852ed9a1a459013",
+        "riwayat": "85e9b590629ee2d3d0cfe535b31bb58253ca53ec7d65a1c8f961b827b77c4fb3",
+        "stateAkhir": "a7626673224d1258a755c804975fbf7e872a7577144785f29b8d94977819b16d"
+      }
+    },
+    {
+      "seed": 2,
+      "level": [
+        "normal",
+        "mudah",
+        "normal",
+        "normal",
+        "mudah",
+        "normal"
+      ],
+      "jumlahAksi": 355,
+      "jumlahView": 161,
+      "putaran": [
+        {
+          "nomor": 1,
+          "pengocok": 4,
+          "rankJoker": 10,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            60,
+            -15,
+            30,
+            45,
+            -50,
+            50
+          ],
+          "skorAkumulasi": [
+            60,
+            -15,
+            30,
+            45,
+            -50,
+            50
+          ]
+        },
+        {
+          "nomor": 2,
+          "pengocok": 4,
+          "rankJoker": 3,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            25,
+            -95,
+            -15,
+            15,
+            -20,
+            25
+          ],
+          "skorAkumulasi": [
+            85,
+            -110,
+            15,
+            60,
+            -70,
+            75
+          ]
+        },
+        {
+          "nomor": 3,
+          "pengocok": 1,
+          "rankJoker": 12,
+          "cara": "mentung",
+          "pementung": 5,
+          "nilaiPentungan": 250,
+          "kepentung": [
+            4
+          ],
+          "dibalik": true,
+          "total": [
+            25,
+            -75,
+            -20,
+            -15,
+            -275,
+            295
+          ],
+          "skorAkumulasi": [
+            110,
+            -185,
+            -5,
+            45,
+            -345,
+            370
+          ]
+        }
+      ],
+      "skorAkhir": [
+        110,
+        -185,
+        -5,
+        45,
+        -345,
+        370
+      ],
+      "pemenang": [
+        5
+      ],
+      "alasanSelesai": "batasPutaran",
+      "hash": {
+        "aksi": "a53f6bfd0d7ebb202a5b201fa3f8a08fc758b55569d3f65a080c2228135f5ed5",
+        "view": "ed99b05077e44c720d4c6168e2093201331c13c575c03361c7c92f7833d64460",
+        "peristiwa": "c1aeb2e4a946a946adae77ff5b6d2de04a880fef1b2b8a98f9f14adff3cc8e88",
+        "log": "142f68a195d74045b6e9b42b1f279cfd91a0ac4440b5f5da35b256cf12b692b6",
+        "riwayat": "70ddf5b0702da341de1820adab5e357c422750b563b6cb8eb8567b54ac9265ee",
+        "stateAkhir": "c1892922853c5608dcfa478b0cdc0fdb1e2e4de07b416c4901e039d8953f52bf"
+      }
+    },
+    {
+      "seed": 3,
+      "level": [
+        "mudah",
+        "normal",
+        "normal",
+        "mudah",
+        "normal",
+        "normal"
+      ],
+      "jumlahAksi": 329,
+      "jumlahView": 151,
+      "putaran": [
+        {
+          "nomor": 1,
+          "pengocok": 4,
+          "rankJoker": 9,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            -35,
+            -15,
+            35,
+            -35,
+            15,
+            30
+          ],
+          "skorAkumulasi": [
+            -35,
+            -15,
+            35,
+            -35,
+            15,
+            30
+          ]
+        },
+        {
+          "nomor": 2,
+          "pengocok": 0,
+          "rankJoker": 11,
+          "cara": "mentung",
+          "pementung": 4,
+          "nilaiPentungan": 100,
+          "kepentung": [
+            2
+          ],
+          "dibalik": false,
+          "total": [
+            -55,
+            15,
+            -105,
+            -10,
+            150,
+            -55
+          ],
+          "skorAkumulasi": [
+            -90,
+            0,
+            -70,
+            -45,
+            165,
+            -25
+          ]
+        },
+        {
+          "nomor": 3,
+          "pengocok": 0,
+          "rankJoker": 4,
+          "cara": "mentung",
+          "pementung": 5,
+          "nilaiPentungan": 50,
+          "kepentung": [
+            3
+          ],
+          "dibalik": false,
+          "total": [
+            -25,
+            -15,
+            -5,
+            -120,
+            10,
+            100
+          ],
+          "skorAkumulasi": [
+            -115,
+            -15,
+            -75,
+            -165,
+            175,
+            75
+          ]
+        }
+      ],
+      "skorAkhir": [
+        -115,
+        -15,
+        -75,
+        -165,
+        175,
+        75
+      ],
+      "pemenang": [
+        4
+      ],
+      "alasanSelesai": "batasPutaran",
+      "hash": {
+        "aksi": "3457e12d91a7e55b962f5744e0be1cbadc11ab0d7d264252c67347da2405120e",
+        "view": "69ebf8bdf05ab7525b0f05582fd21fe8fde78d83f6f4e3a066241a6d5d814faa",
+        "peristiwa": "1e0d3f6ab13779791a39aeb85875a2ed1d9e56fdfad462c41ef4891705037a44",
+        "log": "56a55ba22a7916e03b66d3c55f1ed9575e18e9b322ed59d546916244aa849b6d",
+        "riwayat": "9cd3a4fd5572843f785b5f3a4d1671d438fe56bcfd72fed4c64565e7ebf9b77e",
+        "stateAkhir": "18ee2118c887c8b7049f677de8c2809398b23ad562f3edb7a23badf46a116d28"
+      }
+    },
+    {
+      "seed": 7,
+      "level": [
+        "normal",
+        "normal",
+        "mudah",
+        "normal",
+        "normal",
+        "mudah"
+      ],
+      "jumlahAksi": 324,
+      "jumlahView": 153,
+      "putaran": [
+        {
+          "nomor": 1,
+          "pengocok": 0,
+          "rankJoker": 4,
+          "cara": "mentung",
+          "pementung": 0,
+          "nilaiPentungan": 50,
+          "kepentung": [
+            5
+          ],
+          "dibalik": true,
+          "total": [
+            95,
+            -15,
+            -20,
+            15,
+            -5,
+            -95
+          ],
+          "skorAkumulasi": [
+            95,
+            -15,
+            -20,
+            15,
+            -5,
+            -95
+          ]
+        },
+        {
+          "nomor": 2,
+          "pengocok": 5,
+          "rankJoker": 3,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            15,
+            25,
+            -85,
+            5,
+            15,
+            -50
+          ],
+          "skorAkumulasi": [
+            110,
+            10,
+            -105,
+            20,
+            10,
+            -145
+          ]
+        },
+        {
+          "nomor": 3,
+          "pengocok": 5,
+          "rankJoker": 9,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            25,
+            0,
+            -65,
+            -20,
+            -5,
+            10
+          ],
+          "skorAkumulasi": [
+            135,
+            10,
+            -170,
+            0,
+            5,
+            -135
+          ]
+        }
+      ],
+      "skorAkhir": [
+        135,
+        10,
+        -170,
+        0,
+        5,
+        -135
+      ],
+      "pemenang": [
+        0
+      ],
+      "alasanSelesai": "batasPutaran",
+      "hash": {
+        "aksi": "39dd4967cf9579bd3dbaddc43d9eb47a65485eb4f1c0eea6b8e98e8fca8e3342",
+        "view": "01570b6bed0a95f3d94fa6ac1c04f2d62bf90450dcf8823731a28b859427b30d",
+        "peristiwa": "fc5602fbf761c0e4238862f562ebf6126a928786859f348e19bf09ea76c21429",
+        "log": "0da16c923480f12bccf9483d019ee7eb197755e004e27601d5b92efda0bb5e8c",
+        "riwayat": "9d37653626bcb627b3ddec17a7deb72027547754e25a5462db192b593fe76f31",
+        "stateAkhir": "5cff4e1d1efe97620284d9bf55b733512b942f10c47b52a1953668f07ed29972"
+      }
+    },
+    {
+      "seed": 42,
+      "level": [
+        "mudah",
+        "normal",
+        "normal",
+        "mudah",
+        "normal",
+        "normal"
+      ],
+      "jumlahAksi": 366,
+      "jumlahView": 165,
+      "putaran": [
+        {
+          "nomor": 1,
+          "pengocok": 3,
+          "rankJoker": 3,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            30,
+            -10,
+            -15,
+            10,
+            -15,
+            15
+          ],
+          "skorAkumulasi": [
+            30,
+            -10,
+            -15,
+            10,
+            -15,
+            15
+          ]
+        },
+        {
+          "nomor": 2,
+          "pengocok": 4,
+          "rankJoker": 13,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            -75,
+            -15,
+            30,
+            15,
+            40,
+            25
+          ],
+          "skorAkumulasi": [
+            -45,
+            -25,
+            15,
+            25,
+            25,
+            40
+          ]
+        },
+        {
+          "nomor": 3,
+          "pengocok": 0,
+          "rankJoker": 6,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            -65,
+            -15,
+            -20,
+            20,
+            15,
+            25
+          ],
+          "skorAkumulasi": [
+            -110,
+            -40,
+            -5,
+            45,
+            40,
+            65
+          ]
+        }
+      ],
+      "skorAkhir": [
+        -110,
+        -40,
+        -5,
+        45,
+        40,
+        65
+      ],
+      "pemenang": [
+        5
+      ],
+      "alasanSelesai": "batasPutaran",
+      "hash": {
+        "aksi": "efa67a161ff9832bb047c09fddf6a1df74e68b898a3576ed71f4fc4218bc27dc",
+        "view": "b3bf24f9cb6363b3b428081ba91df57ab002754e54f1eca7bd577fdaa54bfb34",
+        "peristiwa": "dbc56d8bc84b2d9021c196cd371f283564c1320acbcd44c72b23c375dc17ce00",
+        "log": "e02f67c2ab4ebfddda96a60ca5349526daeb09d9955753ae8ca40835a4b1bf7c",
+        "riwayat": "7a12dd222babbb3c795f28c6fbd9e3c9536274e2a0f4b563f70114ddeab2fbbe",
+        "stateAkhir": "46cbd811262a3d98c26c58b6af6497e510553bd61dcc79da9c82cec1560e8929"
+      }
+    },
+    {
+      "seed": 99,
+      "level": [
+        "mudah",
+        "normal",
+        "normal",
+        "mudah",
+        "normal",
+        "normal"
+      ],
+      "jumlahAksi": 360,
+      "jumlahView": 163,
+      "putaran": [
+        {
+          "nomor": 1,
+          "pengocok": 1,
+          "rankJoker": 12,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            -50,
+            35,
+            -5,
+            -50,
+            75,
+            15
+          ],
+          "skorAkumulasi": [
+            -50,
+            35,
+            -5,
+            -50,
+            75,
+            15
+          ]
+        },
+        {
+          "nomor": 2,
+          "pengocok": 3,
+          "rankJoker": 8,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            -10,
+            25,
+            15,
+            -75,
+            -15,
+            -35
+          ],
+          "skorAkumulasi": [
+            -60,
+            60,
+            10,
+            -125,
+            60,
+            -20
+          ]
+        },
+        {
+          "nomor": 3,
+          "pengocok": 3,
+          "rankJoker": 11,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            15,
+            -5,
+            -45,
+            -35,
+            -15,
+            -25
+          ],
+          "skorAkumulasi": [
+            -45,
+            55,
+            -35,
+            -160,
+            45,
+            -45
+          ]
+        }
+      ],
+      "skorAkhir": [
+        -45,
+        55,
+        -35,
+        -160,
+        45,
+        -45
+      ],
+      "pemenang": [
+        1
+      ],
+      "alasanSelesai": "batasPutaran",
+      "hash": {
+        "aksi": "e53a7bcc7bd6a9b81575124a16cc36f029ae2133c139dbfb3793cee9c84df206",
+        "view": "fc74bb78bf445d0640ea09a5da27c2b0260b16b41c6dc5f0faff9143f7d3a13b",
+        "peristiwa": "bf521c36b63b8b732c90f719ae6ebb9165c441441605c4b3e9aaabb912d74446",
+        "log": "08e02a6cd6ea79770512ed4ae82b6f50ae6b911d2c9b85ee04034d3bd8f6fadb",
+        "riwayat": "3b06f3739412ce8e94fe515c1468c1e642105bf8f9cf54e232743c6eed6588a6",
+        "stateAkhir": "fedce8e9acab4dd0768743364f86da579bfe33baa6d48e96a3e7b5536d1c3225"
+      }
+    },
+    {
+      "seed": 2024,
+      "level": [
+        "normal",
+        "mudah",
+        "normal",
+        "normal",
+        "mudah",
+        "normal"
+      ],
+      "jumlahAksi": 368,
+      "jumlahView": 167,
+      "putaran": [
+        {
+          "nomor": 1,
+          "pengocok": 4,
+          "rankJoker": 8,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            35,
+            35,
+            -5,
+            10,
+            60,
+            -15
+          ],
+          "skorAkumulasi": [
+            35,
+            35,
+            -5,
+            10,
+            60,
+            -15
+          ]
+        },
+        {
+          "nomor": 2,
+          "pengocok": 5,
+          "rankJoker": 5,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            15,
+            -10,
+            -35,
+            25,
+            -35,
+            -5
+          ],
+          "skorAkumulasi": [
+            50,
+            25,
+            -40,
+            35,
+            25,
+            -20
+          ]
+        },
+        {
+          "nomor": 3,
+          "pengocok": 2,
+          "rankJoker": 4,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            10,
+            -30,
+            15,
+            20,
+            -15,
+            -55
+          ],
+          "skorAkumulasi": [
+            60,
+            -5,
+            -25,
+            55,
+            10,
+            -75
+          ]
+        }
+      ],
+      "skorAkhir": [
+        60,
+        -5,
+        -25,
+        55,
+        10,
+        -75
+      ],
+      "pemenang": [
+        0
+      ],
+      "alasanSelesai": "batasPutaran",
+      "hash": {
+        "aksi": "3fe5136887ddf3df3900b56ef1b1708f72956fe2c9e48a04ab6bf32661e75613",
+        "view": "040cdcdd13f512544e4a63b435b8c6351e35f6818871c9a4bedca3f0c30c9df1",
+        "peristiwa": "048c48f2b1be91cecb4ec485ba538394f848baa0ee44db2f578a46e9429633a7",
+        "log": "01e71b38934602be0baba7d887023f9fd3198469895904ba298c2384a7b61128",
+        "riwayat": "5fd6ee51577841453a50e2e933f1046b2b30b19a46ea4bf1a4d6c065e6aa073c",
+        "stateAkhir": "9916f85e6e2e1eb71fdf8234f055a8283e006f73e5113548f6437c1eab920343"
+      }
+    },
+    {
+      "seed": 31337,
+      "level": [
+        "normal",
+        "mudah",
+        "normal",
+        "normal",
+        "mudah",
+        "normal"
+      ],
+      "jumlahAksi": 327,
+      "jumlahView": 151,
+      "putaran": [
+        {
+          "nomor": 1,
+          "pengocok": 4,
+          "rankJoker": 13,
+          "cara": "deckHabis",
+          "pementung": null,
+          "nilaiPentungan": 0,
+          "kepentung": [],
+          "dibalik": false,
+          "total": [
+            25,
+            -45,
+            -65,
+            5,
+            -10,
+            25
+          ],
+          "skorAkumulasi": [
+            25,
+            -45,
+            -65,
+            5,
+            -10,
+            25
+          ]
+        },
+        {
+          "nomor": 2,
+          "pengocok": 2,
+          "rankJoker": 10,
+          "cara": "mentung",
+          "pementung": 0,
+          "nilaiPentungan": 150,
+          "kepentung": [
+            3,
+            4
+          ],
+          "dibalik": false,
+          "total": [
+            210,
+            -100,
+            15,
+            -110,
+            -170,
+            0
+          ],
+          "skorAkumulasi": [
+            235,
+            -145,
+            -50,
+            -105,
+            -180,
+            25
+          ]
+        },
+        {
+          "nomor": 3,
+          "pengocok": 4,
+          "rankJoker": 5,
+          "cara": "mentung",
+          "pementung": 0,
+          "nilaiPentungan": 150,
+          "kepentung": [
+            4
+          ],
+          "dibalik": false,
+          "total": [
+            200,
+            -20,
+            -20,
+            15,
+            -155,
+            -15
+          ],
+          "skorAkumulasi": [
+            435,
+            -165,
+            -70,
+            -90,
+            -335,
+            10
+          ]
+        }
+      ],
+      "skorAkhir": [
+        435,
+        -165,
+        -70,
+        -90,
+        -335,
+        10
+      ],
+      "pemenang": [
+        0
+      ],
+      "alasanSelesai": "batasPutaran",
+      "hash": {
+        "aksi": "5d039199220481cb6f68ea831ddd6beab37eab1010ac8edda9cc26e226c21118",
+        "view": "083d9f210532cbb1e2219a305efea4ff553f5b6b06b2faea1bba774c8a6e9e2b",
+        "peristiwa": "bbb378126bd83a379edb57e2b3d97b04f115168c9c418392042a3ceb8a4a0f09",
+        "log": "c0c058a676c157569198fb1d4aa7f2721ec460af52b052f9f7020f772e32e2b4",
+        "riwayat": "ff6c66b30f223f1c3045325e9c357f0fdb6a6d04d775c3ccc76806165475ad6f",
+        "stateAkhir": "eddc742ba5b8fcb07aed5b6618d459add420700e98de20f2684f1de9fade4f16"
+      }
+    }
+  ]
+}

@@ -1,10 +1,14 @@
 {
   "name": "@remi/meja",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "dependencies": { "@remi/engine": "*" }
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@remi/engine": "*"
+  }
 }

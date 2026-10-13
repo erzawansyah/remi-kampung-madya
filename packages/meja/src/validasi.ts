@@ -136,8 +136,17 @@ export function validasiPesan(x: unknown): PesanKlien | null {
   }
 }
 
-/** Nama tampilan: dirapikan, maksimal 16 karakter. */
+/**
+ * Karakter yang dibuang dari nama: kontrol (Cc), format (Cf: pembalik arah U+202A–202E/U+2066–2069,
+ * zero-width U+200B–200F, BOM, dst.), surrogate yatim (Cs), area pribadi (Co), huruf "kosong" yang
+ * tampil sebagai spasi (Hangul filler, braille kosong), dan < > (sisa lama, jaga-jaga HTML).
+ */
+const KARAKTER_BUANG = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}ᅟᅠㅤﾠ⠀<>]/gu;
+
+/** Nama tampilan: dinormalisasi (NFKC), dibersihkan, maksimal 16 karakter. Kosong → "Pemain". */
 export function rapikanNama(nama: string): string {
-  const bersih = nama.replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
-  return bersih || 'Pemain';
+  const bersih = nama.normalize('NFKC').replace(KARAKTER_BUANG, '').replace(/\s+/gu, ' ').trim();
+  // Dipotong per code point supaya emoji tidak terbelah jadi surrogate yatim.
+  const pendek = Array.from(bersih).slice(0, 16).join('').trim();
+  return pendek || 'Pemain';
 }

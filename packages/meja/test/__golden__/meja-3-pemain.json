@@ -1,0 +1,101 @@
+{
+  "skenario": {
+    "label": "3-pemain",
+    "jumlahPemain": 3,
+    "duaDeckUntukEmpat": false,
+    "levelBot": [
+      "normal",
+      "mudah"
+    ],
+    "seedAwal": 11,
+    "seedAcak": 777,
+    "seedManusia": 9,
+    "batasPutaran": 2
+  },
+  "jumlahPesan": 244,
+  "jumlahPerJenis": {
+    "emote": 2,
+    "masuk": 1,
+    "meja": 122,
+    "view": 119
+  },
+  "emote": [
+    "1:Suwun, Bos!",
+    "2:Suwun, Bos!"
+  ],
+  "waktuAkhir": 1007600,
+  "putaran": [
+    {
+      "nomor": 1,
+      "cara": "mentung",
+      "pementung": 2,
+      "kepentung": [
+        0
+      ],
+      "total": [
+        -190,
+        0,
+        170
+      ]
+    },
+    {
+      "nomor": 2,
+      "cara": "mentung",
+      "pementung": 0,
+      "kepentung": [
+        2
+      ],
+      "total": [
+        80,
+        -50,
+        -100
+      ]
+    }
+  ],
+  "skorAkhir": [
+    -110,
+    -50,
+    70
+  ],
+  "ringkasanAkhir": {
+    "kode": "GOLD1",
+    "selesaiPada": 1007600,
+    "alasan": "batasPutaran",
+    "jumlahPutaran": 2,
+    "pemain": [
+      {
+        "kursi": 2,
+        "nama": "Cak Kopag",
+        "bot": true,
+        "skor": 70,
+        "peringkat": 1,
+        "mentung": 1,
+        "kepentung": 1
+      },
+      {
+        "kursi": 1,
+        "nama": "Kipas Dua",
+        "bot": true,
+        "skor": -50,
+        "peringkat": 2,
+        "mentung": 0,
+        "kepentung": 0
+      },
+      {
+        "kursi": 0,
+        "nama": "Budi",
+        "bot": false,
+        "skor": -110,
+        "peringkat": 3,
+        "mentung": 1,
+        "kepentung": 1
+      }
+    ]
+  },
+  "hash": {
+    "semuaPesan": "efe984dd36088f3bbd74a6fafafe4093d827955c09d1b1aad243b5fef226ef37",
+    "pesanView": "88862b601e54a6d32bc82cc1fd2a0d4448644561b40b32e3ee6b35f649161096",
+    "pesanMeja": "870d4ed200a2da807457672af0cca7c9b3ae343b32dde3b14eebdae8b817b18c",
+    "dataMejaAkhir": "ed63fd1447f3f2b3b78ba8ce042936b8a9255b865fecfc8ca6456d829622a47b"
+  }
+}

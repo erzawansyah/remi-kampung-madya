@@ -1,0 +1,213 @@
+/* =============================================================================================
+   TOKEN DESAIN: "meja kartu laken di teras Kedai Madya"
+   Laken hijau (panggung permainan), kayu meja, kuning papan nama MADYA, kertas krem, tinta stiker
+   hitam-putih dari logo, aksen toska kursi besi & zaitun rangka teras. Semua komponen memakai token
+   ini; jangan menulis warna/ukuran literal di komponen baru.
+
+   Kontras WCAG 2.x: L = 0.2126·R + 0.7152·G + 0.0722·B (kanal sRGB dilinearkan:
+   c ≤ 0.04045 ? c/12.92 : ((c+0.055)/1.055)^2.4), rasio = (L terang + 0.05) / (L gelap + 0.05).
+   --panel dihitung setelah dicampur di atas --laken (= #0a2013). Pasangan teks (semua ≥ AA 4.5:1):
+   - --teks di --panel 15.0:1, --teks-redup di --panel 10.3:1, --teks-redup di --laken 5.4:1
+   - --teks-di-emas di --emas 8.4:1, di --emas-tua 5.8:1, di --emas-muda 12.1:1
+   - --emas sebagai teks: di --panel 8.3:1, di --dialog 7.0:1, di --laken-gelap 6.2:1, TAPI di --laken
+     cuma 4.4:1. Teks kuning yang langsung di atas --laken pakai --teks-emas (5.1:1).
+   - --fokus (= --emas-muda) di --laken 6.3:1, di --laken-gelap 9.0:1
+   - --tinta di --krem 16.2:1, --emas-pekat di --krem 6.4:1
+   - --madya-tinta di --madya-kuning 9.2:1, di --madya-kertas 18.3:1, di --krem 17.5:1
+   - --madya-toska & --madya-zaitun: aksen/hiasan saja. Teks di atasnya pakai --madya-tinta
+     (4.7:1); teks krem di atasnya cuma 3.7:1, jangan.
+   - --tinta-merah/biru/hijau di --krem 5.2 / 7.4 / 4.7:1 (= palet kanvas kartuGrafisGambar.ts;
+     cek ulang bila palet berubah)
+   - --positif / --negatif di --panel 10.9:1 / 8.4:1, --teks-di-bahaya di --bahaya-latar 9.0:1
+   Dihitung ulang tiap palet berubah; test: apps/client/test/token.test.ts.
+   ============================================================================================= */
+
+:root {
+  color-scheme: dark;
+
+  /* ---------- Palet dasar ---------- */
+  /* Laken (kain hijau meja) */
+  --laken: #15542f;
+  --laken-terang: #1d6a3d;
+  --laken-gelap: #0c3a20;
+  --laken-pekat: #072414;
+  /* Kayu tepi meja & papan kedai */
+  --kayu: #6e4325;
+  --kayu-terang: #9a6438;
+  --kayu-gelap: #3b2213;
+  /* Kuning papan nama MADYA (nama token "emas" dipertahankan supaya komponen lama tetap jalan) */
+  --emas: #f1a615;
+  /* Kanal RGB --emas untuk transparansi: rgba(var(--emas-rgb), 0.12). Ganti literal rgba(242,193,78,…) lama. */
+  --emas-rgb: 241, 166, 21;
+  --emas-muda: #ffd277;
+  --emas-tua: #c98a10;
+  --emas-pekat: #7a5208;
+  /* Teks kuning yang langsung di atas --laken (kanvas meja & HTML): --emas di --laken cuma 4.4:1 */
+  --teks-emas: #f7b83d;
+  /* Identitas Kedai Madya (logo stiker, papan nama, kursi besi toska, rangka teras) */
+  --madya-tinta: #111111;
+  --madya-kertas: #fbfbfb;
+  --madya-kuning: #f1a615;
+  --madya-toska: #1f8a9e;
+  --madya-zaitun: #6b865e;
+  /* Dasar punggung kartu (arang); padanannya ARANG di kartuGrafisGambar.ts */
+  --madya-arang: #1d1a16;
+  /* Kertas krem (kartu, gelembung, chip) */
+  --krem: #fbf6e9;
+  --krem-redup: #ece3cc;
+  --krem-garis: #c9bea4;
+  --krem-emas: #fff1c4;
+  --tinta: #1d1913;
+  --tinta-redup: #5b5346;
+  /* Sama persis dengan palet kanvas (kartuGrafisGambar.ts) supaya kartu HTML dan kartu di meja serupa. */
+  --tinta-merah: #c62828;
+  /* Kartu 4 warna (preferensi warnaKartu = 'empat'): wajik biru, kriting hijau */
+  --tinta-biru: #1d47b8;
+  --tinta-hijau: #0e7c6a;
+
+  /* ---------- Teks ---------- */
+  --teks: #f6f0e1;
+  --teks-redup: #c3ccb9;
+  --teks-samar: #9aa892; /* 6.8:1 di --panel, tapi 3.6:1 langsung di --laken: jangan dipakai di atas laken */
+  --teks-di-emas: #241a00;
+  --teks-di-bahaya: #fff1ee;
+
+  /* ---------- Semantik ---------- */
+  --bahaya: #e5534b;
+  --bahaya-latar: #7a2520;
+  --bahaya-latar-terang: #94302a;
+  --bahaya-garis: #c9564e;
+  --bahaya-tepi: #3d0f0c;
+  --teks-di-merah: #ffe0dc;
+  --teks-di-info: #d6ecff;
+  --peringatan: #ff9f43;
+  --positif: #8be28b;
+  --positif-latar: #1f5a33;
+  --negatif: #ff9b94;
+  --info: #7fc4ff;
+  --info-latar: #173f63;
+  /* Warna sorakan besar (efek/sorak.ts: .sorak.emas|merah|biru|bahaya) */
+  --sorak-emas: #ffd54a;
+  --sorak-merah: #ff5a4f;
+  --sorak-biru: #7fd0ff;
+  --sorak-bahaya: #ff8a3d;
+  --aman: #c9f2c9;
+
+  /* Alias lama (tetap dipakai kode/agent lain) */
+  --meja: var(--laken-gelap);
+  --meja-terang: var(--laken);
+  --merah: var(--bahaya);
+  --biru: var(--info);
+
+  /* ---------- Permukaan ---------- */
+  /* Panel gelap tembus sedikit: papan di atas laken */
+  --panel: rgba(9, 27, 17, 0.92);
+  /* Panel lebih terang: tombol sekunder, baris aktif */
+  --panel-terang: #24523a;
+  --panel-terang-hover: #2c6045;
+  /* Lapisan tipis di dalam panel (baris daftar, akordion) */
+  --permukaan-1: rgba(255, 246, 225, 0.05);
+  --permukaan-2: rgba(255, 246, 225, 0.08);
+  --permukaan-3: rgba(255, 246, 225, 0.12);
+  /* Kaca buram untuk bar & palet di atas meja */
+  --kaca: rgba(10, 26, 17, 0.72);
+  --kaca-blur: 10px;
+  /* Latar input */
+  --isian: #0a2414;
+  /* Latar dialog (gradien atas → tengah → bawah) */
+  --dialog-atas: #13371f;
+  --dialog: #10301d;
+  --dialog-bawah: #0c2716;
+  /* Tirai di belakang modal */
+  --tirai: rgba(3, 12, 7, 0.62);
+
+  /* ---------- Garis ---------- */
+  --garis: rgba(255, 240, 210, 0.14);
+  --garis-kuat: rgba(255, 240, 210, 0.26);
+  --garis-emas: rgba(241, 166, 21, 0.55);
+
+  /* ---------- Fokus ---------- */
+  --fokus: var(--emas-muda);
+  --fokus-tebal: 3px;
+  --fokus-jarak: 2px;
+
+  /* ---------- Bayangan & elevasi ---------- */
+  --bayangan-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --bayangan-2: 0 3px 8px rgba(0, 0, 0, 0.38);
+  --bayangan-3: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --bayangan-4: 0 18px 50px rgba(0, 0, 0, 0.55);
+  /* Kilau atas + tepi bawah untuk tombol "timbul" */
+  --kilau-atas: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --cahaya-emas: 0 0 0 2px rgba(241, 166, 21, 0.35), 0 0 24px rgba(241, 166, 21, 0.28);
+
+  /* ---------- Radius ---------- */
+  --radius-kecil: 8px;
+  --radius-sedang: 12px;
+  --radius-besar: 18px;
+  --radius-pil: 999px;
+  --radius: var(--radius-sedang);
+
+  /* ---------- Spasi (skala 4px) ---------- */
+  --ruang-1: 4px;
+  --ruang-2: 8px;
+  --ruang-3: 12px;
+  --ruang-4: 16px;
+  --ruang-5: 20px;
+  --ruang-6: 24px;
+  --ruang-7: 28px;
+  --ruang-8: 32px;
+
+  /* ---------- Tipografi ---------- */
+  /* Display: Baloo 2 (self-host, lihat gaya/dasar.css); cadangan rounded/sistem */
+  --font-display: 'Baloo 2', ui-rounded, 'SF Pro Rounded', 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-teks: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-angka: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+  /* Skala dalam rem: ikut ukuran teks browser & preferensi [data-teks="besar"] */
+  --teks-xs: 0.75rem;
+  --teks-sm: 0.875rem;
+  --teks-md: 1rem;
+  --teks-lg: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --teks-xl: clamp(1.1875rem, 1.05rem + 0.55vw, 1.4375rem);
+  --teks-2xl: clamp(1.5rem, 1.2rem + 1.3vw, 2.125rem);
+  --teks-3xl: clamp(1.875rem, 1.35rem + 2.6vw, 3rem);
+  --baris-rapat: 1.15;
+  --baris-normal: 1.45;
+  --baris-longgar: 1.6;
+
+  /* ---------- Gerak (samakan dengan apps/client/src/gerak.ts) ---------- */
+  --durasi-mikro: 110ms;
+  --durasi-cepat: 180ms;
+  --durasi-sedang: 260ms;
+  --durasi-lambat: 420ms;
+  /* Cubic.easeOut */
+  --ease-keluar: cubic-bezier(0.215, 0.61, 0.355, 1);
+  /* Sine.easeInOut */
+  --ease-halus: cubic-bezier(0.37, 0, 0.63, 1);
+  /* Back.easeOut lembut: lewat ±4% lalu kembali */
+  --ease-pegas: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* ---------- Lapisan (z-index) ---------- */
+  --z-meja: 0;
+  --z-ui: 1;
+  --z-palet: 5;
+  --z-gelembung: 6;
+  --z-modal: 10;
+  --z-sorak: 15;
+  --z-dialog: 18;
+  --z-toast: 20;
+  --z-tooltip: 25;
+
+  /* ---------- Tata letak ---------- */
+  --aman-atas: env(safe-area-inset-top, 0px);
+  --aman-bawah: env(safe-area-inset-bottom, 0px);
+  --aman-kiri: env(safe-area-inset-left, 0px);
+  --aman-kanan: env(safe-area-inset-right, 0px);
+  /* Ruang HTML yang dicadangkan MejaScene (ruangAtas/ruangBawah, px CSS). Jangan dilampaui. */
+  --tinggi-bar-atas: 52px;
+  --tinggi-bar-aksi: 138px;
+  /* Target sentuh minimum */
+  --sentuh: 44px;
+  --lebar-kolom: 480px;
+  --lebar-dialog: 560px;
+  --lebar-bar-aksi: 100%;
+}

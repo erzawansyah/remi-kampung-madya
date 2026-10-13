@@ -1,0 +1,255 @@
+# Hal yang menunggu keputusan pemilik
+
+Dokumen ini merinci baris **#25–#38** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Semuanya ditemukan saat audit rilis 0.2.0 dan **sengaja belum diubah**: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja` yang belum boleh disentuh di rilis ini.
+
+Untuk tiap butir ada: apa yang terjadi sekarang, bukti di kode (`file:baris`, per kode saat rilis 0.2.0), pilihan yang mungkin, dan dampaknya. Pilihan di sini **bukan aturan baru**, hanya daftar kemungkinan supaya pemilik gampang memutuskan.
+
+**Setelah pemilik memutuskan:**
+1. Tulis keputusannya di kolom "Keputusan" README dan ubah statusnya.
+2. Kalau menyentuh aturan atau `packages/engine`/`packages/meja`: tambahkan unit test, lalu perbarui golden test dengan peninjauan (lihat [baseline-gameplay.md](baseline-gameplay.md)).
+3. Sesuaikan konten Bantuan/tutorial (`apps/client/src/konten/`) kalau teksnya ikut berubah.
+
+## Ringkasan
+
+| # | Butir | Wilayah | Sifat |
+|---|---|---|---|
+| [25](#k25) | Peristiwa di view membawa kartu buangan yang sudah tertimbun | `packages/engine` (view) | Info rahasia, celah client termodifikasi |
+| [26](#k26) | `rankJoker`/`kartuDibuka` ada di setiap view | `packages/engine` (view) | Info rahasia, celah client termodifikasi |
+| [27](#k27) | Label "→rank" di kartu jadi dan log "(X jadi Y)" | client + engine (log) | Bertentangan dengan teks keputusan joker |
+| [28](#k28) | Sub-teks sorakan JOKER DIBUANG?! menyebut kartunya | client | Bertentangan dengan teks keputusan joker |
+| [29](#k29) | Teks aksi singkat "buang 7♥" di panel pemain | client | Mode ingatan |
+| [30](#k30) | Tangan 1 kartu praktis tidak bisa mulung/mentung lagi | aturan (akibat) | Konfirmasi maksud aturan |
+| [31](#k31) | Joker mati di tangan dinilai kartu biasa | aturan skor | Belum tertulis di README |
+| [32](#k32) | 2 deck: kartu kembar boleh jadi joker pengganti di seri yang sama | aturan kartu jadi | Belum tertulis di README |
+| [33](#k33) | Keluar sebelum OK joker membuat meja macet | `packages/meja` | Tampak bug |
+| [34](#k34) | Pemain yang menyambung ulang tidak melihat popup joker | `packages/meja` | Menyentuh "joker diumumkan sekali" |
+| [35](#k35) | Batas waktu basi setelah semua terputus | `packages/meja` | Tampak bug |
+| [36](#k36) | Voting akhiri tidak dihitung ulang saat pemilih berkurang | `packages/meja` | Tampak bug |
+| [37](#k37) | Refresh di giliran sendiri langsung dimainkan bot | `packages/meja` | Perlu masa tenggang? |
+| [38](#k38) | Error di timer bot bisa mematikan server | `packages/meja` + `apps/server` | Tampak bug (ketahanan) |
+
+---
+
+<a id="k25"></a>
+
+## 25. Peristiwa di view membawa kartu buangan yang sudah tertimbun
+
+**Sekarang:** `viewUntuk()` mengirim 40 peristiwa terakhir ke tiap pemain. Peristiwa `buang` memuat kartunya. Akibatnya, kartu buangan yang sudah tertimbun di bawah (jumlah pemain − 1) kartu teratas masih ada di data yang diterima HP. UI resmi tidak menampilkannya (buangan tetap n − 1), tapi client yang dimodifikasi atau devtools bisa membacanya. Paling terasa di 2 pemain, karena buangan yang terlihat cuma 1 kartu.
+
+**Bukti:**
+- `packages/engine/src/view.ts:62-63` (`BATAS_PERISTIWA_VIEW = 40`) dan `:107` (`peristiwa: state.peristiwa.slice(-BATAS_PERISTIWA_VIEW)`).
+- `packages/engine/src/state.ts:151` (peristiwa `buang` berisi `kartu`).
+- Client memakai peristiwa untuk animasi dan panel mentung: `apps/client/src/efek/pemutar.ts:153-177`, `apps/client/src/kontrolMeja.ts:543-552`.
+
+**Pilihan:**
+1. **Biarkan.** Yang dijaga hanya tampilan resmi. Catatan: di mode offline seluruh `GameState` (termasuk deck dan tangan bot) memang tersimpan di `localStorage` HP, jadi mode offline tidak pernah benar-benar rahasia.
+2. **Saring di view:** peristiwa `buang` yang kartunya sudah tertimbun dikirim tanpa kartu. Mengubah `view.ts`, golden test bergeser, dan pemutar/panel mentung perlu dicek ulang.
+3. **Kirim hanya peristiwa baru** sejak view terakhir per sambungan. Perubahan protokol `packages/meja` dan logika sambung ulang.
+
+**Dampak:** hanya relevan untuk lawan yang sengaja curang di mode online. Pilihan 2/3 mengubah engine/meja (perlu test dan peninjauan golden).
+
+<a id="k26"></a>
+
+## 26. `rankJoker` dan `kartuDibuka` dikirim di setiap view
+
+**Sekarang:** angka joker dan kartu yang dibuka ada di setiap `ViewPemain` selama putaran, ditambah peristiwa `mulaiPutaran` yang memuat `rankJoker`. Client membutuhkannya untuk validasi lokal (tombol yang tidak sah langsung memberi alasan) dan untuk popup joker. Aturan "joker diumumkan sekali" hanya ditegakkan oleh UI.
+
+**Bukti:**
+- `packages/engine/src/view.ts:24-25` dan `:84-85`; `packages/engine/src/state.ts:137` (`mulaiPutaran` membawa `rankJoker`).
+- Pemakai di client: `apps/client/src/kontrolMeja.ts:728` (konteks validasi) dan `:1825` (popup joker). Test `apps/client/test/pemutar.test.ts` menjaga agar pemutar tidak membacanya.
+- Efek samping: validator di client bisa dipakai sebagai "oracle" joker (pilih 2 kartu sebunga + 1 kartu uji, lihat apakah tombol Turunkan aktif). Ini konsekuensi desain validasi lokal.
+
+**Pilihan:**
+1. **Biarkan** (status sekarang), dengan pagar: UI tidak boleh menampilkan angka joker di luar popup.
+2. **Hapus dari view** setelah semua menekan OK; validasi peran joker dipindah ke server. Tombol tidak bisa lagi memberi alasan seketika untuk kombinasi yang memakai joker, dan pilihan peran joker butuh bolak-balik ke server.
+
+**Dampak:** pilihan 2 perubahan besar di engine, meja, client, dan bot (bot juga membaca view). Golden test berubah.
+
+<a id="k27"></a>
+
+## 27. Label "→rank" pada joker pengganti dan log "(X jadi Y)"
+
+**Sekarang:** kartu jadi di meja menandai joker pengganti dengan label kecil, misalnya "→4" di atas 7♠. Log mulung/turunkan menulis misalnya "2-3-4 Wajik (7 Waru jadi 4)". Keduanya membuat angka joker terbaca sepanjang putaran, padahal README menulis angka joker "tidak ditampilkan lagi (tidak di meja, bar atas, maupun log)".
+
+**Bukti:**
+- Label: `apps/client/src/game/tataMeja.ts:497` (`` isi: `→${namaRank(dk.sebagai.rank)}` ``).
+- Log: `packages/engine/src/deskripsi.ts:14`, dipakai di `packages/engine/src/mesin.ts:302`, `:326`, `:412`.
+- Terkait: log mentung menyebut pentungannya, `packages/engine/src/mesin.ts:351` (`… mentung pakai ${namaKartu(kartu)}!`). Pentungan memang dibuka ke semua orang di panel mentung, tapi teks invarian AGENTS.md bilang log tidak menyebut kartu yang dibuang.
+
+**Pilihan:**
+1. **Biarkan** dan ubah teks keputusan: peran joker di kartu jadi dianggap info publik, seperti di meja asli (semua orang bisa melihat 7 Waru dipasang di tempat 4).
+2. **Hapus label "→rank"** dari meja (client saja). Kartu jadi lawan jadi lebih sulit dibaca, terutama di HP.
+3. **Ubah teks log** supaya tidak menyebut peran joker (perubahan engine, golden test bergeser).
+
+**Dampak:** pilihan 1 hanya mengubah dokumentasi. Pilihan 2 dan 3 bisa dipilih terpisah.
+
+<a id="k28"></a>
+
+## 28. Sub-teks sorakan JOKER DIBUANG?! menyebut kartunya
+
+**Sekarang:** saat ada yang membuang joker, sorakan "JOKER DIBUANG?!" muncul dengan sub-teks misalnya "Budi buang 7 Waru · −25". Kartu itu memang terlihat di buangan dan sudah mati, tapi AGENTS.md melarang angka joker di sorakan. Sorakan ini juga memberi tahu semua orang bahwa 7 adalah angka joker putaran ini.
+
+**Bukti:** `apps/client/src/efek/pemutar.ts:166-169`. Sorakan diberi `aria-hidden` (`apps/client/src/efek/sorak.ts:48-50`), jadi tidak dibacakan pembaca layar.
+
+**Pilihan:**
+1. **Biarkan**: membuang joker adalah kejadian publik (−25 terlihat di skor), dan meja asli juga akan heboh.
+2. **Sub-teks tanpa kartu**, misalnya "Budi buang joker · −25". Masih membocorkan bahwa kartu teratas buangan adalah joker.
+3. **Hilangkan sorakannya**, cukup bunyi dan penalti di rincian skor.
+
+**Dampak:** hanya `pemutar.ts`. Pilihan 2/3 perlu test di `apps/client/test/pemutar.test.ts`.
+
+<a id="k29"></a>
+
+## 29. Teks aksi singkat "buang 7♥" di panel pemain
+
+**Sekarang:** panel tiap pemain menampilkan aksi gilirannya selama sekitar 3,5 detik, misalnya "mungut 9♦ · buang A♠". Log tidak menyebut kartu yang dibuang, tapi teks ini sempat terlihat beberapa detik. README bagian "Mode ingatan" menyebutnya sebagai perilaku yang disengaja ("terlihat jelas saat terjadi").
+
+**Bukti:** `apps/client/src/efek/pemutar.ts:157` (`` `buang ${labelKartu(e.kartu)}` ``), batas tampil di `apps/client/src/kontrolMeja.ts:604-620` (3500 ms), dirender di `apps/client/src/game/tataMeja.ts:416`.
+
+**Pilihan:**
+1. **Biarkan** (seperti melihat tangan teman membuang).
+2. **Tanpa nama kartu**, cukup "buang". Kartunya tetap terlihat di buangan selama belum tertimbun.
+3. **Persingkat** waktu tampil.
+
+**Dampak:** hanya client.
+
+<a id="k30"></a>
+
+## 30. Tangan 1 kartu praktis tidak bisa mulung atau mentung lagi
+
+**Sekarang:** pemain yang memulai giliran dengan 1 kartu tidak akan pernah bisa mulung. Kartu paling bawah pungutan wajib masuk kartu jadi baru, kartu jadi minimal 3 kartu, dan modal dari tangan harus ≥ jumlah pungutan di kombinasi itu. Dengan modal paling banyak 1 kartu, kombinasinya paling banyak 2 kartu. Karena mentung hanya sah di giliran yang diawali mulung, pemain itu juga tidak bisa mentung sampai putaran berakhir. Ia hanya bisa ambil deck lalu buang. Yang benar-benar mengancam adalah tangan 2 kartu (mulung ≥ 2, butuh ≥ 3 pemain).
+
+**Bukti:**
+- `packages/engine/src/giliran.ts:119-120` (`MODAL_KURANG`), syarat minimal 3 kartu di `packages/engine/src/kartuJadi.ts` (`validasiSeri`/kembar As).
+- Sudah ditulis apa adanya di FAQ Bantuan: `apps/client/src/konten/bantuan.ts:770`.
+- Tidak cocok dengan sub-teks sorakan "TINGGAL 1 KARTU! · Awas, X siap mentung" (`apps/client/src/efek/pemutar.ts:174`) dan lencana "TINGGAL 1!" di panel (`apps/client/src/game/tataMeja.ts:411`).
+
+**Pilihan:**
+1. **Konfirmasi memang begitu.** Lalu sub-teks sorakan sebaiknya diganti (copy UI, bukan aturan), misalnya tanpa "siap mentung".
+2. **Pemilik menjelaskan aturan lain** untuk kasus ini (misalnya pengecualian modal). Itu aturan baru: wajib unit test, README, Bantuan, dan golden test.
+
+**Dampak:** pilihan 1 hanya teks client. Pilihan 2 mengubah engine.
+
+<a id="k31"></a>
+
+## 31. Joker mati di tangan dinilai sebagai kartu biasa
+
+**Sekarang:** tabel skor README menulis "Joker: Tangan 25". Kode menilai **joker hidup** di tangan 25, sedangkan joker yang sudah mati (pernah dibuang lalu dipungut) dinilai sebagai kartu aslinya (2–10 = 5, Londo 10, As 15). Ini konsisten dengan "joker yang dibuang jadi kartu biasa", tapi belum tertulis eksplisit.
+
+**Bukti:** `packages/engine/src/kartuJadi.ts:160-161` (`nilaiKartuTangan`: `isJokerHidup ? 25 : nilaiDasar`), dipakai `packages/engine/src/skor.ts:40`. Bantuan sudah mengikuti kode ("joker yang masih hidup di tangan bernilai 25").
+
+**Pilihan:**
+1. **Konfirmasi** dan tulis di tabel skor README (cukup dokumentasi; tambahkan test eksplisit kalau belum ada).
+2. **Joker mati tetap 25 di tangan**: perubahan aturan skor (engine, test, golden, Bantuan).
+
+<a id="k32"></a>
+
+## 32. 2 deck: kartu kembar boleh jadi joker pengganti di seri yang sama
+
+**Sekarang:** di permainan 2 deck, satu seri tidak boleh punya dua kartu yang **mewakili** angka yang sama. Tapi kartu kembar fisik boleh ada di seri yang sama asal salah satunya dipakai sebagai joker pengganti. Contoh dengan joker 5: 4♥, 5♥, 6♥, dan 5♥ (deck kedua) sebagai 7♥ adalah sah.
+
+**Bukti:** `packages/engine/src/kartuJadi.ts:132` (duplikat dicek dari `sebagai.rank`, bukan identitas kartu). Test yang ada hanya menolak kembaran **tanpa** joker: `packages/engine/test/kartuJadi.test.ts:68`. Bantuan menulis versi yang sesuai kode: `apps/client/src/konten/bantuan.ts:257`.
+
+**Pilihan:**
+1. **Konfirmasi boleh** (status quo), lalu tambahkan test eksplisit dan satu kalimat di README.
+2. **Larang**: aturan baru di `kartuJadi.ts`, wajib test, README, Bantuan, dan peninjauan golden.
+
+---
+
+## Perilaku room (`packages/meja`)
+
+Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Semuanya ada di `packages/meja` (dan satu di `apps/server`), yang dikunci di rilis 0.2.0. Bukti diverifikasi dengan skrip di audit (lihat catatan tiap butir). Perbaikannya perlu test di `packages/meja/test/meja.test.ts` dan bisa menggeser golden meja.
+
+<a id="k33"></a>
+
+## 33. Keluar sebelum menekan OK joker membuat meja macet
+
+**Sekarang:** `tinggalkan()` (pemain menekan Keluar meja saat main) mengubah kursinya jadi bot, tapi tidak menghapus kursi itu dari `menungguJoker`. Bot tidak pernah mengirim `siapJoker`. Dengan batas waktu giliran 0 (tanpa batas, sah di online), meja menunggu selamanya. Dengan batas waktu, meja macet sampai timer cadangan habis.
+
+**Bukti:** `packages/meja/src/meja.ts:227-236` (`tinggalkan` hanya menyaring `setujuAkhiri`), bandingkan `:216-224` (`terputus` menyaring keduanya). Audit memverifikasi dengan `JamPalsu` (3 kursi, `detikGiliran` 0): setelah B keluar dan waktu maju 10 menit, `menungguJoker=[1]` dan tidak ada timer.
+
+**Pilihan:** saring `menungguJoker` di `tinggalkan()` seperti di `terputus()` (perbaikan kecil). Tidak menyentuh aturan main.
+
+<a id="k34"></a>
+
+## 34. Pemain yang menyambung ulang tidak melihat popup joker
+
+**Sekarang:** pemain yang terputus saat pengumuman joker (termasuk karena refresh) dikeluarkan dari `menungguJoker`, dan saat kembali tidak dimasukkan lagi. Ia tidak pernah melihat angka joker putaran itu (tidak ada tempat lain yang menampilkannya). Di mode offline popup muncul lagi karena `menungguJoker` ikut tersimpan.
+
+**Bukti:** `packages/meja/src/meja.ts:216-224` (filter saat terputus), `:207-214` (`terhubung` tidak menyentuh `menungguJoker`), `:406-411` (daftar hanya diisi saat putaran baru). Client membuka popup hanya kalau `info.menungguJoker` memuat kursinya (`apps/client/src/kontrolMeja.ts:717`).
+
+**Pilihan:**
+1. **Biarkan**: yang terputus kehilangan pengumuman (seperti orang yang sedang ke belakang saat kartu dibuka).
+2. **Tampilkan lagi** untuk kursi yang belum menekan OK di putaran ini (per kursi, bukan untuk semua). Menyentuh keputusan "joker diumumkan sekali", jadi perlu persetujuan pemilik.
+
+<a id="k35"></a>
+
+## 35. Batas waktu basi setelah semua manusia terputus
+
+**Sekarang:** saat semua manusia terputus, meja berhenti menjadwalkan (permainan terjeda), tapi `batasWaktu` giliran yang sedang berjalan tidak direset. Saat pemain kembali, sisa waktunya sudah 0, dan bot langsung mengambil alih giliran orang yang baru kembali.
+
+**Bukti:** `packages/meja/src/meja.ts:480` (`return` tanpa mereset `kunciTimer`/`batasWaktu`), `:527-531` (sisa dihitung dari `batasWaktu` lama). Audit: `detikGiliran` 60, A terputus 5 menit di gilirannya, lalu kembali: `batasWaktu - sekarang = -240000`, 1 ms kemudian `diambilAlihBot=true`.
+
+**Pilihan:** reset (atau beri sisa waktu penuh) saat permainan lanjut dari jeda. Mengubah perilaku room, tidak menyentuh aturan main.
+
+<a id="k36"></a>
+
+## 36. Voting "Akhiri permainan" tidak dihitung ulang saat pemilih berkurang
+
+**Sekarang:** syarat "semua manusia yang terhubung setuju" hanya dicek saat ada yang menekan tombol. Kalau semua yang tersisa sudah setuju lalu satu-satunya yang belum setuju terputus atau keluar, permainan tidak berakhir sampai ada yang menekan tombol lagi.
+
+**Bukti:** `packages/meja/src/meja.ts:364-380` (cek `pemilih.every(...)` hanya di `akhiri()`); `terputus()` `:216-224` dan `tinggalkan()` `:227-236` tidak mengecek ulang. Sudah diverifikasi lewat uji online dengan klien WebSocket (Okt 2026): A dan B setuju, C terputus, status tetap `putaranSelesai` sampai A menekan tombol lagi.
+
+**Pilihan:** cek ulang voting setiap pemilih berkurang, atau biarkan (pemain cukup menekan tombol lagi).
+
+<a id="k37"></a>
+
+## 37. Refresh di giliran sendiri langsung dimainkan bot
+
+**Sekarang:** kursi manusia yang sedang terputus langsung dijalankan bot setelah jeda mikir (tempo santai 3–10 detik, cepat 0,8–2 detik), tidak menunggu batas waktu giliran. Refresh halaman biasa atau sinyal putus sebentar di giliran sendiri bisa membuat giliran itu dimainkan bot. README "Keputusan perilaku aplikasi" menyebut "Pemain yang terputus: gilirannya dijalankan bot sampai ia kembali", jadi ini sesuai teks, tapi terasa kasar untuk putus singkat.
+
+**Bukti:** `packages/meja/src/meja.ts:506-519` (`!k.terhubung` langsung masuk `olehBot`).
+
+**Pilihan:**
+1. **Biarkan** (sesuai teks keputusan sekarang).
+2. **Masa tenggang** sambung ulang, misalnya min(sisa batas waktu, N detik) sebelum bot mengambil alih. Perlu angka N dari pemilik.
+
+<a id="k38"></a>
+
+## 38. Error di timer bot bisa mematikan server
+
+**Sekarang:** `langkahBot()` menangkap error aksi bot pertama lalu mencoba bot mudah, tapi percobaan cadangan itu (dan error lain di `terapkan`/`siarkan` di dalam timer) tidak ditangkap lagi. Di Node, error di dalam `setTimeout` menjadi `uncaughtException`, dan server tidak punya penangan untuk itu. Proses mati dan semua meja (yang hanya ada di memori) hilang. Belum pernah terjadi di simulasi (bot selalu memakai validasi yang sama), jadi ini soal ketahanan.
+
+**Sudah ditangani di sisi server (Okt 2026, `apps/server`):** callback timer meja dijalankan lewat penjadwal pembungkus yang menangkap galat per meja (dicatat dan dihitung sebagai `galatMeja`, terlihat di log berkala atau `/healthz` dengan `HEALTHZ_DETAIL=1`), ditambah penjaga `uncaughtException`/`unhandledRejection`. Proses tidak mati lagi. **Yang tersisa di `packages/meja`:** meja yang galat di `langkahBot` bisa macet (timer bot tidak dijadwalkan ulang sampai ada perubahan lain), dan mode offline di browser tidak punya pembungkus ini.
+
+**Bukti:** `packages/meja/src/meja.ts:550-558` (cadangan `this.terapkan(g, cadangan)` tanpa `try`), `apps/server/src/main.ts` (tidak ada `process.on('uncaughtException')`).
+
+**Pilihan:** bungkus callback timer di `Meja` dengan `try/catch` yang mencatat error lalu menjeda meja itu saja, dan/atau pasang penangan proses di server yang mencatat lalu tetap hidup. Tidak menyentuh aturan main.
+
+---
+
+## Catatan lain (belum masuk tabel)
+
+Temuan audit yang lebih kecil, dicatat supaya tidak hilang:
+
+- **Pemenang dan seri belum didefinisikan di README.** Engine tidak punya konsep pemenang. Klasemen dibuat `buatRingkasanAkhir()` (`packages/meja/src/meja.ts:615`): urut skor tertinggi, skor sama berbagi peringkat. UI mengikuti ini ("X juara (bareng)").
+- **Prioritas batas skor vs batas putaran:** kalau keduanya tercapai di putaran yang sama, alasan selesai = batas skor (urutan `if` di `packages/engine/src/mesin.ts:489-491`). Batasnya inklusif (`>=`/`<=`). Belum tertulis di README.
+- **Urutan bagi kartu:** animasi bagi sudah disamakan dengan engine (mulai dari pengocok, nomor kursi naik, tanpa melihat arah; `apps/client/src/game/MejaScene.ts`, `bagiKartu`). Kalau di Kedai Madya urutannya lain, itu keputusan pemilik dan harus diubah di engine dulu.
+- **Simpanan offline berisi state lengkap** (deck, tangan bot) di `localStorage` (`remi.mejaOffline`). Hanya mode lawan bot, tapi bisa diintip lewat devtools.
+
+## Identitas Kedai Madya (sudah diputuskan, Okt 2026)
+
+Bukan aturan main. Dicatat supaya tidak diubah tanpa pemilik:
+
+- **Istilah pemain komputer di UI:** "warga kedai". Kode, protokol, dan dokumen teknis tetap `bot`.
+- **Nama lawan:** konsep "Warga Madya" (Kipas Dua, Cak Kopag, Mbak Teras, Mas Sampul, Si Rak, Pak Seng, Dik Toska, Ning Sore, Om Garpu, Bu Sendok), diacak per meja, urutan tetap untuk latihan. Golden master meja boleh bergeser **hanya** karena nama ini (lihat [baseline-gameplay.md](baseline-gameplay.md)).
+- **Logo:** dianggap sudah diizinkan kedai; kredit "Logo Kedai Madya dipakai dengan izin." di Tentang.
+- **Punggung kartu:** dasar arang + kawung kuning MADYA (#f1a615) + medali krem berisi maskot cangkir (versi mini: siluet cangkir).
+- **Promosi:** soft selling di beranda, Tentang, dan satu baris di klasemen akhir saja. Selama permainan tidak pernah muncul sendiri (tanpa pop-up/toast); pemain bisa melihatnya kapan saja lewat Tentang, termasuk dari menu ☰ saat bermain (rincian di AGENTS.md, "Promosi Kedai Madya").
+- **Tautan peta:** URL cid Google Maps sebagai utama (di HP langsung membuka aplikasi Maps). Tautan share.google dari pemilik disimpan sebagai cadangan di `konten/kedai.ts` karena membuka Google Search dulu.
+
+Masih terbuka (bawaan sekarang di kurung):
+- Nomor telepon kedai (tidak ditampilkan sampai pemilik kedai mengizinkan).
+- Jam buka (tidak ditulis karena IG dan Maps berbeda; pemain diarahkan ke IG/Maps).
+- Tautan peta di bio IG dan di katalog buku belum dicek tujuannya (tidak dipakai).
+- Opsional dari brief yang belum dikerjakan: splash logo, watermark maskot di meja, font judul Fredoka.

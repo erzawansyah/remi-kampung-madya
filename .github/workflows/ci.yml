@@ -1,0 +1,91 @@
+# Gerbang kualitas: typecheck, semua test (termasuk simulasi bot-vs-bot), dan build produksi.
+name: CI
+
+on:
+  push:
+    branches: [main, produksi]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cek:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          GIT_SHA: ${{ github.sha }}
+
+  # E2E smoke di Chrome bawaan runner (tanpa unduh browser). Opsional: tidak memblok merge.
+  # Kalau Chrome tidak ada, skripnya keluar 0 dengan pesan (E2E_OPSIONAL=1).
+  e2e:
+    name: E2E smoke (opsional)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Jalankan smoke (HP + desktop)
+        run: |
+          export CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          npm run e2e
+        env:
+          E2E_OPSIONAL: '1'
+          GIT_SHA: ${{ github.sha }}
+      - name: Simpan screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-hasil
+          path: |
+            apps/client/e2e/hasil/**/*.png
+            apps/client/e2e/hasil/**/hasil.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Image produksi: Dockerfile sendiri menjalankan typecheck + test + build. Sesudah itu container
+  # dijalankan sebentar untuk memastikan /healthz menjawab dengan versi & commit yang benar.
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: cek
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build --build-arg GIT_SHA=${{ github.sha }} -t remi-ci .
+      - name: Jalankan & cek /healthz
+        run: |
+          docker run -d --name remi-ci -p 127.0.0.1:2567:2567 remi-ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:2567/healthz && break; sleep 1; done
+          curl -sf http://127.0.0.1:2567/healthz | grep -q "\"sha\":\"${GITHUB_SHA::7}\""
+          curl -sfI http://127.0.0.1:2567/ | grep -qi 'cache-control: no-cache'
+          docker stop -t 10 remi-ci
+          test "$(docker inspect remi-ci --format '{{.State.ExitCode}}')" = "0"
+      - name: Log container
+        if: always()
+        run: docker logs remi-ci || true

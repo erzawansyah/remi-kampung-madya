@@ -1,0 +1,124 @@
+/* =============================================================================================
+   RESPONSIF
+   Dasar = HP potret. Tablet ≥ 768px, desktop ≥ 1100px, HP landscape pendek (tinggi ≤ 480px).
+   ============================================================================================= */
+
+/* ---------- Tablet ---------- */
+@media (min-width: 768px) {
+  :root {
+    --lebar-kolom: 560px;
+    --lebar-dialog: 620px;
+    --lebar-bar-aksi: 640px;
+  }
+  .kartu-panel {
+    padding: var(--ruang-5);
+  }
+  .dialog {
+    padding: var(--ruang-6);
+  }
+  .kaki-dialog {
+    bottom: calc(-1 * var(--ruang-6));
+    margin: 0 calc(-1 * var(--ruang-6)) calc(-1 * var(--ruang-6));
+    padding: var(--ruang-3) var(--ruang-6) var(--ruang-6);
+  }
+  .tombol-aksi button {
+    min-height: 56px;
+    font-size: var(--teks-md);
+  }
+  .tombol-aksi button.utama {
+    font-size: var(--teks-lg);
+  }
+  .bar-atas {
+    gap: var(--ruang-2);
+    padding-left: calc(var(--ruang-3) + var(--aman-kiri));
+    padding-right: calc(var(--ruang-3) + var(--aman-kanan));
+  }
+  .bar-atas button.kecil {
+    min-height: 38px;
+    padding-inline: var(--ruang-4);
+  }
+  .bar-atas .info {
+    font-size: var(--teks-md);
+  }
+  .langkah {
+    font-size: var(--teks-sm);
+  }
+  .petunjuk {
+    font-size: var(--teks-md);
+  }
+  #toast {
+    bottom: calc(132px + var(--aman-bawah));
+  }
+}
+
+/* ---------- Desktop ---------- */
+@media (min-width: 1100px) {
+  :root {
+    --lebar-dialog: 680px;
+    --lebar-bar-aksi: 720px;
+  }
+  /* Layar lebar dibaca dari jarak lebih jauh: seluruh skala rem naik sedikit. */
+  html {
+    font-size: 106.25%;
+  }
+  html[data-teks='besar'] {
+    font-size: 118.75%;
+  }
+  .dialog.lebar {
+    --lebar-dialog: 860px;
+  }
+}
+
+/* ---------- HP landscape / layar pendek ---------- */
+@media (max-height: 480px) and (orientation: landscape) {
+  .layar {
+    padding-top: calc(var(--ruang-2) + var(--aman-atas));
+  }
+  .kolom {
+    gap: var(--ruang-3);
+  }
+  .judul {
+    margin: var(--ruang-1) 0 0;
+  }
+  .judul h1 {
+    font-size: var(--teks-2xl);
+  }
+  .judul h1::after {
+    margin-top: var(--ruang-1);
+  }
+  .kartu-panel {
+    padding: var(--ruang-3);
+    gap: var(--ruang-2);
+  }
+  .latar {
+    padding: calc(var(--ruang-2) + var(--aman-atas)) calc(var(--ruang-4) + var(--aman-kanan))
+      calc(var(--ruang-2) + var(--aman-bawah)) calc(var(--ruang-4) + var(--aman-kiri));
+  }
+  .dialog {
+    padding: var(--ruang-4);
+    gap: var(--ruang-2);
+  }
+  .dialog h2 {
+    font-size: var(--teks-xl);
+  }
+  .kaki-dialog {
+    bottom: calc(-1 * var(--ruang-4));
+    margin: 0 calc(-1 * var(--ruang-4)) calc(-1 * var(--ruang-4));
+    padding: var(--ruang-2) var(--ruang-4) var(--ruang-4);
+  }
+  .bar-aksi {
+    gap: var(--ruang-1);
+    padding-top: var(--ruang-1);
+    padding-bottom: calc(6px + var(--aman-bawah));
+  }
+  .tombol-aksi button {
+    min-height: var(--sentuh);
+    padding-block: 6px;
+  }
+  .langkah {
+    min-height: 18px;
+  }
+  #toast {
+    bottom: calc(100px + var(--aman-bawah));
+  }
+}

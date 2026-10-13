@@ -1,0 +1,213 @@
+/* =============================================================================================
+   GERAK: keyframes + pengurangan gerak.
+   Gerak dikurangi aktif kalau sistem meminta (prefers-reduced-motion) ATAU preferensi pemain
+   (<html data-gerak="kurang">, diatur preferensi.ts). Goyang layar, skala/rotasi besar, dan
+   lompatan diganti pudar singkat; animasi kecil dipersingkat. Tidak ada info yang hilang:
+   semua yang dianimasikan tetap tampil.
+   ============================================================================================= */
+
+@keyframes pudar-masuk {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes dialog-masuk {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+@keyframes toast-masuk {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+@keyframes palet-masuk {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.95);
+  }
+}
+/* Dipertahankan untuk kode yang masih memakai nama lama */
+@keyframes muncul {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@keyframes putar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes denyut-emas {
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes sorak-masuk {
+  0% {
+    opacity: 0;
+    transform: scale(2.4) rotate(-6deg);
+  }
+  12% {
+    opacity: 1;
+    transform: scale(0.92) rotate(-3deg);
+  }
+  20% {
+    transform: scale(1.06) rotate(-3deg);
+  }
+  28% {
+    transform: scale(1) rotate(-3deg);
+  }
+  82% {
+    opacity: 1;
+    transform: scale(1.02) rotate(-3deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25) rotate(-3deg);
+  }
+}
+/* Versi tenang: hanya muncul, diam, lalu pudar (tetap selama --durasi supaya terbaca). */
+@keyframes sorak-pudar {
+  0% {
+    opacity: 0;
+  }
+  10%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes goyang {
+  10%,
+  90% {
+    transform: translateX(-2px);
+  }
+  20%,
+  80% {
+    transform: translateX(4px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-8px);
+  }
+  40%,
+  60% {
+    transform: translateX(8px);
+  }
+}
+@keyframes kartu-buka {
+  from {
+    transform: rotateY(90deg) scale(0.8);
+  }
+}
+@keyframes gelembung {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -80%) scale(0.5);
+  }
+  10% {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(1.12);
+  }
+  18% {
+    transform: translate(-50%, -100%) scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -110%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -130%);
+  }
+}
+/* Gelembung tenang: tetap di tempat, pudar masuk-keluar. */
+@keyframes gelembung-pudar {
+  0% {
+    opacity: 0;
+  }
+  8%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ---------- Gerak dikurangi ----------
+   Dua blok isinya sama: satu dari sistem, satu dari preferensi pemain. */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-gerak='penuh']) body.goyang #game,
+  html:not([data-gerak='penuh']) .kotak-status.merah {
+    animation: none;
+  }
+  html:not([data-gerak='penuh']) .sorak {
+    animation-name: sorak-pudar;
+    animation-timing-function: linear;
+  }
+  html:not([data-gerak='penuh']) .gelembung {
+    animation-name: gelembung-pudar;
+    animation-timing-function: linear;
+  }
+  html:not([data-gerak='penuh']) .kartu-html,
+  html:not([data-gerak='penuh']) .tombol-aksi button.utama::after {
+    animation: none;
+  }
+  html:not([data-gerak='penuh']) .dialog,
+  html:not([data-gerak='penuh']) .toast,
+  html:not([data-gerak='penuh']) .palet-emote {
+    animation-name: pudar-masuk;
+  }
+  html:not([data-gerak='penuh']) *,
+  html:not([data-gerak='penuh']) *::before,
+  html:not([data-gerak='penuh']) *::after {
+    transition-duration: 1ms !important;
+  }
+  html:not([data-gerak='penuh']) .waktu > div {
+    transition-duration: 0.9s !important;
+  }
+}
+
+html[data-gerak='kurang'] body.goyang #game,
+html[data-gerak='kurang'] .kotak-status.merah {
+  animation: none;
+}
+html[data-gerak='kurang'] .sorak {
+  animation-name: sorak-pudar;
+  animation-timing-function: linear;
+}
+html[data-gerak='kurang'] .gelembung {
+  animation-name: gelembung-pudar;
+  animation-timing-function: linear;
+}
+html[data-gerak='kurang'] .kartu-html,
+html[data-gerak='kurang'] .tombol-aksi button.utama::after {
+  animation: none;
+}
+html[data-gerak='kurang'] .dialog,
+html[data-gerak='kurang'] .toast,
+html[data-gerak='kurang'] .palet-emote {
+  animation-name: pudar-masuk;
+}
+html[data-gerak='kurang'] *,
+html[data-gerak='kurang'] *::before,
+html[data-gerak='kurang'] *::after {
+  transition-duration: 1ms !important;
+}
+/* Bar waktu tetap bergerak halus: itu informasi, bukan hiasan. */
+html[data-gerak='kurang'] .waktu > div {
+  transition-duration: 0.9s !important;
+}
+
+/* Hemat efek: matikan denyut dekoratif. */
+html[data-efek='hemat'] .tombol-aksi button.utama::after {
+  animation: none;
+}

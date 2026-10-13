@@ -1,56 +1,151 @@
 // Dua jenis koneksi dengan antarmuka sama:
 // - online: WebSocket ke server, sambung ulang otomatis pakai token.
-// - offline: meja dijalankan langsung di browser melawan bot, disimpan di localStorage.
+// - offline: meja dijalankan langsung di browser melawan warga kedai (bot), disimpan di localStorage.
 
-import { Meja, type PengaturanMeja, type PesanKlien, type PesanServer } from '@remi/meja';
+import { Meja, NAMA_LAWAN_BAWAAN, namaLawanAcak, type PengaturanMeja, type PesanKlien, type PesanServer } from '@remi/meja';
 import { simpan } from './penyimpanan';
 
-export type StatusKoneksi = 'menyambung' | 'tersambung' | 'terputus';
+/**
+ * - `menyambung`: sedang membuka sambungan.
+ * - `tersambung`: sambungan terbuka.
+ * - `terputus`: sambungan yang tadinya jalan putus; sambung ulang dijadwalkan.
+ * - `gagal`: belum pernah tersambung sama sekali dan sudah gagal beberapa kali berturut-turut
+ *   (server mati/tidak terjangkau). Tetap dicoba lagi di belakang layar.
+ */
+export type StatusKoneksi = 'menyambung' | 'tersambung' | 'terputus' | 'gagal';
 
 export interface Koneksi {
   readonly jenis: 'online' | 'offline';
   kirim(p: PesanKlien): void;
   saatPesan(cb: (p: PesanServer) => void): void;
+  /** Dipanggil setiap status berubah. Langsung dipanggil sekali dengan status terkini. */
   saatStatus(cb: (s: StatusKoneksi) => void): void;
+  /** Pesan yang dikirim sekarang langsung berangkat (online: socket terbuka; offline: selalu). */
+  siapKirim(): boolean;
   tutup(): void;
+}
+
+const INTERVAL_PING_MS = 25_000;
+/** Ping tanpa jawaban selama ini: anggap sambungan setengah mati (HP pindah jaringan, dll.). */
+const BATAS_PONG_MS = 2 * INTERVAL_PING_MS;
+/** Saat tab terlihat lagi / sinyal kembali: tunggu jawaban sebentar saja. */
+const BATAS_CEK_CEPAT_MS = 5_000;
+/**
+ * Jabat tangan (CONNECTING) yang tidak selesai-selesai: anggap gagal, tutup, lalu sambung ulang
+ * dengan backoff. Tanpa batas ini, paket yang hilang di jalan (sinyal jelek, proxy macet) membuat
+ * layar tertahan di "Menyambung…" selamanya, karena browser bisa menunggu sangat lama.
+ */
+const BATAS_SAMBUNG_MS = 10_000;
+const JEDA_ULANG_AWAL_MS = 500;
+const JEDA_ULANG_MAKS_MS = 8_000;
+/** Berapa kali gagal berturut-turut (tanpa pernah tersambung) sebelum status 'gagal'. */
+const BATAS_GAGAL_AWAL = 3;
+/** Pesan antrian yang lebih tua dari ini dibuang: niat pemain sudah basi. */
+const UMUR_ANTRIAN_MS = 30_000;
+const PANJANG_ANTRIAN_MAKS = 8;
+
+/**
+ * Pesan yang aman dikirim belakangan setelah sambungan pulih. Pesan lain (aksi, vote,
+ * mulai, putaranBerikut, emote, dll.) bisa diterapkan ke state yang sudah berubah, jadi dibuang.
+ * 'keluar' sengaja tidak diantrikan: pemanggilnya langsung menutup koneksi (antrian ikut
+ * dibuang), jadi aplikasi mengecek siapKirim() dulu dan memberi tahu pemain kalau tidak sampai.
+ */
+const BOLEH_ANTRI = new Set<PesanKlien['t']>(['buat', 'gabung', 'daftar']);
+/** Jenis yang cukup diwakili satu pesan terbaru di antrian. Buat dan gabung sama-sama "masuk meja". */
+const kelompokAntri = (t: PesanKlien['t']) => (t === 'buat' || t === 'gabung' ? 'masuk' : t);
+
+const PESAN_TERTAHAN = 'Sinyalnya lagi putus, Bos. Tunggu nyambung dulu, baru coba lagi.';
+
+interface Antri {
+  pesan: PesanKlien;
+  waktu: number;
 }
 
 export class KoneksiOnline implements Koneksi {
   readonly jenis = 'online';
   private ws: WebSocket | null = null;
-  private antrian: PesanKlien[] = [];
+  private antrian: Antri[] = [];
   private pendengar: ((p: PesanServer) => void)[] = [];
   private pendengarStatus: ((s: StatusKoneksi) => void)[] = [];
-  private jedaUlang = 500;
+  private statusKini: StatusKoneksi = 'menyambung';
+  private jedaUlang = JEDA_ULANG_AWAL_MS;
   private ditutup = false;
+  private pernahTersambung = false;
+  private gagalBeruntun = 0;
+  /** Sudah memberi tahu pemain bahwa aksinya tertahan (sekali per putus). */
+  private sudahDiberitahu = false;
   private timerPing: ReturnType<typeof setInterval> | null = null;
+  private timerUlang: ReturnType<typeof setTimeout> | null = null;
+  private timerCekCepat: ReturnType<typeof setTimeout> | null = null;
+  /** Batas waktu jabat tangan untuk socket yang sedang CONNECTING. */
+  private timerSambung: ReturnType<typeof setTimeout> | null = null;
+  /** Kapan socket yang sekarang mulai dibuka. */
+  private mulaiSambung = 0;
+  /** Waktu ping pertama yang belum dijawab; null = server terakhir menjawab. */
+  private pingSejak: number | null = null;
+  /** Bertambah setiap ada pesan masuk (untuk cek cepat). */
+  private jumlahDiterima = 0;
+
+  private readonly saatOnline = () => this.sambungSekarang();
+  private readonly saatTerlihat = () => {
+    if (document.visibilityState === 'visible') this.sambungSekarang();
+  };
 
   constructor(
     private readonly url: string,
     private readonly nama: () => string,
   ) {
+    window.addEventListener('online', this.saatOnline);
+    document.addEventListener('visibilitychange', this.saatTerlihat);
     this.sambung();
   }
 
   private status(s: StatusKoneksi) {
+    this.statusKini = s;
     this.pendengarStatus.forEach((cb) => cb(s));
   }
 
+  private teruskan(p: PesanServer) {
+    this.pendengar.forEach((cb) => cb(p));
+  }
+
   private sambung() {
-    if (this.ditutup) return;
+    if (this.ditutup || this.ws) return;
+    this.timerUlang = null;
     this.status('menyambung');
-    const ws = new WebSocket(this.url);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(this.url);
+    } catch {
+      // URL tidak valid / diblokir: perlakukan seperti sambungan yang langsung gagal.
+      return this.jadwalUlang();
+    }
     this.ws = ws;
+    this.mulaiSambung = Date.now();
+    this.timerSambung = setTimeout(() => {
+      this.timerSambung = null;
+      if (this.ws === ws && ws.readyState === WebSocket.CONNECTING) this.putuskan(ws);
+    }, BATAS_SAMBUNG_MS);
     ws.onopen = () => {
-      this.jedaUlang = 500;
+      this.hentikanBatasSambung();
+      this.jedaUlang = JEDA_ULANG_AWAL_MS;
+      this.pernahTersambung = true;
+      this.gagalBeruntun = 0;
+      this.sudahDiberitahu = false;
+      this.pingSejak = null;
       this.status('tersambung');
-      // Lanjutkan sesi lama bila ada (misalnya habis sinyal hilang atau aplikasi ditutup).
+      const antri = this.ambilAntrian();
+      // Lanjutkan sesi lama (misalnya habis sinyal hilang atau aplikasi ditutup), kecuali pemain
+      // barusan minta masuk meja lain: niat terbarunya yang menang.
       const sesi = simpan.sesi();
-      if (sesi) ws.send(JSON.stringify({ t: 'gabung', kode: sesi.kode, nama: this.nama(), token: sesi.token }));
-      for (const p of this.antrian.splice(0)) ws.send(JSON.stringify(p));
-      this.timerPing = setInterval(() => this.kirim({ t: 'ping' }), 25_000);
+      const mauMasuk = antri.some((p) => p.t === 'buat' || p.t === 'gabung');
+      if (sesi && !mauMasuk) ws.send(JSON.stringify({ t: 'gabung', kode: sesi.kode, nama: this.nama(), token: sesi.token }));
+      for (const p of antri) ws.send(JSON.stringify(p));
+      this.timerPing = setInterval(() => this.detak(), INTERVAL_PING_MS);
     };
     ws.onmessage = (e) => {
+      this.jumlahDiterima++;
+      this.pingSejak = null;
       let p: PesanServer;
       try {
         p = JSON.parse(String(e.data));
@@ -59,29 +154,122 @@ export class KoneksiOnline implements Koneksi {
       }
       if (p.t === 'masuk') simpan.setSesi({ kode: p.kode, token: p.token });
       if (p.t === 'keluar') simpan.setSesi(null);
-      this.pendengar.forEach((cb) => cb(p));
+      this.teruskan(p);
     };
-    ws.onclose = (e) => {
-      if (this.timerPing) clearInterval(this.timerPing);
-      this.timerPing = null;
-      this.ws = null;
-      if (this.ditutup) return;
-      if (e.code === 4000) {
-        // Server menutup karena kursi ini dibuka di tab/perangkat lain: jangan rebutan sambung ulang.
-        this.ditutup = true;
-        const p: PesanServer = { t: 'keluar', alasan: 'Meja ini sedang dibuka di tab atau perangkat lain.' };
-        this.pendengar.forEach((cb) => cb(p));
-        return;
-      }
-      this.status('terputus');
-      setTimeout(() => this.sambung(), this.jedaUlang);
-      this.jedaUlang = Math.min(this.jedaUlang * 2, 8000);
-    };
+    ws.onclose = (e) => this.lepas(ws, e.code);
+  }
+
+  /** Bersihkan sambungan yang sudah (atau dianggap) mati, lalu jadwalkan sambung ulang. */
+  private lepas(ws: WebSocket, kode: number) {
+    if (this.ws !== ws) return;
+    ws.onopen = ws.onmessage = ws.onclose = null;
+    this.ws = null;
+    this.hentikanBatasSambung();
+    this.hentikanDetak();
+    if (this.ditutup) return;
+    if (kode === 4000) {
+      // Server menutup karena kursi ini dibuka di tab/perangkat lain: jangan rebutan sambung ulang.
+      this.tutup();
+      this.teruskan({ t: 'keluar', alasan: 'Meja ini sedang dibuka di tab atau perangkat lain.' });
+      return;
+    }
+    this.jadwalUlang();
+  }
+
+  private jadwalUlang() {
+    if (this.pernahTersambung) this.status('terputus');
+    else this.status(++this.gagalBeruntun >= BATAS_GAGAL_AWAL ? 'gagal' : 'terputus');
+    if (this.timerUlang) clearTimeout(this.timerUlang);
+    this.timerUlang = setTimeout(() => this.sambung(), this.jedaUlang);
+    this.jedaUlang = Math.min(this.jedaUlang * 2, JEDA_ULANG_MAKS_MS);
+  }
+
+  /** Ping berkala + watchdog: ping yang lama tak berjawab berarti sambungan setengah mati. */
+  private detak() {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const sekarang = Date.now();
+    if (this.pingSejak !== null && sekarang - this.pingSejak >= BATAS_PONG_MS) return this.putuskan(ws);
+    this.pingSejak ??= sekarang;
+    ws.send(JSON.stringify({ t: 'ping' }));
+  }
+
+  private hentikanBatasSambung() {
+    if (this.timerSambung) clearTimeout(this.timerSambung);
+    this.timerSambung = null;
+  }
+
+  private hentikanDetak() {
+    if (this.timerPing) clearInterval(this.timerPing);
+    if (this.timerCekCepat) clearTimeout(this.timerCekCepat);
+    this.timerPing = this.timerCekCepat = null;
+    this.pingSejak = null;
+  }
+
+  /** Tutup paksa tanpa menunggu jabat tangan penutupan (bisa lama di sambungan mati). */
+  private putuskan(ws: WebSocket) {
+    try {
+      ws.close();
+    } catch {
+      // Abaikan: yang penting sambungan dilepas.
+    }
+    this.lepas(ws, 1006);
+  }
+
+  /** Tab terlihat lagi atau sinyal kembali: jangan tunggu backoff, cek/sambung sekarang. */
+  private sambungSekarang(): void {
+    if (this.ditutup) return;
+    const ws = this.ws;
+    if (!ws) {
+      if (this.timerUlang) clearTimeout(this.timerUlang);
+      this.jedaUlang = JEDA_ULANG_AWAL_MS;
+      this.sambung();
+      return;
+    }
+    if (ws.readyState === WebSocket.CONNECTING) {
+      // Percobaan yang sudah lama menggantung kemungkinan besar lewat jaringan lama yang sudah mati:
+      // buang dan mulai baru sekarang. Yang baru dimulai dibiarkan (jangan sampai sambungan ganda).
+      if (Date.now() - this.mulaiSambung < BATAS_CEK_CEPAT_MS) return;
+      this.putuskan(ws);
+      return this.sambungSekarang();
+    }
+    if (ws.readyState !== WebSocket.OPEN || this.timerCekCepat) return;
+    // Sambungan kelihatan terbuka, tapi setelah HP tidur bisa saja sudah mati diam-diam.
+    const awal = this.jumlahDiterima;
+    this.pingSejak ??= Date.now();
+    ws.send(JSON.stringify({ t: 'ping' }));
+    this.timerCekCepat = setTimeout(() => {
+      this.timerCekCepat = null;
+      if (this.ws === ws && this.jumlahDiterima === awal) this.putuskan(ws);
+    }, BATAS_CEK_CEPAT_MS);
+  }
+
+  /** Ambil isi antrian yang belum basi, lalu kosongkan antriannya. */
+  private ambilAntrian(): PesanKlien[] {
+    const batas = Date.now() - UMUR_ANTRIAN_MS;
+    return this.antrian.splice(0).filter((a) => a.waktu >= batas).map((a) => a.pesan);
+  }
+
+  private antrikan(p: PesanKlien) {
+    const kelompok = kelompokAntri(p.t);
+    this.antrian = this.antrian.filter((a) => kelompokAntri(a.pesan.t) !== kelompok);
+    this.antrian.push({ pesan: p, waktu: Date.now() });
+    if (this.antrian.length > PANJANG_ANTRIAN_MAKS) this.antrian.splice(0, this.antrian.length - PANJANG_ANTRIAN_MAKS);
+  }
+
+  siapKirim(): boolean {
+    return !this.ditutup && this.ws?.readyState === WebSocket.OPEN;
   }
 
   kirim(p: PesanKlien) {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(p));
-    else if (p.t !== 'ping') this.antrian.push(p);
+    if (this.ditutup) return;
+    if (this.ws?.readyState === WebSocket.OPEN) return this.ws.send(JSON.stringify(p));
+    if (p.t === 'ping') return;
+    if (BOLEH_ANTRI.has(p.t)) return this.antrikan(p);
+    // Aksi saat putus tidak diantrikan (bisa basi), tapi pemain perlu tahu kenapa tidak terjadi apa-apa.
+    if (this.sudahDiberitahu) return;
+    this.sudahDiberitahu = true;
+    queueMicrotask(() => this.teruskan({ t: 'error', pesan: PESAN_TERTAHAN }));
   }
 
   saatPesan(cb: (p: PesanServer) => void) {
@@ -90,15 +278,29 @@ export class KoneksiOnline implements Koneksi {
 
   saatStatus(cb: (s: StatusKoneksi) => void) {
     this.pendengarStatus.push(cb);
+    cb(this.statusKini);
   }
 
   tutup() {
     this.ditutup = true;
-    this.ws?.close();
+    window.removeEventListener('online', this.saatOnline);
+    document.removeEventListener('visibilitychange', this.saatTerlihat);
+    if (this.timerUlang) clearTimeout(this.timerUlang);
+    this.timerUlang = null;
+    this.hentikanBatasSambung();
+    this.hentikanDetak();
+    this.antrian = [];
+    const ws = this.ws;
+    this.ws = null;
+    if (ws) {
+      ws.onopen = ws.onmessage = ws.onclose = null;
+      ws.close();
+    }
   }
 }
 
 const ID_SAYA = 'saya';
+const JEDA_SIMPAN_MS = 300;
 
 export class KoneksiOffline implements Koneksi {
   readonly jenis = 'offline';
@@ -107,21 +309,43 @@ export class KoneksiOffline implements Koneksi {
   private tertunda: PesanServer[] = [];
   private timerSimpan: ReturnType<typeof setTimeout> | null = null;
 
-  private constructor() {}
+  // Tab ditutup/di-refresh/pindah aplikasi: kalau ada perubahan yang belum ditulis, tulis sekarang.
+  private readonly saatHalamanPergi = () => {
+    if (this.timerSimpan) this.simpanSekarang();
+  };
+  private readonly saatTersembunyi = () => {
+    if (document.visibilityState === 'hidden' && this.timerSimpan) this.simpanSekarang();
+  };
 
-  private opsi() {
+  private constructor() {
+    window.addEventListener('pagehide', this.saatHalamanPergi);
+    document.addEventListener('visibilitychange', this.saatTersembunyi);
+  }
+
+  private opsi(namaLawan?: readonly string[]) {
     return {
       kode: 'OFFLINE',
       kirim: (_: string, p: PesanServer) => this.kirimKeUI(p),
       batasLog: 200,
       saatBerubah: () => this.jadwalSimpan(),
+      namaLawan,
     };
   }
 
-  /** Meja baru: saya + bot di kursi lainnya, langsung mulai. */
-  static baru(nama: string, pengaturan: Partial<PengaturanMeja>, pengocok?: number): KoneksiOffline {
+  /**
+   * Meja baru: saya + warga kedai (bot) di kursi lainnya, langsung mulai.
+   * Nama warga kedai diambil dari NAMA_LAWAN_BAWAAN dengan urutan acak (Math.random), kecuali
+   * `urutanNamaTetap` (latihan dengan panduan: lawannya selalu sama, mis. "Kipas Dua" & "Cak Kopag").
+   */
+  static baru(
+    nama: string,
+    pengaturan: Partial<PengaturanMeja>,
+    pengocok?: number,
+    pilihan: { urutanNamaTetap?: boolean } = {},
+  ): KoneksiOffline {
     const k = new KoneksiOffline();
-    const meja = Meja.buat(k.opsi(), ID_SAYA, nama, { ...pengaturan, detikGiliran: 0, publik: false });
+    const namaLawan = pilihan.urutanNamaTetap ? NAMA_LAWAN_BAWAAN : namaLawanAcak();
+    const meja = Meja.buat(k.opsi(namaLawan), ID_SAYA, nama, { ...pengaturan, detikGiliran: 0, publik: false });
     k.meja = meja;
     for (let i = 1; i < (pengaturan.jumlahPemain ?? 4); i++) {
       meja.terima(ID_SAYA, { t: 'aturKursi', kursi: i, jenis: 'bot', level: pengaturan.levelBot });
@@ -130,9 +354,17 @@ export class KoneksiOffline implements Koneksi {
     return k;
   }
 
+  /**
+   * Lanjutkan simpanan offline. Null kalau tidak ada, rusak, atau permainannya sudah selesai
+   * (simpanan seperti itu dibuang supaya klasemennya tidak tercatat dua kali di riwayat).
+   */
   static lanjutkan(): KoneksiOffline | null {
     const data = simpan.mejaOffline();
     if (!data || data.versi !== 1) return null;
+    if (data.game?.status === 'selesai') {
+      simpan.setMejaOffline(null);
+      return null;
+    }
     const k = new KoneksiOffline();
     try {
       k.meja = new Meja(k.opsi(), data);
@@ -141,6 +373,8 @@ export class KoneksiOffline implements Koneksi {
       // Simpanan rusak/tidak cocok: buang supaya tidak macet terus.
       console.error('simpanan offline tidak bisa dilanjutkan', e);
       k.meja?.hentikan();
+      k.meja = null;
+      k.tutup();
       simpan.setMejaOffline(null);
       return null;
     }
@@ -149,8 +383,10 @@ export class KoneksiOffline implements Koneksi {
 
   private kirimKeUI(p: PesanServer) {
     if (p.t === 'keluar') {
+      this.batalSimpan();
       simpan.setMejaOffline(null);
       this.meja?.hentikan();
+      this.meja = null;
     }
     if (!this.pendengar.length) {
       this.tertunda.push(p);
@@ -162,10 +398,24 @@ export class KoneksiOffline implements Koneksi {
 
   private jadwalSimpan() {
     if (this.timerSimpan) return;
-    this.timerSimpan = setTimeout(() => {
-      this.timerSimpan = null;
-      if (this.meja) simpan.setMejaOffline(this.meja.data);
-    }, 300);
+    this.timerSimpan = setTimeout(() => this.simpanSekarang(), JEDA_SIMPAN_MS);
+  }
+
+  private batalSimpan() {
+    if (this.timerSimpan) clearTimeout(this.timerSimpan);
+    this.timerSimpan = null;
+  }
+
+  /**
+   * Tulis simpanan sekarang. Permainan yang sudah selesai tidak pernah ditulis (dan sisa
+   * simpanannya dihapus): kalau tidak, beranda menawarkan "lanjutkan" untuk permainan yang
+   * sudah tamat dan klasemennya tercatat ulang di riwayat.
+   */
+  private simpanSekarang() {
+    this.batalSimpan();
+    if (!this.meja) return;
+    if (this.meja.status === 'selesai') simpan.setMejaOffline(null);
+    else simpan.setMejaOffline(this.meja.data);
   }
 
   kirim(p: PesanKlien) {
@@ -184,9 +434,14 @@ export class KoneksiOffline implements Koneksi {
     cb('tersambung');
   }
 
+  siapKirim(): boolean {
+    return this.meja !== null;
+  }
+
   tutup() {
-    if (this.timerSimpan) clearTimeout(this.timerSimpan);
-    if (this.meja && this.meja.status !== 'selesai') simpan.setMejaOffline(this.meja.data);
+    window.removeEventListener('pagehide', this.saatHalamanPergi);
+    document.removeEventListener('visibilitychange', this.saatTersembunyi);
+    this.simpanSekarang();
     this.meja?.hentikan();
     this.meja = null;
   }

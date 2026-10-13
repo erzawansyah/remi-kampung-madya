@@ -1,5 +1,6 @@
 {
   "name": "remi-kampung-madya",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -9,6 +10,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:client": "vitest run apps/client",
+    "e2e": "node apps/client/e2e/smoke.mjs",
     "typecheck": "tsc -p packages/engine --noEmit && tsc -p packages/meja --noEmit && tsc -p apps/server --noEmit && tsc -p apps/client --noEmit",
     "dev:server": "npm run dev -w @remi/server",
     "dev:client": "npm run dev -w @remi/client",
@@ -20,7 +23,9 @@
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
+    "happy-dom": "20.14.5",
+    "playwright-core": "1.56.1",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   }
 }

@@ -44,7 +44,11 @@ export const PENGATURAN_BAWAAN: PengaturanMeja = {
   tempoBot: 'santai',
 };
 
-/** Emote yang boleh dikirim (dibatasi supaya tidak bisa dipakai untuk pesan bebas). */
+/**
+ * Emote yang boleh dikirim (dibatasi supaya tidak bisa dipakai untuk pesan bebas). Celetukan warga
+ * kedai (Meja.celetukBot) juga hanya boleh memakai isi daftar ini. "Kartu itu bundar, kak." diambil dari
+ * balasan Kedai Madya di Threads; sengaja di urutan terakhir (paling panjang, satu baris sendiri di palet).
+ */
 export const DAFTAR_EMOTE = [
   '😂',
   '😱',
@@ -58,10 +62,11 @@ export const DAFTAR_EMOTE = [
   'Sabar…',
   'Mantap!',
   'Waduh!',
-  'Makasih, Bos!',
+  'Suwun, Bos!',
   'Cepetan!',
-  'Tutup!',
+  'Nutup, rek!',
   'GG',
+  'Kartu itu bundar, kak.',
 ] as const;
 
 export type Emote = (typeof DAFTAR_EMOTE)[number];

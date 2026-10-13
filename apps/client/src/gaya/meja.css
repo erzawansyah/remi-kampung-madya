@@ -1,0 +1,760 @@
+/* =============================================================================================
+   MEJA: bar atas, bar aksi, emote, gelembung, sorakan, kartu pamer (popup joker / mentung),
+   panel mentung, hasil putaran, klasemen akhir, log, menu.
+   Tinggi bar atas dan bar aksi diukur kontrolMeja.ts (ResizeObserver) lalu dikirim ke
+   MejaScene.aturRuang(), jadi bar boleh tumbuh (teks besar, safe area) tanpa menutupi kartu.
+   Usahakan tingginya tetap stabil antar-keadaan supaya meja tidak melompat.
+   ============================================================================================= */
+
+/* Bar hanya menangkap sentuhan di tombolnya; latar gradien tembus ke meja.
+   touch-action: pinch di bar tidak men-zoom halaman (meja dikunci, zoom tetap di layar lain). */
+#ui > .bar-atas,
+#ui > .bar-aksi {
+  pointer-events: none;
+  touch-action: none;
+}
+
+/* ---------- Bar atas ---------- */
+.bar-atas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: calc(6px + var(--aman-atas)) calc(var(--ruang-2) + var(--aman-kanan)) 6px calc(var(--ruang-2) + var(--aman-kiri));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(rgba(4, 14, 8, 0.6), rgba(4, 14, 8, 0));
+}
+.bar-atas > * {
+  pointer-events: auto;
+}
+/* Target sentuh penuh 44px (WCAG 2.5.8). */
+.bar-atas button {
+  min-width: var(--sentuh);
+  min-height: var(--sentuh);
+  padding: 0 var(--ruang-3);
+  font-size: var(--teks-sm);
+  border-radius: var(--radius-kecil);
+  background: var(--kaca);
+  -webkit-backdrop-filter: blur(var(--kaca-blur));
+  backdrop-filter: blur(var(--kaca-blur));
+  border-color: var(--garis-kuat);
+  box-shadow: var(--bayangan-1);
+}
+.bar-atas button.tombol-ikon {
+  padding: 0;
+  font-size: 1.25rem;
+}
+/* Info meja: [jenis meja] · [Putaran n/batas]. Nomor putaran tidak pernah dipotong; yang mengalah
+   jenis meja (dipotong dengan elipsis). Di HP sempit keduanya ditumpuk dua baris. */
+.bar-atas .info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  font-size: var(--teks-sm);
+  font-weight: 600;
+  color: var(--teks-redup);
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+.bar-atas .info > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.info-jenis {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.info-putaran {
+  flex: none;
+  color: var(--teks);
+}
+.info-jenis:not(:empty) + .info-putaran:not(:empty)::before {
+  content: '·';
+  margin: 0 0.4em;
+  color: var(--teks-redup);
+}
+@media (max-width: 480px) {
+  .bar-atas .info {
+    flex-direction: column-reverse;
+    align-items: flex-start;
+    justify-content: center;
+    line-height: 1.2;
+  }
+  .bar-atas .info > span {
+    max-width: 100%;
+  }
+  .info-jenis {
+    font-size: var(--teks-xs);
+  }
+  .info-jenis:not(:empty) + .info-putaran:not(:empty)::before {
+    content: none;
+  }
+}
+html[data-efek='hemat'] .bar-atas button {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--panel);
+}
+
+/* Lencana status koneksi (online): .menyambung | .terputus | .gagal; tersembunyi saat tersambung. */
+.status-koneksi {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pil);
+  font-size: var(--teks-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--kaca);
+  border: 1px solid var(--garis-kuat);
+  color: var(--teks);
+}
+.status-koneksi .titik {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.status-koneksi.menyambung {
+  color: var(--peringatan);
+}
+.status-koneksi.menyambung .titik {
+  animation: denyut-titik 1s var(--ease-halus) infinite alternate;
+}
+.status-koneksi.terputus,
+.status-koneksi.gagal {
+  color: var(--teks-di-bahaya);
+  background: var(--bahaya-latar);
+  border-color: var(--bahaya-garis);
+}
+@keyframes denyut-titik {
+  to {
+    opacity: 0.25;
+  }
+}
+/* HP sempit: cukup titiknya, teks tetap dibaca lewat aria-label. */
+@media (max-width: 380px) {
+  .status-koneksi .teks {
+    display: none;
+  }
+}
+
+/* Bar waktu giliran */
+.waktu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(255, 246, 225, 0.12);
+  pointer-events: none;
+}
+.waktu > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--emas-tua), var(--emas));
+  border-radius: 0 var(--radius-pil) var(--radius-pil) 0;
+  transition: width 0.9s linear;
+}
+.waktu.mendesak > div {
+  background: linear-gradient(90deg, var(--bahaya-latar-terang), var(--bahaya));
+}
+
+/* ---------- Bar aksi ---------- */
+.bar-aksi {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 6px calc(var(--ruang-2) + var(--aman-kanan)) calc(var(--ruang-2) + var(--aman-bawah)) calc(var(--ruang-2) + var(--aman-kiri));
+  background: linear-gradient(rgba(4, 14, 8, 0), rgba(4, 14, 8, 0.66) 32%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.bar-aksi > * {
+  pointer-events: auto;
+  width: 100%;
+  max-width: var(--lebar-bar-aksi);
+}
+/* Petunjuk selalu memesan dua baris supaya tinggi bar tidak melompat saat teksnya berganti. */
+.petunjuk {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  text-align: center;
+  font-size: var(--teks-sm);
+  font-weight: 600;
+  line-height: 1.3;
+  min-height: 2.6em;
+  color: var(--teks);
+  text-shadow: 0 1px 2px #000, 0 0 8px rgba(0, 0, 0, 0.6);
+}
+/* Alasan penolakan boleh tiga baris supaya terbaca utuh di HP sempit (bar tumbuh satu baris
+   sebentar, scene ikut menyesuaikan lewat ResizeObserver). */
+.petunjuk.salah {
+  color: var(--negatif);
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+/* Masih terpotong: ketuk untuk membaca lengkap (toast). */
+.petunjuk.terpotong {
+  cursor: pointer;
+  text-decoration: underline dotted rgba(255, 246, 225, 0.45);
+  text-underline-offset: 3px;
+}
+
+/* Penunjuk langkah ① Ambil → ② Turunkan → ③ Buang (satu baris, tinggi tetap) */
+.langkah {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--teks-xs);
+  color: var(--teks-redup);
+}
+.langkah span {
+  padding: 2px var(--ruang-2);
+  border-radius: var(--radius-pil);
+  background: rgba(4, 14, 8, 0.55);
+  border: 1px solid var(--garis);
+  white-space: nowrap;
+}
+.langkah span.aktif {
+  background: var(--emas);
+  border-color: var(--emas-tua);
+  color: var(--teks-di-emas);
+  font-weight: 700;
+}
+.langkah span.selesai {
+  color: var(--positif);
+  text-decoration: line-through;
+}
+.langkah span b {
+  color: var(--teks);
+}
+.langkah i {
+  font-style: normal;
+  opacity: 0.6;
+}
+
+/* Deret tombol aksi: [ikon urut] [aksi kedua] [AKSI UTAMA]. Tinggi tombol tetap 52px. */
+.tombol-aksi {
+  display: flex;
+  gap: var(--ruang-2);
+  align-items: stretch;
+}
+.tombol-aksi button {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding: 10px 6px;
+  font-size: var(--teks-sm);
+}
+.tombol-aksi button .label {
+  min-width: 0;
+  overflow: hidden;
+}
+/* Label panjang di layar sempit / teks besar ("Konfirmasi mulung" di 360px) dilipat jadi dua
+   baris, bukan dipotong "Konfirmasi mul…". Dua baris rapat (2 × 1.1em) + padding 4px tetap muat
+   di 52px bahkan dengan teks besar (18px), jadi tinggi bar tidak melompat; baris ketiga (sangat
+   jarang) baru diberi elipsis. Kata tidak dipatah di tengah. */
+.tombol-aksi button:not(.ikon) {
+  padding-block: 4px;
+}
+.tombol-aksi button .label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  line-height: 1.1;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
+/* Petunjuk huruf pintasan: hanya di perangkat dengan mouse/keyboard. */
+.tombol-aksi kbd {
+  display: none;
+  flex: none;
+  font-size: 0.7rem;
+  padding: 0 5px;
+  opacity: 0.75;
+  color: inherit;
+  border-color: currentColor;
+  background: transparent;
+}
+@media (hover: hover) and (pointer: fine) {
+  .tombol-aksi kbd {
+    display: inline-block;
+  }
+}
+.tombol-aksi button.ikon {
+  flex: 0 0 56px;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 4px;
+}
+/* Ikon tombol urut lewat CSS: bukan teks DOM, jadi nama aksesibel cukup diawali tulisan di bawahnya. */
+.ikon-urut::before {
+  content: '⇅';
+  content: '⇅' / '';
+}
+.tombol-aksi button.ikon small {
+  font-size: var(--teks-xs);
+  color: var(--teks-redup);
+}
+.tombol-aksi button.kedua {
+  flex: 1 1 0;
+}
+.tombol-aksi button.utama {
+  flex: 1.7 1 0;
+  font-size: var(--teks-md);
+  font-weight: 800;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), var(--bayang-tombol), var(--cahaya-emas);
+}
+/* Cahaya berdenyut pelan di tombol utama yang siap ditekan (hanya opacity: murah). */
+.tombol-aksi button.utama:not(.mati)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  box-shadow: 0 0 18px 2px rgba(255, 210, 110, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  animation: denyut-emas 2.4s var(--ease-halus) infinite;
+}
+.tombol-aksi button.utama.penuh {
+  flex: 1 1 100%;
+}
+/* Tombol mati di bar aksi (mis. "Tunggu giliranmu"): netral tapi tetap terbaca. */
+.tombol-aksi button.mati {
+  color: var(--teks-redup);
+  background: var(--kaca);
+  border: 1px dashed var(--garis-kuat);
+  box-shadow: none;
+  font-weight: 700;
+}
+
+/* ---------- Emote ---------- */
+.palet-emote {
+  position: absolute;
+  top: var(--tinggi-bar-atas-ukur, calc(var(--tinggi-bar-atas) + var(--aman-atas)));
+  right: calc(var(--ruang-2) + var(--aman-kanan));
+  /* rem: palet ikut melebar saat teks besar, supaya kata seperti "Cepetan!" tetap satu baris. */
+  width: min(21.25rem, calc(100vw - 2 * var(--ruang-2)));
+  display: grid;
+  /* minmax(0, 1fr): kolom tidak melebar mengikuti kata terpanjang (meluber ke kanan di HP sempit). */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--garis-kuat);
+  border-radius: var(--radius-besar);
+  box-shadow: var(--bayangan-3);
+  z-index: var(--z-palet);
+  transform-origin: top right;
+  animation: palet-masuk var(--durasi-cepat) var(--ease-pegas);
+}
+.palet-emote button {
+  min-width: 0;
+  min-height: var(--sentuh);
+  padding: var(--ruang-2) var(--ruang-1);
+  font-size: var(--teks-sm);
+  /* Celetukan panjang dilipat di spasi; kata yang tetap tidak muat baru dipotong. */
+  overflow-wrap: anywhere;
+}
+.palet-emote button.emoji {
+  font-size: 1.625rem;
+  padding: var(--ruang-1);
+}
+/* Celetukan yang sendirian di baris terakhir ("Kartu itu bundar, kak.") memakai lebar penuh
+   supaya tidak terlipat dua baris di kolom sempit. */
+.palet-emote button:last-child:nth-child(4n + 1) {
+  grid-column: 1 / -1;
+}
+/* HP sempit (320–400 px, apalagi teks besar): 3 kolom supaya "Cepetan!" dan kawan-kawan tetap
+   utuh satu kata. Celetukan terakhir mengisi sisa baris. */
+@media (max-width: 400px) {
+  .palet-emote {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .palet-emote button:last-child:nth-child(4n + 1) {
+    grid-column: auto;
+  }
+  .palet-emote button:last-child:nth-child(3n + 1) {
+    grid-column: 1 / -1;
+  }
+  .palet-emote button:last-child:nth-child(3n + 2) {
+    grid-column: span 2;
+  }
+}
+
+/* Gelembung emote/celetukan di atas kursi pemain */
+.gelembung {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: var(--krem);
+  color: var(--tinta);
+  font-weight: 800;
+  font-size: var(--teks-md);
+  padding: 6px var(--ruang-3);
+  border-radius: var(--radius-besar);
+  border: 1px solid var(--krem-garis);
+  box-shadow: var(--bayangan-3);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: var(--z-gelembung);
+  animation: gelembung 2.6s var(--ease-keluar) forwards;
+}
+.gelembung::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-top-color: var(--krem);
+  border-bottom: 0;
+}
+.gelembung.emoji {
+  font-size: 2.125rem;
+  padding: 2px 10px;
+}
+.gelembung.milikku {
+  background: var(--krem-emas);
+}
+.gelembung.milikku::after {
+  border-top-color: var(--krem-emas);
+}
+
+/* ---------- Sorakan ("MENTUNG!", "DOUBLE PENTUNG!") ----------
+   .sorak.emas | .merah | .biru | .bahaya; durasi dari --durasi (diatur efek/sorak.ts). */
+#sorak {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-sorak);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sorak {
+  text-align: center;
+  padding: 28px 40px;
+  border-radius: var(--radius-pil);
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0.35) 55%, rgba(0, 0, 0, 0) 75%);
+  animation: sorak-masuk var(--durasi, 1500ms) var(--ease-pegas) forwards;
+}
+.judul-sorak {
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 11vw, 4.75rem);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--warna);
+  -webkit-text-stroke: 2px rgba(0, 0, 0, 0.55);
+  paint-order: stroke fill;
+  text-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.45),
+    0 0 28px var(--cahaya);
+}
+.sub-sorak {
+  margin-top: 10px;
+  font-size: clamp(0.875rem, 4vw, 1.25rem);
+  font-weight: 700;
+  color: var(--krem);
+  text-shadow: 0 2px 4px #000;
+}
+.sorak.emas {
+  --warna: var(--sorak-emas);
+  --cahaya: rgba(255, 196, 0, 0.9);
+}
+.sorak.merah {
+  --warna: var(--sorak-merah);
+  --cahaya: rgba(255, 40, 40, 0.9);
+}
+.sorak.biru {
+  --warna: var(--sorak-biru);
+  --cahaya: rgba(60, 170, 255, 0.9);
+}
+.sorak.bahaya {
+  --warna: var(--sorak-bahaya);
+  --cahaya: rgba(255, 110, 0, 0.9);
+}
+.sorak.bahaya .judul-sorak {
+  font-size: clamp(1.625rem, 8vw, 3.25rem);
+}
+html[data-efek='hemat'] .judul-sorak {
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Goyang layar saat kepentung (efek/pemutar.ts menambah body.goyang) */
+body.goyang #game {
+  animation: goyang 0.45s;
+}
+
+/* ---------- Kartu pamer (popup joker, panel mentung) ----------
+   Wadah kanvas dari gambarKartuKeKanvas(): kartu digambar sama persis dengan kartu di meja
+   (termasuk mode empat warna). Ukuran kanvas diatur JS sesuai layar. */
+.kartu-pamer {
+  display: flex;
+  justify-content: center;
+  margin: var(--ruang-1) auto;
+  perspective: 600px;
+}
+.kartu-pamer canvas {
+  display: block;
+  border-radius: var(--radius-sedang);
+  box-shadow: var(--bayangan-3), 0 0 30px rgba(var(--emas-rgb), 0.45);
+  animation: kartu-buka 0.6s var(--ease-pegas);
+}
+
+/* ---------- Panel mentung ----------
+   .kotak-status.emas (mentung) | .merah (kepentung) | .aman */
+.kotak-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-1);
+  padding: var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--teks-xl);
+  line-height: var(--baris-rapat);
+  text-align: center;
+}
+.kotak-status small {
+  font-family: var(--font-teks);
+  font-size: var(--teks-sm);
+  font-weight: 600;
+}
+.kotak-status.emas {
+  background: linear-gradient(180deg, var(--emas-muda), var(--emas));
+  color: var(--teks-di-emas);
+  box-shadow: var(--cahaya-emas);
+}
+.kotak-status.merah {
+  background: linear-gradient(180deg, var(--bahaya-latar-terang), var(--bahaya-latar));
+  color: var(--teks-di-merah);
+  animation: goyang 0.45s;
+}
+.kotak-status.aman {
+  background: var(--positif-latar);
+  color: var(--aman);
+}
+.lencana-deret {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.lencana-deret .lencana {
+  font-size: var(--teks-sm);
+  font-weight: 800;
+  padding: var(--ruang-1) 10px;
+}
+
+/* ---------- Hasil putaran & klasemen akhir ----------
+   .muncul-bertahap: anak-anaknya muncul satu per satu (dipasang sekali per putaran).
+   .juara: peringkat 1 (skor sama = juara bareng). */
+.muncul-bertahap > * {
+  animation: baris-masuk var(--durasi-lambat) var(--ease-keluar) backwards;
+}
+.muncul-bertahap > :nth-child(2) {
+  animation-delay: 90ms;
+}
+.muncul-bertahap > :nth-child(3) {
+  animation-delay: 180ms;
+}
+.muncul-bertahap > :nth-child(4) {
+  animation-delay: 270ms;
+}
+.muncul-bertahap > :nth-child(5) {
+  animation-delay: 360ms;
+}
+.muncul-bertahap > :nth-child(n + 6) {
+  animation-delay: 450ms;
+}
+@keyframes baris-masuk {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+details.akordion.juara {
+  border-color: var(--garis-emas);
+  box-shadow: var(--cahaya-emas);
+}
+details.akordion.juara > summary .peringkat {
+  background: var(--emas);
+  color: var(--teks-di-emas);
+}
+details.akordion.saya > summary .nama-skor b {
+  color: var(--emas-muda);
+}
+/* Tombol modal hasil putaran menempel di bawah dialog (.kaki-dialog sticky), jadi "Putaran
+   berikutnya" terlihat di HP 360×640 tanpa perlu menggulir rincian skor. */
+.kaki-dialog.aksi-hasil {
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+.kaki-dialog.aksi-hasil > * {
+  flex: none;
+  width: 100%;
+}
+.aksi-hasil-lanjut {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+}
+.aksi-hasil-lanjut > button {
+  width: 100%;
+}
+.juara-teks {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--teks-xl);
+  color: var(--emas);
+}
+/* Satu baris ajakan main di Kedai Madya, hanya di klasemen akhir (kontrolMeja.htmlAjakanKedai). */
+.ajakan-kedai {
+  text-align: center;
+  font-size: var(--teks-sm);
+}
+.ajakan-kedai a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--sentuh);
+  padding: 0 var(--ruang-1);
+  font-weight: 700;
+}
+table.skor .kiri,
+table.skor th.kiri {
+  text-align: left;
+}
+table.klasemen tr.juara td {
+  background: rgba(var(--emas-rgb), 0.16);
+  font-weight: 800;
+}
+table.klasemen .medali {
+  font-size: 1.25rem;
+  min-width: 0;
+}
+/* Kolom skor putaran terakhir di klasemen akhir (+40, −25): lebih kecil dari total. */
+table.klasemen .delta {
+  font-size: var(--teks-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+table.klasemen th.delta abbr {
+  text-decoration: none;
+}
+/* Ringkasan putaran terakhir di bawah klasemen akhir. */
+.akordion.putaran-terakhir {
+  margin-top: var(--ruang-2);
+}
+/* Chip kartu mini (rincian skor) mode empat warna: wajik biru, kriting hijau (sama dengan kanvas). */
+html[data-warna-kartu='empat'] .bunga-wajik {
+  color: var(--tinta-biru);
+}
+html[data-warna-kartu='empat'] .bunga-kriting {
+  color: var(--tinta-hijau);
+}
+/* Selisih dari pemimpin di tab peringkat: diberi label supaya angkanya jelas artinya. */
+.kanan-peringkat .selisih::before {
+  content: 'selisih ';
+}
+
+/* ---------- Log permainan (dikelompokkan per putaran) ---------- */
+.log-meja {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+}
+.log-daftar {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--ruang-2) var(--ruang-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-1);
+  font-size: var(--teks-sm);
+}
+.log-daftar li {
+  display: flex;
+  gap: var(--ruang-2);
+  align-items: baseline;
+  padding: 6px var(--ruang-2);
+  border-radius: var(--radius-kecil);
+  background: var(--permukaan-1);
+  line-height: var(--baris-normal);
+}
+.log-ikon {
+  flex: none;
+  width: 1.4em;
+  text-align: center;
+}
+.log-daftar .log-mentung,
+.log-daftar .log-kepentung {
+  background: var(--bahaya-latar);
+  color: var(--teks-di-merah);
+}
+.log-daftar .log-mulung,
+.log-daftar .log-turun {
+  background: var(--positif-latar);
+}
+.log-daftar .log-mulai,
+.log-daftar .log-selesai,
+.log-daftar .log-susun {
+  background: var(--permukaan-3);
+  font-weight: 700;
+}
+
+/* ---------- Menu ☰ & pintasan ---------- */
+.menu-meja {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+}
+.menu-meja button {
+  justify-content: flex-start;
+}
+.menu-meja button.utama {
+  justify-content: center;
+}
+table.pintasan th {
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+  color: var(--teks);
+}
+
+/* ---------- Gerak dikurangi ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-gerak='penuh']) .muncul-bertahap > *,
+  html:not([data-gerak='penuh']) .kartu-pamer canvas,
+  html:not([data-gerak='penuh']) .status-koneksi .titik {
+    animation: none;
+  }
+}
+html[data-gerak='kurang'] .muncul-bertahap > *,
+html[data-gerak='kurang'] .kartu-pamer canvas,
+html[data-gerak='kurang'] .status-koneksi .titik {
+  animation: none;
+}

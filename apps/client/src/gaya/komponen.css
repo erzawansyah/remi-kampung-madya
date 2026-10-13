@@ -1,0 +1,966 @@
+/* =============================================================================================
+   KOMPONEN UI: tombol, isian, panel, modal, toast, lencana, tab, segmen, saklar, daftar,
+   tabel, tooltip, akordion. Semua memakai token di gaya/token.css.
+   ============================================================================================= */
+
+/* ---------------------------------------------------------------------------------------------
+   TOMBOL
+   <button>                 sekunder (bawaan): papan hijau timbul
+   <button class="utama">   aksi utama: kuningan
+   <button class="bahaya">  aksi merusak (keluar, hapus)
+   <button class="hantu">   tanpa isi, hanya garis (aksi ringan: "Nanti saja")
+   <button class="tombol-ikon" aria-label="…">  ikon persegi 44×44
+   Ukuran: .kecil (36px, area sentuh tetap 44px), .besar (56px), .penuh (lebar 100%)
+   Status: :hover (pointer saja), :active/[aria-pressed="true"] (turun 2px, bayangan mengecil),
+           :disabled / .mati / [aria-disabled="true"] (redup tapi terbaca),
+           [aria-busy="true"] / .memuat (pemintal kecil di depan label)
+   .tombol pada <a> memberi tampilan yang sama.
+   --------------------------------------------------------------------------------------------- */
+button,
+.tombol {
+  --bayang-tombol: 0 3px 0 rgba(0, 0, 0, 0.38);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ruang-2);
+  min-height: var(--sentuh);
+  padding: 10px var(--ruang-4);
+  font: inherit;
+  font-weight: 650;
+  line-height: var(--baris-rapat);
+  text-align: center;
+  text-decoration: none;
+  color: var(--teks);
+  background: linear-gradient(180deg, var(--panel-terang-hover), var(--panel-terang));
+  border: 1px solid var(--garis);
+  border-radius: var(--radius-sedang);
+  box-shadow: var(--kilau-atas), var(--bayang-tombol), var(--bayangan-1);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    transform var(--durasi-mikro) var(--ease-keluar),
+    box-shadow var(--durasi-mikro) var(--ease-keluar),
+    filter var(--durasi-cepat) var(--ease-keluar),
+    background-color var(--durasi-cepat) var(--ease-keluar);
+}
+@media (hover: hover) {
+  button:not(:disabled):not(.mati):not([aria-disabled='true']):hover,
+  .tombol:hover {
+    filter: brightness(1.1);
+  }
+}
+button:not(:disabled):not(.mati):not([aria-disabled='true']):active,
+.tombol:active,
+button[aria-pressed='true'] {
+  transform: translateY(2px);
+  --bayang-tombol: 0 1px 0 rgba(0, 0, 0, 0.38);
+}
+
+button.utama,
+.tombol.utama {
+  --bayang-tombol: 0 3px 0 var(--emas-pekat);
+  color: var(--teks-di-emas);
+  background: linear-gradient(180deg, var(--emas-muda) 0%, var(--emas) 48%, var(--emas-tua) 100%);
+  border-color: var(--emas-tua);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), var(--bayang-tombol), var(--bayangan-2);
+}
+button.utama:not(:disabled):not(.mati):active {
+  --bayang-tombol: 0 1px 0 var(--emas-pekat);
+}
+
+button.bahaya,
+.tombol.bahaya {
+  --bayang-tombol: 0 3px 0 var(--bahaya-tepi);
+  color: var(--teks-di-bahaya);
+  background: linear-gradient(180deg, var(--bahaya-latar-terang), var(--bahaya-latar));
+  border-color: var(--bahaya-garis);
+}
+button.bahaya:not(:disabled):not(.mati):active {
+  --bayang-tombol: 0 1px 0 var(--bahaya-tepi);
+}
+
+button.hantu,
+.tombol.hantu {
+  --bayang-tombol: 0 0 0 transparent;
+  background: transparent;
+  border-color: var(--garis-kuat);
+  box-shadow: none;
+}
+@media (hover: hover) {
+  button.hantu:not(:disabled):hover {
+    filter: none;
+    background: var(--permukaan-2);
+  }
+}
+
+button.kecil,
+.tombol.kecil {
+  min-height: 36px;
+  padding: 6px var(--ruang-3);
+  font-size: var(--teks-sm);
+  border-radius: var(--radius-kecil);
+}
+/* Area sentuh .kecil diperluas tanpa mengubah tampilan (≥ 44px). */
+button.kecil::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+button.besar,
+.tombol.besar {
+  min-height: 56px;
+  padding: 14px var(--ruang-5);
+  font-size: var(--teks-lg);
+  border-radius: var(--radius-besar);
+}
+button.penuh {
+  width: 100%;
+}
+button.tombol-ikon {
+  width: var(--sentuh);
+  min-width: var(--sentuh);
+  padding: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+/* Nonaktif: tetap terbaca (bukan sekadar opacity). Tombol .mati masih bisa diketuk untuk
+   menampilkan alasannya. */
+button:disabled,
+button.mati,
+button[aria-disabled='true'] {
+  --bayang-tombol: 0 0 0 transparent;
+  color: var(--teks-samar);
+  background: var(--permukaan-1);
+  border-color: var(--garis);
+  border-style: dashed;
+  box-shadow: none;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+}
+button.utama:disabled,
+button.utama.mati,
+button.utama[aria-disabled='true'] {
+  color: var(--emas-muda);
+  background: rgba(var(--emas-rgb), 0.1);
+  border-color: var(--garis-emas);
+}
+
+/* Memuat: pemintal di depan label; klik dimatikan. */
+button[aria-busy='true'],
+button.memuat {
+  pointer-events: none;
+  cursor: progress;
+}
+button[aria-busy='true']::before,
+button.memuat::before {
+  content: '';
+  width: 1em;
+  height: 1em;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: putar 0.8s linear infinite;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   ISIAN
+   <input type="text|number">, <select>, <textarea>: tinggi ≥ 44px, fokus bercincin kuningan.
+   <input type="checkbox">: kotak centang kuningan.
+   <input type="checkbox" class="saklar"> atau <button role="switch" aria-checked class="saklar">:
+     saklar geser.
+   <input type="range" style="--isi: 40%">: penggeser; --isi = posisi (0–100%) untuk warna isi.
+   <label class="baris">Teks <input/select></label>: label kiri, kontrol kanan.
+   <label class="medan"><span>Label</span><input><small class="bantuan">…</small></label>:
+     label di atas kontrol.
+   .input-kode: kode meja huruf besar berjarak.
+   --------------------------------------------------------------------------------------------- */
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--teks);
+  background: var(--isian);
+  border: 1px solid var(--garis-kuat);
+  border-radius: var(--radius-kecil);
+  padding: 10px var(--ruang-3);
+  min-width: 0;
+  min-height: var(--sentuh);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+  transition:
+    border-color var(--durasi-cepat) var(--ease-keluar),
+    box-shadow var(--durasi-cepat) var(--ease-keluar);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--teks-samar);
+  opacity: 1;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-color: var(--emas);
+  outline-offset: 1px;
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  color: var(--teks-samar);
+  border-style: dashed;
+  cursor: not-allowed;
+}
+input[type='text'],
+input[type='search'],
+textarea {
+  width: 100%;
+}
+input[type='number'] {
+  width: 90px;
+}
+select {
+  appearance: none;
+  padding-right: 36px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23f1a615' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+select option {
+  background: var(--dialog);
+  color: var(--teks);
+}
+.input-kode {
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-weight: 700;
+  font-family: var(--font-angka);
+  text-align: center;
+}
+
+/* Kotak centang */
+input[type='checkbox']:not(.saklar) {
+  appearance: none;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border-radius: 6px;
+  border: 2px solid var(--garis-kuat);
+  background: var(--isian) center / 16px 16px no-repeat;
+  cursor: pointer;
+}
+input[type='checkbox']:not(.saklar):checked {
+  border-color: var(--emas-tua);
+  background-color: var(--emas);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3.2 3L13 4.5' fill='none' stroke='%23241a00' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* Saklar */
+.saklar {
+  --lebar-saklar: 50px;
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: var(--lebar-saklar);
+  height: 30px;
+  min-height: 0;
+  min-width: var(--lebar-saklar);
+  padding: 0;
+  margin: 7px 0;
+  border-radius: var(--radius-pil);
+  border: 1px solid var(--garis-kuat);
+  background: var(--isian);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: background-color var(--durasi-cepat) var(--ease-keluar);
+}
+.saklar::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--teks-redup);
+  box-shadow: var(--bayangan-1);
+  transition:
+    transform var(--durasi-cepat) var(--ease-pegas),
+    background-color var(--durasi-cepat) var(--ease-keluar);
+}
+.saklar:checked,
+.saklar[aria-checked='true'] {
+  background: var(--emas-tua);
+  border-color: var(--emas);
+}
+.saklar:checked::before,
+.saklar[aria-checked='true']::before {
+  transform: translateX(20px);
+  background: var(--krem);
+}
+button.saklar::after {
+  /* area sentuh 44px */
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+/* Penggeser */
+input[type='range'] {
+  --isi: 50%;
+  appearance: none;
+  width: 100%;
+  min-height: var(--sentuh);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  cursor: pointer;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: var(--radius-pil);
+  background: linear-gradient(90deg, var(--emas) 0 var(--isi), var(--permukaan-3) var(--isi) 100%);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+input[type='range']::-moz-range-track {
+  height: 8px;
+  border-radius: var(--radius-pil);
+  background: var(--permukaan-3);
+}
+input[type='range']::-moz-range-progress {
+  height: 8px;
+  border-radius: var(--radius-pil);
+  background: var(--emas);
+}
+input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, var(--emas-muda), var(--emas) 55%, var(--emas-tua));
+  border: 2px solid var(--emas-pekat);
+  box-shadow: var(--bayangan-2);
+}
+input[type='range']::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--emas);
+  border: 2px solid var(--emas-pekat);
+  box-shadow: var(--bayangan-2);
+}
+input[type='range']:focus-visible {
+  outline-offset: 0;
+  border-radius: var(--radius-kecil);
+}
+
+/* Baris label + kontrol */
+label.baris {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ruang-3);
+  min-height: var(--sentuh);
+  font-size: var(--teks-md);
+}
+label.baris > select {
+  flex: none;
+  max-width: 60%;
+}
+/* Area sentuh kotak centang = seluruh baris label; beri jarak supaya sejajar kanan. */
+label.baris > input[type='checkbox'] {
+  margin-right: 10px;
+}
+.medan {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+}
+.medan .bantuan,
+.bantuan {
+  font-weight: 400;
+  font-size: var(--teks-sm);
+  color: var(--teks-redup);
+}
+/* Label + isian di panel beranda ("Nama kamu") */
+.kartu-panel > label:not(.baris) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   PANEL
+   .kartu-panel  papan gelap berbingkai di atas laken (beranda, lobi, isi tab)
+   .panel-terang permukaan sedikit terang di dalam panel/dialog (kelompok pengaturan)
+   .kelompok-judul judul kecil di atas kelompok isian
+   --------------------------------------------------------------------------------------------- */
+.kartu-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-3);
+  padding: var(--ruang-4);
+  background: linear-gradient(180deg, rgba(255, 246, 225, 0.035), rgba(255, 246, 225, 0) 60%), var(--panel);
+  border: 1px solid var(--garis);
+  border-radius: var(--radius-besar);
+  box-shadow: inset 0 1px 0 rgba(255, 210, 119, 0.08), var(--bayangan-2);
+}
+.kartu-panel h2 {
+  margin: 0;
+  font-size: var(--teks-xl);
+  color: var(--krem);
+}
+.panel-terang {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+  padding: var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  background: var(--permukaan-1);
+  border: 1px solid var(--garis);
+}
+.kelompok-judul {
+  margin: var(--ruang-2) 0 0;
+  font-size: var(--teks-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--emas);
+}
+
+/* ---------------------------------------------------------------------------------------------
+   MODAL & DIALOG (ui/dom.ts: bukaModal → #modal, bukaDialog → #lapisan-dialog)
+   .latar      tirai buram; .dialog: jendela (masuk dengan skala + pudar)
+   .dialog.lebar  untuk isi panjang (skor, bantuan) · .dialog.konfirmasi  sempit
+   .kepala-dialog  baris judul + .tutup-dialog (tombol ×)
+   .kaki-dialog    baris tombol di bawah, menempel saat isi digulir
+   --------------------------------------------------------------------------------------------- */
+#modal {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: var(--z-modal);
+}
+#lapisan-dialog {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: var(--z-dialog);
+}
+.latar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--ruang-4) + var(--aman-atas)) calc(var(--ruang-4) + var(--aman-kanan))
+    calc(var(--ruang-4) + var(--aman-bawah)) calc(var(--ruang-4) + var(--aman-kiri));
+  background: var(--tirai);
+  -webkit-backdrop-filter: blur(4px) saturate(0.9);
+  backdrop-filter: blur(4px) saturate(0.9);
+  pointer-events: auto;
+  animation: pudar-masuk var(--durasi-cepat) var(--ease-keluar);
+}
+.dialog {
+  position: relative;
+  width: min(var(--lebar-dialog), 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--ruang-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-3);
+  color: var(--teks);
+  background:
+    radial-gradient(ellipse 120% 60% at 50% 0%, rgba(255, 214, 140, 0.07), rgba(255, 214, 140, 0) 70%),
+    linear-gradient(180deg, var(--dialog-atas), var(--dialog) 40%, var(--dialog-bawah));
+  border: 1px solid var(--garis-kuat);
+  border-radius: var(--radius-besar);
+  box-shadow: inset 0 1px 0 rgba(255, 210, 119, 0.16), var(--bayangan-4);
+  animation: dialog-masuk var(--durasi-sedang) var(--ease-pegas);
+  user-select: text;
+}
+.dialog h2 {
+  margin: 0;
+  font-size: var(--teks-2xl);
+}
+.dialog h3 {
+  margin: var(--ruang-2) 0 0;
+}
+.dialog p {
+  line-height: var(--baris-normal);
+}
+.dialog.lebar {
+  --lebar-dialog: 760px;
+}
+.dialog.konfirmasi {
+  --lebar-dialog: 420px;
+}
+.dialog.konfirmasi .deret {
+  margin-top: var(--ruang-2);
+}
+.kepala-dialog {
+  display: flex;
+  align-items: center;
+  gap: var(--ruang-3);
+}
+.kepala-dialog h2 {
+  flex: 1;
+  min-width: 0;
+}
+.tutup-dialog {
+  flex: none;
+}
+.kaki-dialog {
+  position: sticky;
+  bottom: calc(-1 * var(--ruang-5));
+  margin: 0 calc(-1 * var(--ruang-5)) calc(-1 * var(--ruang-5));
+  padding: var(--ruang-3) var(--ruang-5) var(--ruang-5);
+  display: flex;
+  gap: var(--ruang-2);
+  flex-wrap: wrap;
+  background: linear-gradient(180deg, rgba(12, 39, 22, 0), var(--dialog-bawah) 30%);
+}
+.kaki-dialog > * {
+  flex: 1 1 auto;
+}
+html[data-efek='hemat'] .latar {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: rgba(3, 12, 7, 0.75);
+}
+
+/* ---------------------------------------------------------------------------------------------
+   TOAST (ui/dom.ts: toast())
+   .toast  pesan singkat · .toast.salah  galat (aksen merah) · .toast.sukses  berhasil
+   .toast.beraksi  ada tombol di kanan (mis. "Muat ulang")
+   --------------------------------------------------------------------------------------------- */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(118px + var(--aman-bawah));
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+  width: min(calc(100vw - 2 * var(--ruang-4)), 440px);
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ruang-3);
+  padding: var(--ruang-3) var(--ruang-4);
+  font-size: var(--teks-sm);
+  font-weight: 600;
+  text-align: center;
+  color: var(--teks);
+  background: rgba(22, 17, 11, 0.95);
+  border: 1px solid var(--garis-kuat);
+  border-left: 4px solid var(--emas);
+  border-radius: var(--radius-sedang);
+  box-shadow: var(--bayangan-3);
+  animation: toast-masuk var(--durasi-sedang) var(--ease-pegas);
+  pointer-events: auto;
+}
+.toast.salah {
+  border-color: var(--bahaya-garis);
+  border-left-color: var(--bahaya);
+  background: rgba(46, 14, 12, 0.96);
+}
+.toast.sukses {
+  border-left-color: var(--positif);
+}
+.toast.beraksi {
+  justify-content: space-between;
+  text-align: left;
+}
+.toast.beraksi button {
+  flex: none;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   LENCANA / PIL
+   <span class="lencana">bot</span>  netral · .emas · .merah · .hijau · .info · .garis (bergaris)
+   --------------------------------------------------------------------------------------------- */
+.lencana {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--teks-xs);
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 2px var(--ruang-2);
+  border-radius: var(--radius-pil);
+  background: var(--permukaan-3);
+  color: var(--teks-redup);
+  white-space: nowrap;
+}
+.lencana.emas {
+  background: var(--emas);
+  color: var(--teks-di-emas);
+}
+.lencana.merah {
+  background: var(--bahaya-latar);
+  color: var(--teks-di-merah);
+}
+.lencana.hijau {
+  background: var(--positif-latar);
+  color: var(--aman);
+}
+.lencana.info {
+  background: var(--info-latar);
+  color: var(--teks-di-info);
+}
+.lencana.garis {
+  background: transparent;
+  border: 1px solid var(--garis-kuat);
+}
+
+/* ---------------------------------------------------------------------------------------------
+   TAB
+   <div class="tab" role="tablist"><button role="tab" aria-selected="true" class="aktif">…
+   Tab aktif ditandai .aktif ATAU aria-selected="true".
+   --------------------------------------------------------------------------------------------- */
+.tab,
+[role='tablist'] {
+  display: flex;
+  gap: var(--ruang-1);
+  padding: var(--ruang-1);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--garis);
+  border-radius: var(--radius-sedang);
+  /* Layar sempit / teks besar: deret tab digulir di tempat, tidak pernah melebarkan layar. */
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.tab::-webkit-scrollbar,
+[role='tablist']::-webkit-scrollbar {
+  display: none;
+}
+/* Isyarat bisa digulir: tepi yang masih menyimpan tab dipudarkan (data-luap diisi JS, lihat
+   pasangIsyaratGulir di ui/riwayat.ts). Tidak sampai bening total supaya tab tepi tetap terbaca. */
+.tab[data-luap],
+[role='tablist'][data-luap] {
+  --pudar-kiri: 0px;
+  --pudar-kanan: 0px;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    rgb(0 0 0 / 0.15) 0,
+    #000 var(--pudar-kiri),
+    #000 calc(100% - var(--pudar-kanan)),
+    rgb(0 0 0 / 0.15) 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    rgb(0 0 0 / 0.15) 0,
+    #000 var(--pudar-kiri),
+    #000 calc(100% - var(--pudar-kanan)),
+    rgb(0 0 0 / 0.15) 100%
+  );
+}
+.tab[data-luap~='kiri'],
+[role='tablist'][data-luap~='kiri'] {
+  --pudar-kiri: 24px;
+}
+.tab[data-luap~='kanan'],
+[role='tablist'][data-luap~='kanan'] {
+  --pudar-kanan: 24px;
+}
+.tab button,
+[role='tab'] {
+  /* Lebar alami (label satu baris), lalu membagi sisa ruang rata. */
+  flex: 1 0 auto;
+  min-width: 0;
+  /* Target sentuh minimum 44px (WCAG 2.5.8 / pedoman HP). */
+  min-height: var(--sentuh);
+  padding-inline: var(--ruang-2);
+  font-size: var(--teks-sm);
+  white-space: nowrap;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--teks-redup);
+  border-radius: var(--radius-kecil);
+}
+/* Cincin fokus di dalam deret yang bisa digulir: jangan sampai terpotong tepi. */
+.tab button:focus-visible,
+[role='tab']:focus-visible {
+  outline-offset: calc(-1 * var(--fokus-tebal));
+}
+.tab button.aktif,
+[role='tab'][aria-selected='true'] {
+  color: var(--teks-di-emas);
+  background: linear-gradient(180deg, var(--emas-muda), var(--emas));
+  border-color: var(--emas-tua);
+  box-shadow: var(--bayangan-1);
+}
+
+/* ---------------------------------------------------------------------------------------------
+   SEGMEN (pilihan preferensi: kecepatan, ukuran teks, efek…)
+   <div class="segmen" role="radiogroup" aria-label="…">
+     <button role="radio" aria-checked="true">Normal</button> …
+   </div>
+   atau dengan radio asli: <label><input type="radio" name="x"><span>Normal</span></label>
+   Pakai .segmen.penuh supaya merentang selebar wadah.
+   --------------------------------------------------------------------------------------------- */
+.segmen {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid var(--garis);
+  border-radius: var(--radius-sedang);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+.segmen.penuh {
+  display: flex;
+  align-self: stretch;
+  width: 100%;
+}
+.segmen > button,
+.segmen > label > span {
+  flex: 1;
+  min-height: var(--sentuh);
+  padding: 6px var(--ruang-3);
+  font-size: var(--teks-sm);
+  color: var(--teks-redup);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-kecil);
+  box-shadow: none;
+}
+.segmen > label {
+  flex: 1;
+  display: flex;
+  cursor: pointer;
+}
+.segmen > label > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 650;
+}
+.segmen > label > input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.segmen > button[aria-checked='true'],
+.segmen > button[aria-pressed='true'],
+.segmen > label > input:checked + span {
+  color: var(--teks-di-emas);
+  background: linear-gradient(180deg, var(--emas-muda), var(--emas));
+  border-color: var(--emas-tua);
+  box-shadow: var(--bayangan-1);
+  transform: none;
+}
+.segmen > label > input:focus-visible + span {
+  outline: var(--fokus-tebal) solid var(--fokus);
+  outline-offset: var(--fokus-jarak);
+}
+
+/* ---------------------------------------------------------------------------------------------
+   DAFTAR
+   <ul class="daftar"><li class="daftar-item">…</li></ul>  baris bergaris tipis
+   .daftar-item.bisa-diketuk  (atau <button class="daftar-item">) baris yang bisa diketuk
+   .kursi  baris kursi di lobi · .daftar-meja .kursi  meja publik (bisa diketuk)
+   --------------------------------------------------------------------------------------------- */
+.daftar {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-1);
+}
+.daftar-item {
+  display: flex;
+  align-items: center;
+  gap: var(--ruang-3);
+  min-height: var(--sentuh);
+  padding: var(--ruang-2) var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  background: var(--permukaan-1);
+  color: inherit;
+  text-align: left;
+}
+button.daftar-item {
+  width: 100%;
+  justify-content: flex-start;
+  font-weight: 400;
+  border-color: transparent;
+  box-shadow: none;
+}
+.daftar-item.bisa-diketuk {
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .daftar-item.bisa-diketuk:hover,
+  button.daftar-item:hover {
+    background: var(--permukaan-2);
+    filter: none;
+  }
+}
+.kursi {
+  display: flex;
+  align-items: center;
+  gap: var(--ruang-3);
+  min-height: var(--sentuh);
+  padding: var(--ruang-2) var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  background: var(--permukaan-1);
+  border: 1px solid transparent;
+}
+.kursi .nama {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.daftar-meja .kursi {
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .daftar-meja .kursi:hover {
+    background: var(--permukaan-2);
+    border-color: var(--garis);
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   TABEL SKOR
+   <table class="skor"> · <tr class="saya"> baris pemain sendiri · angka rata kanan & tabular
+   --------------------------------------------------------------------------------------------- */
+table.skor {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--teks-sm);
+  font-variant-numeric: tabular-nums;
+}
+table.skor th,
+table.skor td {
+  padding: var(--ruang-2) 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--garis);
+}
+table.skor th {
+  font-size: var(--teks-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teks-redup);
+}
+table.skor th:first-child,
+table.skor td:first-child {
+  text-align: left;
+}
+table.skor tbody tr:nth-child(even) td {
+  background: var(--permukaan-1);
+}
+table.skor tr.saya td {
+  background: rgba(var(--emas-rgb), 0.12);
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   TOOLTIP
+   <button data-tip="Urutkan kartu">⇅</button>: muncul saat hover (pointer) atau fokus keyboard.
+   Untuk HP, jangan andalkan tooltip; sertakan juga label/aria-label.
+   --------------------------------------------------------------------------------------------- */
+[data-tip] {
+  position: relative;
+}
+[data-tip]::before {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: var(--z-tooltip);
+  width: max-content;
+  max-width: 240px;
+  padding: 6px 10px;
+  font-size: var(--teks-xs);
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+  text-align: center;
+  color: var(--tinta);
+  background: var(--krem);
+  border-radius: var(--radius-kecil);
+  box-shadow: var(--bayangan-2);
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  pointer-events: none;
+  transition:
+    opacity var(--durasi-cepat) var(--ease-keluar),
+    transform var(--durasi-cepat) var(--ease-keluar);
+}
+@media (hover: hover) {
+  [data-tip]:hover::before {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    transition-delay: 350ms;
+  }
+}
+[data-tip]:focus-visible::before {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+[data-tip].tip-bawah::before {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+
+/* ---------------------------------------------------------------------------------------------
+   AKORDION
+   <details class="akordion"><summary>…</summary>isi</details>
+   --------------------------------------------------------------------------------------------- */
+details.akordion {
+  background: var(--permukaan-1);
+  border-radius: var(--radius-sedang);
+  border: 1px solid transparent;
+  transition: background-color var(--durasi-cepat) var(--ease-keluar);
+}
+details.akordion[open] {
+  border-color: var(--garis);
+  background: var(--permukaan-2);
+}
+details.akordion > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--ruang-2);
+  min-height: var(--sentuh);
+  padding: var(--ruang-2) var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  cursor: pointer;
+}
+details.akordion > summary::-webkit-details-marker {
+  display: none;
+}
+details.akordion > summary::after {
+  content: '▾';
+  color: var(--emas);
+  transition: transform var(--durasi-cepat) var(--ease-keluar);
+}
+details.akordion[open] > summary::after {
+  transform: rotate(180deg);
+}
