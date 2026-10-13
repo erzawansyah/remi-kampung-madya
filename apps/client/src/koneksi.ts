@@ -179,6 +179,9 @@ export class KoneksiOnline implements Koneksi {
   private jadwalUlang() {
     if (this.pernahTersambung) this.status('terputus');
     else this.status(++this.gagalBeruntun >= BATAS_GAGAL_AWAL ? 'gagal' : 'terputus');
+    // Pendengar status boleh langsung menutup koneksi (mis. beranda menyerah saat 'gagal'):
+    // jangan pasang timer sambung ulang yang lolos dari tutup().
+    if (this.ditutup) return;
     if (this.timerUlang) clearTimeout(this.timerUlang);
     this.timerUlang = setTimeout(() => this.sambung(), this.jedaUlang);
     this.jedaUlang = Math.min(this.jedaUlang * 2, JEDA_ULANG_MAKS_MS);

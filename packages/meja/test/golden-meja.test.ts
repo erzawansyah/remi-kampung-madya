@@ -129,5 +129,6 @@ describe('golden master meja: permainan offline penuh dengan JamPalsu', () => {
     const a = mainkanMeja(SKENARIO[0]).surat.semua('host').map(jsonTerurut);
     const b = mainkanMeja(SKENARIO[0]).surat.semua('host').map(jsonTerurut);
     expect(b).toEqual(a);
-  });
+    // Dua permainan penuh: batas waktu sama dengan skenario golden di atas (suite penuh berjalan paralel).
+  }, 60_000);
 });

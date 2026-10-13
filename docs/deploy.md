@@ -13,6 +13,18 @@ docker compose logs --tail 5 # "Remi Kampung Madya v<versi> (<sha>) jalan di por
 
 `docker compose up` mengganti container dengan rapi: `SIGTERM` → server menutup WebSocket, meja, dan database → keluar dengan kode 0 (< 1 detik). Meja online yang sedang jalan hilang (meja hanya di memori), jadi pilih waktu sepi. Permainan offline di HP tidak terpengaruh.
 
+## Batas per jaringan (Wi-Fi kedai)
+
+Semua HP yang memakai Wi-Fi kedai keluar lewat **satu IP publik**, jadi di mata server mereka satu jaringan. Bawaannya sudah dibuat longgar untuk itu (keputusan pemilik 13 Okt 2026, [keputusan-pemilik.md #39](keputusan-pemilik.md#k39)):
+
+| Env | Bawaan | Artinya |
+|---|---|---|
+| `MAKS_MEJA_PER_IP` | 60 (dulu 20) | Meja yang masih ada per jaringan pembuatnya, termasuk meja yang sudah ditinggal tapi belum terhapus (±10 menit). Lewat batas: "Kebanyakan meja dari jaringanmu, Bos." |
+| `MAKS_SAMBUNGAN_PER_IP` | 150 (dulu 50) | Sambungan WebSocket sekaligus per jaringan (IPv4 per alamat, IPv6 per /64). Lewat batas: handshake ditolak `429`. |
+| `MAKS_MEJA` | 500 | Batas total meja di server. Satu jaringan tetap tidak bisa menghabiskannya. |
+
+Kalau kedai sangat ramai dan pesan di atas mulai muncul, naikkan angkanya di `docker-compose.yml` (bagian `environment`, misalnya `- MAKS_MEJA_PER_IP=100`), lalu `docker compose up -d`. Di balik proxy, pastikan alamat pemain terbaca benar (`TRUST_PROXY`, lihat README): kalau tidak, semua pemain terlihat sebagai alamat proxy dan berbagi satu jatah.
+
 ## Cek sesudah deploy
 
 Ganti `B` dengan `http://127.0.0.1:2567` (di VPS) atau `https://remi.domainkamu.com` (lewat proxy).
@@ -32,10 +44,18 @@ Lewat proxy, cek juga bahwa `sw.js` tetap `no-cache` (proxy tidak boleh menimpa 
 
 ## Perilaku update PWA
 
-- `registerType: 'prompt'`: service worker baru diunduh di latar belakang (saat aplikasi dibuka, dan dicek ulang tiap jam), lalu **menunggu**.
-- Selama putaran berjalan atau susun akhir: tidak ada toast, tidak ada reload.
-- Di beranda, lobi, atau di antara putaran: toast "Ada versi baru, Bos." dengan tombol **Muat ulang**, dan tombol menetap di kaki beranda.
-- Sesudah Muat ulang, versi baru aktif dan simpanan permainan offline (`remi.mejaOffline`) tetap ada.
+Versi baru dipasang **otomatis di momen aman**, jadi pemain yang cuma membuka lewat browser HP (tidak memasang ke layar utama) juga ikut terbarui tanpa menekan apa pun. Logikanya di `apps/client/src/pembaruan.ts` (fungsi keputusan murni, diuji `apps/client/test/pembaruan.test.ts`), dirangkai di `apps/client/src/main.ts`.
+
+- `registerType: 'prompt'` tetap: service worker baru diunduh di latar belakang lalu **menunggu** sampai aplikasi menyuruhnya aktif. Jangan diganti `autoUpdate` (bisa memuat ulang di tengah permainan).
+- **Cek versi baru:** saat aplikasi dibuka, saat kembali dari latar belakang atau sinyal kembali (jeda minimal 1 menit), dan berkala tiap 30 menit selama terbuka. Aplikasi juga membandingkan commit-nya dengan `sha` di `/healthz`; kalau server sudah memakai build lain, cek dipaksa. Karena itu deploy dengan `GIT_SHA` (tanpa itu sha tercatat `dev` dan pencocokan dilewati).
+- **Momen aman, dipasang sendiri:** di beranda saat pemain diam ±5 detik (toast "Pakai versi terbaru, sebentar ya…" ±2 detik, lalu muat ulang; disentuh = batal), atau kapan pun aplikasi sedang di latar belakang.
+- **Momen senyap, hanya ditawarkan selama terlihat:** lobi online, daftar meja, riwayat, klasemen akhir yang sudah tercatat, jeda antarputaran online. Toast "Ada versi baru, Bos." dengan tombol **Muat ulang**, dan tombol menetap di kaki beranda. Begitu aplikasi ke latar belakang, versi baru dipasang.
+- **Tidak pernah:** putaran berjalan, susun akhir, popup joker, panel mentung, meja offline yang belum selesai, dialog terbuka, sedang mengetik, atau menunggu jawaban server.
+- **Anti-loop:** paling banyak 2 kali muat ulang otomatis per build di satu tab (dicatat di `sessionStorage`); sesudahnya hanya tawaran manual.
+- Sesudah muat ulang, toast "Sudah pakai versi terbaru, v…" muncul, versi baru aktif, dan simpanan permainan offline (`remi.mejaOffline`) tetap ada. Sesi online tersambung lagi sendiri pakai token.
+- **Syarat:** HTTPS sungguhan (service worker hanya jalan di HTTPS atau `localhost`), dan proxy tidak menimpa `Cache-Control` (`sw.js` dan `index.html` harus `no-cache`). Browser tanpa service worker dimuat ulang biasa di momen aman kalau `/healthz` menunjukkan build lain.
+
+Hasil uji di bawah masih untuk perilaku lama (toast + tombol Muat ulang). Perilaku otomatis di atas perlu diuji ulang di mesin pengembang dan di HP sungguhan lewat HTTPS.
 
 ## Hasil uji di mesin pengembang (Docker Desktop 29.8, Chrome 155, 13 Okt 2026)
 

@@ -51,6 +51,14 @@ Tampilan dan teks disesuaikan dengan Kedai Madya, tempat remi ini biasa dimainka
 - Nama pemain dibersihkan dari karakter tak terlihat dan pembalik arah teks, jadi nama tidak bisa tampil kosong atau terbalik.
 - Pembaca layar: tombol urut kartu namanya sesuai tulisan di tombol, dan isi aplikasi berada di landmark utama.
 - Beranda terbuka lebih cepat: mesin grafis meja baru dimuat sesudah beranda tampil, dan Bantuan serta Tentang dimuat saat dibuka (tetap tersedia offline).
+- Kalau meja gagal dimuat (misalnya sinyal putus sebelum aplikasi tersimpan di HP), muncul pesan "Meja gagal dimuat, Bos." dengan tombol Coba lagi dan Kembali ke beranda, bukan meja kosong. Sesudah sinyal pulih, Coba lagi atau Lanjutkan membawamu langsung kembali ke meja. Simpanan permainan offline tetap aman.
+- Saat meja pertama kali disiapkan di sinyal lambat, muncul tulisan "Nyiapin meja…" (animasinya ikut mati kalau Kurangi gerak nyala).
+- Bantuan dan Tentang yang gagal dibuka karena sinyal putus bisa dicoba lagi tanpa memuat ulang aplikasi.
+- Tab Peringkat dan Riwayat putaran di Papan skor tidak lagi tergencet di HP posisi miring.
+- Di lobi HP, nama tamu tidak lagi terpotong; pilihan isi kursi pindah ke baris bawah kalau tidak muat.
+- Teks penutup latihan diganti jadi kalimat netral tanpa ajakan ke kedai.
+- Nama dengan emoji gabungan (misalnya 👨‍👩‍👧 atau 🏳️‍🌈), bendera seperti Skotlandia, dan ejaan yang memakai ZWJ/ZWNJ (misalnya Persia, Devanagari, Sinhala) tampil seperti yang diketik. Nama yang isinya cuma karakter tak terlihat jadi "Pemain".
+- Gagal gabung ke meja yang penuh atau sudah mulai tidak lagi membuatmu terlempar dari meja yang sedang kamu duduki.
 - Di HP lanskap, gelembung tutorial pada langkah Mulung, Tumpukan buangan, Giliran lawan, dan Kartu jadi lawan tidak lagi menutupi kartu tangan. Kalau tempatnya sempit, gelembung dibuat lebih ramping atau teksnya dilipat satu baris, dan sisanya bisa dibuka lewat "Baca semua".
 
 ### Teknis
@@ -82,6 +90,10 @@ Tampilan dan teks disesuaikan dengan Kedai Madya, tempat remi ini biasa dimainka
 - Phaser dimuat lewat `import()` dinamis (`game/gamePhaser.ts`) sesudah interaksi pertama atau saat senggang; Bantuan dan Tentang (termasuk CHANGELOG) dimuat malas lewat `ui/jendelaMalas.ts`. Semua chunk tetap di precache PWA. Lighthouse mobile: Performance 85 → 92, FCP 3,0 → 1,5 detik, unduhan awal 448 → 151 KiB; `index.js` 326 → 254 kB.
 - `#game` dan `#ui` dibungkus `<main id="utama">` (`pasangLandmarkUtama()` di `ui/dom.ts`).
 - Tata letak lanskap pendek punya mode "panel diriku" dan test matriks baru di `apps/client/test/tataMeja.test.ts` (tanpa tabrakan teks, nama utuh, ukuran kartu tetap saat mulung).
+- `import()` chunk Phaser serta Bantuan/Tentang yang gagal tidak di-cache selamanya. Percobaan ulang Bantuan/Tentang memakai URL dengan query unik (Chrome mengingat import yang gagal per URL), dan Tentang memuat Bantuan lewat `jendelaMalas`. Phaser yang gagal dimuat dengan sinyal ada membuat halaman dimuat ulang lalu meja offline dilanjutkan otomatis (penanda sekali pakai di `sessionStorage`). Boot Phaser punya batas waktu 20 detik (`ui/pemuatMeja.ts`, `jaringan.ts`).
+- Koneksi online yang ditutup dari dalam callback status tidak lagi meninggalkan timer sambung ulang.
+- `rapikanNama` memotong per grapheme (16 huruf, maks 48 code point, maks 8 tanda gabung per huruf), membiarkan ZWJ/ZWNJ/variation selector di emoji dan aksara yang membutuhkannya, dan menolak nama tanpa karakter terlihat.
+- Server: log galat sambungan, banjir pesan, dan galat memproses pesan dibatasi 10 baris/menit per jenis (total masuk ringkasan `status:` berkala); `tutup()` menolak handshake baru (503) selama penutupan; entri `X-Forwarded-For` berport dinormalkan dan IPv4 dalam bentuk IPv6 dihitung sebagai IPv4; gabung yang gagal tidak memutus pemain dari meja lamanya.
 - Vitest naik ke 4.1.11 (menutup temuan critical tinypool dan moderate @vitest/mocker; `npm audit` = 0). Konfigurasi memakai `test.execArgv` dengan `pool: 'forks'` eksplisit.
 - E2E smoke mencari port bebas di beberapa rentang (4173–4199, 8090–8199, lalu port dari OS), supaya tetap jalan di Windows yang memesan rentang port untuk Hyper-V.
 - Deploy: `docker-compose.yml` memasang port hanya di `127.0.0.1` (pakai reverse proxy seperti Caddy), meneruskan build-arg `GIT_SHA`, membatasi ukuran log, dan memberi `stop_grace_period`; `HEALTHCHECK` punya `start-period`. CI ikut membangun dan menjalankan image Docker. Daftar cek deploy ada di `docs/deploy.md`. **Perhatian:** yang dulu membuka port 2567 langsung ke internet tanpa proxy perlu memasang reverse proxy, atau mengubah bagian `ports` di compose.

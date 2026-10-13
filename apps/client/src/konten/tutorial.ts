@@ -100,7 +100,7 @@ export const TEKS_TUTORIAL: Record<IdLangkahTutorial, { judul: string; teks: str
   },
   selesai: {
     judul: 'Mantap, Bos!',
-    teks: 'Kamu sudah siap main di Kedai Madya. Aturan lengkap bisa dibuka lagi di Bantuan kapan saja.',
+    teks: 'Kamu sudah siap main pakai aturan tongkrongan. Aturan lengkap bisa dibuka lagi di Bantuan kapan saja.',
     tombol: 'Ayo main',
   },
 };

@@ -5,7 +5,8 @@
 // - umpan balik tolak (scene.tolak + bunyi/getar 'tolak');
 // - label mentung dari validasiBuang mesin aturan (bukan hitungan sendiri);
 // - fokus tombol bertahan saat render ulang dengan isi sama;
-// - popup joker (autofocus OK, tidak dibuka ulang sambil menunggu server);
+// - popup joker (autofocus OK, tidak dibuka ulang sambil menunggu server, siapJoker yang hilang
+//   karena sinyal putus dikirim ulang sekali per sambungan baru);
 // - setelah hancurkan(): tidak ada render/kirim lagi;
 // - pengumuman pembaca layar tidak menyebut angka joker maupun kartu yang dibuang lawan.
 
@@ -33,7 +34,7 @@ vi.mock('../src/ui/dom', async (asli) => ({ ...(await asli<typeof import('../src
 
 import { bunyi, getar } from '../src/efek/suara';
 import { tutupDialogTeratas, tutupModal, umumkan } from '../src/ui/dom';
-import { geserFokus, KontrolMeja, peristiwaAwalPerluDiputar, PINTASAN_HURUF, teksBarAtas, type AppUntukMeja } from '../src/kontrolMeja';
+import { geserFokus, KontrolMeja, peristiwaAwalPerluDiputar, perluKirimUlangSiapJoker, PINTASAN_HURUF, teksBarAtas, type AppUntukMeja } from '../src/kontrolMeja';
 import { KEDAI } from '../src/konten/kedai';
 import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { _setelUlangCache, preferensi } from '../src/preferensi';
@@ -558,6 +559,57 @@ describe('popup joker', () => {
     expect(document.querySelector('[data-joker]')).toBeNull();
   });
 
+  it('OK ditekan saat sinyal putus: siapJoker dikirim ulang sekali per sambungan baru, popup tidak dibuka lagi', async () => {
+    const g = permainanGiliranku();
+    let status: 'tersambung' | 'terputus' = 'tersambung';
+    let sambungan = 1;
+    meja = new MejaUji(g, { menungguJoker: [0] }, { jenis: 'online', statusKoneksi: () => status, nomorSambungan: () => sambungan });
+    meja.diam = true;
+    await tunggu();
+    status = 'terputus';
+    expect(document.querySelector('#modal [data-joker]')).not.toBeNull();
+    document.querySelector<HTMLButtonElement>('#modal [data-ok]')!.click();
+    const siap = () => meja!.terkirim.filter((p) => p.t === 'siapJoker').length;
+    expect(siap()).toBe(1); // hilang di jalan (sinyal putus)
+    // Masih putus: info lama tidak memicu kirim ulang.
+    meja.kontrol.perbarui(meja.info, null);
+    expect(siap()).toBe(1);
+    // Tersambung lagi; server memasukkan kursiku lagi ke menungguJoker.
+    status = 'tersambung';
+    sambungan = 2;
+    meja.kontrol.perbarui({ ...meja.info, menungguJoker: [0] }, meja.view());
+    await tunggu();
+    expect(siap()).toBe(2);
+    expect(document.querySelector('[data-joker]')).toBeNull();
+    // Info berikutnya di sambungan yang sama (server belum sempat menjawab): tidak dikirim lagi.
+    meja.kontrol.perbarui({ ...meja.info, menungguJoker: [0, 1] }, null);
+    meja.kontrol.perbarui({ ...meja.info, menungguJoker: [0] }, meja.view());
+    await tunggu();
+    expect(siap()).toBe(2);
+    // Putus dan tersambung lagi sebelum sampai: dikirim sekali lagi di sambungan baru.
+    sambungan = 3;
+    meja.kontrol.perbarui({ ...meja.info, menungguJoker: [0] }, null);
+    expect(siap()).toBe(3);
+    // Server sudah mencatat: tidak ada kirim ulang.
+    sambungan = 4;
+    meja.kontrol.perbarui({ ...meja.info, menungguJoker: [] }, null);
+    expect(siap()).toBe(3);
+  });
+
+  it('perluKirimUlangSiapJoker: hanya putaran yang sudah di-OK, kursiku masih ditunggu, tersambung, sambungan baru', () => {
+    const v = viewUntuk(permainanGiliranku(), 0);
+    const nomor = v.putaran!.nomor;
+    const dasar = { view: v, menungguJoker: [0], jokerDiOk: nomor, status: 'tersambung' as const, sambungan: 2, sambunganTerkirim: 1 };
+    expect(perluKirimUlangSiapJoker(dasar)).toBe(true);
+    expect(perluKirimUlangSiapJoker({ ...dasar, sambunganTerkirim: 2 })).toBe(false);
+    expect(perluKirimUlangSiapJoker({ ...dasar, jokerDiOk: -1 })).toBe(false); // belum di-OK: popup yang dibuka
+    expect(perluKirimUlangSiapJoker({ ...dasar, jokerDiOk: nomor - 1 })).toBe(false); // putaran lalu
+    expect(perluKirimUlangSiapJoker({ ...dasar, menungguJoker: [1, 2] })).toBe(false);
+    expect(perluKirimUlangSiapJoker({ ...dasar, status: 'terputus' })).toBe(false);
+    expect(perluKirimUlangSiapJoker({ ...dasar, view: null })).toBe(false);
+    expect(perluKirimUlangSiapJoker({ ...dasar, view: { ...v, status: 'susunAkhir' } })).toBe(false);
+  });
+
   it('angka joker tidak pernah ada di bar, petunjuk, maupun pengumuman pembaca layar', async () => {
     const g = permainanGiliranku();
     meja = new MejaUji(g);
@@ -928,6 +980,39 @@ describe('klasemen akhir', () => {
     expect(ringkas.open).toBe(false);
     expect(ringkas.querySelector('summary')!.textContent).toContain('mentung pakai');
     expect(ringkas.querySelectorAll('.rincian > details.akordion')).toHaveLength(h.rincian.length);
+  });
+});
+
+describe('keadaanTampil (pembaruan PWA dinilai dari yang tampil)', () => {
+  it('panel mentung menahan antrian: sibuk walau view terbaru sudah selesai; klasemen akhir = klasemen', async () => {
+    meja = await mejaSiapMentung({ batasPutaran: 1 });
+    tekan('ArrowRight');
+    tekan(' ');
+    tekan('b');
+    await sampai(() => !!document.querySelector('#modal [data-mentung]'));
+    await sampai(() => meja!.g.status === 'susunAkhir');
+    // Warga kedai cepat selesai menyusun: view 'selesai' datang selagi panel mentung masih di layar.
+    meja.g = semuaSelesaiSusun(meja.g);
+    expect(meja.g.status).toBe('selesai');
+    meja.kontrol.perbarui(meja.info, meja.view());
+    await tunggu();
+    const selagiPanel = meja.kontrol.keadaanTampil();
+    expect(selagiPanel.sibuk).toBe(true);
+    expect(selagiPanel.status).not.toBe('selesai');
+    expect(selagiPanel.klasemen).toBe(false);
+    document.querySelector<HTMLButtonElement>('#modal [data-lanjut]')!.click();
+    await sampai(() => !!document.querySelector('#modal [data-selesai]'));
+    await tunggu();
+    expect(meja.kontrol.keadaanTampil()).toEqual({ status: 'selesai', sibuk: false, klasemen: true });
+  });
+
+  it('popup joker yang belum di-OK = sibuk; sesudah OK tidak', async () => {
+    meja = new MejaUji(permainanGiliranku(), { menungguJoker: [0] });
+    await sampai(() => !!document.querySelector('#modal [data-joker]'));
+    expect(meja.kontrol.keadaanTampil()).toMatchObject({ status: 'putaranBerjalan', sibuk: true, klasemen: false });
+    document.querySelector<HTMLButtonElement>('#modal [data-ok]')!.click();
+    await tunggu();
+    expect(meja.kontrol.keadaanTampil().sibuk).toBe(false);
   });
 });
 

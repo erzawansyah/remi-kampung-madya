@@ -158,7 +158,8 @@
     animation-timing-function: linear;
   }
   html:not([data-gerak='penuh']) .kartu-html,
-  html:not([data-gerak='penuh']) .tombol-aksi button.utama::after {
+  html:not([data-gerak='penuh']) .tombol-aksi button.utama::after,
+  html:not([data-gerak='penuh']) .pemuat-kartu span {
     animation: none;
   }
   html:not([data-gerak='penuh']) .dialog,
@@ -189,7 +190,8 @@ html[data-gerak='kurang'] .gelembung {
   animation-timing-function: linear;
 }
 html[data-gerak='kurang'] .kartu-html,
-html[data-gerak='kurang'] .tombol-aksi button.utama::after {
+html[data-gerak='kurang'] .tombol-aksi button.utama::after,
+html[data-gerak='kurang'] .pemuat-kartu span {
   animation: none;
 }
 html[data-gerak='kurang'] .dialog,
@@ -208,6 +210,7 @@ html[data-gerak='kurang'] .waktu > div {
 }
 
 /* Hemat efek: matikan denyut dekoratif. */
-html[data-efek='hemat'] .tombol-aksi button.utama::after {
+html[data-efek='hemat'] .tombol-aksi button.utama::after,
+html[data-efek='hemat'] .pemuat-kartu span {
   animation: none;
 }

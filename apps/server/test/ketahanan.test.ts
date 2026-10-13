@@ -7,7 +7,9 @@ import type { IncomingMessage } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import type { Penjadwal } from '@remi/meja';
-import { alamatKlien, alamatLokal, jalankanServer, type OpsiServer, type ServerRemi } from '../src/server.js';
+import { alamatKlien, alamatLokal, BAWAAN_MAKS_MEJA_PER_IP, jalankanServer, type OpsiServer, type ServerRemi } from '../src/server.js';
+import { normalkanEntriXff } from '../src/keamanan.js';
+import { buatPembatasLog } from '../src/pembatasLog.js';
 import { pasangPenjagaProses } from '../src/penjaga.js';
 
 const tunggu = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -157,6 +159,129 @@ describe('server tetap hidup', () => {
     t.ws.close();
   });
 
+  it('batas meja per IP bawaan 60 (Wi-Fi kedai = satu IP publik): meja ke-61 ditolak', async () => {
+    expect(BAWAAN_MAKS_MEJA_PER_IP).toBe(60);
+    // Batas pesan dilonggarkan supaya 61 "buat" beruntun tidak dibuang pembatas banjir.
+    const s = await nyalakan({ batasPesanPerDetik: 1000, putusPesanPerDetik: 2000 });
+    const k = await klien(s.port);
+    for (let i = 0; i < 61; i++) k.kirim({ t: 'buat', nama: `M${i}` });
+    const galat = await tungguPesan(k, (p) => p.t === 'error', 15_000);
+    expect(String(galat.pesan)).toContain('Kebanyakan meja');
+    expect(s.jumlahMeja()).toBe(60);
+    k.ws.close();
+    // Batas waktu test di atas batas tungguPesan, supaya yang gagal adalah pesannya, bukan timeout vitest.
+  }, 20_000);
+
+  it('gabung yang gagal (meja penuh / sudah mulai) tidak membuat pemain kehilangan meja lamanya', async () => {
+    const s = await nyalakan();
+    // Meja B 2 kursi, penuh.
+    const hostB = await klien(s.port);
+    hostB.kirim({ t: 'buat', nama: 'HostB', pengaturan: { jumlahPemain: 2 } });
+    const kodeB = String((await tungguPesan(hostB, (p) => p.t === 'masuk')).kode);
+    const lainB = await klien(s.port);
+    lainB.kirim({ t: 'gabung', kode: kodeB, nama: 'LainB' });
+    await tungguPesan(lainB, (p) => p.t === 'masuk');
+    // Meja A: host + teman.
+    const hostA = await klien(s.port);
+    hostA.kirim({ t: 'buat', nama: 'HostA', pengaturan: { jumlahPemain: 3 } });
+    const kodeA = String((await tungguPesan(hostA, (p) => p.t === 'masuk')).kode);
+    const teman = await klien(s.port);
+    teman.kirim({ t: 'gabung', kode: kodeA, nama: 'Teman' });
+    await tungguPesan(teman, (p) => p.t === 'masuk');
+    await tunggu(50);
+
+    // Teman mencoba pindah ke meja B yang penuh lewat sambungan yang sama.
+    teman.pesan.length = 0;
+    hostA.pesan.length = 0;
+    teman.kirim({ t: 'gabung', kode: kodeB, nama: 'Teman' });
+    expect(String((await tungguPesan(teman, (p) => p.t === 'error')).pesan)).toContain('penuh');
+    await tunggu(50);
+    // Meja A tidak menganggap teman terputus, dan kabar meja A tetap sampai ke teman.
+    expect(hostA.pesan.filter((p) => p.t === 'meja')).toHaveLength(0);
+    hostA.kirim({ t: 'pengaturan', pengaturan: { detikGiliran: 45 } });
+    const mejaA = (await tungguPesan(teman, (p) => p.t === 'meja')) as { info?: { kode?: string; kursi?: { nama: string; terhubung: boolean }[] } };
+    expect(mejaA.info?.kursi?.find((k) => k.nama === 'Teman')?.terhubung).toBe(true);
+    // Pesan lanjutan dari teman masih diproses di meja A (bukan "belum masuk meja").
+    teman.pesan.length = 0;
+    teman.kirim({ t: 'siapJoker' });
+    teman.kirim({ t: 'ping' });
+    await tungguPesan(teman, (p) => p.t === 'pong');
+    expect(teman.pesan.filter((p) => p.t === 'error' && String(p.pesan).includes('belum masuk meja'))).toEqual([]);
+
+    // Pindah ke meja yang bisa dimasuki tetap jalan: meja lama baru diberi tahu setelah berhasil.
+    const hostC = await klien(s.port);
+    hostC.kirim({ t: 'buat', nama: 'HostC', pengaturan: { jumlahPemain: 2 } });
+    const kodeC = String((await tungguPesan(hostC, (p) => p.t === 'masuk')).kode);
+    hostA.pesan.length = 0;
+    teman.pesan.length = 0;
+    teman.kirim({ t: 'gabung', kode: kodeC, nama: 'Teman' });
+    expect((await tungguPesan(teman, (p) => p.t === 'masuk')).kode).toBe(kodeC);
+    const kabarA = (await tungguPesan(hostA, (p) => p.t === 'meja')) as { info?: { kursi?: { nama: string; terhubung: boolean }[] } };
+    expect(kabarA.info?.kursi?.find((k) => k.nama === 'Teman')?.terhubung).toBe(false);
+    await tunggu(50);
+    // Setelah pindah, kabar meja A tidak lagi dikirim ke sambungan teman.
+    teman.pesan.length = 0;
+    hostA.kirim({ t: 'pengaturan', pengaturan: { detikGiliran: 60 } });
+    await tunggu(100);
+    expect(teman.pesan.filter((p) => p.t === 'meja')).toHaveLength(0);
+    for (const k of [hostA, hostB, hostC, lainB, teman]) k.ws.close();
+  });
+
+  it('gabung pakai token di sambungan baru: sambungan lama ditutup 4000 hanya kalau berhasil', async () => {
+    const s = await nyalakan();
+    const a = await klien(s.port);
+    a.kirim({ t: 'buat', nama: 'Budi', pengaturan: { jumlahPemain: 2 } });
+    const masuk = await tungguPesan(a, (p) => p.t === 'masuk');
+    const b = await klien(s.port);
+    b.kirim({ t: 'gabung', kode: masuk.kode, nama: 'Budi', token: masuk.token });
+    expect((await tungguPesan(b, (p) => p.t === 'masuk')).kursi).toBe(0);
+    expect((await a.tutup).kode).toBe(4000);
+    b.ws.close();
+  });
+
+  it('tutup(): pesan "buat" yang tiba selama penutupan tidak membuat meja; sambungan baru ditolak', async () => {
+    const s = await nyalakan();
+    const k = await klien(s.port);
+    k.kirim({ t: 'ping' });
+    await tungguPesan(k, (p) => p.t === 'pong');
+    const p = s.tutup();
+    // Sambungan masih CLOSING: pesan ini tetap sampai ke server.
+    k.kirim({ t: 'buat', nama: 'Telat' });
+    const baru = await new Promise<string>((ok) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${s.port}/ws`);
+      ws.on('open', () => {
+        ok('buka');
+        ws.close();
+      });
+      ws.on('unexpected-response', (_r, res) => {
+        ok(`http ${res.statusCode}`);
+        res.resume();
+      });
+      ws.on('error', () => ok('galat'));
+    });
+    expect(baru).not.toBe('buka');
+    await p;
+    await tunggu(100);
+    expect(s.jumlahMeja()).toBe(0);
+    expect(log.some((x) => String(x[0]).includes('dibuat'))).toBe(false);
+    expect(k.pesan.some((x) => x.t === 'masuk')).toBe(false);
+    expect((await k.tutup).kode).toBe(1001);
+    server = null;
+  });
+
+  it('galat sambungan beruntun dicatat dengan jatah, totalnya tetap dihitung', async () => {
+    const s = await nyalakan();
+    for (let i = 0; i < 25; i++) {
+      const k = await klien(s.port);
+      (k.ws as unknown as { _socket: { write(b: Buffer): void } })._socket.write(Buffer.from([0x83, 0x80, 1, 2, 3, 4]));
+      await k.tutup;
+    }
+    await tunggu(50);
+    const baris = log.filter((x) => String(x[0]).startsWith('galat sambungan'));
+    expect(baris.length).toBe(10);
+    expect(await sehat(s.port)).toMatchObject({ ok: true });
+  });
+
   it('tutup(): sambungan menerima 1001, aman dipanggil dua kali', async () => {
     const s = await nyalakan();
     const k = await klien(s.port);
@@ -178,6 +303,18 @@ describe('alamat IP pemain', () => {
     for (const a of ['8.8.8.8', '172.32.0.1', '36.80.1.2', '2001:db8::1']) expect(alamatLokal(a)).toBe(false);
   });
 
+  it('entri X-Forwarded-For berport dinormalkan; entri yang bukan IP jatuh ke alamat langsung', () => {
+    expect(alamatKlien(req('127.0.0.1', '1.2.3.4:5678'))).toBe('1.2.3.4');
+    expect(alamatKlien(req('127.0.0.1', '[2001:db8::1]:443'))).toBe('2001:db8::1');
+    expect(alamatKlien(req('127.0.0.1', '[2001:db8::1]'))).toBe('2001:db8::1');
+    expect(alamatKlien(req('127.0.0.1', '9.9.9.9, [::ffff:36.80.1.2]:80'))).toBe('36.80.1.2');
+    expect(alamatKlien(req('127.0.0.1', ' 36.80.1.2 '))).toBe('36.80.1.2');
+    expect(normalkanEntriXff('fe80::1%eth0')).toBe('fe80::1%eth0');
+    for (const rusak of ['tak-dikenal', 'unknown', '1.2.3.4:abc', '1.2.3.999', '[1.2.3.4]:80x', 'a'.repeat(80), '_hidden', '1.2.3.4:5678:9']) {
+      expect(alamatKlien(req('127.0.0.1', rusak)), rusak).toBe('127.0.0.1');
+    }
+  });
+
   it('X-Forwarded-For hanya dipercaya dari proxy lokal (bawaan), entri paling kanan', () => {
     expect(alamatKlien(req('127.0.0.1', '1.1.1.1, 36.80.1.2'))).toBe('36.80.1.2');
     expect(alamatKlien(req('::ffff:172.18.0.1', '36.80.1.2'))).toBe('36.80.1.2');
@@ -186,6 +323,25 @@ describe('alamat IP pemain', () => {
     expect(alamatKlien(req('127.0.0.1', '9.9.9.9'), false)).toBe('127.0.0.1');
     expect(alamatKlien(req('36.80.1.2', '9.9.9.9'), true)).toBe('9.9.9.9');
     expect(alamatKlien(req('127.0.0.1'))).toBe('127.0.0.1');
+  });
+});
+
+describe('pembatas log', () => {
+  it('paling banyak N baris per jenis per jendela; yang disembunyikan disebut di baris berikutnya', () => {
+    const catatan: unknown[][] = [];
+    let t = 0;
+    const p = buatPembatasLog((...x) => catatan.push(x), { maks: 3, jendelaMs: 1000, sekarang: () => t });
+    for (let i = 0; i < 10; i++) p.catat('a', `a${i}`);
+    p.catat('b', 'b0');
+    expect(catatan.map((x) => x[0])).toEqual(['a0', 'a1', 'a2', 'b0']);
+    expect(p.total('a')).toBe(10);
+    expect(p.total('b')).toBe(1);
+    expect(p.total('c')).toBe(0);
+    t = 1000;
+    p.catat('a', 'a10');
+    expect(catatan.at(-1)).toEqual(['a10', '(+7 kejadian serupa tidak dicatat, total 11)']);
+    p.catat('a', 'a11');
+    expect(catatan.at(-1)).toEqual(['a11']);
   });
 });
 

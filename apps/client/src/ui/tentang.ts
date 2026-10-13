@@ -9,7 +9,7 @@ import changelog from '../../../../CHANGELOG.md?raw';
 import { svgLogo } from '../aset/logoMadya';
 import { htmlTautanKedai, KEDAI } from '../konten/kedai';
 import { BUILD_SHA, BUILD_WAKTU, labelVersi } from '../versi';
-import { bukaBantuan } from './bantuan';
+import { bukaBantuan } from './jendelaMalas';
 import { bukaDialog, esc } from './dom';
 
 // ---------------------------------------------------------------------------------------------

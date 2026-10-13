@@ -8,6 +8,10 @@
 // atau peringatan "kartu berbahaya". Contoh joker selalu ditulis "misal joker putaran ini N".
 
 import type { Bunga, Rank } from '@remi/engine';
+import { TENGGANG_SAMBUNG_MS } from '@remi/meja';
+
+/** Masa tenggang sambung ulang dalam detik (sama dengan yang dipakai meja). */
+const DETIK_TENGGANG = Math.round(TENGGANG_SAMBUNG_MS / 1000);
 
 export type KartuContoh = {
   bunga: Bunga;
@@ -66,7 +70,8 @@ export const BAB_BANTUAN: BabBantuan[] = [
         butir: [
           'Pengocok membagikan kartu ke semua pemain.',
           'Pengocok membuka satu kartu dari sisa deck. Angkanya jadi angka joker putaran itu, lalu kartunya diselipkan lagi ke deck.',
-          'Angka joker diumumkan sekali lewat popup. Ingat baik-baik, karena sesudah itu tidak ditampilkan lagi.',
+          'Angka joker diumumkan sekali lewat popup di awal putaran. Ingat baik-baik, karena angkanya tidak dipajang di meja.',
+          'Joker yang sudah dipasang di kartu jadi diberi label angka yang diwakilinya (misalnya →7) dan tercatat di log. Sama seperti di meja asli, semua orang bisa melihatnya, jadi itu bisa jadi petunjuk.',
           'Pengocok jalan pertama. Tiap giliran: ambil 1 kartu dari deck atau mulung dari buangan, turunkan kartu jadi kalau mau, lalu buang 1 kartu.',
           'Putaran berakhir kalau ada yang mentung atau deck habis.',
           'Semua pemain dapat kesempatan terakhir menurunkan kartu jadi (susun akhir), lalu skor putaran dihitung.',
@@ -114,7 +119,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'catatan',
-        teks: 'Joker yang sudah pernah dibuang jadi kartu biasa. Kalau nanti dipakai sebagai pentungan, nilainya kartu aslinya (bukan 250). Kalau joker mati itu masih di tangan saat putaran selesai, aplikasi juga menghitungnya sebagai kartu aslinya, bukan 25. Bagian di tangan ini cara aplikasi berjalan sekarang; masih menunggu konfirmasi pemilik aturan.',
+        teks: 'Joker yang sudah pernah dibuang jadi kartu biasa. Kalau nanti dipakai sebagai pentungan, nilainya kartu aslinya (bukan 250). Kalau joker mati itu masih di tangan saat putaran selesai, nilainya juga kartu aslinya (bukan 25).',
       },
       {
         t: 'tabel',
@@ -727,13 +732,13 @@ export const BAB_BANTUAN: BabBantuan[] = [
         t: 'daftar',
         butir: [
           'Orang baru hanya bisa masuk selama meja masih di lobi.',
-          'Sambungan putus? Aplikasi mencoba menyambung ulang. Selama kamu terputus, giliranmu dijalankan warga kedai sampai kamu kembali.',
+          `Sambungan putus atau halaman ke-refresh? Aplikasi menyambung ulang sendiri. Giliranmu ditunggu ${DETIK_TENGGANG} detik sejak kamu terputus (atau sampai waktu giliran habis, mana yang duluan). Lewat dari itu, warga kedai menjalankan giliranmu sampai kamu kembali.`,
           'Keluar meja di tengah permainan: kursimu diteruskan warga kedai sampai permainan selesai, dan nggak bisa diambil lagi.',
           'Waktu giliran habis: warga kedai menyelesaikan giliranmu.',
-          'Kalau semua pemain manusia terputus, permainan dijeda sampai ada yang kembali.',
+          'Kalau semua pemain manusia terputus, meja menunggu sampai ada yang kembali. Waktu giliran diberi penuh lagi begitu ia tersambung.',
           'Host pergi: tugas host pindah ke pemain manusia lain yang masih terhubung.',
           'Putaran berikutnya dimulai oleh host. Kalau skor terendah sama, host memilih pengocok atau Acak.',
-          'Pengumuman joker menunggu semua pemain menekan OK. Pemain yang terputus tidak ditunggu.',
+          'Pengumuman joker menunggu semua pemain menekan OK. Pemain yang terputus tidak ditunggu. Kalau ia kembali sebelum sempat menekan OK, popup joker muncul lagi untuknya.',
           'Meja tanpa pemain yang terhubung dihapus otomatis setelah 10 menit.',
         ],
       },
@@ -768,7 +773,7 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   },
   {
     tanya: 'Tanganku tinggal 1 kartu, kok nggak bisa mulung?',
-    jawab: 'Kartu jadi minimal 3 kartu dan modal harus sama banyak atau lebih dari pungutan. Dengan 1 kartu di tangan, modal paling banyak 1, jadi pungutan paling banyak 1, dan kombinasinya cuma 2 kartu. Yang bisa dilakukan: ambil dari deck lalu buang. Ini cara aplikasi berjalan sekarang; masih menunggu konfirmasi pemilik aturan.',
+    jawab: 'Kartu jadi minimal 3 kartu dan modal harus sama banyak atau lebih dari pungutan. Dengan 1 kartu di tangan, modal paling banyak 1, jadi pungutan paling banyak 1, dan kombinasinya cuma 2 kartu. Karena mentung harus diawali mulung, tangan 1 kartu juga tidak bisa mentung. Yang bisa dilakukan: ambil dari deck lalu buang.',
   },
   {
     tanya: 'Boleh nempel kartu ke kartu jadi yang sudah ada?',
@@ -796,7 +801,7 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   },
   {
     tanya: 'Internetku putus waktu main online. Kartuku hilang?',
-    jawab: 'Tidak. Selama kamu terputus, warga kedai menjalankan giliranmu. Buka lagi aplikasinya, dan kamu kembali ke kursimu.',
+    jawab: `Tidak. Kartumu tetap di kursimu. Giliranmu ditunggu ${DETIK_TENGGANG} detik, dihitung sejak kamu terputus. Lewat dari itu, warga kedai yang menjalankan giliranmu sampai kamu kembali. Buka lagi aplikasinya, dan kamu kembali ke kursimu.`,
   },
   {
     tanya: 'Ada taruhan atau koin di game ini?',

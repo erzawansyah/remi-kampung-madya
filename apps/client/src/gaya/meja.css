@@ -758,3 +758,91 @@ html[data-gerak='kurang'] .kartu-pamer canvas,
 html[data-gerak='kurang'] .status-koneksi .titik {
   animation: none;
 }
+
+/* ---------- Pemuat & galat meja (sebelum kanvas Phaser siap, ui/pemuatMeja.ts) ----------
+   Pemuat muncul pelan sesudah jeda singkat, jadi tidak berkedip kalau Phaser sudah siap. Tidak
+   menangkap sentuhan. Galat: panel di tengah dengan Coba lagi + Kembali ke beranda. */
+#ui > .pemuat-meja {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ruang-4);
+  padding: var(--ruang-5);
+  pointer-events: none;
+  color: var(--teks);
+  animation: pudar-masuk var(--durasi-sedang) ease-out 300ms both;
+}
+.pemuat-meja p {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--teks-lg);
+  font-weight: 700;
+}
+.pemuat-kartu {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+.pemuat-kartu span {
+  position: absolute;
+  left: 18px;
+  top: 6px;
+  width: 30px;
+  height: 44px;
+  border-radius: 5px;
+  border: 2px solid var(--emas);
+  background:
+    repeating-linear-gradient(45deg, rgba(var(--emas-rgb), 0.28) 0 2px, transparent 2px 7px),
+    var(--madya-arang);
+  box-shadow: var(--bayangan-1);
+  transform: rotate(var(--miring));
+  transform-origin: 50% 110%;
+  animation: kocok-kartu 1.2s var(--ease-keluar) infinite;
+}
+.pemuat-kartu span:nth-child(1) {
+  --miring: -16deg;
+}
+.pemuat-kartu span:nth-child(2) {
+  --miring: 0deg;
+  animation-delay: 0.15s;
+}
+.pemuat-kartu span:nth-child(3) {
+  --miring: 16deg;
+  animation-delay: 0.3s;
+}
+@keyframes kocok-kartu {
+  0%,
+  60%,
+  100% {
+    transform: rotate(var(--miring)) translateY(0);
+  }
+  30% {
+    transform: rotate(var(--miring)) translateY(-8px);
+  }
+}
+#ui > .galat-meja {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--ruang-4) + var(--aman-atas)) calc(var(--ruang-4) + var(--aman-kanan))
+    calc(var(--ruang-4) + var(--aman-bawah)) calc(var(--ruang-4) + var(--aman-kiri));
+  overflow-y: auto;
+}
+.galat-meja .kartu-panel {
+  width: min(420px, 100%);
+  margin: auto;
+  text-align: center;
+}
+.galat-meja .kartu-panel p {
+  margin: 0;
+  line-height: var(--baris-normal);
+}
+.galat-meja .deret {
+  justify-content: center;
+  flex-wrap: wrap;
+}
