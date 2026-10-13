@@ -2,7 +2,7 @@
 // ditolak di sini supaya tidak pernah sampai ke mesin aturan.
 
 import type { LevelBot, SpesifikasiKartuJadi } from '@remi/engine';
-import { DAFTAR_EMOTE, type AksiKlien, type Emote, type PengaturanMeja, type PesanKlien } from './protokol.js';
+import { DAFTAR_EMOTE, EMOTE_LAMA, type AksiKlien, type Emote, type PengaturanMeja, type PesanKlien } from './protokol.js';
 
 type Obj = Record<string, unknown>;
 
@@ -129,8 +129,13 @@ export function validasiPesan(x: unknown): PesanKlien | null {
     }
     case 'akhiri':
       return typeof x.setuju === 'boolean' ? { t: 'akhiri', setuju: x.setuju } : null;
-    case 'emote':
-      return (DAFTAR_EMOTE as readonly string[]).includes(x.isi as string) ? { t: 'emote', isi: x.isi as Emote } : null;
+    case 'emote': {
+      if (typeof x.isi !== 'string') return null;
+      if ((DAFTAR_EMOTE as readonly string[]).includes(x.isi)) return { t: 'emote', isi: x.isi as Emote };
+      // Emote dari aplikasi versi lama: diteruskan sebagai padanan barunya.
+      const padanan = EMOTE_LAMA.get(x.isi);
+      return padanan ? { t: 'emote', isi: padanan } : null;
+    }
     default:
       return null;
   }

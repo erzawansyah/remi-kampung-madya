@@ -1,16 +1,14 @@
 // Keamanan server: cek Origin handshake WebSocket, batas sambungan per jaringan (IPv6 per /64),
 // header keamanan (CSP dkk.), dan /healthz yang tidak membocorkan angka operasional.
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { CSP, daftarEnv, kunciIp, originDiizinkan } from '../src/keamanan.js';
-import { jalankanServer, type OpsiServer, type ServerRemi } from '../src/server.js';
-
-const tunggu = (ms: number) => new Promise((r) => setTimeout(r, ms));
+import { BAWAAN_MAKS_SAMBUNGAN_PER_IP, jalankanServer, type OpsiServer, type ServerRemi } from '../src/server.js';
 
 let server: ServerRemi | null = null;
 const log: unknown[][] = [];
@@ -36,10 +34,31 @@ function coba(port: number, headers: Record<string, string> = {}): Promise<{ has
     ws.on('error', () => undefined);
   });
 }
-const tutupSemua = async (daftar: WebSocket[]) => {
-  for (const ws of daftar) ws.close();
-  await tunggu(50);
-};
+/**
+ * Tutup semua sambungan dan tunggu sampai klien benar-benar tertutup (paling lama 5 dtk, lalu
+ * diputus paksa). Jeda tetap (mis. 50 ms) tidak cukup saat suite penuh berjalan paralel.
+ */
+const tutupSemua = (daftar: WebSocket[]) =>
+  Promise.all(
+    daftar.map(
+      (ws) =>
+        new Promise<void>((ok) => {
+          if (ws.readyState === WebSocket.CLOSED) return ok();
+          const cadangan = setTimeout(() => {
+            ws.terminate();
+            ok();
+          }, 5000);
+          ws.once('close', () => {
+            clearTimeout(cadangan);
+            ok();
+          });
+          ws.close();
+        }),
+    ),
+  );
+/** Tunggu sampai server mencatat `n` sambungan aktif (penutupan di sisi server bisa sedikit telat). */
+const tungguSambungan = (s: ServerRemi, n: number) =>
+  vi.waitFor(() => expect(s.jumlahSambungan()).toBe(n), { timeout: 5000, interval: 20 });
 
 const req = (headers: Record<string, string>, alamat = '127.0.0.1') => ({ socket: { remoteAddress: alamat }, headers }) as unknown as IncomingMessage;
 
@@ -157,13 +176,29 @@ describe('handshake WebSocket', () => {
     const b = await coba(s.port);
     expect([a.hasil, b.hasil]).toEqual(['buka', 'buka']);
     expect((await coba(s.port)).hasil).toBe(429);
-    if (a.hasil === 'buka') a.ws.close();
-    await tunggu(100);
+    if (a.hasil === 'buka') await tutupSemua([a.ws]);
+    await tungguSambungan(s, 1);
     const c = await coba(s.port);
     expect(c.hasil).toBe('buka');
     await tutupSemua([b, c].flatMap((x) => (x.hasil === 'buka' ? [x.ws] : [])));
-    expect(s.jumlahSambungan()).toBe(0);
+    await tungguSambungan(s, 0);
   });
+
+  it('batas sambungan per IP bawaan 150 (Wi-Fi kedai = satu IP publik): sambungan ke-151 ditolak 429', async () => {
+    expect(BAWAAN_MAKS_SAMBUNGAN_PER_IP).toBe(150);
+    const s = await nyalakan();
+    // Dibuka bertahap (25 sekaligus) supaya tidak membebani mesin saat suite penuh berjalan paralel.
+    const buka: WebSocket[] = [];
+    for (let i = 0; i < BAWAAN_MAKS_SAMBUNGAN_PER_IP; i += 25) {
+      const hasil = await Promise.all(Array.from({ length: Math.min(25, BAWAAN_MAKS_SAMBUNGAN_PER_IP - i) }, () => coba(s.port)));
+      buka.push(...hasil.flatMap((x) => (x.hasil === 'buka' ? [x.ws] : [])));
+    }
+    expect(buka).toHaveLength(150);
+    await tungguSambungan(s, 150);
+    expect((await coba(s.port)).hasil).toBe(429);
+    await tutupSemua(buka);
+    await tungguSambungan(s, 0);
+  }, 30_000);
 
   it('X-Forwarded-For berport: port berbeda tetap satu jaringan, batas per IP berlaku', async () => {
     const s = await nyalakan({ percayaProxy: true, maksSambunganPerIp: 2 });
@@ -198,10 +233,9 @@ describe('handshake WebSocket', () => {
     if (x.hasil !== 'buka' || y.hasil !== 'buka' || z.hasil !== 'buka') throw new Error('gagal buka');
     y.ws.on('message', (d) => pesanY.push(JSON.parse(d.toString())));
     x.ws.send(JSON.stringify({ t: 'buat', nama: 'Satu' }));
-    await tunggu(100);
+    await vi.waitFor(() => expect(s.jumlahMeja()).toBe(1), { timeout: 5000, interval: 20 });
     y.ws.send(JSON.stringify({ t: 'buat', nama: 'Dua' }));
-    await tunggu(100);
-    expect(pesanY.find((p) => p.t === 'error')?.pesan).toContain('Kebanyakan meja');
+    await vi.waitFor(() => expect(pesanY.find((p) => p.t === 'error')?.pesan).toContain('Kebanyakan meja'), { timeout: 5000, interval: 20 });
     expect(s.jumlahMeja()).toBe(1);
     await tutupSemua([x.ws, y.ws, z.ws]);
   });
@@ -231,6 +265,32 @@ describe('header keamanan & /healthz', () => {
     expect(bagian['object-src']).toEqual(["'none'"]);
     expect(bagian['base-uri']).toEqual(["'none'"]);
     expect(CSP).not.toMatch(/unsafe-eval/);
+  });
+
+  it('cache untuk pembaruan PWA: sw.js, skrip SW tambahan, dan index.html selalu dicek ulang; aset ber-hash disimpan lama', async () => {
+    // Transisi dari 0.1.0: browser harus selalu mendapat sw.js (dan skrip yang di-importScripts-nya)
+    // terbaru, kalau tidak HP pemain lama tertahan di versi lama.
+    writeFileSync(join(folder, 'sw.js'), 'importScripts("sw-transisi.js");');
+    writeFileSync(join(folder, 'sw-transisi.js'), '// transisi');
+    mkdirSync(join(folder, 'assets'), { recursive: true });
+    writeFileSync(join(folder, 'assets', 'index-AbC123.js'), '// aset');
+    const s = await nyalakan({ folderStatis: folder });
+    const ambil = async (jalur: string) => {
+      const r = await fetch(`http://127.0.0.1:${s.port}${jalur}`);
+      return { status: r.status, cache: r.headers.get('cache-control'), jenis: r.headers.get('content-type'), isi: await r.text() };
+    };
+    for (const jalur of ['/sw.js', '/sw-transisi.js', '/', '/index.html']) {
+      const r = await ambil(jalur);
+      expect(r.status, jalur).toBe(200);
+      expect(r.cache, jalur).toBe('no-cache');
+    }
+    expect((await ambil('/sw-transisi.js')).jenis).toMatch(/javascript/);
+    expect((await ambil('/assets/index-AbC123.js')).cache).toBe('public, max-age=31536000, immutable');
+    // Skrip yang tidak ada: 404 (bukan index.html berstatus 200 yang akan dieksekusi sebagai skrip).
+    const hilang = await ambil('/sw-lain.js');
+    expect(hilang.status).toBe(404);
+    expect(hilang.isi).not.toContain('<!doctype');
+    expect((await ambil('/healthz')).cache).toBe('no-store');
   });
 
   it('/healthz bawaan hanya { ok, meja, versi, sha }; HEALTHZ_DETAIL menambah angka operasional', async () => {

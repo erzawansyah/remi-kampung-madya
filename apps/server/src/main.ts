@@ -31,6 +31,7 @@ const server = await jalankanServer({
   log,
   percayaProxy,
   maksMeja: angkaEnv('MAKS_MEJA'),
+  // Kosong = bawaan server.ts (60 meja dan 150 sambungan per jaringan; Wi-Fi kedai = satu IP publik).
   maksMejaPerIp: angkaEnv('MAKS_MEJA_PER_IP'),
   maksSambunganPerIp: angkaEnv('MAKS_SAMBUNGAN_PER_IP'),
   // ORIGIN_DIIZINKAN: asal tambahan untuk WebSocket, dipisah koma ("https://a.id,b.id"; "*" = semua).

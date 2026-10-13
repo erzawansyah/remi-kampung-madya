@@ -85,10 +85,13 @@ docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + te
 **Info rahasia ("mode ingatan", keputusan pemilik):**
 - `viewUntuk()` hanya mengirim tangan sendiri, **(jumlah pemain − 1) kartu teratas buangan**, dan `jokerMati` yang relevan. Jangan menambahkan info tersembunyi ke view, log, maupun peristiwa.
 - Log **tidak boleh** menyebut kartu yang dibuang.
-- **Angka joker hanya diumumkan sekali** (popup di awal putaran, harus ditekan OK). Jangan tampilkan angka joker di meja, bar atas, log, atau sorakan. Client tidak boleh membaca `putaran.rankJoker`/`kartuDibuka` untuk tampilan apa pun selain popup joker (dijaga `apps/client/test/pemutar.test.ts`).
+- **Angka joker hanya diumumkan sekali** (popup di awal putaran, harus ditekan OK; pemain online yang tersambung kembali sebelum menekan OK mendapat popup lagi). Jangan tampilkan angka joker di meja, bar atas, log, atau sorakan, selain pengecualian yang diputuskan pemilik di bawah. Client tidak boleh membaca `putaran.rankJoker`/`kartuDibuka` untuk tampilan apa pun selain popup joker (dijaga `apps/client/test/pemutar.test.ts`).
 - Joker di tangan tidak diberi penanda. Tidak ada peringatan "kartu berbahaya", karena itu skill pemain.
 - Semua aturan di atas **juga berlaku untuk `aria-label`, `umumkan()`/aria-live, tutorial, bunyi, dan getar**: tidak ada bunyi/getar/label yang berbeda untuk joker, dan pengumuman pembaca layar tidak menyebut kartu yang dibuang lawan.
-- Yang masih menunggu keputusan pemilik dan **tidak boleh diubah sepihak**: label "→rank" di kartu jadi, teks log "(X jadi Y)", sub-teks sorakan JOKER DIBUANG?!, dan teks aksi singkat "buang 7♥" di panel pemain.
+- **Sudah diputuskan pemilik (13 Okt 2026), jangan diubah sepihak** (rincian: [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md) #25–#29):
+  - **Dipertahankan, jangan dihapus:** label "→rank" pada joker pengganti di kartu jadi, teks log "(X jadi Y)", dan sub-teks sorakan JOKER DIBUANG?! yang menyebut kartunya. Seperti di meja asli, joker yang sudah dipasang terlihat semua orang dan boleh jadi petunjuk.
+  - **Teks aksi singkat untuk buang di panel pemain cukup "buang kartu"**, tanpa menyebut kartunya. Kartunya tetap terlihat di tumpukan buangan.
+  - `rankJoker`/`kartuDibuka` di view dan peristiwa buangan yang sudah tertimbun dibiarkan apa adanya. Pagar UI di atas tetap berlaku.
 
 **Bot**
 - Bot hanya melihat `ViewPemain` dan memvalidasi aksinya dengan fungsi aturan yang sama. Simulasi gagal kalau ada aksi bot yang ditolak.
@@ -133,7 +136,11 @@ docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + te
 - **Versi tunggal** ada di `package.json` root (SemVer). Semua workspace (`packages/*`, `apps/*`) disamakan dengannya. Vite menyuntik `__VERSI_APP__`, `__BUILD_SHA__`, `__BUILD_WAKTU__` (`apps/client/src/versi.ts`); server menyuntik versi/sha lewat `apps/server/scripts/bundel.mjs`. Commit diambil dari env `GIT_SHA` (Docker `--build-arg GIT_SHA=...`) atau git lokal.
 - **`CHANGELOG.md` wajib diperbarui** untuk setiap perubahan yang terasa pemain atau penting secara teknis, di bagian `## [Belum dirilis]` (format Keep a Changelog, dibagi "Untuk pemain" dan "Teknis"). Perubahan aturan wajib tertulis jelas.
   - CHANGELOG ditampilkan di layar Tentang lewat renderer markdown mini dan diuji `apps/client/test/tentang.test.ts`: pertahankan heading `## [Belum dirilis]`, pakai hanya tautan `https://` (bukan tautan relatif), dan jangan pakai HTML.
-- **PWA `registerType: 'prompt'`**: service worker baru menunggu sampai pemain menekan "Muat ulang" di toast versi baru. Tawaran ditunda selama putaran berjalan/susun akhir. Jangan kembali ke `autoUpdate` (bisa memuat ulang di tengah permainan).
+- **PWA `registerType: 'prompt'` + pembaruan otomatis di momen aman** (`apps/client/src/pembaruan.ts`, diuji `apps/client/test/pembaruan.test.ts`): service worker baru menunggu, lalu aplikasi sendiri yang memasangnya (`updateSW(true)`) tanpa pemain harus menekan apa pun.
+  - Cek versi baru saat start, saat tab terlihat lagi, saat sinyal kembali, dan tiap 30 menit. Build client juga dicocokkan dengan `/healthz` server (sha); kalau beda, SW dicek saat itu juga.
+  - Kapan dipasang diputuskan `momenPembaruan()`/`putuskanPembaruan()` (fungsi murni): beranda = toast singkat lalu muat ulang (atau diam-diam saat tab tersembunyi); lobi online, daftar meja, riwayat, klasemen akhir, dan jeda antarputaran online = hanya saat tab tersembunyi; putaran berjalan, susun akhir, popup joker, panel mentung, meja offline yang belum selesai, dialog terbuka, atau isian yang sedang diketik = **ditunda**. Tombol manual "Muat ulang" tetap ada.
+  - Anti-loop: muat ulang otomatis dicatat di `sessionStorage` per build, paling banyak 2 kali.
+  - Jangan kembali ke `autoUpdate` (bisa memuat ulang di tengah permainan), dan jangan longgarkan momen "tidak" tanpa izin pemilik.
 
 ## Catatan client (Phaser)
 
@@ -190,6 +197,7 @@ Daftar lengkap ada di README. Yang paling sering terlupa:
 - Seri angka hanya 2–10 (maksimal 9 kartu). Seri Londo hanya J-Q-K. Angka dan Londo tidak bisa disambung, dan As tidak bisa masuk seri.
 - Kembar hanya untuk As, dan bunganya harus beda semua (3 atau 4 kartu). 3 As butuh kartu jadi lain, boleh yang diturunkan bersamaan di aksi yang sama.
 - Joker pengganti jumlahnya ≤ kartu biasa dan tidak boleh dempet. Joker tidak bisa menggantikan Londo maupun As.
+- 2 deck: kartu kembar boleh di seri yang sama asal salah satunya jadi joker pengganti untuk angka lain (joker 5: 4♥ 5♥ 6♥ + 5♥ deck kedua sebagai 7♥). Dua kartu yang mewakili angka sama tetap ditolak (`packages/engine/test/kembar-pengganti.test.ts`).
 
 **Mulung**
 - Kartu paling bawah yang dipungut wajib jadi kartu jadi baru.

@@ -186,6 +186,34 @@ describe('pemutar peristiwa: info rahasia', () => {
     }
   });
 
+  it('teks aksi singkat untuk buang cukup "buang kartu", tanpa menyebut kartunya (keputusan pemilik #6)', () => {
+    for (const s of SUDUT) {
+      const buang = rekamanPer.get(s)!.filter((r) => r.peristiwa.jenis === 'buang' && r.teks.length > 0);
+      expect(buang.length).toBeGreaterThan(0);
+      for (const r of buang) {
+        const e = r.peristiwa as Extract<Peristiwa, { jenis: 'buang' }>;
+        // Teks pertama selalu catatan aksi; sesudahnya hanya sorakan (JOKER DIBUANG?!, TINGGAL 1 KARTU!).
+        expect(r.teks[0]).toBe('buang kartu');
+        expect(r.teks[0]).not.toContain(labelKartu(e.kartu));
+        expect(r.teks[0].match(POLA_KARTU)).toBeNull();
+      }
+    }
+  });
+
+  it('sorakan TINGGAL 1 KARTU! netral: tidak menyebut mentung (keputusan pemilik #30: tangan 1 kartu tidak bisa mentung)', () => {
+    const sub = [...rekamanPer.values()].flatMap((rs) =>
+      rs.flatMap((r) => {
+        const i = r.teks.indexOf('TINGGAL 1 KARTU!');
+        return i < 0 ? [] : [{ teks: r.teks[i + 1], nama: `Pemain ${(r.peristiwa as Extract<Peristiwa, { jenis: 'buang' }>).pemain}` }];
+      }),
+    );
+    expect(sub.length, 'skenario harus memuat lawan yang tinggal 1 kartu').toBeGreaterThan(0);
+    for (const s of sub) {
+      expect(s.teks).toBe(`${s.nama} tinggal pegang satu kartu`);
+      expect(s.teks).not.toMatch(/mentung|nutup|awas/i);
+    }
+  });
+
   it('kartu yang diambil lawan dari deck tidak pernah diperlihatkan', () => {
     for (const s of SUDUT) {
       const lawan = rekamanPer.get(s)!.filter((r) => r.peristiwa.jenis === 'ambilDeck' && r.peristiwa.pemain !== s);

@@ -65,6 +65,8 @@ export interface AppUntukMeja {
   readonly tutorial?: boolean;
   /** Status koneksi saat ini (online); offline selalu 'tersambung'. */
   statusKoneksi?(): StatusKoneksi;
+  /** Nomor sambungan online: naik setiap kali tersambung (lagi) ke server. Offline: tidak ada (0). */
+  nomorSambungan?(): number;
 }
 
 interface Mulung {
@@ -271,6 +273,33 @@ export function peristiwaAwalPerluDiputar(v: ViewPemain, menungguJoker: readonly
 }
 
 /**
+ * OK joker sudah kutekan untuk putaran ini, tapi server masih menunggu kursiku. Ini terjadi kalau
+ * pesan siapJoker hilang karena sinyal putus (pesan aksi tidak diantrikan) lalu server memasukkan
+ * kursiku lagi ke menungguJoker saat tersambung kembali. Popup tidak dibuka lagi (sudah dilihat),
+ * jadi siapJoker dikirim ulang, sekali per sambungan, supaya meja tidak tertahan sampai batas waktu.
+ */
+export function perluKirimUlangSiapJoker(k: {
+  view: ViewPemain | null;
+  menungguJoker: readonly number[];
+  /** Putaran yang popup jokernya sudah kutekan OK (-1 = belum ada). */
+  jokerDiOk: number;
+  status: StatusKoneksi;
+  /** Nomor sambungan sekarang dan nomor sambungan tempat siapJoker terakhir dikirim. */
+  sambungan: number;
+  sambunganTerkirim: number | null;
+}): boolean {
+  const v = k.view;
+  const p = v?.putaran;
+  if (!v || !p || v.saya === null || v.status !== 'putaranBerjalan') return false;
+  return (
+    p.nomor === k.jokerDiOk &&
+    k.menungguJoker.includes(v.saya) &&
+    k.status === 'tersambung' &&
+    k.sambungan !== k.sambunganTerkirim
+  );
+}
+
+/**
  * Teks bar atas: nomor (dan batas) putaran dipisah dari jenis meja supaya di layar sempit nomor
  * putaran tetap terbaca (jenis meja yang mengalah: dipotong/ditumpuk lewat CSS).
  */
@@ -331,6 +360,8 @@ export class KontrolMeja implements AksiAdegan {
   private selesaiDitampilkan = false;
   /** Putaran yang popup jokernya sudah kutekan OK (jangan dibuka lagi sambil menunggu server). */
   private jokerDiOk = -1;
+  /** Nomor sambungan tempat siapJoker terakhir dikirim (lihat perluKirimUlangSiapJoker). */
+  private siapJokerDiSambungan: number | null = null;
   /** Cadangan supaya popup joker tidak tertunda selamanya kalau antrian animasi macet. */
   private timerJoker: ReturnType<typeof setTimeout> | null = null;
   /** Nomor putaran yang hasilnya sudah dianimasikan (gambar ulang karena voting tidak mengulang). */
@@ -467,13 +498,32 @@ export class KontrolMeja implements AksiAdegan {
 
   perbarui(info: InfoMeja | null, view: ViewPemain | null) {
     if (this.hancur) return;
-    if (info) this.info = info;
+    if (info) {
+      this.info = info;
+      this.kirimUlangSiapJokerBilaPerlu();
+    }
     if (view) {
       // Jawaban (atau keadaan baru) datang: bar aksi boleh dipakai lagi.
       this.lepasKunciKirim();
       this.antrian.push(view);
       void this.putarAntrian();
     } else if (!this.sedangMemutar) this.tampilkan();
+  }
+
+  /**
+   * Keadaan meja yang sedang TAMPIL, untuk keputusan pembaruan PWA (main.ts → pembaruan.ts). View terbaru
+   * dari server bisa sudah 'selesai' sementara panel mentung atau animasi akhir putaran masih diputar.
+   */
+  keadaanTampil(): { status: string | null; sibuk: boolean; klasemen: boolean } {
+    const modal = document.getElementById('modal');
+    const jendelaMenahan = !!modal?.querySelector('[data-mentung], [data-joker]');
+    return {
+      status: this.view?.status ?? null,
+      sibuk:
+        !this.hancur &&
+        (this.sedangMemutar || this.animasi || this.antrian.length > 0 || this.viewTertunda !== null || jendelaMenahan || this.tungguJokerSaya()),
+      klasemen: !!modal?.querySelector('[data-selesai]'),
+    };
   }
 
   /** Putar peristiwa baru dari tiap view secara berurutan, lalu tampilkan view-nya. */
@@ -654,7 +704,7 @@ export class KontrolMeja implements AksiAdegan {
 
   private catatAksi(pemain: number, teks: string) {
     if (this.hancur) return;
-    // Aksi dalam satu giliran digabung, misalnya "mungut 9♦ · buang A♠". Hanya tampil sebentar.
+    // Aksi dalam satu giliran digabung, misalnya "mungut 9♦ · buang kartu". Hanya tampil sebentar.
     const lama = this.aksiTerakhir[pemain];
     const gabung = lama && this.timerAksi.has(pemain) && !teks.startsWith('ambil') && !teks.startsWith('mungut');
     this.aksiTerakhir = { ...this.aksiTerakhir, [pemain]: gabung ? `${lama} · ${teks}` : teks };
@@ -717,6 +767,7 @@ export class KontrolMeja implements AksiAdegan {
     // Pengumuman joker: sekali di awal putaran, harus ditekan OK.
     if (!this.tungguJokerSaya() && document.querySelector('[data-joker]')) tutupModal();
     this.bukaJokerBilaPerlu();
+    this.kirimUlangSiapJokerBilaPerlu();
 
     // Tanda giliranmu: bunyi + getar pendek.
     const giliranSaya = (this.giliranSaya() && !this.info.menungguJoker.length) || this.susunSaya();
@@ -769,6 +820,27 @@ export class KontrolMeja implements AksiAdegan {
       this.timerJoker = null;
     }
     this.modalJoker();
+  }
+
+  private sambunganKini(): number {
+    return this.app.nomorSambungan?.() ?? 0;
+  }
+
+  /** OK joker sudah ditekan tapi pesannya hilang di jalan: kirim ulang (lihat perluKirimUlangSiapJoker). */
+  private kirimUlangSiapJokerBilaPerlu() {
+    if (this.hancur || !this.info) return;
+    const sambungan = this.sambunganKini();
+    const perlu = perluKirimUlangSiapJoker({
+      view: this.view,
+      menungguJoker: this.info.menungguJoker,
+      jokerDiOk: this.jokerDiOk,
+      status: this.app.statusKoneksi?.() ?? 'tersambung',
+      sambungan,
+      sambunganTerkirim: this.siapJokerDiSambungan,
+    });
+    if (!perlu) return;
+    this.siapJokerDiSambungan = sambungan;
+    this.app.kirim({ t: 'siapJoker' });
   }
 
   private tungguJokerSaya(): boolean {
@@ -1953,6 +2025,8 @@ export class KontrolMeja implements AksiAdegan {
         dlg.querySelector('[data-kartu]')!.appendChild(gambarKartuKeKanvas(k, lebarKartuPamer()));
         dlg.querySelector('[data-ok]')!.addEventListener('click', () => {
           this.jokerDiOk = nomor;
+          // Kalau sinyal sedang putus, pesan ini hilang; nomor sambungan yang baru nanti memicu kirim ulang.
+          this.siapJokerDiSambungan = this.sambunganKini();
           tutupModal();
           this.tutorial?.tandai('joker');
           this.app.kirim({ t: 'siapJoker' });

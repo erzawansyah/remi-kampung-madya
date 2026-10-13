@@ -71,6 +71,17 @@ export const DAFTAR_EMOTE = [
 
 export type Emote = (typeof DAFTAR_EMOTE)[number];
 
+/**
+ * Emote versi lama yang sudah diganti, beserta padanannya sekarang. HP yang masih memakai aplikasi
+ * lama (0.1.0, atau build pra-rilis 0.2.0) tetap bisa mengirimnya; meja meneruskannya sebagai
+ * padanan baru (validasiPesan). Jangan dihapus selama masih ada pemain yang memakai versi lama.
+ */
+export const EMOTE_LAMA: ReadonlyMap<string, Emote> = new Map<string, Emote>([
+  ['Makasih, Bos!', 'Suwun, Bos!'],
+  ['Tutup!', 'Nutup, rek!'],
+  ['Kartu itu bundar…', 'Kartu itu bundar, kak.'],
+]);
+
 export type JenisKursi = 'kosong' | 'manusia' | 'bot';
 
 export interface InfoKursi {

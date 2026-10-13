@@ -47,8 +47,9 @@ export default defineConfig({
   },
   plugins: [
     VitePWA({
-      // 'prompt': service worker baru menunggu sampai pemain setuju muat ulang (toast "versi baru"
-      // dipasang di main.ts lewat registerSW onNeedRefresh), jadi tidak reload di tengah permainan.
+      // 'prompt': service worker baru menunggu sampai halaman memilih momen aman (pembaruan.ts, lewat
+      // registerSW onNeedRefresh), jadi tidak reload di tengah permainan. Pengecualian untuk halaman
+      // versi lama yang tidak bisa memintanya: lihat importScripts di bawah.
       registerType: 'prompt',
       // Ikon manifest sudah ikut globPatterns (*.png); jangan dimasukkan dua kali ke precache.
       includeManifestIcons: false,
@@ -78,6 +79,10 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/ws/, /^\/healthz/, /^\/api\//],
+        // Jembatan dari 0.1.x (autoUpdate) ke 'prompt': halaman lama yang tidak menjawab sapa SW baru
+        // tetap diperbarui (public/sw-transisi.js). Diambil sw.js saat dipasang, jadi tidak perlu precache.
+        importScripts: ['sw-transisi.js'],
+        manifestTransforms: [async (entri) => ({ manifest: entri.filter((e) => e.url !== 'sw-transisi.js'), warnings: [] })],
       },
     }),
   ],

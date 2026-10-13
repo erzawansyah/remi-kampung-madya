@@ -2,7 +2,8 @@
 // kartu terbang, teks aksi di panel pemain, suara, getar, dan sorakan besar.
 //
 // Info rahasia: tidak pernah membaca angka joker (rankJoker/kartuDibuka); kartu yang dibagikan atau
-// diambil lawan dari deck selalu tertutup; teks hanya menyebut kartu yang memang terbuka di peristiwa itu.
+// diambil lawan dari deck selalu tertutup; teks hanya menyebut kartu yang memang terbuka di peristiwa itu,
+// dan teks aksi singkat untuk buang cukup "buang kartu" (keputusan pemilik #6).
 // Durasi di sini durasi DASAR; scene menyesuaikannya dengan preferensi kecepatan/gerak.
 
 import { namaKartu, namaRank, type Bunga, type Kartu, type Peristiwa, type ViewPemain } from '@remi/engine';
@@ -184,7 +185,9 @@ export class PemutarPeristiwa {
         // Kalau ini pentungan, animasinya diurus peristiwa 'mentung' (dibuang tertutup lalu dibuka).
         if (berikut?.jenis === 'mentung') return;
         bunyi('buang');
-        this.k.catatAksi(e.pemain, `buang ${labelKartu(e.kartu)}`);
+        // Keputusan pemilik (#6): teks aksi singkat tidak menyebut kartu yang dibuang. Kartunya tetap
+        // terlihat di tumpukan buangan; mengingatnya urusan pemain (mode ingatan).
+        this.k.catatAksi(e.pemain, 'buang kartu');
         const id = e.kartu.id;
         // Asal: titik lepas (kartu diseret ke buangan), kartu di tanganku, atau panel lawan.
         const dari = (e.pemain === saya ? (scene.posisiLepas(id) ?? scene.posisiKartu(id)) : undefined) ?? scene.posisiPemain(e.pemain);
@@ -202,7 +205,7 @@ export class PemutarPeristiwa {
         if (e.sisaTangan === 1 && e.pemain !== saya && !this.sudahTinggalSatu.has(kunci)) {
           this.sudahTinggalSatu.add(kunci);
           bunyi('bahaya');
-          void sorak({ judul: 'TINGGAL 1 KARTU!', sub: `Awas, ${this.k.nama(e.pemain)} siap mentung`, gaya: 'bahaya', durasi: 1400 });
+          void sorak({ judul: 'TINGGAL 1 KARTU!', sub: `${this.k.nama(e.pemain)} tinggal pegang satu kartu`, gaya: 'bahaya', durasi: 1400 });
         }
         return;
       }

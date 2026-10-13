@@ -142,4 +142,22 @@ describe('server WebSocket', () => {
     expect((await c.tunggu('error', (p) => p.pesan.includes('ZZZZZ'))).pesan).toContain('nggak ketemu');
     c.tutup();
   });
+
+  it('HP yang masih memakai aplikasi 0.1.0: emote lama diteruskan sebagai padanan baru, bukan ditolak', async () => {
+    // Pesan persis seperti yang dikirim client 0.1.0 (JSON mentah, tanpa field baru).
+    const lama = new Klien(server.port);
+    await lama.kirim({ t: 'buat', nama: 'Budi', pengaturan: { jumlahPemain: 4 } });
+    const { kode } = await lama.tunggu('masuk');
+    const baru = new Klien(server.port);
+    await baru.kirim({ t: 'gabung', kode, nama: 'Siti' });
+    await baru.tunggu('masuk');
+    await lama.kirim({ t: 'emote', isi: 'Makasih, Bos!' } as Record<string, unknown>);
+    expect((await baru.tunggu('emote')).isi).toBe('Suwun, Bos!');
+    await new Promise((r) => setTimeout(r, 1300));
+    await lama.kirim({ t: 'emote', isi: 'Tutup!' } as Record<string, unknown>);
+    expect((await baru.tunggu('emote', (p) => p.isi !== 'Suwun, Bos!')).isi).toBe('Nutup, rek!');
+    expect(lama.pesan.filter((p) => p.t === 'error')).toEqual([]);
+    lama.tutup();
+    baru.tutup();
+  });
 });

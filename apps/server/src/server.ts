@@ -11,6 +11,14 @@ import type { PenyimpanRiwayat } from './riwayat.js';
 import { alamatKlien, HEADER_KEAMANAN, kunciIp, originDiizinkan } from './keamanan.js';
 import { buatPembatasLog } from './pembatasLog.js';
 
+/**
+ * Batas bawaan per jaringan (keputusan pemilik, 13 Okt 2026). Semua HP yang memakai Wi-Fi kedai
+ * keluar lewat satu IP publik, jadi batasnya dibuat longgar. Bisa ditimpa lewat env
+ * MAKS_MEJA_PER_IP dan MAKS_SAMBUNGAN_PER_IP (lihat main.ts).
+ */
+export const BAWAAN_MAKS_MEJA_PER_IP = 60;
+export const BAWAAN_MAKS_SAMBUNGAN_PER_IP = 150;
+
 export interface OpsiServer {
   port: number;
   host?: string;
@@ -23,7 +31,8 @@ export interface OpsiServer {
   maksMeja?: number;
   /**
    * Maksimal meja yang masih ada (termasuk yang sudah ditinggal tapi belum dihapus) per alamat IP
-   * pembuatnya. Pemain di kedai biasanya satu WiFi (satu IP publik), jadi jangan terlalu kecil.
+   * pembuatnya. Bawaan {@link BAWAAN_MAKS_MEJA_PER_IP}: pemain di kedai biasanya satu Wi-Fi (satu IP
+   * publik), dan meja yang ditinggal baru dihapus ±10 menit kemudian, jadi jangan terlalu kecil.
    */
   maksMejaPerIp?: number;
   /**
@@ -42,8 +51,9 @@ export interface OpsiServer {
    */
   originDiizinkan?: readonly string[];
   /**
-   * Maksimal sambungan WebSocket sekaligus per jaringan (IPv4 per alamat, IPv6 per /64). Bawaan 50:
-   * longgar, karena satu WiFi kedai atau CGNAT operator seluler bisa berbagi satu IP publik.
+   * Maksimal sambungan WebSocket sekaligus per jaringan (IPv4 per alamat, IPv6 per /64). Bawaan
+   * {@link BAWAAN_MAKS_SAMBUNGAN_PER_IP}: longgar, karena satu Wi-Fi kedai atau CGNAT operator seluler
+   * bisa berbagi satu IP publik.
    */
   maksSambunganPerIp?: number;
   /** /healthz ikut menampilkan jumlah sambungan & galat meja (bawaan: tidak; detailnya ada di log). */
@@ -190,7 +200,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
 
   /** Jumlah sambungan WebSocket aktif per kunci jaringan. */
   const sambunganPerJaringan = new Map<string, number>();
-  const maksSambunganPerIp = opsi.maksSambunganPerIp ?? 50;
+  const maksSambunganPerIp = opsi.maksSambunganPerIp ?? BAWAAN_MAKS_SAMBUNGAN_PER_IP;
   let ditolakOrigin = 0;
   let ditolakPenuh = 0;
 
@@ -323,7 +333,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         // Satu alamat tidak boleh memenuhi server dengan meja (meja ditinggal baru dihapus ~10 menit kemudian).
         let dariIpIni = 0;
         for (const ip of pembuatMeja.values()) if (ip === s.jaringan) dariIpIni++;
-        if (dariIpIni >= (opsi.maksMejaPerIp ?? 20)) {
+        if (dariIpIni >= (opsi.maksMejaPerIp ?? BAWAAN_MAKS_MEJA_PER_IP)) {
           return kirimKe(s, { t: 'error', pesan: 'Kebanyakan meja dari jaringanmu, Bos. Pakai meja yang sudah ada atau tunggu sebentar.' });
         }
         const kode = buatKode();

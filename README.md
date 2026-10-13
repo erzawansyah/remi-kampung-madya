@@ -37,7 +37,7 @@ Istilah: di UI, pemain komputer disebut **warga kedai** (Kipas Dua, Cak Kopag, S
 
 **Offline, PWA, dan online**
 - Permainan offline tersimpan otomatis, juga saat aplikasi ditutup atau dipindah ke latar belakang.
-- Versi baru ditawarkan lewat toast "Ada versi baru, Bos." dan tidak pernah memuat ulang sendiri di tengah putaran.
+- Versi baru terpasang sendiri di momen yang aman (di beranda, atau saat aplikasi sedang di latar belakang), juga untuk pemain yang cuma membuka lewat browser HP. Tidak pernah memuat ulang di tengah putaran.
 - Nomor versi tampil di beranda dan di layar Tentang (beserta catatan perubahan).
 - Online: lencana status koneksi, sambung ulang otomatis, konfirmasi sebelum keluar meja (teksnya sama di semua jalur), dan pesan ramah kalau server tidak bisa dihubungi.
 - Riwayat dan statistik: permainan online dari server, permainan di HP ini, dan statistik pribadi.
@@ -100,7 +100,7 @@ curl -s http://127.0.0.1:2567/healthz                                 # {"ok":tr
 - **Image runtime ramping:** `node:24-alpine` + satu `main.js` (server dibundel, termasuk `ws` dan `sirv`) + file PWA (±3 MB di atas image Node), jadi tahap runtime tidak menjalankan `npm install`. Proses jalan sebagai user `node` (bukan root). `HEALTHCHECK` memanggil `/healthz` (status `healthy` ±30 detik setelah start).
 - **Kompresi dan cache:** build client menulis versi `.br` dan `.gz` untuk file teks ≥ 1 KB, dan server menyajikannya otomatis. File ber-hash di `/assets/` diberi `Cache-Control: public, max-age=31536000, immutable`; `index.html`, `sw.js`, manifest, ikon, dan font diberi `no-cache`; 404 diberi `no-store`. Semua respons membawa `x-content-type-options: nosniff` dan `referrer-policy: strict-origin-when-cross-origin`.
 - **Phaser dipisah** jadi chunk sendiri (`assets/phaser-[hash].js`) supaya update aplikasi tidak mengunduh ulang Phaser.
-- Konfigurasi lewat environment: `PORT` (default 2567), `STATIC_DIR` (folder file PWA), `DB_PATH` (database klasemen), `MAKS_MEJA` (default 500), `MAKS_MEJA_PER_IP` (default 20; pemain satu WiFi kedai berbagi satu IP), `TRUST_PROXY` (`lokal` default: `X-Forwarded-For`/`X-Forwarded-Host` hanya dipercaya dari proxy di alamat loopback/privat; `1` selalu; `0` tidak pernah), `MAKS_SAMBUNGAN_PER_IP` (default 50 sambungan WebSocket sekaligus per jaringan; IPv4 per alamat, IPv6 per /64; sengaja longgar untuk WiFi kedai dan CGNAT seluler), `ORIGIN_DIIZINKAN` (asal tambahan yang boleh membuka WebSocket, dipisah koma, misalnya `https://remi.contoh.id,contoh.id`; bawaan hanya halaman yang sehost dengan server), `HEALTHZ_DETAIL` (`1` = `/healthz` ikut menampilkan `sambungan` dan `galatMeja`).
+- Konfigurasi lewat environment: `PORT` (default 2567), `STATIC_DIR` (folder file PWA), `DB_PATH` (database klasemen), `MAKS_MEJA` (default 500), `MAKS_MEJA_PER_IP` (default 60; semua HP di Wi-Fi kedai keluar lewat satu IP publik, dan meja yang ditinggal baru dihapus ±10 menit kemudian), `TRUST_PROXY` (`lokal` default: `X-Forwarded-For`/`X-Forwarded-Host` hanya dipercaya dari proxy di alamat loopback/privat; `1` selalu; `0` tidak pernah), `MAKS_SAMBUNGAN_PER_IP` (default 150 sambungan WebSocket sekaligus per jaringan; IPv4 per alamat, IPv6 per /64; sengaja longgar untuk Wi-Fi kedai dan CGNAT seluler), `ORIGIN_DIIZINKAN` (asal tambahan yang boleh membuka WebSocket, dipisah koma, misalnya `https://remi.contoh.id,contoh.id`; bawaan hanya halaman yang sehost dengan server), `HEALTHZ_DETAIL` (`1` = `/healthz` ikut menampilkan `sambungan` dan `galatMeja`).
 - **Ketahanan:** pesan WebSocket > 64 KiB atau frame cacat hanya menutup sambungan itu; galat di timer meja dicatat per meja di log (ringkasan `status: meja, sambungan, galatMeja` tiap ±10 menit; di `/healthz` hanya dengan `HEALTHZ_DETAIL=1`); galat yang lolos (`uncaughtException`) dicatat dan server tetap jalan, kecuali datang ≥ 20 kali per menit (proses keluar, Docker menyalakan ulang). Sambungan yang membanjiri > 120 pesan/detik diputus. Handshake WebSocket dari Origin asing ditolak `403`, dan lewat `MAKS_SAMBUNGAN_PER_IP` ditolak `429`. Semua respons HTTP (termasuk `/healthz`) membawa `Content-Security-Policy` (`script-src 'self'`, tanpa skrip inline; skrip splash ada di `public/splash.js`), `X-Frame-Options: DENY`, dan `Permissions-Policy` (kamera, mikrofon, lokasi mati); daftar lengkapnya di `apps/server/src/keamanan.ts`. Nama pemain dinormalisasi NFKC dan dibersihkan dari karakter kontrol/format (pembalik arah teks, zero-width lepas), tapi ZWJ/ZWNJ di emoji gabungan dan aksara yang membutuhkannya tetap; nama tanpa karakter terlihat jadi "Pemain". Log galat per sambungan dibatasi 10 baris/menit per jenis.
 - **Wajib HTTPS untuk PWA.** Service worker dan "pasang ke layar utama" hanya jalan di HTTPS (pengecualian: `http://localhost` untuk uji lokal). Pasang reverse proxy di depan container. Contoh dengan Caddy di mesin yang sama (sertifikat otomatis, WebSocket `/ws` otomatis diteruskan):
 
@@ -112,7 +112,12 @@ curl -s http://127.0.0.1:2567/healthz                                 # {"ok":tr
 
   - Tidak perlu `encode` di Caddy: server sudah mengirim versi `.br`/`.gz` sendiri dan header cache-nya diteruskan apa adanya.
   - Proxy jangan menimpa `Cache-Control`. `sw.js` dan `index.html` harus tetap `no-cache`, kalau tidak pemain bisa lama tertahan di versi lama.
-- **Update aplikasi (PWA `registerType: 'prompt'`):** setelah deploy, HP yang membuka aplikasi mengunduh service worker baru di latar belakang (saat dibuka/dimuat ulang, dan dicek ulang tiap jam). Selama putaran berjalan atau susun akhir tidak ada tawaran dan tidak ada reload. Di beranda, lobi, atau di antara putaran muncul toast "Ada versi baru, Bos." dengan tombol **Muat ulang**, plus tombol menetap di kaki beranda. Simpanan permainan offline tetap ada sesudah muat ulang.
+- **Update aplikasi (otomatis di momen aman):** pemain tidak perlu menekan apa pun, baik yang memasang PWA ke layar utama maupun yang cuma membuka lewat browser HP. Service worker tetap `registerType: 'prompt'`, jadi versi baru menunggu sampai aplikasi sendiri yang memutuskan kapan memasangnya (`apps/client/src/pembaruan.ts`).
+  - **Kapan dicek:** saat aplikasi dibuka, saat kembali dari latar belakang atau sinyal kembali (paling sering sekali per menit), dan tiap 30 menit selama terbuka. Aplikasi juga mencocokkan commit-nya dengan `/healthz` server; kalau server sudah memakai build lain, versi baru langsung dicari.
+  - **Kapan dipasang:** di beranda saat pemain diam sebentar, muncul toast "Pakai versi terbaru, sebentar ya…" lalu halaman dimuat ulang (menyentuh layar membatalkannya). Kalau aplikasi sedang di latar belakang, versi baru dipasang diam-diam. Di lobi online, daftar meja, riwayat, klasemen akhir, atau jeda antarputaran online, versi baru dipasang hanya saat aplikasi di latar belakang; selama terlihat cukup ditawarkan lewat toast "Ada versi baru, Bos." dengan tombol **Muat ulang**, plus tombol menetap di kaki beranda.
+  - **Tidak pernah:** selama putaran berjalan, susun akhir, popup joker, panel mentung, meja offline yang belum selesai, saat dialog terbuka, saat mengetik, atau saat menunggu jawaban server.
+  - Muat ulang otomatis paling banyak 2 kali per build di satu tab (anti-loop); sesudahnya hanya tawaran manual. Sesudah berhasil muncul toast "Sudah pakai versi terbaru, v…". Simpanan permainan offline tetap ada.
+  - **Syarat:** HTTPS (service worker tidak jalan di HTTP biasa, kecuali `localhost`), dan `sw.js`/`index.html` tetap `no-cache` (lihat poin proxy di atas). Browser tanpa service worker tetap dimuat ulang biasa di momen aman kalau `/healthz` menunjukkan build lain.
 
 - **Meja yang sedang jalan ada di memori server,** jadi restart server menghapus meja yang sedang jalan. Meja tanpa pemain terhubung dihapus otomatis setelah 10 menit.
 - **Klasemen akhir permainan online** disimpan di SQLite (`node:sqlite`, bawaan Node, tanpa dependensi native) pada volume `remi-data`.
@@ -197,23 +202,23 @@ Ini perilaku aplikasi, bukan aturan main. Semuanya bisa diubah kalau perlu.
 
 - Pengaturan bawaan: warga kedai **Normal**, **tanpa batas putaran**, **tanpa batas skor**. Permainan selesai kalau semua sepakat menekan "Akhiri permainan". Pengaturan offline terakhir disimpan per HP dan dipakai lagi.
 - Orang baru hanya bisa masuk saat meja masih di lobi. Setelah main, yang bisa masuk hanya pemain lama yang menyambung ulang pakai token.
-- Pemain yang terputus: gilirannya dijalankan warga kedai (bot) sampai ia kembali. Pemain yang menekan "Keluar meja" saat main: kursinya diteruskan warga kedai permanen, jadi aplikasi meminta konfirmasi dulu. Teks konfirmasinya satu sumber (`opsiKonfirmasiKeluar` di `ui/lobi.ts`) untuk tombol Back, menu ☰, dan tombol di lobi.
+- Pemain yang terputus (refresh, sinyal putus): ada masa tenggang 20 detik sejak ia terputus. Kalau belum kembali, gilirannya dijalankan warga kedai (bot) sampai ia kembali. Batas waktu giliran meja tetap berlaku, mana yang habis lebih dulu. Pemain yang menekan "Keluar meja" saat main: kursinya diteruskan warga kedai permanen, jadi aplikasi meminta konfirmasi dulu. Teks konfirmasinya satu sumber (`opsiKonfirmasiKeluar` di `ui/lobi.ts`) untuk tombol Back, menu ☰, dan tombol di lobi.
 - Nama warga kedai: "Warga Madya" (Kipas Dua, Cak Kopag, Mbak Teras, Mas Sampul, Si Rak, Pak Seng, Dik Toska, Ning Sore, Om Garpu, Bu Sendok). Urutannya diacak per meja (latihan: urutan tetap), nama yang sudah dipakai kursi lain dilewati, dan cadangannya "Warga N". Nama tidak bergantung pada level, kartu, giliran, atau peristiwa.
 - Memulai permainan offline baru atau latihan saat masih ada simpanan selalu minta konfirmasi, karena simpanan lama terhapus. Permainan latihan tidak dicatat di riwayat.
 - Waktu giliran habis (default 60 detik, bisa diatur 30–120 atau tanpa batas): warga kedai (bot) menyelesaikan giliran itu.
-- Semua manusia terputus: permainan dijeda (bot berhenti) sampai ada yang kembali.
+- Semua manusia terputus: permainan dijeda (bot berhenti) sampai ada yang kembali. Saat lanjut, batas waktu giliran yang sedang berjalan diulang dari awal.
 - Angka negatif ditampilkan dengan minus tipografis "−" (U+2212) di semua tampilan skor.
 - Putaran berikutnya dimulai oleh host. Kalau skor terendah sama, host memilih pengocok atau "Acak".
-- "Akhiri permainan" (di antara putaran): semua manusia yang terhubung harus setuju.
+- "Akhiri permainan" (di antara putaran): semua manusia yang terhubung harus setuju. Voting dihitung ulang setiap ada yang terputus atau keluar, jadi kalau semua yang tersisa sudah setuju, permainan langsung selesai.
 - Host pergi: host pindah ke pemain manusia lain yang masih terhubung.
 - Joker di tangan tidak diberi penanda, dan tidak ada peringatan saat membuang joker (sesuai keputusan D11).
-- Pengumuman joker online: pemain yang terputus tidak ditunggu. Kalau ada batas waktu giliran, popup joker juga dibatasi waktu yang sama.
+- Pengumuman joker online: pemain yang terputus atau keluar meja tidak ditunggu (yang keluar dianggap sudah OK). Pemain yang tersambung kembali sebelum menekan OK di putaran itu mendapat popup joker lagi. Tunggu untuknya ikut batas waktu giliran, atau 30 detik kalau meja tanpa batas waktu. Kalau ada batas waktu giliran, popup joker juga dibatasi waktu yang sama.
 - Simpanan permainan dari versi lama otomatis dilengkapi (migrasi). Kalau tetap tidak terbaca, simpanan itu dihapus supaya tidak macet. Simpanan permainan yang sudah selesai tidak ditawarkan untuk dilanjutkan. Nilai lain di `localStorage` yang bentuknya tidak cocok (misalnya riwayat bukan array) dikembalikan ke bawaan dan kuncinya dihapus.
 - Tombol Back di HP menutup jendela teratas dulu, lalu meminta konfirmasi keluar dari meja/lobi. Di beranda perlu ditekan dua kali untuk keluar.
 - Layar dijaga tetap menyala selama di meja (wake lock), dan kanvas meja berhenti menggambar saat tidak tampil supaya hemat baterai.
 - **Mode ingatan (seperti meja asli):**
   - Server hanya mengirim (jumlah pemain − 1) kartu teratas buangan, dan log tidak menyebut kartu yang dibuang.
-  - Setiap ambil, buang, dan mungut terlihat jelas saat terjadi (animasi + teks di panel pemain), jadi pemain harus ingat sendiri.
+  - Setiap ambil, buang, dan mungut terlihat jelas saat terjadi (animasi + teks singkat di panel pemain), jadi pemain harus ingat sendiri. Teks singkat untuk buang cukup "buang kartu" tanpa menyebut kartunya (keputusan pemilik); kartunya terlihat di tumpukan buangan.
   - Bot juga hanya melihat yang sama.
   - Pengumuman pembaca layar, tutorial, bunyi, dan getar ikut menjaga info rahasia.
 - **Tidak ada bantuan "kartu berbahaya":** menilai kartu mana yang aman dibuang adalah skill pemain.
@@ -311,9 +316,11 @@ Kartu bergambar joker tidak dipakai.
 - Joker bisa menggantikan kartu apa pun kecuali Londo dan As.
 - Joker selalu boleh dipakai sebagai kartu aslinya, dan dalam peran itu dihitung kartu biasa.
 - Jumlah joker pengganti dalam satu seri ≤ jumlah kartu biasa, dan joker pengganti tidak boleh bersebelahan (selang-seling).
+- **2 deck:** kartu kembar boleh ada di seri yang sama asal salah satunya dipakai sebagai joker pengganti untuk angka lain. Contoh dengan joker 5: 4♥ 5♥ 6♥ + 5♥ dari deck kedua sebagai 7♥ sah. Dua kartu yang mewakili angka sama di satu seri tetap tidak boleh.
 - Joker yang dibuang kehilangan status jokernya dan jadi kartu biasa. Pembuangnya kena −25 per kartu di putaran itu, kecuali joker itu dipakai sebagai pentungan.
-- **Pengumuman joker hanya sekali:** di awal tiap putaran muncul popup kartu yang dibuka. Permainan baru mulai setelah semua pemain manusia menekan OK.
-- Sesudah itu angka joker **tidak ditampilkan lagi** (tidak di meja, bar atas, maupun log), dan kartu joker di tangan tidak diberi penanda. Pemain harus ingat sendiri.
+- **Pengumuman joker hanya sekali:** di awal tiap putaran muncul popup kartu yang dibuka. Permainan baru mulai setelah semua pemain manusia menekan OK. Pemain online yang terputus sebelum menekan OK mendapat popup itu lagi saat tersambung kembali.
+- Sesudah itu angka joker **tidak ditampilkan lagi** (tidak di bar atas, tidak ada pengingat), dan kartu joker di tangan tidak diberi penanda. Pemain harus ingat sendiri.
+- Yang tetap terlihat, seperti di meja asli (keputusan pemilik): joker yang sudah dipasang sebagai pengganti di kartu jadi ditandai perannya (label "→4" di meja, log "(7 Waru jadi 4)"), dan sorakan JOKER DIBUANG?! menyebut kartu yang dibuang. Keduanya boleh jadi petunjuk bagi pemain lain.
 
 **Mentung**
 - Mentung = membuang kartu terakhir di tangan. Hanya sah di giliran yang diawali mulung.
@@ -328,7 +335,7 @@ Kartu bergambar joker tidak dipakai.
 | 2–10 | 5 | 50 |
 | J, Q, K | 10 | 100 |
 | As | 15 | 150 |
-| Joker | Tangan 25. Di kartu jadi bernilai kartu yang diwakili | 250. Joker yang sudah pernah dibuang (hasil mungut) sudah jadi kartu biasa: nilai kartu aslinya |
+| Joker | Tangan 25 (joker hidup). Joker yang sudah pernah dibuang lalu dipungut lagi sudah jadi kartu biasa: di tangan bernilai kartu aslinya. Di kartu jadi bernilai kartu yang diwakili | 250. Joker yang sudah pernah dibuang (hasil mungut) sudah jadi kartu biasa: nilai kartu aslinya |
 
 - **Skor dasar:** jadi − tangan.
 - **Yang mentung:** jadi + pentungan.
@@ -365,20 +372,21 @@ Kartu bergambar joker tidak dipakai.
 | 21 | Di susun akhir, boleh menurunkan sampai tangan habis? | Boleh (tidak ada buang); tidak dihitung mentung | **Perlu konfirmasi** |
 | 22 | Urutan susun akhir | Serentak, karena kartu jadi tidak bisa ditempel sehingga urutan tidak berpengaruh | **Perlu konfirmasi** |
 | 23 | Batas waktu di susun akhir (online) | Sama dengan batas giliran; lewat batas, bot menurunkan yang bisa dijadikan lalu selesai | **Perlu konfirmasi** |
-| 25 | Peristiwa di view membawa kartu buangan yang sudah tertimbun di bawah (n − 1) teratas? | Kode sekarang: 40 peristiwa terakhir ikut di view (`view.ts`, `BATAS_PERISTIWA_VIEW`). UI tidak menampilkannya, tapi client termodifikasi bisa membacanya ([rinci](docs/keputusan-pemilik.md#k25)) | **Menunggu keputusan pemilik** |
-| 26 | `rankJoker`/`kartuDibuka` dikirim di setiap view? | Kode sekarang: ya, dipakai validasi lokal dan popup joker; hanya UI yang menyembunyikannya ([rinci](docs/keputusan-pemilik.md#k26)) | **Menunggu keputusan pemilik** |
-| 27 | Label "→rank" pada joker pengganti di kartu jadi dan teks log "(X jadi Y)", padahal angka joker "tidak ditampilkan lagi"? | Kode sekarang: keduanya tampil sepanjang putaran ([rinci](docs/keputusan-pemilik.md#k27)) | **Menunggu keputusan pemilik** |
-| 28 | Sub-teks sorakan JOKER DIBUANG?! menyebut kartunya? | Kode sekarang: ya, misalnya "Budi buang 7 Waru · −25" ([rinci](docs/keputusan-pemilik.md#k28)) | **Menunggu keputusan pemilik** |
-| 29 | Teks aksi singkat "buang 7♥" di panel lawan? | Kode sekarang: tampil sekitar 3,5 detik ([rinci](docs/keputusan-pemilik.md#k29)) | **Menunggu keputusan pemilik** |
-| 30 | Pemain bertangan 1 kartu praktis tidak bisa mulung/mentung lagi (akibat modal ≥ pungutan dan kartu jadi minimal 3)? | Kode sekarang: memang begitu; perlu konfirmasi bahwa itu maksud aturannya ([rinci](docs/keputusan-pemilik.md#k30)) | **Menunggu keputusan pemilik** |
-| 31 | Joker mati (pernah dibuang lalu dipungut) di tangan dinilai berapa? | Kode sekarang: nilai kartu aslinya, bukan 25. Belum tertulis di tabel skor ([rinci](docs/keputusan-pemilik.md#k31)) | **Menunggu keputusan pemilik** |
-| 32 | 2 deck: kartu kembar boleh jadi joker pengganti di seri yang sama? | Kode sekarang: boleh (yang dilarang dua kartu yang mewakili angka sama) ([rinci](docs/keputusan-pemilik.md#k32)) | **Menunggu keputusan pemilik** |
-| 33 | Room: pemain keluar sebelum menekan OK joker | Kode sekarang: meja menunggu selamanya kalau tanpa batas waktu (`tinggalkan` tidak menghapus dari `menungguJoker`) ([rinci](docs/keputusan-pemilik.md#k33)) | **Menunggu keputusan pemilik** |
-| 34 | Room: pemain yang menyambung ulang saat pengumuman joker | Kode sekarang: tidak melihat popup joker putaran itu ([rinci](docs/keputusan-pemilik.md#k34)) | **Menunggu keputusan pemilik** |
-| 35 | Room: batas waktu giliran setelah semua manusia terputus | Kode sekarang: batas lama tidak direset, bot langsung mengambil alih saat pemain kembali ([rinci](docs/keputusan-pemilik.md#k35)) | **Menunggu keputusan pemilik** |
-| 36 | Room: voting "Akhiri permainan" saat pemilih berkurang | Kode sekarang: tidak dihitung ulang sampai ada yang menekan tombol lagi ([rinci](docs/keputusan-pemilik.md#k36)) | **Menunggu keputusan pemilik** |
-| 37 | Room: refresh/putus singkat di giliran sendiri | Kode sekarang: bot langsung memainkan giliran itu setelah jeda mikir. Perlu masa tenggang? ([rinci](docs/keputusan-pemilik.md#k37)) | **Menunggu keputusan pemilik** |
-| 38 | Room: error di timer bot | Kode sekarang: bisa mematikan proses server (semua meja di memori hilang) ([rinci](docs/keputusan-pemilik.md#k38)) | **Menunggu keputusan pemilik** |
+| 25 | Peristiwa di view membawa kartu buangan yang sudah tertimbun di bawah (n − 1) teratas? | Dibiarkan (pilihan A). 40 peristiwa terakhir tetap ikut di view (`view.ts`, `BATAS_PERISTIWA_VIEW`). Yang dijaga tampilan resmi: UI tidak menampilkan kartu yang sudah tertimbun ([rinci](docs/keputusan-pemilik.md#k25)) | Diputuskan pemilik (13 Okt 2026) |
+| 26 | `rankJoker`/`kartuDibuka` dikirim di setiap view? | Dibiarkan (pilihan A). Tetap dikirim untuk validasi lokal dan popup joker. UI tidak boleh menampilkan angka joker di luar popup ([rinci](docs/keputusan-pemilik.md#k26)) | Diputuskan pemilik (13 Okt 2026) |
+| 27 | Label "→rank" pada joker pengganti di kartu jadi dan teks log "(X jadi Y)", padahal angka joker "tidak ditampilkan lagi"? | Dipertahankan. Di meja asli joker yang sudah dipasang di kartu jadi juga terlihat semua orang, dan itu boleh jadi petunjuk bagi pemain lain ([rinci](docs/keputusan-pemilik.md#k27)) | Diputuskan pemilik (13 Okt 2026) |
+| 28 | Sub-teks sorakan JOKER DIBUANG?! menyebut kartunya? | Dipertahankan, misalnya "Budi buang 7 Waru · −25". Alasannya sama dengan #27 ([rinci](docs/keputusan-pemilik.md#k28)) | Diputuskan pemilik (13 Okt 2026) |
+| 29 | Teks aksi singkat "buang 7♥" di panel lawan? | Diganti jadi "buang kartu", tanpa menyebut kartunya. Kartunya tetap terlihat di tumpukan buangan selama belum tertimbun ([rinci](docs/keputusan-pemilik.md#k29)) | Diputuskan pemilik (13 Okt 2026) |
+| 30 | Pemain bertangan 1 kartu praktis tidak bisa mulung/mentung lagi (akibat modal ≥ pungutan dan kartu jadi minimal 3)? | Memang begitu: dengan 1 kartu di tangan, modal tidak cukup untuk kartu jadi minimal 3, jadi hanya bisa ambil deck lalu buang ([rinci](docs/keputusan-pemilik.md#k30)) | Diputuskan pemilik (13 Okt 2026) |
+| 31 | Joker mati (pernah dibuang lalu dipungut) di tangan dinilai berapa? | Nilai kartu aslinya (2–10 = 5, Londo 10, As 15), bukan 25, karena joker yang sudah dibuang jadi kartu biasa ([rinci](docs/keputusan-pemilik.md#k31)) | Diputuskan pemilik (13 Okt 2026) |
+| 32 | 2 deck: kartu kembar boleh jadi joker pengganti di seri yang sama? | Boleh. Contoh dengan joker 5: 4♥ 5♥ 6♥ + 5♥ dari deck kedua sebagai 7♥ sah. Yang tetap dilarang: dua kartu yang mewakili angka sama di satu seri. Dijaga `packages/engine/test/kembar-pengganti.test.ts` ([rinci](docs/keputusan-pemilik.md#k32)) | Diputuskan pemilik (13 Okt 2026) |
+| 33 | Room: pemain keluar sebelum menekan OK joker | Diperbaiki: pemain yang keluar dianggap sudah OK, jadi meja tidak menunggunya ([rinci](docs/keputusan-pemilik.md#k33)) | Diputuskan pemilik (13 Okt 2026) |
+| 34 | Room: pemain yang menyambung ulang saat pengumuman joker | Diperbaiki: pemain yang belum menekan OK di putaran itu mendapat popup joker lagi saat tersambung kembali. Yang sudah OK tidak ditanya lagi ([rinci](docs/keputusan-pemilik.md#k34)) | Diputuskan pemilik (13 Okt 2026) |
+| 35 | Room: batas waktu giliran setelah semua manusia terputus | Diperbaiki: batas waktu giliran diulang dari awal saat ada pemain yang kembali dan permainan lanjut dari jeda ([rinci](docs/keputusan-pemilik.md#k35)) | Diputuskan pemilik (13 Okt 2026) |
+| 36 | Room: voting "Akhiri permainan" saat pemilih berkurang | Diperbaiki: voting dihitung ulang setiap ada pemilih yang terputus atau keluar. Kalau semua yang tersisa sudah setuju, permainan langsung selesai ([rinci](docs/keputusan-pemilik.md#k36)) | Diputuskan pemilik (13 Okt 2026) |
+| 37 | Room: refresh/putus singkat di giliran sendiri | Diberi masa tenggang: warga kedai baru mengambil alih giliran pemain yang terputus setelah 20 detik sejak ia terputus. Batas waktu giliran meja tetap berlaku, mana yang habis lebih dulu ([rinci](docs/keputusan-pemilik.md#k37)) | Diputuskan pemilik (13 Okt 2026) |
+| 38 | Room: error di timer bot | Kode sekarang: di server sudah ditangkap per meja dan proses tetap hidup; di `packages/meja` meja yang galat bisa macet ([rinci](docs/keputusan-pemilik.md#k38)) | **Menunggu keputusan pemilik** |
+| 39 | Deploy: batas meja dan sambungan per jaringan, padahal semua HP di Wi-Fi kedai keluar lewat satu IP publik | Bawaan dinaikkan: `MAKS_MEJA_PER_IP` 60 (dulu 20) dan `MAKS_SAMBUNGAN_PER_IP` 150 (dulu 50). Tetap bisa diubah lewat env ([rinci](docs/keputusan-pemilik.md#k39)) | Diputuskan pemilik (13 Okt 2026) |
 
 ## Test
 
@@ -387,7 +395,7 @@ Kartu bergambar joker tidak dipakai.
 Cakupan test:
 - **Validasi seri:** semua contoh 7.1, batas 2–10, Londo, As.
 - **Kembar As:** 3 vs 4 As, beda bunga, syarat kartu jadi lain (termasuk di aksi yang sama).
-- **Joker:** kelima contoh selang-seling, Londo dan As sebagai joker, joker sebagai kartu asli, joker mati.
+- **Joker:** kelima contoh selang-seling, Londo dan As sebagai joker, joker sebagai kartu asli, joker mati, kartu kembar 2 deck sebagai joker pengganti di seri yang sama (#32).
 - **Larangan:** membuang As, menempel ke kartu jadi.
 - **Mulung:** semua contoh Bagian 5.
 - **Mentung:** kepentung satu dan dua pemain, kartu sendiri, kepentung sekali, Contoh A & B, arah mundur, pentungan joker 250.
@@ -398,13 +406,13 @@ Cakupan test:
 - **Golden master:** permainan bot-vs-bot dan meja offline dengan seed tetap dikunci lewat sidik jari sha256 (proteksi regresi aturan sebelum mengubah presentasi). Cara meninjau dan memperbarui (`-u`) ada di [docs/baseline-gameplay.md](docs/baseline-gameplay.md).
 - **Fuzz:** aksi acak yang sering ilegal. Aksi yang ditolak harus tidak mengubah state, aksi yang diterima harus menghasilkan state legal.
 - **Meja:** lobi, host, atur kursi, mulai, kartu rahasia per pemain, permainan penuh 1 manusia + 3 bot, timer giliran diambil alih bot, putus/sambung ulang, jeda saat semua pergi, voting akhiri, simpan/lanjut.
-- **Server:** integrasi WebSocket nyata (buat/gabung pakai kode, kartu rahasia, sambung ulang dengan token, daftar meja publik, pesan rusak), riwayat SQLite.
+- **Server:** integrasi WebSocket nyata (buat/gabung pakai kode, kartu rahasia, sambung ulang dengan token, daftar meja publik, pesan rusak), riwayat SQLite, batas bawaan per jaringan (60 meja, 150 sambungan).
 - **Client** (`apps/client/test`, happy-dom): preferensi dan migrasinya, gerak, penyimpanan, versi, jendela dan fokus (`dom.ts`), koneksi (watchdog, antrian, simpan offline), kontrol meja (keyboard, tolak, kunci kirim, popup joker), pemutar peristiwa (info rahasia: tidak membaca angka joker, kartu lawan tetap tertutup), rincian skor, tutorial, Bantuan, Pengaturan, Tentang (CHANGELOG), Riwayat, beranda.
 - **E2E smoke** (`npm run e2e`, tidak ikut `npm test`): alur beranda → main → joker → ambil → buang → Pengaturan → Bantuan → Tentang → simpan → lanjutkan di Chrome sungguhan, untuk HP dan desktop. Gagal kalau ada error di konsol atau ketukan tembus ke kanvas.
 
 ## Catatan & rencana berikutnya
 
-- **Keputusan pemilik yang tertunda:** baris #20–#23 dan #25–#38 di tabel Aturan Terbuka. Rinciannya di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md).
+- **Keputusan pemilik yang tertunda:** baris #20–#23, #30, #31, dan #38 di tabel Aturan Terbuka. Rinciannya di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md).
 - **Belum diuji di HP fisik.** Semua uji tampilan memakai Chrome desktop dengan emulasi HP (dpr 2–3, sentuh). Yang perlu dicek di perangkat sungguhan lewat HTTPS: Safari iOS (audio, getar tidak didukung, PWA), Chrome Android (getar, tombol Back di PWA fullscreen, wake lock), siklus update service worker dari versi A ke B, dan pembaca layar (TalkBack/VoiceOver).
 - **Bot normal masih cukup pasif.** Di 6 pemain, mayoritas putaran berakhir karena deck habis. Perlu diperkuat (lebih berani mulung, menahan kartu untuk mentung).
 - **Meja online hanya di memori.** Restart atau deploy ulang server membuang meja yang sedang berjalan.

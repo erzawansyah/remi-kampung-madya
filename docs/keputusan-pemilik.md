@@ -1,38 +1,45 @@
-# Hal yang menunggu keputusan pemilik
+# Keputusan pemilik: rincian butir #25–#39
 
-Dokumen ini merinci baris **#25–#38** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Semuanya ditemukan saat audit rilis 0.2.0 dan **sengaja belum diubah**: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja` yang belum boleh disentuh di rilis ini.
+Dokumen ini merinci baris **#25–#39** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy.
 
-Untuk tiap butir ada: apa yang terjadi sekarang, bukti di kode (`file:baris`, per kode saat rilis 0.2.0), pilihan yang mungkin, dan dampaknya. Pilihan di sini **bukan aturan baru**, hanya daftar kemungkinan supaya pemilik gampang memutuskan.
+**Pemilik sudah memutuskan sebagian besar butir pada 13 Okt 2026.** Yang masih menunggu: **#30**, **#31**, dan **#38**. Jangan ubah perilaku butir yang masih menunggu sebelum ada keputusan.
 
-**Setelah pemilik memutuskan:**
+Untuk tiap butir ada: keputusan pemilik (kalau sudah), apa yang terjadi sebelum keputusan, bukti di kode (`file:baris`, per kode saat rilis 0.2.0, jadi nomor baris bisa sudah bergeser), pilihan yang waktu itu ditawarkan, dan dampaknya. Pilihan **bukan aturan baru**, hanya daftar kemungkinan yang ditawarkan ke pemilik.
+
+Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 dan #26, 5 = #27 dan #28, 6 = #29, 7 = #30–#32 (yang dijawab hanya #32), 8 = #34, 9 = #33, 10 = #36, 11 = #37, 12 = #35, 13 = #39.
+
+**Setelah pemilik memutuskan butir yang tersisa:**
 1. Tulis keputusannya di kolom "Keputusan" README dan ubah statusnya.
 2. Kalau menyentuh aturan atau `packages/engine`/`packages/meja`: tambahkan unit test, lalu perbarui golden test dengan peninjauan (lihat [baseline-gameplay.md](baseline-gameplay.md)).
 3. Sesuaikan konten Bantuan/tutorial (`apps/client/src/konten/`) kalau teksnya ikut berubah.
 
 ## Ringkasan
 
-| # | Butir | Wilayah | Sifat |
+| # | Butir | Wilayah | Status |
 |---|---|---|---|
-| [25](#k25) | Peristiwa di view membawa kartu buangan yang sudah tertimbun | `packages/engine` (view) | Info rahasia, celah client termodifikasi |
-| [26](#k26) | `rankJoker`/`kartuDibuka` ada di setiap view | `packages/engine` (view) | Info rahasia, celah client termodifikasi |
-| [27](#k27) | Label "→rank" di kartu jadi dan log "(X jadi Y)" | client + engine (log) | Bertentangan dengan teks keputusan joker |
-| [28](#k28) | Sub-teks sorakan JOKER DIBUANG?! menyebut kartunya | client | Bertentangan dengan teks keputusan joker |
-| [29](#k29) | Teks aksi singkat "buang 7♥" di panel pemain | client | Mode ingatan |
-| [30](#k30) | Tangan 1 kartu praktis tidak bisa mulung/mentung lagi | aturan (akibat) | Konfirmasi maksud aturan |
-| [31](#k31) | Joker mati di tangan dinilai kartu biasa | aturan skor | Belum tertulis di README |
-| [32](#k32) | 2 deck: kartu kembar boleh jadi joker pengganti di seri yang sama | aturan kartu jadi | Belum tertulis di README |
-| [33](#k33) | Keluar sebelum OK joker membuat meja macet | `packages/meja` | Tampak bug |
-| [34](#k34) | Pemain yang menyambung ulang tidak melihat popup joker | `packages/meja` | Menyentuh "joker diumumkan sekali" |
-| [35](#k35) | Batas waktu basi setelah semua terputus | `packages/meja` | Tampak bug |
-| [36](#k36) | Voting akhiri tidak dihitung ulang saat pemilih berkurang | `packages/meja` | Tampak bug |
-| [37](#k37) | Refresh di giliran sendiri langsung dimainkan bot | `packages/meja` | Perlu masa tenggang? |
-| [38](#k38) | Error di timer bot bisa mematikan server | `packages/meja` + `apps/server` | Tampak bug (ketahanan) |
+| [25](#k25) | Peristiwa di view membawa kartu buangan yang sudah tertimbun | `packages/engine` (view) | Diputuskan: dibiarkan |
+| [26](#k26) | `rankJoker`/`kartuDibuka` ada di setiap view | `packages/engine` (view) | Diputuskan: dibiarkan |
+| [27](#k27) | Label "→rank" di kartu jadi dan log "(X jadi Y)" | client + engine (log) | Diputuskan: dipertahankan |
+| [28](#k28) | Sub-teks sorakan JOKER DIBUANG?! menyebut kartunya | client | Diputuskan: dipertahankan |
+| [29](#k29) | Teks aksi singkat "buang 7♥" di panel pemain | client | Diputuskan: jadi "buang kartu" |
+| [30](#k30) | Tangan 1 kartu praktis tidak bisa mulung/mentung lagi | aturan (akibat) | **Menunggu keputusan pemilik** |
+| [31](#k31) | Joker mati di tangan dinilai kartu biasa | aturan skor | **Menunggu keputusan pemilik** |
+| [32](#k32) | 2 deck: kartu kembar boleh jadi joker pengganti di seri yang sama | aturan kartu jadi | Diputuskan: boleh |
+| [33](#k33) | Keluar sebelum OK joker membuat meja macet | `packages/meja` | Diputuskan: diperbaiki |
+| [34](#k34) | Pemain yang menyambung ulang tidak melihat popup joker | `packages/meja` | Diputuskan: diperbaiki |
+| [35](#k35) | Batas waktu basi setelah semua terputus | `packages/meja` | Diputuskan: diperbaiki |
+| [36](#k36) | Voting akhiri tidak dihitung ulang saat pemilih berkurang | `packages/meja` | Diputuskan: diperbaiki |
+| [37](#k37) | Refresh di giliran sendiri langsung dimainkan bot | `packages/meja` | Diputuskan: masa tenggang |
+| [38](#k38) | Error di timer bot bisa mematikan server | `packages/meja` + `apps/server` | **Menunggu keputusan pemilik** (server sudah ditangani) |
+| [39](#k39) | Batas meja dan sambungan per jaringan terlalu kecil untuk Wi-Fi kedai | `apps/server` (deploy) | Diputuskan: bawaan dinaikkan |
 
 ---
 
 <a id="k25"></a>
 
 ## 25. Peristiwa di view membawa kartu buangan yang sudah tertimbun
+
+**Keputusan pemilik (13 Okt 2026): dibiarkan (pilihan 1).** Peristiwa di view tetap membawa kartu buangan yang sudah tertimbun. Yang dijaga tampilan resmi: UI tetap hanya menampilkan (jumlah pemain − 1) kartu teratas buangan.
 
 **Sekarang:** `viewUntuk()` mengirim 40 peristiwa terakhir ke tiap pemain. Peristiwa `buang` memuat kartunya. Akibatnya, kartu buangan yang sudah tertimbun di bawah (jumlah pemain − 1) kartu teratas masih ada di data yang diterima HP. UI resmi tidak menampilkannya (buangan tetap n − 1), tapi client yang dimodifikasi atau devtools bisa membacanya. Paling terasa di 2 pemain, karena buangan yang terlihat cuma 1 kartu.
 
@@ -52,6 +59,8 @@ Untuk tiap butir ada: apa yang terjadi sekarang, bukti di kode (`file:baris`, pe
 
 ## 26. `rankJoker` dan `kartuDibuka` dikirim di setiap view
 
+**Keputusan pemilik (13 Okt 2026): dibiarkan (pilihan 1).** `rankJoker` dan `kartuDibuka` tetap dikirim di view untuk validasi lokal dan popup joker. Pagarnya tetap: UI tidak boleh menampilkan angka joker di luar popup (dijaga `apps/client/test/pemutar.test.ts`).
+
 **Sekarang:** angka joker dan kartu yang dibuka ada di setiap `ViewPemain` selama putaran, ditambah peristiwa `mulaiPutaran` yang memuat `rankJoker`. Client membutuhkannya untuk validasi lokal (tombol yang tidak sah langsung memberi alasan) dan untuk popup joker. Aturan "joker diumumkan sekali" hanya ditegakkan oleh UI.
 
 **Bukti:**
@@ -68,6 +77,8 @@ Untuk tiap butir ada: apa yang terjadi sekarang, bukti di kode (`file:baris`, pe
 <a id="k27"></a>
 
 ## 27. Label "→rank" pada joker pengganti dan log "(X jadi Y)"
+
+**Keputusan pemilik (13 Okt 2026): dipertahankan (pilihan 1).** Label "→rank" dan teks log "(X jadi Y)" tetap ada. Kata pemilik: di permainan aslinya memang begitu, joker yang sudah dipasang di kartu jadi terlihat semua orang dan boleh jadi petunjuk bagi pemain lain. Teks ringkasan aturan di README sudah disesuaikan. Jangan dihapus.
 
 **Sekarang:** kartu jadi di meja menandai joker pengganti dengan label kecil, misalnya "→4" di atas 7♠. Log mulung/turunkan menulis misalnya "2-3-4 Wajik (7 Waru jadi 4)". Keduanya membuat angka joker terbaca sepanjang putaran, padahal README menulis angka joker "tidak ditampilkan lagi (tidak di meja, bar atas, maupun log)".
 
@@ -87,6 +98,8 @@ Untuk tiap butir ada: apa yang terjadi sekarang, bukti di kode (`file:baris`, pe
 
 ## 28. Sub-teks sorakan JOKER DIBUANG?! menyebut kartunya
 
+**Keputusan pemilik (13 Okt 2026): dipertahankan (pilihan 1).** Sub-teks tetap menyebut kartunya, misalnya "Budi buang 7 Waru · −25". Alasannya sama dengan #27. Jangan dihapus.
+
 **Sekarang:** saat ada yang membuang joker, sorakan "JOKER DIBUANG?!" muncul dengan sub-teks misalnya "Budi buang 7 Waru · −25". Kartu itu memang terlihat di buangan dan sudah mati, tapi AGENTS.md melarang angka joker di sorakan. Sorakan ini juga memberi tahu semua orang bahwa 7 adalah angka joker putaran ini.
 
 **Bukti:** `apps/client/src/efek/pemutar.ts:166-169`. Sorakan diberi `aria-hidden` (`apps/client/src/efek/sorak.ts:48-50`), jadi tidak dibacakan pembaca layar.
@@ -102,7 +115,9 @@ Untuk tiap butir ada: apa yang terjadi sekarang, bukti di kode (`file:baris`, pe
 
 ## 29. Teks aksi singkat "buang 7♥" di panel pemain
 
-**Sekarang:** panel tiap pemain menampilkan aksi gilirannya selama sekitar 3,5 detik, misalnya "mungut 9♦ · buang A♠". Log tidak menyebut kartu yang dibuang, tapi teks ini sempat terlihat beberapa detik. README bagian "Mode ingatan" menyebutnya sebagai perilaku yang disengaja ("terlihat jelas saat terjadi").
+**Keputusan pemilik (13 Okt 2026): tanpa nama kartu (pilihan 2).** Teks aksi singkat untuk buang jadi "buang kartu". Kartunya tetap terlihat di tumpukan buangan selama belum tertimbun. Aksi lain (misalnya "mungut 9♦") tidak berubah.
+
+**Sebelum keputusan:** panel tiap pemain menampilkan aksi gilirannya selama sekitar 3,5 detik, misalnya "mungut 9♦ · buang A♠". Log tidak menyebut kartu yang dibuang, tapi teks ini sempat terlihat beberapa detik. README bagian "Mode ingatan" menyebutnya sebagai perilaku yang disengaja ("terlihat jelas saat terjadi").
 
 **Bukti:** `apps/client/src/efek/pemutar.ts:157` (`` `buang ${labelKartu(e.kartu)}` ``), batas tampil di `apps/client/src/kontrolMeja.ts:604-620` (3500 ms), dirender di `apps/client/src/game/tataMeja.ts:416`.
 
@@ -116,6 +131,8 @@ Untuk tiap butir ada: apa yang terjadi sekarang, bukti di kode (`file:baris`, pe
 <a id="k30"></a>
 
 ## 30. Tangan 1 kartu praktis tidak bisa mulung atau mentung lagi
+
+**Keputusan pemilik (13 Okt 2026): memang begitu (pilihan 1).** Pemilik menyerahkan pilihan ke saran pengembang: ini akibat langsung aturan modal ≥ pungutan dan kartu jadi minimal 3, jadi tidak dibuat pengecualian. Engine tidak berubah. Sub-teks sorakan "TINGGAL 1 KARTU!" tidak lagi menyebut "siap mentung".
 
 **Sekarang:** pemain yang memulai giliran dengan 1 kartu tidak akan pernah bisa mulung. Kartu paling bawah pungutan wajib masuk kartu jadi baru, kartu jadi minimal 3 kartu, dan modal dari tangan harus ≥ jumlah pungutan di kombinasi itu. Dengan modal paling banyak 1 kartu, kombinasinya paling banyak 2 kartu. Karena mentung hanya sah di giliran yang diawali mulung, pemain itu juga tidak bisa mentung sampai putaran berakhir. Ia hanya bisa ambil deck lalu buang. Yang benar-benar mengancam adalah tangan 2 kartu (mulung ≥ 2, butuh ≥ 3 pemain).
 
@@ -134,6 +151,8 @@ Untuk tiap butir ada: apa yang terjadi sekarang, bukti di kode (`file:baris`, pe
 
 ## 31. Joker mati di tangan dinilai sebagai kartu biasa
 
+**Keputusan pemilik (13 Okt 2026): kartu biasa (pilihan 1).** Pemilik menyerahkan pilihan ke saran pengembang: joker yang sudah dibuang jadi kartu biasa, sama seperti aturan pentungan untuk joker yang pernah dibuang. Sudah ditulis di tabel skor README dan dijaga test engine.
+
 **Sekarang:** tabel skor README menulis "Joker: Tangan 25". Kode menilai **joker hidup** di tangan 25, sedangkan joker yang sudah mati (pernah dibuang lalu dipungut) dinilai sebagai kartu aslinya (2–10 = 5, Londo 10, As 15). Ini konsisten dengan "joker yang dibuang jadi kartu biasa", tapi belum tertulis eksplisit.
 
 **Bukti:** `packages/engine/src/kartuJadi.ts:160-161` (`nilaiKartuTangan`: `isJokerHidup ? 25 : nilaiDasar`), dipakai `packages/engine/src/skor.ts:40`. Bantuan sudah mengikuti kode ("joker yang masih hidup di tangan bernilai 25").
@@ -145,6 +164,8 @@ Untuk tiap butir ada: apa yang terjadi sekarang, bukti di kode (`file:baris`, pe
 <a id="k32"></a>
 
 ## 32. 2 deck: kartu kembar boleh jadi joker pengganti di seri yang sama
+
+**Keputusan pemilik (13 Okt 2026): boleh (pilihan 1).** Perilaku kode sudah benar. Contoh dengan joker 5: 4♥, 5♥, 6♥, dan 5♥ dari deck kedua sebagai 7♥ sah. Yang tetap dilarang: dua kartu yang mewakili angka sama di satu seri. Dijaga `packages/engine/test/kembar-pengganti.test.ts` (tingkat validator dan lewat mesin), dan sudah ditulis di ringkasan aturan README bagian Joker.
 
 **Sekarang:** di permainan 2 deck, satu seri tidak boleh punya dua kartu yang **mewakili** angka yang sama. Tapi kartu kembar fisik boleh ada di seri yang sama asal salah satunya dipakai sebagai joker pengganti. Contoh dengan joker 5: 4♥, 5♥, 6♥, dan 5♥ (deck kedua) sebagai 7♥ adalah sah.
 
@@ -158,13 +179,15 @@ Untuk tiap butir ada: apa yang terjadi sekarang, bukti di kode (`file:baris`, pe
 
 ## Perilaku room (`packages/meja`)
 
-Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Semuanya ada di `packages/meja` (dan satu di `apps/server`), yang dikunci di rilis 0.2.0. Bukti diverifikasi dengan skrip di audit (lihat catatan tiap butir). Perbaikannya perlu test di `packages/meja/test/meja.test.ts` dan bisa menggeser golden meja.
+Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Semuanya ada di `packages/meja` (dan satu di `apps/server`), yang dikunci di rilis 0.2.0. Bukti diverifikasi dengan skrip di audit (lihat catatan tiap butir). Perbaikan #33–#37 (keputusan 13 Okt 2026) diuji di `packages/meja/test/` dan bisa menggeser golden meja (lihat [baseline-gameplay.md](baseline-gameplay.md)).
 
 <a id="k33"></a>
 
 ## 33. Keluar sebelum menekan OK joker membuat meja macet
 
-**Sekarang:** `tinggalkan()` (pemain menekan Keluar meja saat main) mengubah kursinya jadi bot, tapi tidak menghapus kursi itu dari `menungguJoker`. Bot tidak pernah mengirim `siapJoker`. Dengan batas waktu giliran 0 (tanpa batas, sah di online), meja menunggu selamanya. Dengan batas waktu, meja macet sampai timer cadangan habis.
+**Keputusan pemilik (13 Okt 2026): diperbaiki.** Pemain yang keluar meja sebelum menekan OK dianggap sudah OK, jadi dikeluarkan dari daftar tunggu pengumuman joker dan meja tidak menunggunya.
+
+**Sebelum keputusan:** `tinggalkan()` (pemain menekan Keluar meja saat main) mengubah kursinya jadi bot, tapi tidak menghapus kursi itu dari `menungguJoker`. Bot tidak pernah mengirim `siapJoker`. Dengan batas waktu giliran 0 (tanpa batas, sah di online), meja menunggu selamanya. Dengan batas waktu, meja macet sampai timer cadangan habis.
 
 **Bukti:** `packages/meja/src/meja.ts:227-236` (`tinggalkan` hanya menyaring `setujuAkhiri`), bandingkan `:216-224` (`terputus` menyaring keduanya). Audit memverifikasi dengan `JamPalsu` (3 kursi, `detikGiliran` 0): setelah B keluar dan waktu maju 10 menit, `menungguJoker=[1]` dan tidak ada timer.
 
@@ -174,7 +197,11 @@ Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Sem
 
 ## 34. Pemain yang menyambung ulang tidak melihat popup joker
 
-**Sekarang:** pemain yang terputus saat pengumuman joker (termasuk karena refresh) dikeluarkan dari `menungguJoker`, dan saat kembali tidak dimasukkan lagi. Ia tidak pernah melihat angka joker putaran itu (tidak ada tempat lain yang menampilkannya). Di mode offline popup muncul lagi karena `menungguJoker` ikut tersimpan.
+**Keputusan pemilik (13 Okt 2026): diperbaiki (pilihan 2).** Pemain yang belum menekan OK di putaran itu mendapat popup joker lagi saat tersambung kembali (per kursi). Yang sudah menekan OK tidak ditanya lagi, jadi joker tetap diumumkan sekali untuk tiap pemain. Meja menunggu OK-nya paling lama 30 detik (`BATAS_JOKER_SAMBUNG_MS` di `packages/meja/src/meja.ts`), atau batas waktu giliran kalau itu lebih pendek. Popup yang sudah tampil sampai batas waktunya habis dianggap sudah dilihat.
+
+**Batas tambahan (Okt 2026, temuan verifikasi rilis 0.2.0):** tiap kursi paling banyak **sekali** ditanya ulang per putaran. Kalau ia putus lagi sebelum menekan OK lalu kembali, meja tidak ditahan lagi (popup tidak muncul lagi). Sebelumnya tunggu itu ikut batas waktu giliran (bisa sampai 10 menit) dan bisa berulang tiap putus-sambung, sehingga meja bisa beku lama. **Sisa yang diketahui:** batas waktu giliran pemain yang sedang jalan diulang penuh sesudah tunggu joker selesai (sisa waktunya tidak disimpan); pemain yang tersambung kembali saat susun akhir tidak mendapat popup joker.
+
+**Sebelum keputusan:** pemain yang terputus saat pengumuman joker (termasuk karena refresh) dikeluarkan dari `menungguJoker`, dan saat kembali tidak dimasukkan lagi. Ia tidak pernah melihat angka joker putaran itu (tidak ada tempat lain yang menampilkannya). Di mode offline popup muncul lagi karena `menungguJoker` ikut tersimpan.
 
 **Bukti:** `packages/meja/src/meja.ts:216-224` (filter saat terputus), `:207-214` (`terhubung` tidak menyentuh `menungguJoker`), `:406-411` (daftar hanya diisi saat putaran baru). Client membuka popup hanya kalau `info.menungguJoker` memuat kursinya (`apps/client/src/kontrolMeja.ts:717`).
 
@@ -186,7 +213,9 @@ Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Sem
 
 ## 35. Batas waktu basi setelah semua manusia terputus
 
-**Sekarang:** saat semua manusia terputus, meja berhenti menjadwalkan (permainan terjeda), tapi `batasWaktu` giliran yang sedang berjalan tidak direset. Saat pemain kembali, sisa waktunya sudah 0, dan bot langsung mengambil alih giliran orang yang baru kembali.
+**Keputusan pemilik (13 Okt 2026): diperbaiki.** Saat ada pemain yang kembali dan permainan lanjut dari jeda, batas waktu giliran yang sedang berjalan diulang dari awal.
+
+**Sebelum keputusan:** saat semua manusia terputus, meja berhenti menjadwalkan (permainan terjeda), tapi `batasWaktu` giliran yang sedang berjalan tidak direset. Saat pemain kembali, sisa waktunya sudah 0, dan bot langsung mengambil alih giliran orang yang baru kembali.
 
 **Bukti:** `packages/meja/src/meja.ts:480` (`return` tanpa mereset `kunciTimer`/`batasWaktu`), `:527-531` (sisa dihitung dari `batasWaktu` lama). Audit: `detikGiliran` 60, A terputus 5 menit di gilirannya, lalu kembali: `batasWaktu - sekarang = -240000`, 1 ms kemudian `diambilAlihBot=true`.
 
@@ -196,7 +225,9 @@ Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Sem
 
 ## 36. Voting "Akhiri permainan" tidak dihitung ulang saat pemilih berkurang
 
-**Sekarang:** syarat "semua manusia yang terhubung setuju" hanya dicek saat ada yang menekan tombol. Kalau semua yang tersisa sudah setuju lalu satu-satunya yang belum setuju terputus atau keluar, permainan tidak berakhir sampai ada yang menekan tombol lagi.
+**Keputusan pemilik (13 Okt 2026): diperbaiki.** Voting dihitung ulang setiap ada pemilih yang terputus atau keluar. Kalau semua manusia yang tersisa sudah setuju, permainan langsung selesai.
+
+**Sebelum keputusan:** syarat "semua manusia yang terhubung setuju" hanya dicek saat ada yang menekan tombol. Kalau semua yang tersisa sudah setuju lalu satu-satunya yang belum setuju terputus atau keluar, permainan tidak berakhir sampai ada yang menekan tombol lagi.
 
 **Bukti:** `packages/meja/src/meja.ts:364-380` (cek `pemilih.every(...)` hanya di `akhiri()`); `terputus()` `:216-224` dan `tinggalkan()` `:227-236` tidak mengecek ulang. Sudah diverifikasi lewat uji online dengan klien WebSocket (Okt 2026): A dan B setuju, C terputus, status tetap `putaranSelesai` sampai A menekan tombol lagi.
 
@@ -206,7 +237,9 @@ Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Sem
 
 ## 37. Refresh di giliran sendiri langsung dimainkan bot
 
-**Sekarang:** kursi manusia yang sedang terputus langsung dijalankan bot setelah jeda mikir (tempo santai 3–10 detik, cepat 0,8–2 detik), tidak menunggu batas waktu giliran. Refresh halaman biasa atau sinyal putus sebentar di giliran sendiri bisa membuat giliran itu dimainkan bot. README "Keputusan perilaku aplikasi" menyebut "Pemain yang terputus: gilirannya dijalankan bot sampai ia kembali", jadi ini sesuai teks, tapi terasa kasar untuk putus singkat.
+**Keputusan pemilik (13 Okt 2026): beri masa tenggang (pilihan 2).** Warga kedai baru mengambil alih giliran pemain yang terputus setelah masa tenggang 20 detik sejak ia terputus (`TENGGANG_SAMBUNG_MS` di `packages/meja/src/meja.ts`). Kalau meja memakai batas waktu giliran, batas itu tetap berlaku: mana yang habis lebih dulu. Angka 20 detik dipilih dari usulan 15–20 detik.
+
+**Sebelum keputusan:** kursi manusia yang sedang terputus langsung dijalankan bot setelah jeda mikir (tempo santai 3–10 detik, cepat 0,8–2 detik), tidak menunggu batas waktu giliran. Refresh halaman biasa atau sinyal putus sebentar di giliran sendiri bisa membuat giliran itu dimainkan bot. README "Keputusan perilaku aplikasi" menyebut "Pemain yang terputus: gilirannya dijalankan bot sampai ia kembali", jadi ini sesuai teks, tapi terasa kasar untuk putus singkat.
 
 **Bukti:** `packages/meja/src/meja.ts:506-519` (`!k.terhubung` langsung masuk `olehBot`).
 
@@ -218,6 +251,8 @@ Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Sem
 
 ## 38. Error di timer bot bisa mematikan server
 
+**Status: masih menunggu keputusan pemilik** (tidak termasuk daftar pertanyaan 13 Okt 2026). Sisi server sudah ditangani (lihat di bawah).
+
 **Sekarang:** `langkahBot()` menangkap error aksi bot pertama lalu mencoba bot mudah, tapi percobaan cadangan itu (dan error lain di `terapkan`/`siarkan` di dalam timer) tidak ditangkap lagi. Di Node, error di dalam `setTimeout` menjadi `uncaughtException`, dan server tidak punya penangan untuk itu. Proses mati dan semua meja (yang hanya ada di memori) hilang. Belum pernah terjadi di simulasi (bot selalu memakai validasi yang sama), jadi ini soal ketahanan.
 
 **Sudah ditangani di sisi server (Okt 2026, `apps/server`):** callback timer meja dijalankan lewat penjadwal pembungkus yang menangkap galat per meja (dicatat dan dihitung sebagai `galatMeja`, terlihat di log berkala atau `/healthz` dengan `HEALTHZ_DETAIL=1`), ditambah penjaga `uncaughtException`/`unhandledRejection`. Proses tidak mati lagi. **Yang tersisa di `packages/meja`:** meja yang galat di `langkahBot` bisa macet (timer bot tidak dijadwalkan ulang sampai ada perubahan lain), dan mode offline di browser tidak punya pembungkus ini.
@@ -225,6 +260,20 @@ Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Sem
 **Bukti:** `packages/meja/src/meja.ts:550-558` (cadangan `this.terapkan(g, cadangan)` tanpa `try`), `apps/server/src/main.ts` (tidak ada `process.on('uncaughtException')`).
 
 **Pilihan:** bungkus callback timer di `Meja` dengan `try/catch` yang mencatat error lalu menjeda meja itu saja, dan/atau pasang penangan proses di server yang mencatat lalu tetap hidup. Tidak menyentuh aturan main.
+
+<a id="k39"></a>
+
+## 39. Batas meja dan sambungan per jaringan (deploy)
+
+**Keputusan pemilik (13 Okt 2026): bawaan dinaikkan** ("pilihkan yang terbaik"). `MAKS_MEJA_PER_IP` bawaan 60 (dulu 20) dan `MAKS_SAMBUNGAN_PER_IP` bawaan 150 (dulu 50). Keduanya tetap bisa diubah lewat env saat deploy.
+
+**Sebelum keputusan:** server membatasi 20 meja per alamat IP pembuatnya dan 50 sambungan WebSocket sekaligus per jaringan, supaya satu orang iseng tidak bisa memenuhi server.
+
+**Masalahnya:** semua HP yang memakai Wi-Fi kedai keluar lewat **satu IP publik** yang sama. Meja yang ditinggal baru dihapus sekitar 10 menit kemudian dan tetap dihitung selama itu. Kalau banyak yang membuat meja dari Wi-Fi kedai, batas 20 bisa tersentuh dan pemain mendapat "Kebanyakan meja dari jaringanmu, Bos."
+
+**Alasan angka:** 60 meja cukup untuk satu kedai yang ramai (puluhan meja aktif plus meja lama yang belum terhapus), dan masih jauh di bawah batas total `MAKS_MEJA` (500), jadi satu jaringan tetap tidak bisa memenuhi server. 150 sambungan cukup untuk 60 meja yang rata-rata berisi 2–3 HP, sekaligus menampung CGNAT operator seluler. Batas pesan per sambungan (banjir pesan) tidak berubah.
+
+**Bukti:** konstanta `BAWAAN_MAKS_MEJA_PER_IP` dan `BAWAAN_MAKS_SAMBUNGAN_PER_IP` di `apps/server/src/server.ts`; env dibaca di `apps/server/src/main.ts`. Dikunci test `apps/server/test/ketahanan.test.ts` (meja ke-61 ditolak) dan `apps/server/test/keamanan.test.ts` (sambungan ke-151 ditolak 429).
 
 ---
 

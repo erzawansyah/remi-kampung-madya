@@ -7,7 +7,7 @@ import type { IncomingMessage } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import type { Penjadwal } from '@remi/meja';
-import { alamatKlien, alamatLokal, jalankanServer, type OpsiServer, type ServerRemi } from '../src/server.js';
+import { alamatKlien, alamatLokal, BAWAAN_MAKS_MEJA_PER_IP, jalankanServer, type OpsiServer, type ServerRemi } from '../src/server.js';
 import { normalkanEntriXff } from '../src/keamanan.js';
 import { buatPembatasLog } from '../src/pembatasLog.js';
 import { pasangPenjagaProses } from '../src/penjaga.js';
@@ -158,6 +158,19 @@ describe('server tetap hidup', () => {
     k.ws.close();
     t.ws.close();
   });
+
+  it('batas meja per IP bawaan 60 (Wi-Fi kedai = satu IP publik): meja ke-61 ditolak', async () => {
+    expect(BAWAAN_MAKS_MEJA_PER_IP).toBe(60);
+    // Batas pesan dilonggarkan supaya 61 "buat" beruntun tidak dibuang pembatas banjir.
+    const s = await nyalakan({ batasPesanPerDetik: 1000, putusPesanPerDetik: 2000 });
+    const k = await klien(s.port);
+    for (let i = 0; i < 61; i++) k.kirim({ t: 'buat', nama: `M${i}` });
+    const galat = await tungguPesan(k, (p) => p.t === 'error', 15_000);
+    expect(String(galat.pesan)).toContain('Kebanyakan meja');
+    expect(s.jumlahMeja()).toBe(60);
+    k.ws.close();
+    // Batas waktu test di atas batas tungguPesan, supaya yang gagal adalah pesannya, bukan timeout vitest.
+  }, 20_000);
 
   it('gabung yang gagal (meja penuh / sudah mulai) tidak membuat pemain kehilangan meja lamanya', async () => {
     const s = await nyalakan();

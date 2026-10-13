@@ -15,19 +15,43 @@ import { opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
 import { renderRiwayat } from './ui/riwayat';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang, siapkanJendelaMalas } from './ui/jendelaMalas';
-import { adaJendelaTerbuka, konfirmasi, pasangLandmarkUtama, toast, tutupModal, tutupSemuaJendela, umumkan } from './ui/dom';
+import {
+  adaJendelaTerbuka,
+  dialogTerbuka,
+  konfirmasi,
+  modalTerbuka,
+  pasangLandmarkUtama,
+  toast,
+  tutupModal,
+  tutupSemuaJendela,
+  umumkan,
+} from './ui/dom';
 import { siapkanAudio, suasanaMusik } from './efek/suara';
 import { adaJaringan } from './jaringan';
 import { PESAN_MEJA_MASIH_PUTUS, renderGalatMeja, renderPemuatMeja } from './ui/pemuatMeja';
+import {
+  bolehCek,
+  CEK_BERKALA_MS,
+  JEDA_TOAST_MS,
+  pasangPenjawabSapa,
+  PengelolaPembaruan,
+  pesanSesudahPembaruan,
+  serverBeda,
+  TEKS_PASANG,
+  type InfoBuild,
+  type KeadaanPembaruan,
+  type PenyimpananSesi,
+} from './pembaruan';
+import { BUILD_SHA, BUILD_WAKTU, labelVersi, VERSI } from './versi';
 
+// Paling awal: jawab sapaan SW baru (jembatan transisi 0.1 → 0.2, lihat public/sw-transisi.js). Kalau
+// terlambat, halaman ini dikira versi lama dan dimuat ulang begitu SW baru aktif.
+pasangPenjawabSapa('serviceWorker' in navigator ? navigator.serviceWorker : null, `${VERSI}+${BUILD_SHA}`);
 // Sedini mungkin: atribut tampilan (<html data-*>) sebelum layar pertama digambar, lalu audio.
 pasangPreferensi();
 siapkanAudio();
 
-/** Cek versi baru berkala (service worker). */
-const PERIKSA_UPDATE_MS = 60 * 60 * 1000;
-/** Kalau reload dari pembaruan SW tidak terjadi (mis. SW lama sudah hilang), muat ulang manual. */
-const CADANGAN_MUAT_ULANG_MS = 4000;
+const BUILD: InfoBuild = { versi: VERSI, sha: BUILD_SHA, waktu: BUILD_WAKTU, label: labelVersi() };
 
 /** Pengaturan permainan latihan: tiga pemain (kamu + 2 warga kedai mudah), satu putaran, kamu ngocok & jalan duluan. */
 const PENGATURAN_LATIHAN: Partial<PengaturanMeja> = {
@@ -84,14 +108,28 @@ class Aplikasi implements AppUntukMeja {
   /** Permainan offline yang sedang jalan adalah latihan dengan panduan. */
   private modeLatihan = false;
   private statusKini: StatusKoneksi = 'tersambung';
+  /** Naik setiap kali tersambung (lagi) ke server; KontrolMeja memakainya untuk kirim ulang siapJoker. */
+  private sambunganKe = 0;
   /** Aksi online terakhir dari beranda, untuk tombol "Coba lagi" saat server tidak terjangkau. */
   private niatOnline: (() => void) | null = null;
   /** Sudah ada entri riwayat "penjaga" untuk menangkap tombol Back. */
   private adaJaga = false;
-  // Pembaruan PWA
+  // Pembaruan PWA (lihat pembaruan.ts: kapan versi baru dipasang sendiri)
   private perbaruiSW: ((muatUlang?: boolean) => Promise<void>) | null = null;
-  private versiBaru = false;
-  private versiBaruDitawarkan = false;
+  private regSW: ServiceWorkerRegistration | null = null;
+  private urlSW = '';
+  private terakhirCekSW: number | null = null;
+  private terakhirCekServer: number | null = null;
+  private readonly pembaruan = new PengelolaPembaruan({
+    build: BUILD,
+    keadaan: () => this.keadaanPembaruan(),
+    tersembunyi: () => document.visibilityState === 'hidden',
+    aktifkanSW: () => void this.perbaruiSW?.(true),
+    muatUlang: () => location.reload(),
+    toast: (pesan, aksi) => toast(pesan, false, aksi ? 20000 : JEDA_TOAST_MS + 1200, aksi),
+    saatTombolBerubah: (f) => this.layar === 'beranda' && this.beranda?.aturMuatUlang(f),
+    penyimpanan: penyimpananSesi(),
+  });
   /** Pesan 'keluar' barusan tidak terkirim karena sinyal putus (dari layar mana). */
   private keluarTakSampai: 'lobi' | 'meja' | null = null;
   /**
@@ -119,6 +157,10 @@ class Aplikasi implements AppUntukMeja {
     return this.koneksi?.jenis === 'online' ? this.statusKini : 'tersambung';
   }
 
+  nomorSambungan(): number {
+    return this.sambunganKe;
+  }
+
   mulai() {
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -140,15 +182,24 @@ class Aplikasi implements AppUntukMeja {
       this.tampilkanBeranda();
       if (dari === 'riwayat') this.beranda?.fokusNav('riwayat');
     });
-    window.addEventListener('online', () => this.layar === 'beranda' && this.beranda?.aturStatusOnline('siap'));
+    window.addEventListener('online', () => {
+      if (this.layar === 'beranda') this.beranda?.aturStatusOnline('siap');
+      this.cekPembaruan();
+    });
     window.addEventListener('offline', () => this.layar === 'beranda' && this.beranda?.aturStatusOnline('offline'));
     document.addEventListener('visibilitychange', () => {
+      const terlihat = document.visibilityState === 'visible';
       // Wake lock otomatis dilepas browser saat tab tersembunyi; minta lagi saat kembali ke meja.
-      if (document.visibilityState === 'visible' && this.layar === 'meja') this.mintaWakeLock();
+      if (terlihat && this.layar === 'meja') this.mintaWakeLock();
+      // Kembali terlihat: cek versi baru. Disembunyikan: momen terbaik memasang versi yang menunggu.
+      if (terlihat) this.cekPembaruan();
+      this.pembaruan.nilai();
     });
     this.pasangTombolKembali();
     this.pasangPembaruan();
     this.tampilkanBeranda();
+    const pesanPembaruan = pesanSesudahPembaruan(penyimpananSesi(), BUILD);
+    if (pesanPembaruan) toast(pesanPembaruan, false, 4000);
     // Ada sesi online yang belum selesai (misalnya aplikasi tertutup saat main): sambung lagi.
     if (simpan.sesi() && navigator.onLine) {
       toast('Menyambung lagi ke meja terakhir…');
@@ -165,47 +216,99 @@ class Aplikasi implements AppUntukMeja {
   private pasangPembaruan() {
     this.perbaruiSW = registerSW({
       immediate: true,
-      onNeedRefresh: () => {
-        this.versiBaru = true;
-        this.tawarkanVersiBaru();
-      },
+      // SW baru terpasang dan menunggu: pembaruan.ts memutuskan kapan dipasang (momen aman).
+      onNeedRefresh: () => this.pembaruan.versiBaruSiap(),
+      // SW baru mengambil alih. Dipasang dari tab ini = muat ulang; dari tab lain = tunggu momen aman,
+      // jangan memotong putaran yang sedang berjalan di tab ini.
+      onNeedReload: () => this.pembaruan.swMengambilAlih(),
       onOfflineReady: () => toast('Aplikasinya sudah tersimpan di HP, Bos. Main bareng warga kedai tetap jalan tanpa sinyal.', false, 5000),
       onRegisteredSW: (swUrl, r) => {
         if (!r) return;
-        const periksa = async () => {
-          if (r.installing || !navigator.onLine) return;
-          try {
-            const resp = await fetch(swUrl, { cache: 'no-store', headers: { 'cache-control': 'no-cache' } });
-            if (resp.status === 200) await r.update();
-          } catch {
-            // Server tidak terjangkau: coba lagi di jadwal berikutnya.
-          }
-        };
-        setInterval(() => void periksa(), PERIKSA_UPDATE_MS);
+        this.regSW = r;
+        this.urlSW = swUrl;
       },
     });
+    // SW baru bisa mengambil alih tanpa lewat onNeedReload: jembatan transisi (public/sw-transisi.js)
+    // langsung mengaktifkannya kalau ada jendela lama, dan workbox-window tidak mengabari halaman yang
+    // memicu pemeriksaannya sendiri kurang dari semenit sesudah dibuka. Halaman yang sejak awal sudah
+    // dikendalikan SW lalu berganti pengendali = versi baru sudah aktif; dimuat ulang di momen aman.
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => this.pembaruan.swMengambilAlih());
+    }
+    // Pemain yang sedang menyentuh layar tidak dikagetkan muat ulang (lihat DIAM_MS).
+    const sentuh = () => {
+      if (this.pembaruan.catatInteraksi()) hapusToast(TEKS_PASANG);
+    };
+    for (const jenis of ['pointerdown', 'keydown', 'input'] as const) document.addEventListener(jenis, sentuh, { capture: true, passive: true });
+    setInterval(() => this.cekPembaruan(), CEK_BERKALA_MS);
+    // Saat start: register (immediate) sudah mengecek SW; server dicek kalau ada sinyal.
+    void this.cekServer();
   }
 
-  /** Putaran sedang berjalan: jangan ganggu dengan tawaran muat ulang. */
-  private sedangSeru(): boolean {
-    if (this.layar !== 'meja') return false;
-    const s = this.view?.status;
-    return s === 'putaranBerjalan' || s === 'susunAkhir';
+  /** Cek versi baru: service worker dan (kalau ada) build server. Dibatasi JEDA_CEK_MIN_MS. */
+  private cekPembaruan() {
+    void this.cekSW();
+    void this.cekServer();
   }
 
-  /** Tawarkan muat ulang sekali, di saat yang aman (tidak di tengah putaran). Tidak pernah reload sendiri. */
-  private tawarkanVersiBaru() {
-    if (!this.versiBaru) return;
-    // Tombol muat ulang yang menetap di kaki beranda: disisipkan saja, beranda tidak digambar ulang.
-    if (this.layar === 'beranda') this.beranda?.aturMuatUlang(() => this.muatUlang());
-    if (this.versiBaruDitawarkan || this.sedangSeru()) return;
-    this.versiBaruDitawarkan = true;
-    toast('Ada versi baru, Bos.', false, 20000, { label: 'Muat ulang', jalankan: () => this.muatUlang() });
+  private async cekSW(paksa = false) {
+    const r = this.regSW;
+    if (!r || !navigator.onLine || r.installing || r.waiting) return;
+    if (!bolehCek(this.terakhirCekSW, Date.now(), paksa)) return;
+    this.terakhirCekSW = Date.now();
+    try {
+      // sw.js dicek dulu: r.update() saat server mati melempar galat yang tidak perlu.
+      const resp = await fetch(this.urlSW, { cache: 'no-store', headers: { 'cache-control': 'no-cache' } });
+      if (resp.status === 200) await r.update();
+    } catch {
+      // Server tidak terjangkau: coba lagi di pemicu berikutnya.
+    }
   }
 
-  private muatUlang() {
-    void this.perbaruiSW?.(true);
-    setTimeout(() => location.reload(), CADANGAN_MUAT_ULANG_MS);
+  /**
+   * Bandingkan build client dengan server (/healthz). Kalau server sudah build lain, versi baru dicari
+   * sekarang juga (SW), atau, kalau browser tidak punya service worker (mis. http di jaringan lokal),
+   * halaman dimuat ulang biasa di momen aman. Build 'dev' / server tanpa sha: diabaikan.
+   */
+  private async cekServer(paksa = false) {
+    if (!navigator.onLine || !bolehCek(this.terakhirCekServer, Date.now(), paksa)) return;
+    this.terakhirCekServer = Date.now();
+    let isi: unknown;
+    try {
+      const resp = await fetch('/healthz', { cache: 'no-store' });
+      if (!resp.ok) return;
+      isi = await resp.json();
+    } catch {
+      return;
+    }
+    if (!serverBeda(BUILD, isi)) return;
+    if (this.regSW) await this.cekSW(true);
+    else if (!('serviceWorker' in navigator)) this.pembaruan.perluMuatUlangBiasa();
+  }
+
+  /** Keadaan aplikasi untuk keputusan pembaruan (lihat momenPembaruan di pembaruan.ts). */
+  private keadaanPembaruan(): KeadaanPembaruan {
+    // Meja dinilai dari yang tampil (KontrolMeja), bukan this.view: view terbaru bisa sudah 'selesai'
+    // padahal panel mentung atau animasi akhir putaran masih di layar.
+    const tampil = this.layar === 'meja' ? this.kontrol?.keadaanTampil() : undefined;
+    return {
+      layar: this.layar,
+      jenis: this.koneksi?.jenis ?? null,
+      statusMeja: tampil?.status ?? null,
+      mejaSiap: !!this.kontrol,
+      mejaSibuk: tampil?.sibuk ?? false,
+      klasemenTampil: tampil?.klasemen ?? false,
+      selesaiTercatat: this.sudahDicatat,
+      dialogTerbuka: dialogTerbuka(),
+      modalTerbuka: modalTerbuka(),
+      sedangMengetik: adaIsianAktif(),
+      menungguServer: !!this.niatOnline && this.koneksi?.jenis === 'online',
+    };
+  }
+
+  /** Layar/view berganti: momen aman untuk memasang versi baru mungkin sudah tiba. */
+  private nilaiPembaruan() {
+    this.pembaruan.nilai();
   }
 
   // ---------- tombol Back ----------
@@ -297,7 +400,11 @@ class Aplikasi implements AppUntukMeja {
       if (this.koneksi !== k || k.jenis === 'offline') return;
       const sebelum = this.statusKini;
       this.statusKini = s;
+      if (s === 'tersambung' && sebelum !== 'tersambung') this.sambunganKe++;
       this.saatStatusBerubah(s, sebelum);
+      // Baru tersambung ke server: pastikan client ini build yang sama dengan server. Sambung LAGI
+      // sesudah putus (server bisa saja baru di-deploy ulang) dicek tanpa jeda minimum.
+      if (s === 'tersambung' && sebelum !== 'tersambung') void this.cekServer(sebelum === 'terputus' || sebelum === 'gagal');
     });
   }
 
@@ -372,11 +479,14 @@ class Aplikasi implements AppUntukMeja {
         this.view = p.view;
         this.catatJikaSelesai();
         if (this.layar === 'meja') this.kontrol?.perbarui(null, p.view);
-        this.tawarkanVersiBaru();
+        this.nilaiPembaruan();
         break;
       case 'error':
         if (p.pesan.includes('nggak ketemu') && simpan.sesi()) {
           simpan.setSesi(null);
+          // Meja hilang biasanya karena server dinyalakan ulang, sering kali dengan build baru: cek
+          // sekarang juga (tanpa jeda minimum), supaya versi baru dipasang begitu pemain di beranda.
+          void this.cekServer(true);
           if (this.layar === 'beranda') {
             this.beranda?.aturStatusOnline('siap');
             return toast('Meja terakhir sudah tidak ada.');
@@ -496,12 +606,12 @@ class Aplikasi implements AppUntukMeja {
           }),
         tentang: () => bukaTentang(),
         pasangAplikasi: this.aksiPasang(),
-        muatUlang: this.versiBaru ? () => this.muatUlang() : null,
+        muatUlang: this.pembaruan.tombol(),
       },
       { kodeAwal: this.kodeAwal, statusOnline: online },
     );
-    // Tawaran versi baru yang tertunda (mis. keluar dari meja di tengah putaran) muncul sekarang.
-    this.tawarkanVersiBaru();
+    // Versi baru yang tertunda (mis. keluar dari meja di tengah putaran) dipasang/ditawarkan sekarang.
+    this.nilaiPembaruan();
   }
 
   /** Aksi tombol "Pasang ke layar utama", atau null kalau browser belum menawarkan pemasangan. */
@@ -580,7 +690,7 @@ class Aplikasi implements AppUntukMeja {
       this.keluarMeja();
     });
     this.pastikanJaga();
-    this.tawarkanVersiBaru();
+    this.nilaiPembaruan();
   }
 
   private tampilkanMeja() {
@@ -706,6 +816,29 @@ function ambilLanjutSetelahMuatUlang(): boolean {
     return false;
   }
 }
+/** sessionStorage, atau null kalau tidak bisa diakses (mode privat tertentu, data situs diblokir). */
+function penyimpananSesi(): PenyimpananSesi | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Hapus toast dengan teks tertentu (mis. "Pakai versi terbaru…" yang dibatalkan karena pemain menyentuh layar). */
+function hapusToast(pesan: string): void {
+  for (const el of document.querySelectorAll<HTMLElement>('#toast .toast')) if (el.dataset.pesan === pesan) el.remove();
+}
+
+/** Isian teks sedang difokus, atau kode meja sudah diketik tapi belum dipakai: jangan muat ulang. */
+function adaIsianAktif(): boolean {
+  const a = document.activeElement;
+  if (a instanceof HTMLTextAreaElement || (a instanceof HTMLElement && a.isContentEditable)) return true;
+  if (a instanceof HTMLInputElement && !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'color', 'file'].includes(a.type)) return true;
+  const kode = document.getElementById('kode');
+  return kode instanceof HTMLInputElement && kode.value.trim() !== '' && kode.value !== kode.defaultValue;
+}
+
 siapkanJendelaMalas();
 // Untuk debug/uji saat pengembangan (mis. cek aplikasi.tutorial dari Playwright).
 if (import.meta.env.DEV) (window as unknown as { __remiApp: Aplikasi }).__remiApp = aplikasi;
