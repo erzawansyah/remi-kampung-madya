@@ -1,6 +1,6 @@
 // Satu meja (room): kursi, host, bot, batas waktu giliran, sambung ulang, dan voting akhiri.
 // Tidak tahu apa-apa soal jaringan: pesan keluar lewat `kirim`, waktu lewat `Penjadwal`.
-// Dipakai server (online) dan client (offline lawan bot).
+// Dipakai server (online) dan client (offline lawan warga kedai).
 
 import {
   AturanError,
@@ -75,8 +75,14 @@ export interface OpsiMeja {
   jedaBotMs?: number;
   /** Sumber seed untuk permainan baru. */
   buatSeed?: () => number;
-  /** Sumber acak untuk celetukan bot (bisa diganti di test). */
+  /** Sumber acak untuk celetukan bot (bisa diganti di test). Tidak dipakai untuk nama lawan. */
   acak?: () => number;
+  /**
+   * Urutan calon nama lawan otomatis (warga kedai). Kosong = NAMA_LAWAN_BAWAAN. Server dan meja
+   * offline mengirim daftar yang sudah diacak; latihan dengan panduan memakai urutan tetap.
+   * Sengaja di opsi (bukan PengaturanMeja/DataMeja): nama yang sudah dipilih tersimpan di kursi.
+   */
+  namaLawan?: readonly string[];
   /** Jumlah entri log terakhir yang dikirim ke client. */
   batasLog?: number;
   /** Dipanggil setiap data meja berubah (misalnya untuk disimpan). */
@@ -198,6 +204,11 @@ export class Meja {
     const i = this.d.kursi.findIndex((k) => k.jenis === 'kosong');
     if (i < 0) galat('Mejanya sudah penuh, Bos.');
     this.d.kursi[i] = { jenis: 'manusia', nama: rapikanNama(nama), pemainId, terhubung: true, level: this.d.pengaturan.levelBot };
+    // Nama yang baru masuk sama dengan nama warga kedai di lobi: warga kedainya yang ganti nama.
+    const kunci = kunciNama(this.d.kursi[i].nama);
+    this.d.kursi.forEach((k, j) => {
+      if (k.jenis === 'bot' && kunciNama(k.nama) === kunci) k.nama = namaBot(this.d.kursi, j, this.opsi.namaLawan);
+    });
     this.kirimKe(pemainId, { t: 'masuk', kode: this.d.kode, token: pemainId, kursi: i });
     this.perbaruiHost();
     this.berubah();
@@ -297,7 +308,7 @@ export class Meja {
     const lv = level ?? this.d.pengaturan.levelBot;
     this.d.kursi[i] =
       jenis === 'bot'
-        ? { jenis: 'bot', nama: namaBot(this.d.kursi, i), pemainId: null, terhubung: false, level: lv }
+        ? { jenis: 'bot', nama: namaBot(this.d.kursi, i, this.opsi.namaLawan), pemainId: null, terhubung: false, level: lv }
         : kursiKosong(lv);
     this.berubah();
   }
@@ -327,7 +338,7 @@ export class Meja {
   private mulai(oleh: number, pengocok?: number): void {
     this.wajibHost(oleh);
     if (this.status !== 'lobi') galat('Permainan sudah berjalan.');
-    if (this.d.kursi.some((k) => k.jenis === 'kosong')) galat('Masih ada kursi kosong. Isi dengan bot atau tunggu orang masuk.');
+    if (this.d.kursi.some((k) => k.jenis === 'kosong')) galat('Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.');
     const p = this.d.pengaturan;
     const game = buatPermainan({
       pemain: this.d.kursi.map((k) => k.nama),
@@ -356,7 +367,7 @@ export class Meja {
     if (this.d.menungguJoker.length) galat('Tunggu semua pemain melihat joker dulu.');
     const giliranSaya = g.status === 'susunAkhir' || g.putaran!.giliran === kursi;
     if (giliranSaya && this.ambilAlih !== null && this.ambilAlih === this.kunciGiliran()) {
-      galat('Waktu habis, giliranmu dijalankan bot.');
+      galat('Waktu habis, giliranmu dijalankan warga kedai dulu, Bos.');
     }
     this.terapkan(g, aksi);
   }
@@ -428,7 +439,10 @@ export class Meja {
     }
   }
 
-  /** Bot sesekali nyeletuk menanggapi kejadian yang terlihat semua orang (tidak membocorkan kartu). */
+  /**
+   * Bot sesekali nyeletuk menanggapi kejadian yang terlihat semua orang (tidak membocorkan kartu).
+   * Panjang tiap daftar pilih([...]) sengaja tetap: urutan acaknya dikunci golden master meja.
+   */
   private celetukBot(baru: Peristiwa[]): void {
     const acak = this.opsi.acak ?? Math.random;
     const bot = (i: number) => this.d.kursi[i]?.jenis === 'bot';
@@ -436,11 +450,11 @@ export class Meja {
     const rencana: [number, Emote][] = [];
     for (const e of baru) {
       if (e.jenis === 'mulung' && bot(e.pemain) && e.kartu.some((x) => x.pemilik !== e.pemain) && acak() < 0.4) {
-        rencana.push([e.pemain, pilih(['Makasih, Bos!', '😎', '👏'] as const)]);
+        rencana.push([e.pemain, pilih(['Suwun, Bos!', '😎', '👏'] as const)]);
       }
       if (e.jenis === 'mentung') {
-        if (bot(e.pemain) && acak() < 0.7) rencana.push([e.pemain, pilih(['Tutup!', '🔥', '😎', 'GG'] as const)]);
-        for (const k of e.kepentung) if (bot(k) && acak() < 0.6) rencana.push([k, pilih(['Waduh!', '😱', '😤'] as const)]);
+        if (bot(e.pemain) && acak() < 0.7) rencana.push([e.pemain, pilih(['Nutup, rek!', '🔥', '😎', 'GG'] as const)]);
+        for (const k of e.kepentung) if (bot(k) && acak() < 0.6) rencana.push([k, pilih(['Waduh!', '😱', 'Kartu itu bundar, kak.'] as const)]);
       }
     }
     rencana.slice(0, 3).forEach(([kursi, isi], i) =>
@@ -632,9 +646,48 @@ function kursiKosong(level: LevelBot): Kursi {
   return { jenis: 'kosong', nama: '', pemainId: null, terhubung: false, level };
 }
 
-function namaBot(kursi: Kursi[], i: number): string {
-  const dipakai = new Set(kursi.filter((_, j) => j !== i).map((k) => k.nama));
-  for (let n = 1; ; n++) if (!dipakai.has(`Bot ${n}`)) return `Bot ${n}`;
+/**
+ * Nama lawan otomatis bawaan: "Warga Madya", sapaan + benda/suasana Kedai Madya. Semua ≤ 10 huruf
+ * (muat di panel HP 360 dengan teks besar) dan inisialnya berbeda-beda (label sempit di buangan).
+ * Nama tidak pernah bergantung pada level, kartu, giliran, atau peristiwa.
+ */
+export const NAMA_LAWAN_BAWAAN: readonly string[] = [
+  'Kipas Dua',
+  'Cak Kopag',
+  'Mbak Teras',
+  'Mas Sampul',
+  'Si Rak',
+  'Pak Seng',
+  'Dik Toska',
+  'Ning Sore',
+  'Om Garpu',
+  'Bu Sendok',
+];
+
+/** Daftar nama lawan bawaan dengan urutan acak (Fisher–Yates). Sumber acak bisa diganti di test. */
+export function namaLawanAcak(acak: () => number = Math.random): string[] {
+  const xs = [...NAMA_LAWAN_BAWAAN];
+  for (let i = xs.length - 1; i > 0; i--) {
+    const j = Math.floor(acak() * (i + 1)) % (i + 1);
+    [xs[i], xs[j]] = [xs[j], xs[i]];
+  }
+  return xs;
+}
+
+const kunciNama = (n: string) => n.trim().toLocaleLowerCase('id-ID');
+
+/**
+ * Nama untuk warga kedai di kursi i: nama pertama dari daftar yang belum dipakai kursi lain (manusia
+ * maupun warga kedai, tanpa beda huruf besar/kecil). Habis: "Warga 1", "Warga 2", ...
+ */
+function namaBot(kursi: Kursi[], i: number, daftar: readonly string[] = NAMA_LAWAN_BAWAAN): string {
+  const dipakai = new Set(kursi.filter((k, j) => j !== i && k.jenis !== 'kosong').map((k) => kunciNama(k.nama)));
+  for (const calon of daftar.length ? daftar : NAMA_LAWAN_BAWAAN) {
+    if (typeof calon !== 'string' || !calon.trim()) continue;
+    const nama = rapikanNama(calon);
+    if (!dipakai.has(kunciNama(nama))) return nama;
+  }
+  for (let n = 1; ; n++) if (!dipakai.has(kunciNama(`Warga ${n}`))) return `Warga ${n}`;
 }
 
 function acak(): number {

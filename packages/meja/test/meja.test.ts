@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '@remi/engine';
-import { Meja, validasiPesan, type DataMeja, type RingkasanAkhir } from '../src/index.js';
+import { DAFTAR_EMOTE, Meja, NAMA_LAWAN_BAWAAN, namaLawanAcak, validasiPesan, type DataMeja, type RingkasanAkhir } from '../src/index.js';
 import { aksiManusia, siapkan, siapSemua } from './bantu.js';
 
 function mejaDenganBot(jumlahPemain = 4, pengaturan = {}) {
@@ -79,7 +79,7 @@ describe('lobi', () => {
     meja.masuk('p2', 'Siti');
     meja.terima('host', { t: 'aturKursi', kursi: 1, jenis: 'bot', level: 'mudah' });
     expect(surat.terakhir('p2', 'keluar')).toBeDefined();
-    expect(surat.info('host').kursi[1]).toMatchObject({ jenis: 'bot', nama: 'Bot 1', level: 'mudah' });
+    expect(surat.info('host').kursi[1]).toMatchObject({ jenis: 'bot', nama: NAMA_LAWAN_BAWAAN[0], level: 'mudah' });
     expect(meja.punyaPemain('p2')).toBe(false);
   });
 
@@ -455,5 +455,131 @@ describe('validasi pesan dari jaringan', () => {
         aksi: { jenis: 'turunkan', kartuJadi: [[{ id: 'a' }, { id: 'b', sebagai: { rank: 4, bunga: 'love' } }]] },
       }),
     ).toEqual({ t: 'aksi', aksi: { jenis: 'turunkan', kartuJadi: [[{ id: 'a' }, { id: 'b', sebagai: { rank: 4, bunga: 'love' } }]] } });
+  });
+});
+
+describe('nama lawan (warga kedai)', () => {
+  const namaKursi = (meja: Meja) => meja.data.kursi.map((k) => k.nama);
+
+  it('daftar bawaan: 10 nama unik, masing-masing ≤ 10 karakter termasuk spasi, inisial tidak kembar', () => {
+    expect(NAMA_LAWAN_BAWAAN).toHaveLength(10);
+    expect(new Set(NAMA_LAWAN_BAWAAN.map((n) => n.toLowerCase())).size).toBe(10);
+    for (const n of NAMA_LAWAN_BAWAAN) expect([...n].length, n).toBeLessThanOrEqual(10);
+    const inisial = NAMA_LAWAN_BAWAAN.map((n) => n.split(' ').map((k) => k[0]).join('').toUpperCase());
+    expect(new Set(inisial).size).toBe(10);
+    expect(NAMA_LAWAN_BAWAAN.some((n) => /bot/i.test(n))).toBe(false);
+  });
+
+  it('tanpa opsi: urutan tetap NAMA_LAWAN_BAWAAN, semuanya unik', () => {
+    const { meja } = mejaDenganBot(6);
+    expect(namaKursi(meja)).toEqual(['Budi', ...NAMA_LAWAN_BAWAAN.slice(0, 5)]);
+  });
+
+  it('opsi namaLawan menentukan urutan (meja offline/server mengirim daftar acak)', () => {
+    const ctx = siapkan({ namaLawan: ['Si Rak', 'Ning Sore', 'Om Garpu'] });
+    const meja = Meja.buat(ctx.opsi, 'host', 'Budi', { jumlahPemain: 4 });
+    for (let i = 1; i < 4; i++) meja.terima('host', { t: 'aturKursi', kursi: i, jenis: 'bot' });
+    expect(namaKursi(meja)).toEqual(['Budi', 'Si Rak', 'Ning Sore', 'Om Garpu']);
+  });
+
+  it('latihan (urutan tetap = NAMA_LAWAN_BAWAAN): lawannya selalu sama, berapa kali pun dibuat', () => {
+    const buat = () => {
+      const ctx = siapkan({ namaLawan: NAMA_LAWAN_BAWAAN });
+      const meja = Meja.buat(ctx.opsi, 'host', 'Pemain', { jumlahPemain: 3, levelBot: 'mudah', batasPutaran: 1 });
+      for (let i = 1; i < 3; i++) meja.terima('host', { t: 'aturKursi', kursi: i, jenis: 'bot', level: 'mudah' });
+      return namaKursi(meja);
+    };
+    expect(buat()).toEqual(['Pemain', 'Kipas Dua', 'Cak Kopag']);
+    expect(buat()).toEqual(buat());
+  });
+
+  it('menghindari nama manusia di meja (tanpa beda huruf besar/kecil)', () => {
+    const ctx = siapkan();
+    const meja = Meja.buat(ctx.opsi, 'host', 'kipas dua', { jumlahPemain: 3 });
+    meja.masuk('p2', 'CAK KOPAG');
+    meja.terima('host', { t: 'aturKursi', kursi: 2, jenis: 'bot' });
+    expect(namaKursi(meja)[2]).toBe('Mbak Teras');
+  });
+
+  it('nama habis: cadangan "Warga 1", "Warga 2", …', () => {
+    const ctx = siapkan({ namaLawan: ['Si Rak'] });
+    const meja = Meja.buat(ctx.opsi, 'host', 'Warga 1', { jumlahPemain: 4 });
+    for (let i = 1; i < 4; i++) meja.terima('host', { t: 'aturKursi', kursi: i, jenis: 'bot' });
+    expect(namaKursi(meja)).toEqual(['Warga 1', 'Si Rak', 'Warga 2', 'Warga 3']);
+  });
+
+  it('isi daftar dirapikan seperti nama pemain; entri kosong dilewati', () => {
+    const ctx = siapkan({ namaLawan: ['  ', '  Pak   Seng ', '<b>x</b>'] });
+    const meja = Meja.buat(ctx.opsi, 'host', 'Budi', { jumlahPemain: 3 });
+    meja.terima('host', { t: 'aturKursi', kursi: 1, jenis: 'bot' });
+    meja.terima('host', { t: 'aturKursi', kursi: 2, jenis: 'bot' });
+    expect(namaKursi(meja)).toEqual(['Budi', 'Pak Seng', 'bx/b']);
+  });
+
+  it('kursi warga kedai dikosongkan lalu diisi lagi: nama yang sudah lepas boleh dipakai lagi, tidak pernah dobel', () => {
+    const { meja } = mejaDenganBot(4);
+    meja.terima('host', { t: 'aturKursi', kursi: 1, jenis: 'kosong' });
+    meja.terima('host', { t: 'aturKursi', kursi: 1, jenis: 'bot' });
+    const nama = namaKursi(meja);
+    expect(new Set(nama).size).toBe(4);
+    expect(nama[1]).toBe(NAMA_LAWAN_BAWAAN[0]);
+  });
+
+  it('manusia masuk lobi dengan nama yang sama dengan warga kedai: warga kedainya ganti nama', () => {
+    const ctx = siapkan();
+    const meja = Meja.buat(ctx.opsi, 'host', 'Budi', { jumlahPemain: 4 });
+    meja.terima('host', { t: 'aturKursi', kursi: 1, jenis: 'bot' });
+    meja.masuk('p2', 'Kipas Dua');
+    meja.terima('host', { t: 'aturKursi', kursi: 3, jenis: 'bot' });
+    const nama = namaKursi(meja);
+    expect(nama[2]).toBe('Kipas Dua');
+    expect(nama[1]).not.toBe('Kipas Dua');
+    expect(new Set(nama.map((n) => n.toLowerCase())).size).toBe(4);
+    expect(ctx.surat.info('p2').kursi.map((k) => k.nama)).toEqual(nama);
+  });
+
+  it('nama tidak memakai opsi.acak (sumber acak celetukan): urutan acak celetukan tidak bergeser', () => {
+    let dipanggil = 0;
+    const ctx = siapkan({ acak: () => (dipanggil++, 0.5) });
+    const meja = Meja.buat(ctx.opsi, 'host', 'Budi', { jumlahPemain: 6 });
+    for (let i = 1; i < 6; i++) meja.terima('host', { t: 'aturKursi', kursi: i, jenis: 'bot' });
+    expect(dipanggil).toBe(0);
+  });
+
+  it('level warga kedai tidak tercermin di nama', () => {
+    const ctx = siapkan();
+    const meja = Meja.buat(ctx.opsi, 'host', 'Budi', { jumlahPemain: 3 });
+    meja.terima('host', { t: 'aturKursi', kursi: 1, jenis: 'bot', level: 'mudah' });
+    meja.terima('host', { t: 'aturKursi', kursi: 2, jenis: 'bot', level: 'normal' });
+    expect(namaKursi(meja)).toEqual(['Budi', NAMA_LAWAN_BAWAAN[0], NAMA_LAWAN_BAWAAN[1]]);
+  });
+
+  it('simpanan lama dengan "Bot 1" tetap dilanjutkan apa adanya', () => {
+    const { meja, opsi } = mejaDenganBot(3);
+    const data = meja.data;
+    data.kursi[1].nama = 'Bot 1';
+    data.kursi[2].nama = 'Bot 2';
+    meja.hentikan();
+    const lanjut = new Meja(opsi, data);
+    expect(lanjut.data.kursi.map((k) => k.nama)).toEqual(['Budi', 'Bot 1', 'Bot 2']);
+    lanjut.hentikan();
+  });
+
+  it('namaLawanAcak: permutasi daftar bawaan, deterministik untuk sumber acak yang sama', () => {
+    const a = namaLawanAcak(() => 0.3);
+    expect([...a].sort()).toEqual([...NAMA_LAWAN_BAWAAN].sort());
+    expect(namaLawanAcak(() => 0.3)).toEqual(a);
+    const rng = new Rng(5);
+    const b = namaLawanAcak(() => rng.next());
+    expect([...b].sort()).toEqual([...NAMA_LAWAN_BAWAAN].sort());
+    expect(namaLawanAcak(() => 0.999999)).toHaveLength(10);
+  });
+
+  it('celetukan warga kedai semuanya ada di DAFTAR_EMOTE dan lolos validasi', () => {
+    for (const isi of ['Suwun, Bos!', 'Nutup, rek!', 'Kartu itu bundar, kak.', '😎', '👏', '🔥', 'GG', 'Waduh!', '😱']) {
+      expect((DAFTAR_EMOTE as readonly string[]).includes(isi), isi).toBe(true);
+      expect(validasiPesan({ t: 'emote', isi })).toEqual({ t: 'emote', isi });
+    }
+    expect(validasiPesan({ t: 'emote', isi: 'Makasih, Bos!' })).toBeNull();
   });
 });
