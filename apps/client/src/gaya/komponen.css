@@ -490,6 +490,12 @@ label.baris > input[type='checkbox'] {
   animation: dialog-masuk var(--durasi-sedang) var(--ease-pegas);
   user-select: text;
 }
+/* Isi yang lebih tinggi dari layar digulir oleh .dialog sendiri, jadi anak-anaknya tidak boleh ikut
+   dikecilkan flexbox. Tanpa ini, anak yang overflow-nya bukan visible (deret tab, .tabel-gulir)
+   diperas sampai tinggal garis tipis di HP lanskap (740×360) dan tab-nya tidak bisa diketuk. */
+.dialog > * {
+  flex-shrink: 0;
+}
 .dialog h2 {
   margin: 0;
   font-size: var(--teks-2xl);
@@ -834,6 +840,20 @@ button.daftar-item {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Lobi: nama dapat lebar utuhnya dulu. Kalau nama + lencana + pilihan "Isi kursi" (host) tidak muat
+   sebaris (HP sempit), pilihan pindah ke baris kedua, bukan nama yang dipotong jadi "Tamu J…". */
+.layar-lobi .kursi {
+  flex-wrap: wrap;
+  row-gap: var(--ruang-2);
+}
+.layar-lobi .kursi .nama {
+  flex: 1 1 auto;
+}
+.layar-lobi .kursi > select {
+  flex: 0 1 auto;
+  max-width: 100%;
+  margin-left: auto;
 }
 .daftar-meja .kursi {
   cursor: pointer;

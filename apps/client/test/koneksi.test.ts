@@ -347,6 +347,27 @@ describe('KoneksiOnline: sambung ulang, watchdog, antrian', () => {
     expect(status.at(-1)).toBe('tersambung');
   });
 
+  it("tutup() dari dalam pendengar status 'gagal' tidak meninggalkan timer sambung ulang", async () => {
+    // Seperti main.ts di beranda: begitu 'gagal', koneksi langsung ditutup dari callback status.
+    const k2 = new KoneksiOnline('ws://uji/ws', () => 'Penguji');
+    let ditutupSaatGagal = false;
+    k2.saatStatus((s) => {
+      if (s !== 'gagal') return;
+      ditutupSaatGagal = true;
+      k2.tutup();
+    });
+    k.tutup(); // koneksi bawaan beforeEach tidak ikut dihitung
+    for (let i = 0; i < 3 && !ditutupSaatGagal; i++) {
+      WsPalsu.terakhir().putus();
+      if (!ditutupSaatGagal) await vi.advanceTimersByTimeAsync(10_000);
+    }
+    expect(ditutupSaatGagal).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    const n = WsPalsu.semua.length;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(WsPalsu.semua.length).toBe(n);
+  });
+
   it("pernah tersambung lalu putus → 'terputus' (bukan 'gagal') walau gagal berkali-kali", async () => {
     WsPalsu.terakhir().buka();
     await gagalSambung(5);

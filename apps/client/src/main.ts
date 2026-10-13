@@ -17,6 +17,8 @@ import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang, siapkanJendelaMalas } from './ui/jendelaMalas';
 import { adaJendelaTerbuka, konfirmasi, pasangLandmarkUtama, toast, tutupModal, tutupSemuaJendela, umumkan } from './ui/dom';
 import { siapkanAudio, suasanaMusik } from './efek/suara';
+import { adaJaringan } from './jaringan';
+import { PESAN_MEJA_MASIH_PUTUS, renderGalatMeja, renderPemuatMeja } from './ui/pemuatMeja';
 
 // Sedini mungkin: atribut tampilan (<html data-*>) sebelum layar pertama digambar, lalu audio.
 pasangPreferensi();
@@ -60,6 +62,8 @@ interface PromptPasang extends Event {
 
 type Layar = 'beranda' | 'publik' | 'riwayat' | 'lobi' | 'meja';
 
+/** sessionStorage: halaman dimuat ulang oleh "Coba lagi" meja yang gagal dimuat; lanjutkan meja offline. */
+const KUNCI_LANJUT = 'remi.lanjutSetelahMuatUlang';
 const bacaLatihan = simpan.latihanTersimpan;
 const tulisLatihan = simpan.setLatihanTersimpan;
 
@@ -90,6 +94,18 @@ class Aplikasi implements AppUntukMeja {
   private versiBaruDitawarkan = false;
   /** Pesan 'keluar' barusan tidak terkirim karena sinyal putus (dari layar mana). */
   private keluarTakSampai: 'lobi' | 'meja' | null = null;
+  /**
+   * Layar meja sedang menunggu Phaser (pemuat tampil) atau menampilkan galat "Meja gagal dimuat".
+   * Selama itu info meja baru cukup disimpan; KontrolMeja memakainya begitu dibuat.
+   */
+  private mejaTertunda = false;
+  /** Nomor percobaan memuat meja; jawaban dari percobaan lama diabaikan. */
+  private nomorMuatMeja = 0;
+  /**
+   * Chunk Phaser pernah gagal dimuat di halaman ini. Chrome mengingat import() yang gagal per URL,
+   * jadi percobaan berikutnya (juga lewat Lanjutkan dari beranda) langsung memuat ulang halaman kalau sinyal ada.
+   */
+  private mejaPernahGagal = false;
 
   get jenis(): 'online' | 'offline' {
     return this.koneksi?.jenis ?? 'online';
@@ -138,6 +154,9 @@ class Aplikasi implements AppUntukMeja {
       toast('Menyambung lagi ke meja terakhir…');
       this.niatOnline = () => this.pakaiOnline();
       this.pakaiOnline();
+    } else if (ambilLanjutSetelahMuatUlang() && simpan.mejaOffline()) {
+      // Halaman dimuat ulang dari tombol "Coba lagi" meja yang gagal dimuat: kembali ke meja offline.
+      this.lanjutOffline();
     } else if (bacaLatihan() && !simpan.mejaOffline()) tulisLatihan(false);
   }
 
@@ -245,20 +264,22 @@ class Aplikasi implements AppUntukMeja {
         this.pastikanJaga();
         return this.tampilkanBeranda();
       case 'lobi':
-      case 'meja': {
+      case 'meja':
         this.pastikanJaga();
-        const asal = this.layar;
-        const offline = this.jenis === 'offline';
-        // Teks sama dengan tombol keluar di lobi dan menu meja (ui/lobi.ts).
-        const ya = await konfirmasi(opsiKonfirmasiKeluar({ asal, offline, selesai: asal === 'meja' && this.view?.status === 'selesai' }));
-        // Layar sudah berganti selagi dialog terbuka (mis. host memulai permainan dari lobi):
-        // teks konfirmasinya sudah tidak berlaku, jadi jangan keluar.
-        if (!ya || this.layar !== asal) return;
-        if (!offline) this.kirim({ t: 'keluar' });
-        this.keluarMeja();
-        return;
-      }
+        return this.konfirmasiKeluar(this.layar);
     }
+  }
+
+  /** Minta konfirmasi lalu keluar dari lobi/meja (Back, atau tombol beranda di galat meja). */
+  private async konfirmasiKeluar(asal: 'lobi' | 'meja') {
+    const offline = this.jenis === 'offline';
+    // Teks sama dengan tombol keluar di lobi dan menu meja (ui/lobi.ts).
+    const ya = await konfirmasi(opsiKonfirmasiKeluar({ asal, offline, selesai: asal === 'meja' && this.view?.status === 'selesai' }));
+    // Layar sudah berganti selagi dialog terbuka (mis. host memulai permainan dari lobi):
+    // teks konfirmasinya sudah tidak berlaku, jadi jangan keluar.
+    if (!ya || this.layar !== asal) return;
+    if (!offline) this.kirim({ t: 'keluar' });
+    this.keluarMeja();
   }
 
   // ---------- koneksi ----------
@@ -432,6 +453,7 @@ class Aplikasi implements AppUntukMeja {
   private sembunyikanGame() {
     this.kontrol?.hancurkan();
     this.kontrol = null;
+    this.mejaTertunda = false;
     this.tinggalkanBeranda();
     this.elGame.style.visibility = 'hidden';
     // Meja tidak tampil: hentikan loop Phaser supaya HP tidak menggambar kanvas tersembunyi.
@@ -562,32 +584,87 @@ class Aplikasi implements AppUntukMeja {
   }
 
   private tampilkanMeja() {
-    if (this.layar === 'meja' && this.kontrol) {
-      this.kontrol.perbarui(this.info, null);
-      return;
+    if (this.layar === 'meja') {
+      if (this.kontrol) return this.kontrol.perbarui(this.info, null);
+      // Pemuat/galat sedang tampil: info terbaru sudah di this.info, dipakai saat meja siap.
+      if (this.mejaTertunda) return;
     }
     // Dialog milik layar sebelumnya (mis. konfirmasi "Keluar dari meja?" di lobi saat host
     // memulai) tidak boleh ikut melayang di atas meja dengan teks yang sudah tidak berlaku.
     if (this.layar !== 'meja') tutupSemuaJendela();
     this.layar = 'meja';
     this.tinggalkanBeranda();
-    this.ui.innerHTML = '';
     this.elGame.style.visibility = 'visible';
     suasanaMusik('meja');
-    // Game yang sudah ada dibangunkan; game baru menyalakan loop-nya sendiri saat boot.
-    if (this.game) bangunkanGame(this.game.game);
-    else this.game = buatGame(this.elGame);
-    const akar = this.ui;
-    void this.game.scene.then((scene) => {
-      // Sudah pindah layar sebelum Phaser siap: tidurkan lagi loop yang baru menyala.
-      if (this.layar !== 'meja') return this.game && tidurkanGame(this.game.game);
-      if (this.kontrol) return;
-      this.kontrol = new KontrolMeja(this, scene, akar);
-      this.kontrol.perbarui(this.info, this.view);
-    });
+    this.siapkanMeja();
     window.dispatchEvent(new Event('resize'));
     this.mintaWakeLock();
     this.pastikanJaga();
+  }
+
+  /**
+   * Pasang KontrolMeja begitu Phaser siap. Selama chunk Phaser diunduh (kunjungan pertama, sinyal lambat)
+   * tampil pemuat "Nyiapin meja…"; kalau gagal dimuat, tampil galat dengan "Coba lagi" dan "Kembali ke
+   * beranda" (simpanan offline tetap ada), bukan kanvas kosong tanpa jalan keluar.
+   * `ulang`: percobaan dari tombol Coba lagi; kalau gagal lagi padahal sinyal ada, halaman dimuat ulang
+   * (Chrome mengingat import() yang gagal per URL, jadi import ulang saja tidak cukup).
+   */
+  private siapkanMeja(ulang = false) {
+    const nomor = ++this.nomorMuatMeja;
+    // Game yang sudah ada dibangunkan; game baru menyalakan loop-nya sendiri saat boot.
+    if (this.game) bangunkanGame(this.game.game);
+    else this.game = buatGame(this.elGame);
+    const penampung = this.game;
+    const akar = this.ui;
+    this.mejaTertunda = true;
+    // Kalau Phaser sudah siap, pemuat ini diganti KontrolMeja di microtask yang sama (tidak sempat tampil).
+    renderPemuatMeja(akar);
+    penampung.scene.then(
+      (scene) => {
+        // Sudah pindah layar sebelum Phaser siap: tidurkan lagi loop yang baru menyala.
+        if (this.layar !== 'meja') return tidurkanGame(penampung.game);
+        if (nomor !== this.nomorMuatMeja || this.kontrol) return;
+        this.mejaTertunda = false;
+        this.kontrol = new KontrolMeja(this, scene, akar);
+        this.kontrol.perbarui(this.info, this.view);
+      },
+      async (e: unknown) => {
+        console.error('meja gagal dimuat', e);
+        // Percobaan berikutnya membuat game baru (import ulang), bukan menunggu promise yang sudah ditolak.
+        if (this.game === penampung) this.game = null;
+        if (nomor !== this.nomorMuatMeja || this.layar !== 'meja' || this.kontrol) return;
+        const pernahGagal = this.mejaPernahGagal;
+        this.mejaPernahGagal = true;
+        if ((ulang || pernahGagal) && (await adaJaringan())) {
+          if (nomor === this.nomorMuatMeja && this.layar === 'meja') {
+            // Sesudah dimuat ulang, permainan offline langsung dilanjutkan (sesi online tersambung lagi sendiri).
+            if (this.jenis === 'offline') tandaiLanjutSetelahMuatUlang();
+            location.reload();
+          }
+          return;
+        }
+        if (nomor !== this.nomorMuatMeja || this.layar !== 'meja') return;
+        this.tampilkanGalatMeja(ulang ? PESAN_MEJA_MASIH_PUTUS : undefined);
+      },
+    );
+  }
+
+  private tampilkanGalatMeja(pesan?: string) {
+    this.mejaTertunda = true;
+    const nomor = this.nomorMuatMeja;
+    const galat = renderGalatMeja(this.ui, {
+      pesan,
+      cobaLagi: async () => {
+        galat.aturSibuk(true);
+        const nyambung = await adaJaringan();
+        // Pemain sudah keluar dari meja (Back) atau percobaan lain sudah berjalan.
+        if (nomor !== this.nomorMuatMeja || this.layar !== 'meja' || !galat.el.isConnected) return;
+        galat.aturSibuk(false);
+        if (!nyambung) return galat.aturPesan(PESAN_MEJA_MASIH_PUTUS);
+        this.siapkanMeja(true);
+      },
+      keBeranda: () => void this.konfirmasiKeluar('meja'),
+    });
   }
 
   private mintaWakeLock() {
@@ -610,6 +687,25 @@ class Aplikasi implements AppUntukMeja {
 pasangLandmarkUtama();
 const aplikasi = new Aplikasi();
 aplikasi.mulai();
+
+// Penanda sekali pakai (sessionStorage, hanya tab ini) bahwa halaman dimuat ulang untuk melanjutkan meja offline.
+function tandaiLanjutSetelahMuatUlang(): void {
+  try {
+    sessionStorage.setItem(KUNCI_LANJUT, '1');
+  } catch {
+    // Penyimpanan sesi tidak tersedia: pemain tinggal menekan Lanjutkan di beranda.
+  }
+}
+
+function ambilLanjutSetelahMuatUlang(): boolean {
+  try {
+    const ada = sessionStorage.getItem(KUNCI_LANJUT) === '1';
+    sessionStorage.removeItem(KUNCI_LANJUT);
+    return ada;
+  } catch {
+    return false;
+  }
+}
 siapkanJendelaMalas();
 // Untuk debug/uji saat pengembangan (mis. cek aplikasi.tutorial dari Playwright).
 if (import.meta.env.DEV) (window as unknown as { __remiApp: Aplikasi }).__remiApp = aplikasi;

@@ -109,6 +109,24 @@ describe('kunciIp', () => {
     expect(kunciIp('64:ff9b::1.2.3.4')).toBe('64:ff9b:0:0::/64');
   });
 
+  it('IPv4 dibungkus IPv6 bentuk heksa (::ffff:0:0/96 dan ::ffff:0:0:0/96) jadi alamat IPv4-nya', () => {
+    expect(kunciIp('::ffff:0102:0304')).toBe('1.2.3.4');
+    expect(kunciIp('::FFFF:102:304')).toBe('1.2.3.4');
+    expect(kunciIp('0:0:0:0:0:ffff:2450:0102')).toBe('36.80.1.2');
+    expect(kunciIp('::ffff:0:1.2.3.4')).toBe('1.2.3.4');
+    expect(kunciIp('::ffff:0:0102:0304')).toBe('1.2.3.4');
+    // Tidak lagi seember dengan ::1, dan alamat berbeda = kunci berbeda.
+    expect(kunciIp('::ffff:0102:0304')).not.toBe(kunciIp('::1'));
+    expect(kunciIp('::ffff:0102:0305')).not.toBe(kunciIp('::ffff:0102:0304'));
+    expect(kunciIp('::1')).toBe('0:0:0:0::/64');
+  });
+
+  it('bentuk berport tetap jadi kunci jaringan yang sama', () => {
+    expect(kunciIp('1.2.3.4:5678')).toBe('1.2.3.4');
+    expect(kunciIp('[2001:db8::1]:443')).toBe(kunciIp('2001:db8::1'));
+    expect(kunciIp('[2001:db8::1]')).toBe('2001:db8:0:0::/64');
+  });
+
   it('alamat rusak tetap jadi kunci (tidak melempar)', () => {
     for (const x of ['tak-dikenal', '1:2:3', ':::', '1::2::3', 'zz::1', '']) expect(() => kunciIp(x)).not.toThrow();
   });
@@ -145,6 +163,23 @@ describe('handshake WebSocket', () => {
     expect(c.hasil).toBe('buka');
     await tutupSemua([b, c].flatMap((x) => (x.hasil === 'buka' ? [x.ws] : [])));
     expect(s.jumlahSambungan()).toBe(0);
+  });
+
+  it('X-Forwarded-For berport: port berbeda tetap satu jaringan, batas per IP berlaku', async () => {
+    const s = await nyalakan({ percayaProxy: true, maksSambunganPerIp: 2 });
+    const buka: WebSocket[] = [];
+    for (const xff of ['[2001:db8::1]:443', '[2001:db8::1]:444']) {
+      const r = await coba(s.port, { 'x-forwarded-for': xff });
+      expect(r.hasil, xff).toBe('buka');
+      if (r.hasil === 'buka') buka.push(r.ws);
+    }
+    expect((await coba(s.port, { 'x-forwarded-for': '[2001:db8::1]:445' })).hasil).toBe(429);
+    expect((await coba(s.port, { 'x-forwarded-for': '2001:db8::1' })).hasil).toBe(429);
+    const a = await coba(s.port, { 'x-forwarded-for': '1.2.3.4:5678' });
+    const b = await coba(s.port, { 'x-forwarded-for': '1.2.3.4:5679' });
+    expect([a.hasil, b.hasil]).toEqual(['buka', 'buka']);
+    expect((await coba(s.port, { 'x-forwarded-for': '1.2.3.4' })).hasil).toBe(429);
+    await tutupSemua([...buka, ...[a, b].flatMap((x) => (x.hasil === 'buka' ? [x.ws] : []))]);
   });
 
   it('IPv6 satu /64 dihitung satu jaringan (sambungan maupun meja)', async () => {

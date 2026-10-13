@@ -2,6 +2,7 @@
 // handshake WebSocket, dan pengelompokan alamat IP untuk batas per jaringan.
 
 import type { IncomingMessage } from 'node:http';
+import { isIP } from 'node:net';
 
 /**
  * Content-Security-Policy untuk halaman PWA. Alasan tiap bagian:
@@ -50,6 +51,24 @@ export function proxyDipercaya(req: IncomingMessage, percaya: boolean | 'lokal' 
   return percaya === true || (percaya === 'lokal' && alamatLokal(langsung));
 }
 
+/**
+ * Satu entri X-Forwarded-For jadi alamat IP polos, atau null kalau bukan IP sah. Beberapa proxy/LB
+ * menulis port ('1.2.3.4:5678', '[2001:db8::1]:443'); tanpa dinormalkan, tiap port jadi kunci
+ * sendiri dan batas per IP bisa diakali.
+ */
+export function normalkanEntriXff(entri: string): string | null {
+  let a = entri.trim();
+  if (!a || a.length > 64) return null;
+  const kurung = /^\[([^\]]+)\](?::\d{1,5})?$/.exec(a);
+  if (kurung) a = kurung[1];
+  else {
+    const v4Port = /^(\d{1,3}(?:\.\d{1,3}){3}):\d{1,5}$/.exec(a);
+    if (v4Port) a = v4Port[1];
+  }
+  a = a.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
+  return isIP(a) ? a : null;
+}
+
 /** Alamat IP pemain, dengan X-Forwarded-For (entri paling kanan = yang ditulis proxy terdekat) bila dipercaya. */
 export function alamatKlien(req: IncomingMessage, percaya: boolean | 'lokal' = 'lokal'): string {
   const langsung = (req.socket.remoteAddress ?? '').replace(/^::ffff:/i, '');
@@ -60,7 +79,9 @@ export function alamatKlien(req: IncomingMessage, percaya: boolean | 'lokal' = '
       .map((s) => s.trim())
       .filter(Boolean);
     const terakhir = daftar.at(-1);
-    if (terakhir && terakhir.length <= 64) return terakhir.replace(/^::ffff:/i, '');
+    // Entri yang bukan IP sah (rusak/terlalu panjang) diabaikan: pakai alamat sambungan langsung.
+    const ip = terakhir ? normalkanEntriXff(terakhir) : null;
+    if (ip) return ip;
   }
   return langsung || 'tak-dikenal';
 }
@@ -91,10 +112,18 @@ function blokIpv6(ip: string): number[] | null {
  * biasanya mendapat satu /64 utuh dan bisa berganti alamat di dalamnya sesuka hati.
  */
 export function kunciIp(ip: string): string {
-  const a = ip.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
+  // Bentuk berport ('1.2.3.4:5678', '[2001:db8::1]:443') diterima juga, jaga-jaga.
+  const a = (normalkanEntriXff(ip) ?? ip).replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '');
   if (!a.includes(':')) return a;
   const blok = blokIpv6(a);
   if (!blok) return a.toLowerCase();
+  // IPv4 yang dibungkus IPv6 dalam bentuk heksa: ::ffff:0:0/96 (mapped, mis. ::ffff:0102:0304) dan
+  // ::ffff:0:0:0/96 (translated, mis. ::ffff:0:1.2.3.4) dihitung sebagai alamat IPv4-nya, bukan
+  // diciutkan ke satu ember /64 bersama ::1.
+  const nol = (dari: number, sampai: number) => blok.slice(dari, sampai).every((x) => x === 0);
+  if ((nol(0, 5) && blok[5] === 0xffff) || (nol(0, 4) && blok[4] === 0xffff && blok[5] === 0)) {
+    return [blok[6] >> 8, blok[6] & 0xff, blok[7] >> 8, blok[7] & 0xff].join('.');
+  }
   return `${blok
     .slice(0, 4)
     .map((x) => x.toString(16))

@@ -9,6 +9,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { GalatMeja, Meja, namaLawanAcak, penjadwalNyata, validasiPesan, type Penjadwal, type PesanServer, type RingkasanAkhir } from '@remi/meja';
 import type { PenyimpanRiwayat } from './riwayat.js';
 import { alamatKlien, HEADER_KEAMANAN, kunciIp, originDiizinkan } from './keamanan.js';
+import { buatPembatasLog } from './pembatasLog.js';
 
 export interface OpsiServer {
   port: number;
@@ -101,6 +102,10 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   /** Kode meja → kunci jaringan pembuatnya (untuk batas meja per IP; IPv6 per /64). */
   const pembuatMeja = new Map<string, string>();
   let galatMeja = 0;
+  /** true sejak tutup() dipanggil: sambungan & pesan baru tidak dilayani lagi. */
+  let menutup = false;
+  // Kejadian per sambungan yang bisa dipicu dari luar dicatat dengan jatah (10 baris/menit per jenis).
+  const logTerbatas = buatPembatasLog(log);
 
   // Timer meja (langkah bot, batas waktu giliran, celetukan) berjalan di luar penanganan pesan.
   // Galat di sana tanpa pembungkus jadi uncaughtException dan mematikan proses beserta SEMUA meja.
@@ -195,6 +200,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     maxPayload: 64 * 1024,
     // Dipanggil sinkron sebelum handshake selesai: tolak dengan kode HTTP tanpa membuka sambungan.
     verifyClient: (info, jawab) => {
+      if (menutup) return jawab(false, 503, 'Server sedang dimatikan');
       if (!originDiizinkan(info.req, { percayaProxy: opsi.percayaProxy ?? 'lokal', tambahan: opsi.originDiizinkan })) {
         // Dicatat sesekali saja supaya log tidak bisa dibanjiri.
         if (ditolakOrigin++ % 100 === 0) log(`handshake ditolak: Origin asing ${JSON.stringify(String(info.origin).slice(0, 100))} (total ${ditolakOrigin})`);
@@ -251,21 +257,42 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     },
   });
 
-  const tautkan = (s: Sambungan, pemainId: string, kode: string) => {
+  /**
+   * Tautkan sambungan `s` ke `pemainId` di meja `kode`, lalu jalankan `masukkan` (buat meja / duduk).
+   * Selama `masukkan` berjalan, pesan untuk `pemainId` (mis. 'masuk') sudah diantar ke `s`, tapi
+   * keadaan lama belum disentuh. Kalau `masukkan` melempar (meja penuh, sudah mulai), tautan
+   * dikembalikan seperti semula: pemain tetap di meja lamanya, tidak dianggap terputus. Baru kalau
+   * berhasil, sambungan lama milik `pemainId` ditutup dan meja lama milik `s` diberi tahu terputus.
+   */
+  const tautkan = (s: Sambungan, pemainId: string, kode: string, masukkan: () => void) => {
     const lama = sambunganPemain.get(pemainId);
+    sambunganPemain.set(pemainId, s);
+    try {
+      masukkan();
+    } catch (e) {
+      if (lama) sambunganPemain.set(pemainId, lama);
+      else sambunganPemain.delete(pemainId);
+      throw e;
+    }
     if (lama && lama !== s) {
       // Pemain yang sama membuka sambungan baru: tutup yang lama.
       lama.pemainId = null;
       lama.kode = null;
       lama.ws.close(4000, 'Dibuka di tempat lain');
     }
-    if (s.pemainId && s.pemainId !== pemainId && s.kode) {
-      daftarMeja.get(s.kode)?.terputus(s.pemainId);
-      sambunganPemain.delete(s.pemainId);
-    }
+    const idLama = s.pemainId;
+    const kodeLama = s.kode;
     s.pemainId = pemainId;
     s.kode = kode;
-    sambunganPemain.set(pemainId, s);
+    if (idLama && idLama !== pemainId) {
+      // Lepas dulu tautannya supaya kabar dari meja lama tidak lagi sampai ke sambungan ini.
+      if (sambunganPemain.get(idLama) === s) sambunganPemain.delete(idLama);
+      try {
+        if (kodeLama) daftarMeja.get(kodeLama)?.terputus(idLama);
+      } catch (e) {
+        log(`galat saat pemain pindah dari meja ${kodeLama}`, e);
+      }
+    }
   };
 
   const prosesPesan = (s: Sambungan, mentah: string) => {
@@ -301,10 +328,10 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         }
         const kode = buatKode();
         const pemainId = randomUUID();
-        tautkan(s, pemainId, kode);
-        const meja = Meja.buat(opsiMeja(kode), pemainId, pesan.nama, pesan.pengaturan);
-        daftarMeja.set(kode, meja);
-        pembuatMeja.set(kode, s.jaringan);
+        tautkan(s, pemainId, kode, () => {
+          daftarMeja.set(kode, Meja.buat(opsiMeja(kode), pemainId, pesan.nama, pesan.pengaturan));
+          pembuatMeja.set(kode, s.jaringan);
+        });
         log(`meja ${kode} dibuat`);
         return;
       }
@@ -313,15 +340,11 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         const meja = daftarMeja.get(kode);
         if (!meja) return kirimKe(s, { t: 'error', pesan: `Meja ${kode} nggak ketemu.` });
         const pemainId = pesan.token && meja.punyaPemain(pesan.token) ? pesan.token : randomUUID();
-        const sebelumnya = { pemainId: s.pemainId, kode: s.kode };
-        tautkan(s, pemainId, kode);
         try {
-          meja.masuk(pemainId, pesan.nama);
+          // Gagal (meja penuh / sudah mulai) = tautan dikembalikan; pemain tetap di meja lamanya.
+          tautkan(s, pemainId, kode, () => meja.masuk(pemainId, pesan.nama));
           kosongSejak.delete(kode);
         } catch (e) {
-          sambunganPemain.delete(pemainId);
-          s.pemainId = sebelumnya.pemainId;
-          s.kode = sebelumnya.kode;
           if (e instanceof GalatMeja) return kirimKe(s, { t: 'error', pesan: e.message });
           throw e;
         }
@@ -347,6 +370,12 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   const batasPutus = opsi.putusPesanPerDetik ?? 120;
 
   wss.on('connection', (ws, req) => {
+    if (menutup) {
+      // Lolos verifyClient tepat sebelum tutup() dimulai: tolak dengan sopan, jangan didaftarkan.
+      ws.on('error', () => undefined);
+      ws.close(1001, 'Server dimatikan');
+      return;
+    }
     const ip = alamatKlien(req, opsi.percayaProxy ?? 'lokal');
     const s: Sambungan = { ws, pemainId: null, kode: null, hidup: true, jumlahPesan: 0, ip, jaringan: kunciIp(ip) };
     semuaSambungan.add(s);
@@ -354,14 +383,17 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     // WAJIB ada: tanpa penangan 'error', frame cacat atau pesan > maxPayload membuat ws memancarkan
     // 'error' tanpa pendengar → uncaughtException → seluruh server mati. Sambungannya sendiri
     // sudah ditutup oleh ws (mis. kode 1009 / 1002).
-    ws.on('error', (e) => log(`galat sambungan ${s.ip}: ${(e as Error).message}`));
+    ws.on('error', (e) => logTerbatas.catat('galatSambungan', `galat sambungan ${s.ip}: ${(e as Error).message}`));
     ws.on('pong', () => (s.hidup = true));
     ws.on('message', (raw) => {
+      // Sambungan yang sedang ditutup (CLOSING) masih bisa memancarkan 'message': jangan sampai
+      // pesan 'buat' di jeda itu membuat meja baru yang timernya tidak pernah dihentikan.
+      if (menutup) return;
       // Maksimal `batasPesan` pesan per detik per sambungan; banjir pesan = diputus.
       s.jumlahPesan++;
       if (s.jumlahPesan > batasPutus) {
         if (s.jumlahPesan === batasPutus + 1) {
-          log(`sambungan ${s.ip} diputus: banjir pesan`);
+          logTerbatas.catat('banjir', `sambungan ${s.ip} diputus: banjir pesan`);
           ws.close(1008, 'Kebanyakan pesan');
         }
         return;
@@ -370,7 +402,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       try {
         prosesPesan(s, raw.toString());
       } catch (e) {
-        log('galat memproses pesan', e);
+        logTerbatas.catat('galatPesan', 'galat memproses pesan', e);
         kirimKe(s, { t: 'error', pesan: 'Ada yang salah di server.' });
       }
     });
@@ -401,7 +433,10 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   let ringkasanTerakhir = '';
   const timerBersih = setInterval(() => {
     if (++detakBersih % 20 === 0) {
-      const r = `status: meja ${daftarMeja.size}, sambungan ${semuaSambungan.size}, galatMeja ${galatMeja}, ditolak origin ${ditolakOrigin}, ditolak penuh ${ditolakPenuh}`;
+      const r =
+        `status: meja ${daftarMeja.size}, sambungan ${semuaSambungan.size}, galatMeja ${galatMeja}, ` +
+        `ditolak origin ${ditolakOrigin}, ditolak penuh ${ditolakPenuh}, galat sambungan ${logTerbatas.total('galatSambungan')}, ` +
+        `diputus banjir ${logTerbatas.total('banjir')}, galat pesan ${logTerbatas.total('galatPesan')}`;
       if (r !== ringkasanTerakhir) log(r);
       ringkasanTerakhir = r;
     }
@@ -458,6 +493,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     jumlahSambungan: () => semuaSambungan.size,
     tutup: () =>
       (penutupan ??= (async () => {
+        menutup = true;
         clearInterval(timerPesan);
         clearInterval(timerBersih);
         for (const kode of [...daftarMeja.keys()]) hapusMeja(kode);
@@ -473,6 +509,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         const paksa = setTimeout(() => wss.clients.forEach((ws) => ws.terminate()), 1000);
         await new Promise<void>((ok) => wss.close(() => ok()));
         clearTimeout(paksa);
+        // Jaring pengaman: meja apa pun yang sempat muncul selama penutupan ikut dihentikan.
+        for (const kode of [...daftarMeja.keys()]) hapusMeja(kode);
         await new Promise<void>((ok) => {
           http.close(() => ok());
           // Sambungan HTTP keep-alive (aset PWA) jangan sampai menahan penutupan.

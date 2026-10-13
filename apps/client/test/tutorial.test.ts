@@ -426,6 +426,9 @@ describe('Tutorial (gelembung)', () => {
     expect(p.selesai).toContain(TEKS_TUTORIAL.selesai.judul);
     expect(p.selesai).toContain(TEKS_TUTORIAL.selesai.teks);
     expect(p.selesai).toContain('role="note"');
+    // Penutup ikut tampil di klasemen latihan dan diumumkan ke pembaca layar: bebas ajakan/promosi kedai
+    // (AGENTS.md: promosi Kedai Madya hanya di beranda, Tentang, dan klasemen akhir permainan biasa).
+    expect(`${TEKS_TUTORIAL.selesai.judul} ${TEKS_TUTORIAL.selesai.teks}`).not.toMatch(/kedai|madya/i);
     // Membuat HTML saja belum menandai apa pun: tutorial masih jalan sampai penutup benar-benar tampil.
     expect(t.aktif).toBe(true);
     expect(preferensi().tutorialSelesai).toBe(false);

@@ -137,16 +137,127 @@ export function validasiPesan(x: unknown): PesanKlien | null {
 }
 
 /**
- * Karakter yang dibuang dari nama: kontrol (Cc), format (Cf: pembalik arah U+202A–202E/U+2066–2069,
- * zero-width U+200B–200F, BOM, dst.), surrogate yatim (Cs), area pribadi (Co), huruf "kosong" yang
- * tampil sebagai spasi (Hangul filler, braille kosong), dan < > (sisa lama, jaga-jaga HTML).
+ * Karakter yang selalu dibuang dari nama: kontrol (Cc), surrogate yatim (Cs), area pribadi (Co),
+ * huruf "kosong" yang tampil sebagai spasi (Hangul filler U+115F/U+1160/U+3164/U+FFA0, braille
+ * kosong U+2800), dan < > (sisa lama, jaga-jaga HTML). Karakter format (Cf) diurus `buangFormat`.
  */
-const KARAKTER_BUANG = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}ᅟᅠㅤﾠ⠀<>]/gu;
+const KARAKTER_BUANG = /[\p{Cc}\p{Cs}\p{Co}ᅟᅠㅤﾠ⠀<>]/gu;
 
-/** Nama tampilan: dinormalisasi (NFKC), dibersihkan, maksimal 16 karakter. Kosong → "Pemain". */
+const ZWNJ = 0x200c;
+const ZWJ = 0x200d;
+const BENDERA_HITAM = 0x1f3f4;
+const TAG_AWAL = 0xe0020;
+const TAG_AKHIR = 0xe007e;
+const TAG_BATAL = 0xe007f;
+
+/** Ujung kiri rangkaian emoji ZWJ: gambar, VS16 (U+FE0F), atau warna kulit (U+1F3FB–1F3FF). */
+const EMOJI_KIRI = /[\p{Extended_Pictographic}\u{FE0F}\u{1F3FB}-\u{1F3FF}]/u;
+const EMOJI_KANAN = /\p{Extended_Pictographic}/u;
+/**
+ * Aksara yang ejaannya memang memakai ZWJ/ZWNJ (Arab/Persia, aksara India, Sinhala, Khmer, Myanmar,
+ * aksara Jawa/Bali/Sunda, ...). Di Latin/Yunani/Kiril penggabung tidak berguna dan hanya membuat
+ * "Budi" kembar yang beda isi, jadi di sana tetap dibuang.
+ */
+const AKSARA_PENGGABUNG =
+  /[\p{scx=Arab}\p{scx=Syrc}\p{scx=Nkoo}\p{scx=Mong}\p{scx=Deva}\p{scx=Beng}\p{scx=Guru}\p{scx=Gujr}\p{scx=Orya}\p{scx=Taml}\p{scx=Telu}\p{scx=Knda}\p{scx=Mlym}\p{scx=Sinh}\p{scx=Khmr}\p{scx=Mymr}\p{scx=Tibt}\p{scx=Java}\p{scx=Bali}\p{scx=Sund}]/u;
+const HURUF_ATAU_TANDA = /[\p{L}\p{M}]/u;
+const TANDA = /\p{M}/u;
+const FORMAT = /\p{Cf}/u;
+/** Nama harus memuat minimal satu karakter yang terlihat. */
+const TERLIHAT = /[\p{L}\p{N}\p{S}\p{P}]/u;
+
+/** Maksimal huruf (grapheme) di nama, dan batas code point total supaya rangkaian panjang tidak lolos. */
+const MAKS_HURUF = 16;
+const MAKS_CODE_POINT = 48;
+/** Tanda gabung (aksen, harakat) per huruf; sisanya dibuang supaya teks "zalgo" tidak meluber. */
+const MAKS_TANDA_PER_HURUF = 8;
+
+const kode = (c: string | undefined) => (c === undefined ? -1 : c.codePointAt(0)!);
+
+/**
+ * Buang karakter format (Cf: pembalik arah U+202A–202E/U+2066–2069, zero-width space, BOM,
+ * word joiner, karakter tag, ...), kecuali:
+ * - ZWJ di dalam rangkaian emoji (👨‍👩‍👧, 🏳️‍🌈),
+ * - ZWJ/ZWNJ di tengah aksara yang membutuhkannya (Persia "می‌خواهم", Devanagari "क्‍ष"),
+ * - karakter tag di bendera bertag (🏴 + tag + U+E007F, mis. bendera Skotlandia).
+ */
+function buangFormat(s: string): string {
+  const cp = Array.from(s);
+  // Tahap 1: buang Cf selain penggabung; bendera bertag disimpan utuh sebagai satu unit.
+  const unit: string[] = [];
+  for (let i = 0; i < cp.length; i++) {
+    const k = kode(cp[i]);
+    if (k === BENDERA_HITAM) {
+      let j = i + 1;
+      while (j < cp.length && kode(cp[j]) >= TAG_AWAL && kode(cp[j]) <= TAG_AKHIR) j++;
+      if (j > i + 1 && kode(cp[j]) === TAG_BATAL) {
+        unit.push(cp.slice(i, j + 1).join(''));
+        i = j;
+        continue;
+      }
+      unit.push(cp[i]);
+      continue;
+    }
+    if (k !== ZWJ && k !== ZWNJ && FORMAT.test(cp[i])) continue;
+    unit.push(cp[i]);
+  }
+  // Tahap 2: penggabung hanya disimpan kalau diapit karakter yang memang memakainya.
+  const hasil: string[] = [];
+  for (let i = 0; i < unit.length; i++) {
+    const k = kode(unit[i]);
+    if (k !== ZWJ && k !== ZWNJ) {
+      hasil.push(unit[i]);
+      continue;
+    }
+    const kiriUnit = hasil.at(-1);
+    const kiri = kiriUnit === undefined ? undefined : Array.from(kiriUnit).at(-1);
+    const kanan = unit[i + 1] === undefined ? undefined : Array.from(unit[i + 1])[0];
+    if (kiri === undefined) continue;
+    const emoji = k === ZWJ && EMOJI_KIRI.test(kiri) && kanan !== undefined && EMOJI_KANAN.test(kanan);
+    const aksaraKiri = HURUF_ATAU_TANDA.test(kiri) && AKSARA_PENGGABUNG.test(kiri);
+    const aksara =
+      aksaraKiri &&
+      (kanan !== undefined && HURUF_ATAU_TANDA.test(kanan)
+        ? AKSARA_PENGGABUNG.test(kanan)
+        : // ZWJ sesudah virama di ujung kata (mis. chillu Malayalam lama).
+          k === ZWJ && TANDA.test(kiri) && (kanan === undefined || /\s/u.test(kanan)));
+    if (emoji || aksara) hasil.push(unit[i]);
+  }
+  return hasil.join('');
+}
+
+/** Potong per grapheme (huruf yang tampil) supaya emoji/aksara tidak terbelah. */
+function potong(s: string): string {
+  const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+  if (!Segmenter) return Array.from(s).slice(0, MAKS_HURUF).join('');
+  let hasil = '';
+  let jumlahHuruf = 0;
+  let jumlahCp = 0;
+  for (const { segment } of new Segmenter(undefined, { granularity: 'grapheme' }).segment(s)) {
+    let tanda = 0;
+    const huruf = Array.from(segment)
+      .filter((c) => !TANDA.test(c) || ++tanda <= MAKS_TANDA_PER_HURUF)
+      .join('');
+    const n = Array.from(huruf).length;
+    if (jumlahHuruf >= MAKS_HURUF || jumlahCp + n > MAKS_CODE_POINT) break;
+    hasil += huruf;
+    jumlahHuruf++;
+    jumlahCp += n;
+  }
+  return hasil;
+}
+
+/**
+ * Nama tampilan: dinormalisasi (NFKC), dibersihkan, maksimal 16 huruf. Kosong atau isinya tidak
+ * ada yang terlihat → "Pemain".
+ */
 export function rapikanNama(nama: string): string {
-  const bersih = nama.normalize('NFKC').replace(KARAKTER_BUANG, '').replace(/\s+/gu, ' ').trim();
-  // Dipotong per code point supaya emoji tidak terbelah jadi surrogate yatim.
-  const pendek = Array.from(bersih).slice(0, 16).join('').trim();
-  return pendek || 'Pemain';
+  // NFKC menyeragamkan huruf lebar penuh/ligatur, tapi jamo kompatibilitas Korea (ㅋㅋㅋ) dibiarkan:
+  // NFKC mengubahnya jadi jamo conjoining yang tampil lain.
+  const normal = nama.replace(/[^ㄱ-ㆎ]+/gu, (x) => x.normalize('NFKC'));
+  const bersih = buangFormat(normal.replace(KARAKTER_BUANG, '')).replace(/\s+/gu, ' ').trim();
+  const pendek = potong(bersih);
+  // Penggabung yatim di ujung potongan dibuang.
+  const hasil = (pendek.length < bersih.length ? pendek.replace(/[‌‍]+$/u, '') : pendek).trim();
+  return TERLIHAT.test(hasil) ? hasil : 'Pemain';
 }
