@@ -1,0 +1,2 @@
+# Snapshot golden dibandingkan byte per byte (toMatchFileSnapshot): selalu LF di semua OS.
+**/__golden__/*.json text eol=lf
