@@ -6,8 +6,9 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import sirv from 'sirv';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { GalatMeja, Meja, validasiPesan, type Penjadwal, type PesanServer, type RingkasanAkhir } from '@remi/meja';
+import { GalatMeja, Meja, namaLawanAcak, penjadwalNyata, validasiPesan, type Penjadwal, type PesanServer, type RingkasanAkhir } from '@remi/meja';
 import type { PenyimpanRiwayat } from './riwayat.js';
+import { alamatKlien, HEADER_KEAMANAN, kunciIp, originDiizinkan } from './keamanan.js';
 
 export interface OpsiServer {
   port: number;
@@ -19,6 +20,33 @@ export interface OpsiServer {
   /** Meja tanpa manusia terhubung dihapus setelah sekian ms. */
   hapusMejaKosongMs?: number;
   maksMeja?: number;
+  /**
+   * Maksimal meja yang masih ada (termasuk yang sudah ditinggal tapi belum dihapus) per alamat IP
+   * pembuatnya. Pemain di kedai biasanya satu WiFi (satu IP publik), jadi jangan terlalu kecil.
+   */
+  maksMejaPerIp?: number;
+  /**
+   * Kapan header X-Forwarded-For dipercaya untuk alamat IP pemain:
+   * 'lokal' (bawaan) = hanya kalau sambungan datang dari alamat loopback/privat (reverse proxy
+   * seperti Caddy di mesin/jaringan yang sama); true = selalu; false = tidak pernah.
+   */
+  percayaProxy?: boolean | 'lokal';
+  /** Pesan per detik per sambungan yang diproses; sisanya dibuang. */
+  batasPesanPerDetik?: number;
+  /** Lewat sekian pesan dalam satu detik, sambungan diputus (banjir pesan). */
+  putusPesanPerDetik?: number;
+  /**
+   * Asal (Origin) tambahan yang boleh membuka WebSocket, selain yang sehost dengan server:
+   * "https://contoh.id" atau "contoh.id"; "*" = semua (cek Origin mati).
+   */
+  originDiizinkan?: readonly string[];
+  /**
+   * Maksimal sambungan WebSocket sekaligus per jaringan (IPv4 per alamat, IPv6 per /64). Bawaan 50:
+   * longgar, karena satu WiFi kedai atau CGNAT operator seluler bisa berbagi satu IP publik.
+   */
+  maksSambunganPerIp?: number;
+  /** /healthz ikut menampilkan jumlah sambungan & galat meja (bawaan: tidak; detailnya ada di log). */
+  healthzDetail?: boolean;
   /** Penyimpan klasemen akhir (SQLite). Kosong = tidak disimpan. */
   riwayat?: PenyimpanRiwayat;
   log?: (...x: unknown[]) => void;
@@ -30,15 +58,37 @@ interface Sambungan {
   kode: string | null;
   hidup: boolean;
   jumlahPesan: number;
+  ip: string;
+  /** Kunci jaringan untuk batas per IP (lihat kunciIp). */
+  jaringan: string;
 }
+
+export { alamatKlien, alamatLokal, kunciIp, originDiizinkan } from './keamanan.js';
 
 // Tanpa huruf/angka yang mirip (0/O, 1/I/L).
 const HURUF_KODE = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+// Disuntik esbuild saat build (scripts/bundel.mjs). Saat dev lewat tsx tidak ada, jadi pakai
+// versi dari npm (npm run dev:server mengisi npm_package_version) atau 'dev'.
+declare const __VERSI_SERVER__: string | undefined;
+declare const __SHA_SERVER__: string | undefined;
+export const VERSI = typeof __VERSI_SERVER__ === 'string' ? __VERSI_SERVER__ : (process.env.npm_package_version ?? 'dev');
+export const SHA = typeof __SHA_SERVER__ === 'string' ? __SHA_SERVER__ : 'dev';
+
+/** Aset Vite di /assets ber-hash di namanya: aman disimpan browser selamanya. */
+const CACHE_ASET = 'public, max-age=31536000, immutable';
+/** Selain itu (index.html, sw.js, manifest, ikon) harus dicek ulang supaya update cepat sampai. */
+const CACHE_LAINNYA = 'no-cache';
 
 export interface ServerRemi {
   http: Server;
   port: number;
   jumlahMeja(): number;
+  /** Jumlah galat yang tertangkap di timer meja (bot, batas waktu) sejak server jalan. */
+  jumlahGalatMeja(): number;
+  /** Jumlah sambungan WebSocket aktif. */
+  jumlahSambungan(): number;
+  /** Tutup server: semua sambungan diputus (kode 1001), timer meja dihentikan. Aman dipanggil berulang. */
   tutup(): Promise<void>;
 }
 
@@ -47,6 +97,39 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   const daftarMeja = new Map<string, Meja>();
   const kosongSejak = new Map<string, number>();
   const sambunganPemain = new Map<string, Sambungan>();
+  const semuaSambungan = new Set<Sambungan>();
+  /** Kode meja → kunci jaringan pembuatnya (untuk batas meja per IP; IPv6 per /64). */
+  const pembuatMeja = new Map<string, string>();
+  let galatMeja = 0;
+
+  // Timer meja (langkah bot, batas waktu giliran, celetukan) berjalan di luar penanganan pesan.
+  // Galat di sana tanpa pembungkus jadi uncaughtException dan mematikan proses beserta SEMUA meja.
+  // Di sini galatnya ditangkap per meja dan dicatat; meja lain jalan terus.
+  const penjadwalDasar = opsi.penjadwal ?? penjadwalNyata;
+  const penjadwalAman = (kode: string): Penjadwal => ({
+    setel: (ms, fn) =>
+      penjadwalDasar.setel(ms, () => {
+        try {
+          fn();
+        } catch (e) {
+          galatMeja++;
+          log(`galat di timer meja ${kode}`, e);
+        }
+      }),
+    batal: (h) => penjadwalDasar.batal(h),
+    sekarang: () => penjadwalDasar.sekarang(),
+  });
+
+  const hapusMeja = (kode: string) => {
+    try {
+      daftarMeja.get(kode)?.hentikan();
+    } catch (e) {
+      log(`galat menghentikan meja ${kode}`, e);
+    }
+    daftarMeja.delete(kode);
+    kosongSejak.delete(kode);
+    pembuatMeja.delete(kode);
+  };
 
   const statis =
     opsi.folderStatis && existsSync(opsi.folderStatis)
@@ -54,12 +137,26 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       : null;
 
   const http = createServer((req: IncomingMessage, res: ServerResponse) => {
-    if (req.url === '/healthz') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, meja: daftarMeja.size }));
+    // Header keamanan (CSP, anti-bingkai, dst.) untuk semua respons HTTP; upgrade WebSocket tidak lewat sini.
+    for (const [k, v] of Object.entries(HEADER_KEAMANAN)) res.setHeader(k, v);
+    let url: URL;
+    try {
+      url = new URL(req.url ?? '/', 'http://x');
+    } catch {
+      // Mis. "//[": tanpa ini galatnya tidak tertangkap dan proses server ikut mati.
+      res.writeHead(400);
+      res.end('Alamat tidak valid');
       return;
     }
-    const url = new URL(req.url ?? '/', 'http://x');
+    if (url.pathname === '/healthz') {
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      // Publik: cukup untuk healthcheck & cek versi deploy. Angka operasional (sambungan, galat) hanya
+      // dengan HEALTHZ_DETAIL=1; selain itu tercatat di log (ringkasan berkala & tiap galat).
+      const isi: Record<string, unknown> = { ok: true, meja: daftarMeja.size, versi: VERSI, sha: SHA };
+      if (opsi.healthzDetail) Object.assign(isi, { sambungan: semuaSambungan.size, galatMeja });
+      res.end(JSON.stringify(isi));
+      return;
+    }
     if (url.pathname === '/api/riwayat' || url.pathname === '/api/peringkat') {
       const json = (kode: number, isi: unknown) => {
         res.writeHead(kode, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -75,15 +172,42 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         return json(500, { error: 'Gagal membaca riwayat.' });
       }
     }
-    if (statis) return statis(req, res, () => {
-      res.writeHead(404);
-      res.end('Tidak ditemukan');
-    });
+    if (statis) {
+      res.setHeader('cache-control', /^\/assets\/[^/]+\.[a-z0-9]+$/i.test(url.pathname) ? CACHE_ASET : CACHE_LAINNYA);
+      return statis(req, res, () => {
+        res.writeHead(404, { 'cache-control': 'no-store' });
+        res.end('Tidak ditemukan');
+      });
+    }
     res.writeHead(404);
     res.end('Tidak ditemukan');
   });
 
-  const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: 64 * 1024 });
+  /** Jumlah sambungan WebSocket aktif per kunci jaringan. */
+  const sambunganPerJaringan = new Map<string, number>();
+  const maksSambunganPerIp = opsi.maksSambunganPerIp ?? 50;
+  let ditolakOrigin = 0;
+  let ditolakPenuh = 0;
+
+  const wss = new WebSocketServer({
+    server: http,
+    path: '/ws',
+    maxPayload: 64 * 1024,
+    // Dipanggil sinkron sebelum handshake selesai: tolak dengan kode HTTP tanpa membuka sambungan.
+    verifyClient: (info, jawab) => {
+      if (!originDiizinkan(info.req, { percayaProxy: opsi.percayaProxy ?? 'lokal', tambahan: opsi.originDiizinkan })) {
+        // Dicatat sesekali saja supaya log tidak bisa dibanjiri.
+        if (ditolakOrigin++ % 100 === 0) log(`handshake ditolak: Origin asing ${JSON.stringify(String(info.origin).slice(0, 100))} (total ${ditolakOrigin})`);
+        return jawab(false, 403, 'Origin tidak diizinkan');
+      }
+      const jaringan = kunciIp(alamatKlien(info.req, opsi.percayaProxy ?? 'lokal'));
+      if ((sambunganPerJaringan.get(jaringan) ?? 0) >= maksSambunganPerIp) {
+        if (ditolakPenuh++ % 100 === 0) log(`handshake ditolak: ${jaringan} sudah ${maksSambunganPerIp} sambungan (total ${ditolakPenuh})`);
+        return jawab(false, 429, 'Kebanyakan sambungan');
+      }
+      jawab(true);
+    },
+  });
 
   const kirim = (pemainId: string, pesan: PesanServer) => {
     const s = sambunganPemain.get(pemainId);
@@ -111,9 +235,11 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   const opsiMeja = (kode: string) => ({
     kode,
     kirim,
-    penjadwal: opsi.penjadwal,
+    penjadwal: penjadwalAman(kode),
     jedaBotMs: opsi.jedaBotMs,
     buatSeed: () => randomBytes(4).readInt32LE(0),
+    // Nama warga kedai: urutan acak per meja, supaya lawan pertama tidak selalu "Kipas Dua".
+    namaLawan: namaLawanAcak(),
     saatSelesai: (r: RingkasanAkhir) => {
       if (!opsi.riwayat) return;
       try {
@@ -167,11 +293,18 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         if (daftarMeja.size >= (opsi.maksMeja ?? 500)) {
           return kirimKe(s, { t: 'error', pesan: 'Server lagi penuh, coba lagi nanti.' });
         }
+        // Satu alamat tidak boleh memenuhi server dengan meja (meja ditinggal baru dihapus ~10 menit kemudian).
+        let dariIpIni = 0;
+        for (const ip of pembuatMeja.values()) if (ip === s.jaringan) dariIpIni++;
+        if (dariIpIni >= (opsi.maksMejaPerIp ?? 20)) {
+          return kirimKe(s, { t: 'error', pesan: 'Kebanyakan meja dari jaringanmu, Bos. Pakai meja yang sudah ada atau tunggu sebentar.' });
+        }
         const kode = buatKode();
         const pemainId = randomUUID();
         tautkan(s, pemainId, kode);
         const meja = Meja.buat(opsiMeja(kode), pemainId, pesan.nama, pesan.pengaturan);
         daftarMeja.set(kode, meja);
+        pembuatMeja.set(kode, s.jaringan);
         log(`meja ${kode} dibuat`);
         return;
       }
@@ -202,15 +335,38 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     }
   };
 
-  const semuaSambungan = new Set<Sambungan>();
+  // Galat di level server HTTP/WebSocket (bukan per sambungan): catat saja.
+  wss.on('error', (e) => log('galat WebSocketServer', e));
+  // Permintaan HTTP cacat: tutup soketnya dengan sopan (bawaan Node juga begini, tapi tanpa log).
+  http.on('clientError', (_e, soket) => {
+    if (soket.writable) soket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+    else soket.destroy();
+  });
 
-  wss.on('connection', (ws) => {
-    const s: Sambungan = { ws, pemainId: null, kode: null, hidup: true, jumlahPesan: 0 };
+  const batasPesan = opsi.batasPesanPerDetik ?? 30;
+  const batasPutus = opsi.putusPesanPerDetik ?? 120;
+
+  wss.on('connection', (ws, req) => {
+    const ip = alamatKlien(req, opsi.percayaProxy ?? 'lokal');
+    const s: Sambungan = { ws, pemainId: null, kode: null, hidup: true, jumlahPesan: 0, ip, jaringan: kunciIp(ip) };
     semuaSambungan.add(s);
+    sambunganPerJaringan.set(s.jaringan, (sambunganPerJaringan.get(s.jaringan) ?? 0) + 1);
+    // WAJIB ada: tanpa penangan 'error', frame cacat atau pesan > maxPayload membuat ws memancarkan
+    // 'error' tanpa pendengar → uncaughtException → seluruh server mati. Sambungannya sendiri
+    // sudah ditutup oleh ws (mis. kode 1009 / 1002).
+    ws.on('error', (e) => log(`galat sambungan ${s.ip}: ${(e as Error).message}`));
     ws.on('pong', () => (s.hidup = true));
     ws.on('message', (raw) => {
-      // Batas sederhana: maksimal 30 pesan per detik per sambungan.
-      if (++s.jumlahPesan > 30) return;
+      // Maksimal `batasPesan` pesan per detik per sambungan; banjir pesan = diputus.
+      s.jumlahPesan++;
+      if (s.jumlahPesan > batasPutus) {
+        if (s.jumlahPesan === batasPutus + 1) {
+          log(`sambungan ${s.ip} diputus: banjir pesan`);
+          ws.close(1008, 'Kebanyakan pesan');
+        }
+        return;
+      }
+      if (s.jumlahPesan > batasPesan) return;
       try {
         prosesPesan(s, raw.toString());
       } catch (e) {
@@ -219,10 +375,18 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       }
     });
     ws.on('close', () => {
-      semuaSambungan.delete(s);
+      if (semuaSambungan.delete(s)) {
+        const sisa = (sambunganPerJaringan.get(s.jaringan) ?? 1) - 1;
+        if (sisa > 0) sambunganPerJaringan.set(s.jaringan, sisa);
+        else sambunganPerJaringan.delete(s.jaringan);
+      }
       if (s.pemainId && sambunganPemain.get(s.pemainId) === s) {
         sambunganPemain.delete(s.pemainId);
-        if (s.kode) daftarMeja.get(s.kode)?.terputus(s.pemainId);
+        try {
+          if (s.kode) daftarMeja.get(s.kode)?.terputus(s.pemainId);
+        } catch (e) {
+          log(`galat saat pemain terputus dari meja ${s.kode}`, e);
+        }
       }
     });
   });
@@ -232,48 +396,88 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   }, 1000);
 
   // Tiap 30 detik: putuskan sambungan yang tidak menjawab ping, hapus meja yang lama kosong.
+  // Ringkasan operasional ke log tiap ±10 menit (pengganti angka detail di /healthz), hanya kalau ada isinya.
+  let detakBersih = 0;
+  let ringkasanTerakhir = '';
   const timerBersih = setInterval(() => {
+    if (++detakBersih % 20 === 0) {
+      const r = `status: meja ${daftarMeja.size}, sambungan ${semuaSambungan.size}, galatMeja ${galatMeja}, ditolak origin ${ditolakOrigin}, ditolak penuh ${ditolakPenuh}`;
+      if (r !== ringkasanTerakhir) log(r);
+      ringkasanTerakhir = r;
+    }
     for (const s of semuaSambungan) {
-      if (!s.hidup) {
-        s.ws.terminate();
-        continue;
+      try {
+        if (!s.hidup) {
+          s.ws.terminate();
+          continue;
+        }
+        s.hidup = false;
+        s.ws.ping();
+      } catch (e) {
+        log('galat ping sambungan', e);
       }
-      s.hidup = false;
-      s.ws.ping();
     }
     const sekarang = Date.now();
     const batas = opsi.hapusMejaKosongMs ?? 10 * 60_000;
     for (const [kode, meja] of daftarMeja) {
-      if (meja.jumlahManusiaTerhubung > 0) {
-        kosongSejak.delete(kode);
-        continue;
-      }
-      const sejak = kosongSejak.get(kode) ?? sekarang;
-      kosongSejak.set(kode, sejak);
-      if (sekarang - sejak >= batas) {
-        meja.hentikan();
-        daftarMeja.delete(kode);
-        kosongSejak.delete(kode);
-        log(`meja ${kode} dihapus (kosong)`);
+      try {
+        if (meja.jumlahManusiaTerhubung > 0) {
+          kosongSejak.delete(kode);
+          continue;
+        }
+        const sejak = kosongSejak.get(kode) ?? sekarang;
+        kosongSejak.set(kode, sejak);
+        if (sekarang - sejak >= batas) {
+          hapusMeja(kode);
+          log(`meja ${kode} dihapus (kosong)`);
+        }
+      } catch (e) {
+        log(`galat membersihkan meja ${kode}`, e);
       }
     }
   }, 30_000);
 
-  await new Promise<void>((ok) => http.listen(opsi.port, opsi.host ?? '0.0.0.0', ok));
+  await new Promise<void>((ok, gagal) => {
+    http.once('error', gagal);
+    http.listen(opsi.port, opsi.host ?? '0.0.0.0', () => {
+      http.off('error', gagal);
+      ok();
+    });
+  });
+  // Setelah jalan, galat server HTTP (jarang) cukup dicatat, jangan sampai jadi 'error' tanpa pendengar.
+  http.on('error', (e) => log('galat server HTTP', e));
   const alamat = http.address();
   const port = typeof alamat === 'object' && alamat ? alamat.port : opsi.port;
 
+  let penutupan: Promise<void> | null = null;
   return {
     http,
     port,
     jumlahMeja: () => daftarMeja.size,
-    tutup: async () => {
-      clearInterval(timerPesan);
-      clearInterval(timerBersih);
-      for (const m of daftarMeja.values()) m.hentikan();
-      wss.clients.forEach((ws) => ws.terminate());
-      await new Promise<void>((ok) => wss.close(() => ok()));
-      await new Promise<void>((ok) => http.close(() => ok()));
-    },
+    jumlahGalatMeja: () => galatMeja,
+    jumlahSambungan: () => semuaSambungan.size,
+    tutup: () =>
+      (penutupan ??= (async () => {
+        clearInterval(timerPesan);
+        clearInterval(timerBersih);
+        for (const kode of [...daftarMeja.keys()]) hapusMeja(kode);
+        // 1001 "going away": client tahu server pergi (bukan ditolak) dan bisa mencoba lagi nanti.
+        for (const s of semuaSambungan) {
+          try {
+            s.ws.close(1001, 'Server dimatikan');
+          } catch {
+            s.ws.terminate();
+          }
+        }
+        // Yang tidak menjawab salam penutup dalam 1 detik diputus paksa.
+        const paksa = setTimeout(() => wss.clients.forEach((ws) => ws.terminate()), 1000);
+        await new Promise<void>((ok) => wss.close(() => ok()));
+        clearTimeout(paksa);
+        await new Promise<void>((ok) => {
+          http.close(() => ok());
+          // Sambungan HTTP keep-alive (aset PWA) jangan sampai menahan penutupan.
+          http.closeAllConnections();
+        });
+      })()),
   };
 }

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import type { PesanKlien, PesanServer } from '@remi/meja';
+import { NAMA_LAWAN_BAWAAN, type PesanKlien, type PesanServer } from '@remi/meja';
 import { jalankanServer, type ServerRemi } from '../src/server.js';
 
 class Klien {
@@ -79,6 +79,24 @@ describe('server WebSocket', () => {
     expect((await b.tunggu('error')).pesan).toContain('gilirannya');
     a.tutup();
     b.tutup();
+  });
+
+  it('warga kedai diberi nama dari daftar bawaan dengan urutan acak per meja', async () => {
+    const urutan: string[] = [];
+    for (let m = 0; m < 6; m++) {
+      const a = new Klien(server.port);
+      await a.kirim({ t: 'buat', nama: 'Budi', pengaturan: { jumlahPemain: 6 } });
+      await a.tunggu('masuk');
+      for (let i = 1; i < 6; i++) await a.kirim({ t: 'aturKursi', kursi: i, jenis: 'bot' });
+      const info = (await a.tunggu('meja', (p) => p.info.kursi.every((k) => k.jenis !== 'kosong'))).info;
+      const nama = info.kursi.slice(1).map((k) => k.nama);
+      expect(new Set(nama).size).toBe(5);
+      for (const n of nama) expect(NAMA_LAWAN_BAWAAN).toContain(n);
+      urutan.push(nama.join('|'));
+      a.tutup();
+    }
+    // Enam meja dengan urutan yang sama persis hampir mustahil kalau diacak (10P5 = 30.240 kemungkinan).
+    expect(new Set(urutan).size).toBeGreaterThan(1);
   });
 
   it('sambung ulang dengan token setelah koneksi putus', async () => {
