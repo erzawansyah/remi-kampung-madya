@@ -880,9 +880,16 @@ function lebarKepalaSebaris(m: ModelTata, lawan: readonly number[], u: UkuranLay
   return k.nama + CELAH_KEPALA * u.d + k.info;
 }
 
-/** Inisial nama: "Kipas Dua" → "KD", "Bot 1" → "B1", "Budi Santoso" → "BS". Nama satu kata: null. Maks 3 huruf. */
+/**
+ * Inisial nama: "Kipas Dua" → "KD", "Koki-Kun" → "KK", "Bot 1" → "B1", "Budi Santoso" → "BS". Maks 3 huruf.
+ * Nama satu kata: dua huruf pertamanya ("Jurik" → "JU"), asal keduanya huruf/angka (bukan emoji); selain itu null.
+ */
 export function inisialNama(nama: string): string | null {
-  const kata = nama.trim().split(/\s+/).filter(Boolean);
+  const kata = nama.trim().split(/[\s-]+/).filter(Boolean);
+  if (kata.length === 1) {
+    const awal = [...kata[0]].slice(0, 2).join('');
+    return /^[\p{L}\p{N}]{2}$/u.test(awal) ? awal.toUpperCase() : null;
+  }
   if (kata.length < 2) return null;
   return kata
     .slice(0, 3)
@@ -892,15 +899,44 @@ export function inisialNama(nama: string): string | null {
 }
 
 /**
- * Label nama di tempat sempit (mis. di bawah kartu buangan): nama lengkap kalau muat, lalu inisial,
- * lalu nama terpotong asal masih ≥ 3 huruf; selain itu null (label disembunyikan, bukan "B…").
+ * Jumlah huruf minimal kalau `nama` dipotong ('Jura…'): huruf pertama yang membedakannya dari tiap nama lain
+ * di meja (tanpa beda huruf besar/kecil) harus ikut tampil, supaya potongannya tidak bisa dibaca sebagai
+ * nama lain. Minimal 3. Lebih dari panjang nama = memotong tidak bisa membedakan ("Juri" vs "Jurik").
  */
-export function labelSempit(nama: string, lebar: number, ukuranPx: number): { isi: string; minHuruf: number } | null {
+function hurufPembeda(nama: string, namaLain: readonly string[]): number {
+  let n = 3;
+  for (const lain of namaLain) {
+    let i = 0;
+    while (i < nama.length && i < lain.length && nama[i].toLowerCase() === lain[i].toLowerCase()) i++;
+    // Spasi di ujung potongan dibuang scene ('Pak …' → 'Pak…'), jadi huruf sesudahnya ikut dihitung.
+    n = Math.max(n, i + (/\s/.test(nama[i] ?? '') ? 2 : 1));
+  }
+  return n;
+}
+
+/**
+ * Label nama di tempat sempit (mis. di bawah kartu buangan): nama lengkap kalau muat, lalu inisial,
+ * lalu nama terpotong; selain itu null (label disembunyikan, bukan "B…"). `namaLain` = nama pemain lain
+ * di meja, supaya label tidak tertukar: inisial hanya dipakai kalau tidak kembar dengan inisial atau nama
+ * orang lain ("Pak Seng" & "Pak Sule" sama-sama "PS", "Jurik" & "Juragan" sama-sama "JU"), dan potongan
+ * minimal 3 huruf, lebih panjang kalau awal namanya sama ("Juri…" & "Jura…", bukan "Jur…"). `minHuruf`
+ * juga berlaku kalau nama lengkap ternyata tidak muat saat diukur scene.
+ */
+export function labelSempit(
+  nama: string,
+  lebar: number,
+  ukuranPx: number,
+  namaLain: readonly string[] = [],
+): { isi: string; minHuruf: number } | null {
   if (!nama || lebar <= 0) return null;
-  if (kiraLebarTeks(nama, ukuranPx) <= lebar) return { isi: nama, minHuruf: 3 };
+  const minHuruf = hurufPembeda(nama, namaLain);
+  if (kiraLebarTeks(nama, ukuranPx) <= lebar) return { isi: nama, minHuruf };
   const ini = inisialNama(nama);
-  if (ini && kiraLebarTeks(ini, ukuranPx) <= lebar) return { isi: ini, minHuruf: ini.length };
-  if (kiraLebarTeks('abc…', ukuranPx) <= lebar) return { isi: nama, minHuruf: 3 };
+  const kembar = (x: string | null) => !!x && x.toLowerCase() === ini?.toLowerCase();
+  if (ini && kiraLebarTeks(ini, ukuranPx) <= lebar && !namaLain.some((n) => kembar(n) || kembar(inisialNama(n)))) {
+    return { isi: ini, minHuruf: ini.length };
+  }
+  if (minHuruf <= nama.length && kiraLebarTeks(`${nama.slice(0, minHuruf).trimEnd()}…`, ukuranPx) <= lebar) return { isi: nama, minHuruf };
   return null;
 }
 
@@ -1305,11 +1341,13 @@ function gambarTengah(
       });
     }
     // Nama pembuang di bawah kartu, selebar bagian kartu yang terlihat. Tidak muat: inisial ("Pak Seng" → "PS"),
-    // atau dipotong asal masih ≥ 3 huruf; kalau itu pun tidak muat, labelnya disembunyikan (bukan "B…").
+    // atau dipotong asal masih ≥ 3 huruf, dan tidak boleh kembar dengan label pemain lain di meja ("Jurik" &
+    // "Juragan" jadi "Juri…" & "Jura…"); kalau itu pun tidak muat, labelnya disembunyikan (bukan "B…").
     // Nama pertama mundur ke kanan kalau '+N' di bawah tumpukan butuh tempat (lebarnya berkurang sebanyak itu).
     const xLabel = Math.max(kx - cwT / 2 + 1 * d, i === 0 ? batasNamaPertama : -Infinity);
     const lebarLabel = (i === tampil.length - 1 ? cwT : langkah) - 2 * d - (xLabel - (kx - cwT / 2 + 1 * d));
-    const label = ringkas ? null : labelSempit(v.pemain[e.pemilik]?.nama ?? '', lebarLabel, 10 * s * d);
+    const namaLain = v.pemain.filter((_, j) => j !== e.pemilik).map((p) => p.nama);
+    const label = ringkas ? null : labelSempit(v.pemain[e.pemilik]?.nama ?? '', lebarLabel, 10 * s * d, namaLain);
     if (label) t.teks.push({ kunci: `b-nama:${i}`, x: xLabel, y: yLabelBawah, isi: label.isi, ukuran: 10, warna: 'redup', maks: lebarLabel, minHuruf: label.minHuruf });
   });
   // Tujuan kartu yang baru dibuang: slot berikutnya di atas tumpukan.

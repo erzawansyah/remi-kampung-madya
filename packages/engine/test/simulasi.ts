@@ -4,6 +4,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   buatPermainan,
+  DAFTAR_LEVEL_BOT,
   periksaInvarian,
   pilihAksiBot,
   Rng,
@@ -82,7 +83,8 @@ export function ujiSimulasi(judul: string, n: number, duaDeck: boolean): void {
     for (let awal = 1; awal <= 60; awal += 10) {
       it(`seed ${awal}–${awal + 9}: tanpa state ilegal maupun aksi ditolak`, async () => {
         for (let seed = awal; seed < awal + 10; seed++) {
-          const level: LevelBot[] = Array.from({ length: n }, (_, i) => ((seed + i) % 3 === 0 ? 'mudah' : 'normal'));
+          // Semua level ikut: mudah, normal, jago, dan suhu bergantian kursi.
+          const level: LevelBot[] = Array.from({ length: n }, (_, i) => DAFTAR_LEVEL_BOT[(seed + i) % DAFTAR_LEVEL_BOT.length]);
           mainkan(n, duaDeck, seed, level, stat);
           // Beri kesempatan worker memproses pesan dari Vitest.
           await new Promise((r) => setTimeout(r, 0));

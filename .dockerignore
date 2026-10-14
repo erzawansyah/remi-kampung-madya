@@ -1,3 +1,5 @@
+# Pengecualian di sini juga dipakai scripts/idBuild.mjs saat menghitung hash isi sumber (identitas
+# build tanpa GIT_SHA): ubah keduanya bersamaan.
 node_modules
 **/node_modules
 **/dist

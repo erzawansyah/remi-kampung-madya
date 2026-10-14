@@ -1,6 +1,7 @@
 # Produksi: satu container (server WebSocket + file PWA) di balik reverse proxy HTTPS (mis. Caddy).
 #   GIT_SHA=$(git rev-parse --short HEAD) docker compose up -d --build
-# Tanpa GIT_SHA, commit tercatat "dev" di /healthz dan layar Tentang.
+# GIT_SHA opsional. Tanpa itu /healthz dan layar Tentang menampilkan hash isi sumber ("h-xxxxxxx")
+# sebagai pengganti commit (lihat docs/deploy.md, "Identitas build").
 services:
   remi:
     build:

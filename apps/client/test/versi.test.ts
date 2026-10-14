@@ -23,7 +23,11 @@ describe('labelVersi', () => {
     expect(labelVersi()).toBe('v0.2.0 (a1b2c3d)');
   });
 
-  it('build tanpa git (sha "dev" atau kosong): versi saja', async () => {
+  it('build tanpa commit (hash isi sumber "h-…"): ditampilkan apa adanya', async () => {
+    expect((await muatDengan('0.2.0', 'h-1a2b3c4')).labelVersi()).toBe('v0.2.0 (h-1a2b3c4)');
+  });
+
+  it('dev server (sha "dev") atau kosong: versi saja', async () => {
     expect((await muatDengan('0.2.0', 'dev')).labelVersi()).toBe('v0.2.0');
     expect((await muatDengan('0.2.0', '')).labelVersi()).toBe('v0.2.0');
   });

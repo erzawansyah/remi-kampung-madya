@@ -3,9 +3,38 @@
 // tombol Back di main.ts), supaya isinya sama dan jujur soal apa yang terjadi pada kursimu.
 // "Warga kedai" = istilah UI untuk pemain komputer (kode/protokol tetap memakai 'bot').
 
-import type { InfoMeja, PengaturanMeja, PesanKlien } from '@remi/meja';
+import type { LevelBot } from '@remi/engine';
+import type { InfoKursi, InfoMeja, PengaturanMeja, PesanKlien } from '@remi/meja';
+import { DAFTAR_LEVEL_WARGA, infoLevel, labelLevelKecil } from '../konten/levelWarga';
 import { esc, konfirmasi, toast, type OpsiKonfirmasi } from './dom';
 import { angkaSkor } from './rincianSkor';
+
+/** Nilai <select> kursi untuk warga kedai level tertentu, mis. "bot-jago". */
+const nilaiBot = (level: string) => `bot-${level}`;
+
+/**
+ * Level dari nilai pilihan kursi ("bot-suhu" → 'suhu'). Undefined kalau nilainya bukan level yang
+ * dikenal (mis. pilihan "Warga kedai" untuk level dari versi lain): meja memakai level bawaannya.
+ */
+export function levelDariPilihan(nilai: string): LevelBot | undefined {
+  return DAFTAR_LEVEL_WARGA.find((l) => nilai === nilaiBot(l.level))?.level;
+}
+
+/** Pilihan isi kursi untuk host: tunggu orang, atau warga kedai per level. */
+function pilihanKursi(k: InfoKursi, i: number): string {
+  const nilai = k.jenis === 'kosong' ? 'kosong' : k.jenis === 'bot' ? nilaiBot(k.level) : 'manusia';
+  const dipilih = (v: string) => (v === nilai ? 'selected' : '');
+  // Level yang tidak dikenal versi ini (server lebih baru): tetap tampil sebagai warga kedai, bukan "Tunggu orang".
+  const levelAsing = k.jenis === 'bot' && !infoLevel(k.level);
+  return `<select data-kursi="${i}" aria-label="Isi kursi ${i + 1}">
+      ${k.jenis === 'manusia' ? `<option value="manusia" selected>${esc(k.nama)}</option>` : ''}
+      ${levelAsing ? '<option value="bot" selected>Warga kedai</option>' : ''}
+      <option value="kosong" ${dipilih('kosong')}>Tunggu orang</option>
+      <optgroup label="Warga kedai">${DAFTAR_LEVEL_WARGA.map(
+        (l) => `<option value="${nilaiBot(l.level)}" ${dipilih(nilaiBot(l.level))}>${esc(l.pilihan)}</option>`,
+      ).join('')}</optgroup>
+    </select>`;
+}
 
 export interface KeadaanKeluar {
   /** Layar asal: lobi (sebelum mulai) atau meja (permainan sudah mulai). */
@@ -70,20 +99,11 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
       const lencana = [
         i === info.host ? '<span class="lencana emas">host</span>' : '',
         i === info.kursiSaya ? '<span class="lencana">kamu</span>' : '',
-        k.jenis === 'bot' ? `<span class="lencana">warga kedai · ${k.level}</span>` : '',
+        k.jenis === 'bot' ? `<span class="lencana">${esc(['warga kedai', labelLevelKecil(k.level)].filter(Boolean).join(' · '))}</span>` : '',
         k.jenis === 'manusia' && !k.terhubung ? '<span class="lencana merah">terputus</span>' : '',
       ].join('');
       const nama = k.jenis === 'kosong' ? '<span class="redup">menunggu orang masuk…</span>' : `<b>${esc(k.nama)}</b>`;
-      const nilai = k.jenis === 'kosong' ? 'kosong' : k.jenis === 'bot' ? `bot-${k.level}` : 'manusia';
-      const pilih =
-        host && i !== info.kursiSaya
-          ? `<select data-kursi="${i}" aria-label="Isi kursi ${i + 1}">
-              ${k.jenis === 'manusia' ? `<option value="manusia" selected>${esc(k.nama)}</option>` : ''}
-              <option value="kosong" ${nilai === 'kosong' ? 'selected' : ''}>Tunggu orang</option>
-              <option value="bot-mudah" ${nilai === 'bot-mudah' ? 'selected' : ''}>Warga kedai (mudah)</option>
-              <option value="bot-normal" ${nilai === 'bot-normal' ? 'selected' : ''}>Warga kedai (normal)</option>
-            </select>`
-          : '';
+      const pilih = host && i !== info.kursiSaya ? pilihanKursi(k, i) : '';
       return `<div class="kursi"><span class="redup" aria-label="Kursi ${i + 1}">${i + 1}</span><span class="nama">${nama}</span>${lencana}${pilih}</div>`;
     })
     .join('');
@@ -157,8 +177,9 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
     s.addEventListener('change', () => {
       const i = Number(s.dataset.kursi);
       if (s.value === 'manusia') return;
-      if (s.value === 'kosong') kirim({ t: 'aturKursi', kursi: i, jenis: 'kosong' });
-      else kirim({ t: 'aturKursi', kursi: i, jenis: 'bot', level: s.value === 'bot-mudah' ? 'mudah' : 'normal' });
+      if (s.value === 'kosong') return kirim({ t: 'aturKursi', kursi: i, jenis: 'kosong' });
+      const level = levelDariPilihan(s.value);
+      kirim(level ? { t: 'aturKursi', kursi: i, jenis: 'bot', level } : { t: 'aturKursi', kursi: i, jenis: 'bot' });
     }),
   );
   q('#isi-bot')?.addEventListener('click', () =>

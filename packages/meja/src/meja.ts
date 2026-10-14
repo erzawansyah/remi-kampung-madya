@@ -5,15 +5,18 @@
 import {
   AturanError,
   buatPermainan,
+  isJokerHidup,
   migrasiState,
   pilihAksiBot,
   Rng,
   terapkanAksi,
+  validasiBuang,
   viewUntuk,
   type Aksi,
   type GameState,
   type LevelBot,
   type Peristiwa,
+  type ViewPemain,
 } from '@remi/engine';
 import {
   JEDA_BOT,
@@ -28,7 +31,7 @@ import {
   type RingkasanMeja,
   type StatusMeja,
 } from './protokol.js';
-import { rapikanNama } from './validasi.js';
+import { rapikanLevel, rapikanNama } from './validasi.js';
 
 export interface Penjadwal {
   setel(ms: number, fn: () => void): unknown;
@@ -85,6 +88,18 @@ export const TENGGANG_SAMBUNG_MS = 20_000;
  */
 export const BATAS_JOKER_SAMBUNG_MS = 30_000;
 
+/**
+ * Jeda coba ulang sesudah langkah warga kedai gagal total (semua cadangan galat): 2 detik, lalu dua
+ * kali lipat tiap gagal lagi di giliran yang sama, paling lama JEDA_ULANG_GALAT_MAKS_MS. Supaya meja
+ * yang tersandung tidak berputar cepat menghabiskan CPU, tapi juga tidak berhenti selamanya.
+ */
+export const JEDA_ULANG_GALAT_MS = 2_000;
+export const JEDA_ULANG_GALAT_MAKS_MS = 60_000;
+
+function jedaUlangGalat(kali: number): number {
+  return Math.min(JEDA_ULANG_GALAT_MAKS_MS, JEDA_ULANG_GALAT_MS * 2 ** Math.max(0, kali - 1));
+}
+
 export interface OpsiMeja {
   kode: string;
   kirim: (pemainId: string, pesan: PesanServer) => void;
@@ -113,6 +128,11 @@ export interface OpsiMeja {
   saatBerubah?: (data: DataMeja) => void;
   /** Dipanggil sekali saat permainan selesai, membawa klasemen akhir. */
   saatSelesai?: (ringkasan: RingkasanAkhir) => void;
+  /**
+   * Dipanggil setiap ada galat yang ditangkap meja di dalam timer (langkah warga kedai, batas waktu,
+   * dll.). Meja tetap jalan; ini hanya untuk dicatat/dihitung. Kosong = console.error.
+   */
+  saatGalat?: (konteks: string, galat: unknown) => void;
 }
 
 export class GalatMeja extends Error {}
@@ -145,15 +165,23 @@ export class Meja {
   private seriJoker = 0;
   /** Tunggu joker yang sedang berjalan dimulai karena ada yang tersambung kembali. */
   private jokerSambung = false;
+  /** Langkah warga kedai yang gagal total berturut-turut di satu giliran (untuk jeda coba ulang). */
+  private galatBot: { kunci: string; kali: number } | null = null;
+  /** Timer coba ulang menyusun jadwal kalau jadwalkan() sendiri galat, dan berapa kali sudah gagal. */
+  private timerPulih: unknown = null;
+  private gagalJadwal = 0;
 
   constructor(
     private readonly opsi: OpsiMeja,
     data: DataMeja,
   ) {
     const menungguJoker = Array.isArray(data.menungguJoker) ? data.menungguJoker : [];
+    const pengaturan = { ...PENGATURAN_BAWAAN, ...data.pengaturan };
     this.d = {
       ...data,
-      pengaturan: { ...PENGATURAN_BAWAAN, ...data.pengaturan },
+      // Level yang tidak dikenal (simpanan rusak atau dari versi lain) jatuh ke bawaan.
+      pengaturan: { ...pengaturan, levelBot: rapikanLevel(pengaturan.levelBot) },
+      kursi: data.kursi.map((k) => ({ ...k, level: rapikanLevel(k.level) })),
       game: data.game && migrasiState(data.game),
       menungguJoker,
       // Simpanan lama (belum ada field ini): yang tidak sedang ditunggu dianggap sudah melihat
@@ -173,6 +201,7 @@ export class Meja {
   /** Meja baru dengan host di kursi 0. */
   static buat(opsi: OpsiMeja, pemainId: string, nama: string, pengaturan: Partial<PengaturanMeja> = {}): Meja {
     const p = { ...PENGATURAN_BAWAAN, ...pengaturan };
+    p.levelBot = rapikanLevel(p.levelBot);
     const kursi: Kursi[] = Array.from({ length: p.jumlahPemain }, () => kursiKosong(p.levelBot));
     kursi[0] = { jenis: 'manusia', nama: rapikanNama(nama), pemainId, terhubung: true, level: p.levelBot };
     const data: DataMeja = {
@@ -378,7 +407,8 @@ export class Meja {
     if (lama.jenis === 'manusia' && lama.pemainId) {
       this.kirimKe(lama.pemainId, { t: 'keluar', alasan: 'Kursimu diganti oleh host.' });
     }
-    const lv = level ?? this.d.pengaturan.levelBot;
+    // Pesan dari jaringan sudah divalidasi; meja offline memanggil langsung dari isian UI.
+    const lv = level === undefined ? this.d.pengaturan.levelBot : rapikanLevel(level);
     this.d.kursi[i] =
       jenis === 'bot'
         ? { jenis: 'bot', nama: namaBot(this.d.kursi, i, this.opsi.namaLawan), pemainId: null, terhubung: false, level: lv }
@@ -543,9 +573,14 @@ export class Meja {
       }
     }
     rencana.slice(0, 3).forEach(([kursi, isi], i) =>
-      this.penjadwal.setel(700 + i * 800 + Math.floor(acak() * 400), () => {
-        if (!this.berhenti) this.kirimEmote(kursi, isi);
-      }),
+      this.pasangTimer(
+        700 + i * 800 + Math.floor(acak() * 400),
+        'celetukan warga kedai',
+        () => {
+          if (!this.berhenti) this.kirimEmote(kursi, isi);
+        },
+        false,
+      ),
     );
   }
 
@@ -561,9 +596,59 @@ export class Meja {
     if (this.timerBot !== null) this.penjadwal.batal(this.timerBot);
     if (this.timerGiliran !== null) this.penjadwal.batal(this.timerGiliran);
     if (this.timerTenggang !== null) this.penjadwal.batal(this.timerTenggang);
+    if (this.timerPulih !== null) this.penjadwal.batal(this.timerPulih);
     this.timerBot = null;
     this.timerGiliran = null;
     this.timerTenggang = null;
+    this.timerPulih = null;
+  }
+
+  /**
+   * Pasang timer meja. Galat di dalam callback tidak pernah lolos keluar: di Node galat timer yang
+   * lolos bisa mematikan proses, dan di browser meja offline diam macet. Galatnya dicatat, lalu
+   * (kalau `pulihkan`) jadwal meja disusun ulang supaya meja tidak tertinggal tanpa timer.
+   */
+  private pasangTimer(ms: number, konteks: string, fn: () => void, pulihkan = true): unknown {
+    return this.penjadwal.setel(ms, () => {
+      try {
+        fn();
+      } catch (e) {
+        this.catatGalat(konteks, e);
+        if (pulihkan) this.pulihkanJadwal();
+      }
+    });
+  }
+
+  /**
+   * Susun ulang timer sesudah galat. Kalau jadwalkan() sendiri galat, coba lagi nanti dengan jeda
+   * yang makin panjang (tidak pernah berputar cepat), sampai berhasil atau ada perubahan lain.
+   */
+  private pulihkanJadwal(): void {
+    if (this.berhenti) return;
+    try {
+      this.jadwalkan();
+      this.gagalJadwal = 0;
+    } catch (e) {
+      this.catatGalat('menyusun ulang jadwal meja', e);
+      try {
+        this.timerPulih = this.penjadwal.setel(jedaUlangGalat(++this.gagalJadwal), () => {
+          this.timerPulih = null;
+          this.pulihkanJadwal();
+        });
+      } catch (e2) {
+        this.catatGalat('memasang timer pemulihan', e2);
+      }
+    }
+  }
+
+  /** Catat galat lewat opsi.saatGalat (bawaan console.error). Tidak pernah melempar lagi. */
+  private catatGalat(konteks: string, e: unknown): void {
+    try {
+      if (this.opsi.saatGalat) this.opsi.saatGalat(konteks, e);
+      else console.error(`[meja ${this.d.kode}] ${konteks}`, e);
+    } catch {
+      // Pencatatnya sendiri galat: diamkan, yang penting meja jalan terus.
+    }
   }
 
   /** Atur ulang timer bot dan batas waktu giliran sesuai state sekarang. */
@@ -605,7 +690,7 @@ export class Meja {
           this.kunciTimer = kunciJoker;
           this.batasWaktu = sekarang + lamaJoker;
         }
-        this.timerGiliran = this.penjadwal.setel(Math.max(0, this.batasWaktu! - sekarang), () => {
+        this.timerGiliran = this.pasangTimer(Math.max(0, this.batasWaktu! - sekarang), 'batas waktu pengumuman joker', () => {
           // Popupnya sudah tampil sampai batas waktu: dianggap sudah melihat, tidak ditanya lagi.
           this.d.sudahLihatJoker = [...new Set([...this.d.sudahLihatJoker, ...this.d.menungguJoker])].sort((a, b) => a - b);
           this.d.menungguJoker = [];
@@ -637,7 +722,7 @@ export class Meja {
       return false;
     });
     if (akhirTenggang !== Infinity) {
-      this.timerTenggang = this.penjadwal.setel(akhirTenggang - sekarang, () => {
+      this.timerTenggang = this.pasangTimer(akhirTenggang - sekarang, 'masa tenggang sambung ulang', () => {
         this.timerTenggang = null;
         if (this.kunciGiliran() === kunci) this.berubah();
       });
@@ -645,12 +730,14 @@ export class Meja {
     if (olehBot.length) {
       const awalGiliran = this.kunciLangkahBot !== kunci;
       const [min, maks] = JEDA_BOT[this.d.pengaturan.tempoBot ?? 'santai'][awalGiliran ? 'mikir' : 'lanjut'];
-      const jeda = this.opsi.jedaBotMs ?? Math.round(min + Math.random() * (maks - min));
+      // Langkah sebelumnya di giliran ini gagal total: coba lagi dengan jeda yang makin panjang.
+      const gagal = this.galatBot?.kunci === kunci ? this.galatBot.kali : 0;
+      const jeda = gagal ? jedaUlangGalat(gagal) : (this.opsi.jedaBotMs ?? Math.round(min + Math.random() * (maks - min)));
       if (awalGiliran) this.botMikir = olehBot[0];
-      this.timerBot = this.penjadwal.setel(jeda, () => {
+      this.timerBot = this.pasangTimer(jeda, 'langkah warga kedai', () => {
         this.kunciLangkahBot = kunci;
         this.botMikir = null;
-        this.langkahBot(olehBot[0]);
+        this.langkahBot(olehBot[0], kunci);
       });
       if (olehBot.length === menunggu.length) return;
     }
@@ -664,33 +751,55 @@ export class Meja {
       this.batasWaktu = this.penjadwal.sekarang() + detik * 1000;
     }
     const sisa = Math.max(0, this.batasWaktu! - this.penjadwal.sekarang());
-    this.timerGiliran = this.penjadwal.setel(sisa, () => {
+    this.timerGiliran = this.pasangTimer(sisa, 'batas waktu giliran', () => {
       if (this.kunciGiliran() !== kunci) return;
       this.ambilAlih = kunci;
       this.berubah();
     });
   }
 
-  private langkahBot(giliran: number): void {
+  /**
+   * Satu aksi warga kedai untuk kursi `giliran`. Galat di sini tidak boleh membuat meja macet
+   * (keputusan pemilik #38), jadi ada cadangan berlapis, semuanya aksi sah yang tetap divalidasi
+   * mesin: strategi sesuai level kursi, lalu strategi mudah, lalu aksiAman(). Kalau semuanya galat,
+   * giliran ini dicoba lagi nanti dengan jeda yang makin panjang; selama itu meja tetap melayani
+   * pemain (emote, keluar, sambung ulang, aksi manusia yang sah).
+   */
+  private langkahBot(giliran: number, kunci: string): void {
     this.timerBot = null;
     const g = this.d.game;
     if (!g || !g.putaran) return;
     if (g.status === 'putaranBerjalan' ? g.putaran.giliran !== giliran : g.status !== 'susunAkhir') return;
     const k = this.d.kursi[giliran];
     const level: LevelBot = k.jenis === 'bot' ? k.level : 'normal';
+    // Dikosongkan dulu supaya jadwal sesudah aksi yang berhasil kembali ke jeda biasa.
+    const gagalSebelumnya = this.galatBot?.kunci === kunci ? this.galatBot.kali : 0;
+    this.galatBot = null;
+    // Jalur normal memakai rng persis seperti sebelumnya (golden master meja tidak bergeser).
     const rng = new Rng(this.d.rngBot);
-    const view = viewUntuk(g, giliran);
-    const aksi = pilihAksiBot(view, level, rng);
-    this.d.rngBot = rng.state;
-    try {
-      this.terapkan(g, aksi);
-    } catch (e) {
-      // Seharusnya tidak terjadi (bot memakai validasi yang sama). Coba bot mudah supaya meja tidak macet.
-      console.error(`[meja ${this.d.kode}] aksi bot ditolak`, aksi, e);
-      const cadangan = pilihAksiBot(view, 'mudah', rng);
-      this.d.rngBot = rng.state;
-      this.terapkan(g, cadangan);
+    let view: ViewPemain | null = null;
+    for (const cara of [level, 'mudah', 'aman'] as const) {
+      let aksi: Aksi | null = null;
+      try {
+        view ??= viewUntuk(g, giliran);
+        aksi = cara === 'aman' ? aksiAman(view) : pilihAksiBot(view, cara, rng);
+        this.d.rngBot = rng.state;
+        this.terapkan(g, aksi);
+        return;
+      } catch (e) {
+        if (this.d.game !== g) {
+          // Aksinya sudah diterapkan, yang galat sesudahnya (menyiarkan/menyimpan). Jangan disusul
+          // aksi lain; cukup pastikan jadwal meja tetap tersusun.
+          this.catatGalat(`sesudah langkah warga kedai kursi ${giliran}`, e);
+          this.pulihkanJadwal();
+          return;
+        }
+        this.catatGalat(`langkah warga kedai kursi ${giliran} (${cara})${aksi ? ` ditolak: ${JSON.stringify(aksi)}` : ''}`, e);
+      }
     }
+    // Semua cara galat: coba lagi nanti, jedanya makin panjang tiap gagal lagi di giliran yang sama.
+    this.galatBot = { kunci, kali: gagalSebelumnya + 1 };
+    this.pulihkanJadwal();
   }
 
   private perbaruiHost(): void {
@@ -763,13 +872,57 @@ export function buatRingkasanAkhir(kode: string, kursi: Kursi[], game: GameState
   return { kode, selesaiPada, alasan: game.alasanSelesai, jumlahPutaran: game.riwayat.length, pemain };
 }
 
+/**
+ * Cadangan terakhir kalau strategi warga kedai galat: aksi sah paling sederhana, dipilih dari view
+ * dengan validator engine yang sama (tidak ada aturan baru). Tahap ambil = ambil dari deck, tahap
+ * main = buang kartu pertama yang sah (joker hidup paling akhir, supaya tidak kena −25 kalau masih
+ * ada pilihan lain), susun akhir = Selesai. Melempar kalau tidak ada aksi aman.
+ */
+function aksiAman(view: ViewPemain): Aksi {
+  const p = view.putaran;
+  const saya = view.saya;
+  if (p && saya !== null) {
+    if (view.status === 'susunAkhir' && !p.selesaiSusun[saya]) return { jenis: 'selesaiSusun', pemain: saya };
+    if (view.status === 'putaranBerjalan' && p.giliran === saya) {
+      if (p.tahap === 'ambil' && p.jumlahDeck > 0) return { jenis: 'ambilDeck', pemain: saya };
+      const tangan = p.tangan[saya];
+      const sumberAmbil = p.sumberAmbil;
+      if (p.tahap === 'main' && tangan && sumberAmbil) {
+        const ctx = { rankJoker: p.rankJoker, jokerMati: p.jokerMati };
+        const sah = tangan.filter((kartu) => {
+          try {
+            validasiBuang({
+              tangan,
+              punyaKartuJadi: p.kartuJadi[saya].length > 0,
+              sumberAmbil,
+              kartuId: kartu.id,
+              ctx,
+              asJokerBolehDibuangTanpaJadi: view.konfigurasi.asJokerBolehDibuangTanpaJadi,
+            });
+            return true;
+          } catch (e) {
+            if (e instanceof AturanError) return false;
+            throw e;
+          }
+        });
+        const kartu = sah.find((x) => !isJokerHidup(x, ctx)) ?? sah[0];
+        if (kartu) return { jenis: 'buang', pemain: saya, kartuId: kartu.id };
+      }
+    }
+  }
+  throw new Error('Tidak ada aksi aman untuk warga kedai ini.');
+}
+
 function kursiKosong(level: LevelBot): Kursi {
   return { jenis: 'kosong', nama: '', pemainId: null, terhubung: false, level };
 }
 
 /**
- * Nama lawan otomatis bawaan: "Warga Madya", sapaan + benda/suasana Kedai Madya. Semua ≤ 10 huruf
- * (muat di panel HP 360 dengan teks besar) dan inisialnya berbeda-beda (label sempit di buangan).
+ * Nama lawan otomatis bawaan. Sepuluh pertama "Warga Madya" (sapaan + benda/suasana Kedai Madya); sisanya
+ * nama pilihan pemilik (14 Okt 2026, "Mas Sampul" di daftar itu sudah ada di atas). Nama baru ditambahkan di
+ * belakang: golden meja dan latihan memakai nama-nama terdepan sesuai urutan. Semua ≤ 10 huruf (muat di
+ * panel HP 360 dengan teks besar) dan unik tanpa beda huruf besar/kecil. Label sempit di buangan dibedakan
+ * di client (`labelSempit`, tataMeja.ts) terhadap nama lain di meja, termasuk nama satu kata (Jurik, Juragan).
  * Nama tidak pernah bergantung pada level, kartu, giliran, atau peristiwa.
  */
 export const NAMA_LAWAN_BAWAAN: readonly string[] = [
@@ -783,6 +936,18 @@ export const NAMA_LAWAN_BAWAAN: readonly string[] = [
   'Ning Sore',
   'Om Garpu',
   'Bu Sendok',
+  'Cak Owner',
+  'Penampil',
+  'Koki-Kun',
+  'Bang IT',
+  'Bos Bocil',
+  'Jurik',
+  'Bajigur',
+  'Pak Tani',
+  'Juragan',
+  'Ning Kukis',
+  'Mbak Mata',
+  'Om Napi',
 ];
 
 /** Daftar nama lawan bawaan dengan urutan acak (Fisher–Yates). Sumber acak bisa diganti di test. */

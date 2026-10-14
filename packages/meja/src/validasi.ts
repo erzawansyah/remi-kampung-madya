@@ -1,15 +1,33 @@
 // Validasi bentuk pesan dari client. Data dari jaringan tidak dipercaya: bentuk yang salah
 // ditolak di sini supaya tidak pernah sampai ke mesin aturan.
 
-import type { LevelBot, SpesifikasiKartuJadi } from '@remi/engine';
-import { DAFTAR_EMOTE, EMOTE_LAMA, type AksiKlien, type Emote, type PengaturanMeja, type PesanKlien } from './protokol.js';
+import { DAFTAR_LEVEL_BOT, type LevelBot, type SpesifikasiKartuJadi } from '@remi/engine';
+import {
+  DAFTAR_EMOTE,
+  EMOTE_LAMA,
+  PENGATURAN_BAWAAN,
+  type AksiKlien,
+  type Emote,
+  type PengaturanMeja,
+  type PesanKlien,
+} from './protokol.js';
 
 type Obj = Record<string, unknown>;
 
 const isObj = (x: unknown): x is Obj => typeof x === 'object' && x !== null && !Array.isArray(x);
 const isInt = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x);
 const isStr = (x: unknown, maks = 200): x is string => typeof x === 'string' && x.length <= maks;
-const isLevel = (x: unknown): x is LevelBot => x === 'mudah' || x === 'normal';
+
+/** Level warga kedai yang dikenal versi ini (DAFTAR_LEVEL_BOT di engine). */
+export const isLevel = (x: unknown): x is LevelBot => (DAFTAR_LEVEL_BOT as readonly unknown[]).includes(x);
+
+/**
+ * Level dari data yang tidak bisa dipercaya penuh (simpanan di HP, isian UI): yang tidak dikenal
+ * (rusak, kosong, atau dari versi lain) jatuh ke level bawaan, supaya meja tetap jalan.
+ */
+export function rapikanLevel(x: unknown): LevelBot {
+  return isLevel(x) ? x : PENGATURAN_BAWAAN.levelBot;
+}
 
 function spesifikasi(x: unknown): SpesifikasiKartuJadi[] | null {
   if (!Array.isArray(x) || x.length < 1 || x.length > 8) return null;
@@ -115,7 +133,7 @@ export function validasiPesan(x: unknown): PesanKlien | null {
     case 'aturKursi':
       if (!isInt(x.kursi) || (x.jenis !== 'bot' && x.jenis !== 'kosong')) return null;
       if (x.level !== undefined && !isLevel(x.level)) return null;
-      return { t: 'aturKursi', kursi: x.kursi, jenis: x.jenis, level: x.level as LevelBot | undefined };
+      return { t: 'aturKursi', kursi: x.kursi, jenis: x.jenis, level: x.level };
     case 'pengaturan': {
       const p = validasiPengaturan(x.pengaturan);
       return p ? { t: 'pengaturan', pengaturan: p } : null;

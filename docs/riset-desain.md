@@ -624,7 +624,7 @@ Usulan berikut menyentuh perilaku meja, kebiasaan main, atau selera tongkrongan.
 
 ## Catatan dari pembacaan kode (perlu dicek pemilik)
 
-Riset aksesibilitas menemukan dua hal di client yang mungkin bersinggungan dengan keputusan mode ingatan. Keduanya **belum diubah** dan sekarang tercatat sebagai baris Aturan Terbuka README yang menunggu keputusan pemilik:
+Riset aksesibilitas menemukan dua hal di client yang mungkin bersinggungan dengan keputusan mode ingatan. Keduanya dicatat sebagai baris Aturan Terbuka README dan sudah diputuskan pemilik pada 13 Okt 2026: sub-teks JOKER DIBUANG?! dipertahankan, teks aksi buang jadi "buang kartu".
 
 1. `efek/pemutar.ts` menampilkan sorakan "JOKER DIBUANG?!" beserta nama kartunya. Lihat [#28](keputusan-pemilik.md#k28).
 2. Panel pemain mencatat aksi giliran seperti "buang 7♥". Lihat [#29](keputusan-pemilik.md#k29).

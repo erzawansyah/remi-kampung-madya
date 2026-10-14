@@ -6,10 +6,11 @@
 //
 // "Warga kedai" = istilah untuk pemain komputer (kode tetap memakai 'bot').
 
-import type { DataMeja, PengaturanMeja, RingkasanMeja } from '@remi/meja';
+import { rapikanLevel, type DataMeja, type PengaturanMeja, type RingkasanMeja } from '@remi/meja';
 import { svgLogo } from '../aset/logoMadya';
 import { gambarKartuKeKanvas, type KartuGambar } from '../game/kartuGrafisGambar';
 import { htmlTautanKedai, KEDAI } from '../konten/kedai';
+import { DAFTAR_LEVEL_WARGA, LEVEL_WARGA, labelLevelKecil } from '../konten/levelWarga';
 import { aturPreferensi, preferensi, saatPreferensiBerubah } from '../preferensi';
 import { simpan } from '../penyimpanan';
 import { labelVersi } from '../versi';
@@ -81,7 +82,7 @@ const TEKS_STATUS: Record<StatusOnline, string> = {
 const LABEL_TEMPO: Record<string, string> = { santai: 'santai', normal: 'tempo normal', cepat: 'cepat' };
 
 function pengaturanTersimpan(): PengaturanMeja {
-  return {
+  const p: PengaturanMeja = {
     jumlahPemain: 4,
     duaDeckUntukEmpat: false,
     levelBot: 'normal',
@@ -93,6 +94,8 @@ function pengaturanTersimpan(): PengaturanMeja {
     detikGiliran: 0,
     ...simpan.pengaturanOffline(),
   };
+  // Level yang tidak dikenal (simpanan rusak/versi lain) jadi 'normal', supaya pilihan dan ringkasan cocok.
+  return { ...p, levelBot: rapikanLevel(p.levelBot) };
 }
 
 /** Pendengar preferensi kipas dari beranda yang terakhir digambar (dilepas saat beranda diganti). */
@@ -137,7 +140,7 @@ export async function konfirmasiTimpaSimpanan(alasan: string): Promise<boolean> 
 function ringkasMeja(p: Pick<PengaturanMeja, 'jumlahPemain' | 'levelBot' | 'tempoBot' | 'batasPutaran'>): string {
   return [
     `${p.jumlahPemain} pemain`,
-    `lawan ${p.levelBot}`,
+    `lawan ${labelLevelKecil(rapikanLevel(p.levelBot))}`,
     LABEL_TEMPO[p.tempoBot] ?? p.tempoBot,
     p.batasPutaran ? `${p.batasPutaran} putaran` : 'tanpa batas putaran',
   ].join(' · ');
@@ -203,10 +206,11 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
                 <select id="o-jumlah">${pilihan(p.jumlahPemain, [2, 3, 4, 5, 6].map((n) => [n, String(n)]))}</select></label>
               <label class="baris" id="o-dua-baris">Pakai 2 deck (12 kartu)<input type="checkbox" id="o-dua" ${p.duaDeckUntukEmpat ? 'checked' : ''} /></label>
               <label class="baris">Level warga kedai
-                <select id="o-level">${pilihan(p.levelBot, [
-                  ['mudah', 'Mudah'],
-                  ['normal', 'Normal'],
-                ])}</select></label>
+                <select id="o-level" aria-describedby="ket-level">${pilihan(
+                  p.levelBot,
+                  DAFTAR_LEVEL_WARGA.map((l) => [l.level, l.pilihan]),
+                )}</select></label>
+              <p class="bantuan rapat" id="ket-level">${esc(LEVEL_WARGA[p.levelBot].ket)}</p>
               <label class="baris">Tempo warga kedai
                 <select id="o-tempo">${pilihan(p.tempoBot, [
                   ['santai', 'Santai'],
@@ -320,7 +324,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
     return {
       jumlahPemain: n,
       duaDeckUntukEmpat: n === 4 && el<HTMLInputElement>('o-dua')!.checked,
-      levelBot: el<HTMLSelectElement>('o-level')!.value as PengaturanMeja['levelBot'],
+      levelBot: rapikanLevel(el<HTMLSelectElement>('o-level')!.value),
       tempoBot: el<HTMLSelectElement>('o-tempo')!.value as PengaturanMeja['tempoBot'],
       batasPutaran: Number(el<HTMLSelectElement>('o-putaran')!.value) || null,
       batasSkorAtas: skor ? 500 : null,
@@ -332,6 +336,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
     const baru = bacaPengaturan();
     simpan.setPengaturanOffline(baru);
     el('ringkas-meja')!.textContent = ringkasMeja({ ...p, ...baru });
+    el('ket-level')!.textContent = LEVEL_WARGA[rapikanLevel(baru.levelBot)].ket;
   };
   akar.querySelector('.isi-atur')!.addEventListener('change', perbaruiAtur);
   el('o-dua-baris')!.classList.toggle('tersembunyi', jumlah.value !== '4');

@@ -15,6 +15,8 @@
 // Fungsi keputusan (momenPembaruan, putuskanPembaruan, serverBeda, percobaan) murni dan diuji di
 // apps/client/test/pembaruan.test.ts; kelas PengelolaPembaruan merangkainya dengan timer dan toast.
 
+import type { StatusKoneksi } from './koneksi';
+
 export type LayarPembaruan = 'beranda' | 'publik' | 'riwayat' | 'lobi' | 'meja';
 
 /** Seberapa aman memuat ulang halaman sekarang. */
@@ -109,11 +111,16 @@ export interface InfoBuild {
   label: string;
 }
 
-const shaDikenal = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-f]{7,40}$/i.test(s);
+/**
+ * Identitas build yang bisa dibandingkan (scripts/idBuild.mjs): commit git (hex) atau hash isi sumber
+ * ("h-" + hex, build tanpa GIT_SHA dan tanpa .git). 'dev' (dev server) dan kosong tidak.
+ */
+const shaDikenal = (s: unknown): s is string => typeof s === 'string' && /^(?:h-)?[0-9a-f]{7,40}$/i.test(s);
 
 /**
  * Jawaban /healthz menunjukkan server memakai build lain dari client ini. Hanya kalau sha keduanya
- * dikenal (bukan 'dev'/kosong); sha pendek dibandingkan sepanjang yang lebih pendek.
+ * dikenal (bukan 'dev'/kosong); sha pendek dibandingkan sepanjang yang lebih pendek. Commit dan hash
+ * isi tidak pernah sama (commit tidak diawali "h-"), jadi build dengan GIT_SHA vs tanpa = beda.
  */
 export function serverBeda(klien: Pick<InfoBuild, 'sha'>, healthz: unknown): boolean {
   if (!healthz || typeof healthz !== 'object') return false;
@@ -379,4 +386,24 @@ export const CEK_BERKALA_MS = 30 * 60 * 1000;
 /** Perlu cek sekarang? Dipaksa (mis. server beda versi) selalu boleh. */
 export function bolehCek(terakhir: number | null, sekarang: number, paksa = false): boolean {
   return paksa || terakhir === null || sekarang - terakhir >= JEDA_CEK_MIN_MS;
+}
+
+/**
+ * Cek /healthz yang dipicu status koneksi online (satu objek per koneksi). Tersambung pertama kali =
+ * cek biasa (kena JEDA_CEK_MIN_MS; start aplikasi biasanya baru saja mengecek). Tersambung LAGI sesudah
+ * sempat putus/gagal = cek paksa: server bisa saja baru di-deploy ulang.
+ * KoneksiOnline selalu melapor 'menyambung' tepat sebelum 'tersambung', juga saat sambung ulang, jadi
+ * status persis sebelumnya tidak bisa dipakai. Yang diingat: ada putus sejak tersambung terakhir.
+ */
+export class PemicuCekServer {
+  private sempatPutus = false;
+
+  /** Status koneksi berubah. Null = tidak perlu cek; false = cek biasa; true = cek paksa. */
+  status(s: StatusKoneksi): boolean | null {
+    if (s === 'terputus' || s === 'gagal') this.sempatPutus = true;
+    if (s !== 'tersambung') return null;
+    const paksa = this.sempatPutus;
+    this.sempatPutus = false;
+    return paksa;
+  }
 }

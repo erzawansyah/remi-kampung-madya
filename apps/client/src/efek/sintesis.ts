@@ -232,6 +232,197 @@ export function petik(k: Keluaran, t: number, frek: number, dur: number, puncak:
   rapikan(k, osc, f, g, ...kirim);
 }
 
+// ---------- bahan untuk momen dramatis (pentungan dibuka, kepentung, joker dibuang) ----------
+
+/**
+ * Desir: derau tersaring yang membengkak sampai puncak di akhir lalu berhenti cepat (riser), seperti
+ * tarikan napas penonton sebelum kartu dibuka. Frekuensi saringan menyapu dari `frek` ke `frekAkhir`.
+ */
+export function desir(k: Keluaran, t: number, dur: number, o: { frek: number; frekAkhir: number; puncak: number; q?: number; lepas?: number; gema?: number }): void {
+  const { a } = k;
+  const src = a.createBufferSource();
+  src.buffer = k.derau;
+  src.loop = true;
+  const f = a.createBiquadFilter();
+  f.type = 'bandpass';
+  f.Q.value = o.q ?? 0.9;
+  f.frequency.setValueAtTime(o.frek, t);
+  f.frequency.exponentialRampToValueAtTime(o.frekAkhir, t + dur);
+  const g = a.createGain();
+  const puncak = Math.max(NOL, o.puncak);
+  const lepas = o.lepas ?? 0.06;
+  // Mulai ~26 dB di bawah puncak (bukan dari nol) supaya bengkaknya terdengar sejak awal.
+  g.gain.setValueAtTime(NOL, t);
+  g.gain.linearRampToValueAtTime(puncak * 0.05, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(puncak, t + dur);
+  g.gain.exponentialRampToValueAtTime(NOL, t + dur + lepas);
+  src.connect(f).connect(g);
+  const kirim = keBus(k, g, o.gema ?? 0);
+  src.start(t, acak(0, k.derau.duration * 0.5));
+  src.stop(t + dur + lepas + 0.02);
+  rapikan(k, src, f, g, ...kirim);
+}
+
+/**
+ * Dentum: hentakan besar. "Krak" derau pendek, badan segitiga (supaya tetap terasa di speaker HP yang
+ * tidak sanggup bass), dan sub yang jatuh nadanya.
+ */
+export function dentum(k: Keluaran, t: number, puncak: number, o: { frek?: number; panjang?: number } = {}): void {
+  const frek = o.frek ?? 110;
+  const panjang = o.panjang ?? 0.9;
+  nada(k, t, frek, panjang, { puncak, serang: 0.004, geserKe: frek * 0.33 });
+  nada(k, t, frek * 2, panjang * 0.4, { tipe: 'triangle', puncak: puncak * 0.45, serang: 0.003, geserKe: frek * 0.9, lowpass: 1100 });
+  gesek(k, t, 0.09, { frek: 2600, frekAkhir: 600, q: 0.5, puncak: puncak * 0.5, serang: 0.001 });
+  gesek(k, t, 0.35, { frek: 520, frekAkhir: 90, q: 0.7, puncak: puncak * 0.45, serang: 0.003, tipe: 'lowpass' });
+}
+
+/** Parsial logam kecrek (Hz, kekerasan relatif): tak-harmonis supaya terdengar seperti lempeng, bukan nada. */
+const PARSIAL_KECREK = [
+  [3170, 0.1],
+  [4410, 0.07],
+  [6020, 0.05],
+] as const;
+
+/**
+ * Kecrek wayang: lempeng logam yang dipukul dalang sebagai penanda adegan genting.
+ * Derau terang + beberapa parsial logam tak-harmonis yang cepat padam.
+ */
+export function kecrek(k: Keluaran, t: number, puncak: number, dur = 0.14): void {
+  gesek(k, t, dur, { frek: 5400, frekAkhir: 4200, q: 0.7, puncak, serang: 0.001 });
+  // Segitiga tanpa saringan: cukup terang untuk kesan logam, lebih murah dari kotak + lowpass.
+  for (const [frek, p] of PARSIAL_KECREK) nada(k, t, frek * acak(0.985, 1.015), dur * 0.8, { tipe: 'triangle', puncak: puncak * p * 1.4, serang: 0.001 });
+}
+
+/**
+ * Pukul-pukulan berurutan pada satu gain: serang 1,5 ms lalu luruh eksponensial. Luruh dipotong sebelum
+ * pukulan berikutnya, karena titik otomatisasi harus urut waktunya.
+ */
+function pukulan(g: AudioParam, waktu: readonly number[], luruhMaks: number, puncak: (i: number) => number): void {
+  g.setValueAtTime(NOL, waktu[0]);
+  waktu.forEach((t, i) => {
+    const luruh = Math.min(luruhMaks, ((waktu[i + 1] ?? t + luruhMaks * 2) - t) * 0.85);
+    g.setValueAtTime(NOL, t);
+    g.linearRampToValueAtTime(Math.max(NOL, puncak(i)), t + 0.0015);
+    g.exponentialRampToValueAtTime(NOL, t + Math.max(0.004, luruh));
+  });
+}
+
+/**
+ * Rentetan pukulan derau (gulungan kendang, crek-crek kecrek yang makin rapat) dengan SATU sumber derau,
+ * seperti gemeretak: tiap pukulan hanya titik otomatisasi gain, jadi ringan walau puluhan pukulan.
+ */
+export function rentetDerau(k: Keluaran, waktu: readonly number[], o: { frek: number; q: number; luruh: number; puncak: (i: number) => number }): void {
+  if (waktu.length === 0) return;
+  const { a } = k;
+  const src = a.createBufferSource();
+  src.buffer = k.derau;
+  src.loop = true;
+  const f = a.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.value = o.frek;
+  f.Q.value = o.q;
+  const g = a.createGain();
+  pukulan(g.gain, waktu, o.luruh, o.puncak);
+  src.connect(f).connect(g).connect(k.ke);
+  src.start(waktu[0], acak(0, k.derau.duration * 0.5));
+  src.stop(waktu[waktu.length - 1] + o.luruh + 0.03);
+  rapikan(k, src, f, g);
+}
+
+/**
+ * Rentetan pukulan bernada pendek dengan SATU osilator (badan "tak"/"dung" kendang dalam gulungan, atau
+ * bilah yang dipukul cepat): tiap pukulan menyetel ulang nadanya ke `frek` (boleh beda per pukulan),
+ * lalu turun ke `frekAkhir` kalau ada.
+ */
+export function rentetNada(
+  k: Keluaran,
+  waktu: readonly number[],
+  o: { frek: number | ((i: number) => number); frekAkhir?: number; tipe?: OscillatorType; luruh: number; puncak: (i: number) => number; gema?: number },
+): void {
+  if (waktu.length === 0) return;
+  const { a } = k;
+  const osc = a.createOscillator();
+  osc.type = o.tipe ?? 'sine';
+  const g = a.createGain();
+  pukulan(g.gain, waktu, o.luruh, o.puncak);
+  waktu.forEach((t, i) => {
+    osc.frequency.setValueAtTime(typeof o.frek === 'number' ? o.frek : o.frek(i), t);
+    if (o.frekAkhir) osc.frequency.exponentialRampToValueAtTime(o.frekAkhir, t + Math.min(o.luruh, ((waktu[i + 1] ?? t + 1) - t) * 0.85));
+  });
+  osc.connect(g);
+  const kirim = keBus(k, g, o.gema ?? 0);
+  osc.start(waktu[0]);
+  osc.stop(waktu[waktu.length - 1] + o.luruh + 0.03);
+  rapikan(k, osc, g, ...kirim);
+}
+
+/**
+ * Tiup: nada rendah ala kuningan yang membengkak (dua gergaji sedikit sumbang, saringan yang membuka lalu
+ * menutup). Untuk akord dramatis di bawah bilah dan gong; selalu disaring supaya tetap hangat.
+ */
+export function tiup(k: Keluaran, t: number, frek: number, dur: number, o: { puncak: number; serang?: number; terang?: number; gema?: number; geserKe?: number }): void {
+  const { a } = k;
+  const serang = Math.min(o.serang ?? 0.08, dur * 0.8);
+  const f = a.createBiquadFilter();
+  f.type = 'lowpass';
+  f.Q.value = 0.8;
+  f.frequency.setValueAtTime(frek * 1.2, t);
+  f.frequency.exponentialRampToValueAtTime(Math.min(7000, frek * (o.terang ?? 5)), t + serang);
+  f.frequency.exponentialRampToValueAtTime(frek * 1.3, t + dur);
+  const g = a.createGain();
+  amplop(g.gain, t, serang, o.puncak, Math.max(0.05, dur - serang));
+  f.connect(g);
+  const kirim = keBus(k, g, o.gema ?? 0);
+  const osc = [-8, 8].map((sen) => {
+    const s = a.createOscillator();
+    s.type = 'sawtooth';
+    s.frequency.setValueAtTime(frek, t);
+    if (o.geserKe) s.frequency.exponentialRampToValueAtTime(o.geserKe, t + dur);
+    s.detune.value = sen;
+    s.connect(f);
+    s.start(t);
+    s.stop(t + dur + 0.03);
+    return s;
+  });
+  rapikan(k, osc[0], f, g, ...kirim);
+  rapikan(k, osc[1]);
+}
+
+/** Panjang tunda tiap jalur gema aula (detik): saling tak sebanding supaya pantulannya tidak berdenyut. */
+const TUNDA_AULA = [0.0797, 0.0937, 0.1087, 0.1229] as const;
+
+/**
+ * Gema aula: ekor gema panjang khusus bunyi dramatis, dari empat jalur tunda berumpan balik yang
+ * diredam (lowpass) dan disebar kiri-kanan. Sengaja bukan ConvolverNode: menyiapkan respons impuls
+ * konvolusi memakan puluhan ms di main thread (diukur 70–130 ms di CPU yang diperlambat 4x), sedangkan
+ * ini hanya belasan node. `detik` = waktu luruh sampai −60 dB. Kembalikan node masukannya.
+ */
+export function buatAula(a: BaseAudioContext, tujuan: AudioNode, o: { detik: number; basah: number }): AudioNode {
+  const masuk = a.createGain();
+  const basah = a.createGain();
+  basah.gain.value = o.basah;
+  basah.connect(tujuan);
+  // Pra-tunda kecil supaya hentakan tetap tajam di depan ekornya.
+  const pra = a.createDelay(0.1);
+  pra.delayTime.value = 0.02;
+  masuk.connect(pra);
+  TUNDA_AULA.forEach((d, i) => {
+    const tunda = a.createDelay(0.5);
+    tunda.delayTime.value = d;
+    const redam = a.createBiquadFilter();
+    redam.type = 'lowpass';
+    redam.frequency.value = 2600;
+    redam.Q.value = 0.3;
+    const umpan = a.createGain();
+    umpan.gain.value = 10 ** ((-3 * d) / o.detik);
+    const geser = a.createStereoPanner();
+    geser.pan.value = i % 2 ? 0.55 : -0.55;
+    pra.connect(tunda).connect(redam).connect(umpan).connect(tunda);
+    redam.connect(geser).connect(basah);
+  });
+  return masuk;
+}
+
 /** Bangun gema ringan (tunda + umpan balik tersaring) yang keluar ke `tujuan`. Kembalikan node masukannya. */
 export function buatGema(a: BaseAudioContext, tujuan: AudioNode, o: { tunda: number; umpan: number; basah: number; lowpass: number }): AudioNode {
   const masuk = a.createGain();

@@ -695,10 +695,12 @@ export class KontrolMeja implements AksiAdegan {
         },
         { bisaDitutup: false },
       );
+      // Siapa yang kepentung sudah tampil untuk semua orang di panel ini: yang kena dapat bunyi besar,
+      // yang lain cukup isyarat pelan.
       if (e.kepentung.includes(saya)) {
         bunyi('kepentung');
         getar('kepentung');
-      }
+      } else if (e.kepentung.length > 0) bunyi('kepentungLain');
     });
   }
 

@@ -95,7 +95,7 @@ describe('server WebSocket', () => {
       urutan.push(nama.join('|'));
       a.tutup();
     }
-    // Enam meja dengan urutan yang sama persis hampir mustahil kalau diacak (10P5 = 30.240 kemungkinan).
+    // Enam meja dengan urutan yang sama persis hampir mustahil kalau diacak (22 nama: 22P5 = 3.160.080 kemungkinan).
     expect(new Set(urutan).size).toBeGreaterThan(1);
   });
 

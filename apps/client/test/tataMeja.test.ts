@@ -624,11 +624,15 @@ describe('jumlah kartu & skor lawan selalu kebagian tempat', () => {
 });
 
 describe('label nama pembuang di bawah buangan', () => {
-  it('inisialNama: nama beberapa kata jadi inisial (maks 3 huruf), satu kata tidak', () => {
+  it('inisialNama: huruf awal tiap kata (maks 3, tanda hubung = pemisah kata), satu kata: dua huruf pertama', () => {
     expect(inisialNama('Bot 1')).toBe('B1');
     expect(inisialNama('budi santoso')).toBe('BS');
     expect(inisialNama('Pak Haji Udin Ganteng')).toBe('PHU');
-    expect(inisialNama('Penguji')).toBeNull();
+    expect(inisialNama('Koki-Kun')).toBe('KK');
+    expect(inisialNama('Penguji')).toBe('PE');
+    expect(inisialNama('Jurik')).toBe('JU');
+    expect(inisialNama('A')).toBeNull();
+    expect(inisialNama('😀😀')).toBeNull();
     expect(inisialNama('  ')).toBeNull();
   });
 
@@ -636,10 +640,26 @@ describe('label nama pembuang di bawah buangan', () => {
     const px = 10;
     expect(labelSempit('Bot 1', 100, px)).toEqual({ isi: 'Bot 1', minHuruf: 3 });
     expect(labelSempit('Bot 1', 16, px)).toEqual({ isi: 'B1', minHuruf: 2 });
-    expect(labelSempit('Penguji', 25, px)).toEqual({ isi: 'Penguji', minHuruf: 3 });
+    expect(labelSempit('Penguji', 25, px)).toEqual({ isi: 'PE', minHuruf: 2 });
     expect(labelSempit('Penguji', 12, px)).toBeNull();
     expect(labelSempit('Bot 1', 8, px)).toBeNull();
     expect(labelSempit('', 100, px)).toBeNull();
+    // Tanpa inisial (dua karakter pertamanya bukan huruf/angka semua): dipotong asal masih ≥ 3 huruf.
+    expect(labelSempit('(Budi)', 25, px)).toEqual({ isi: '(Budi)', minHuruf: 3 });
+  });
+
+  it('labelSempit: tidak bisa tertukar dengan nama lain di meja', () => {
+    const px = 10;
+    // Inisial kembar (dengan inisial atau nama orang lain): inisial tidak dipakai, nama dipotong sampai beda.
+    expect(labelSempit('Juragan', 30, px, ['Budi'])).toEqual({ isi: 'JU', minHuruf: 2 });
+    expect(labelSempit('Juragan', 30, px, ['Budi', 'Jurik'])).toEqual({ isi: 'Juragan', minHuruf: 4 }); // 'Jura…'
+    expect(labelSempit('Jurik', 28, px, ['Juragan'])).toBeNull(); // 'Juri…' tidak muat, 'Jur…' bisa dibaca Juragan
+    expect(labelSempit('Pak Seng', 40, px, ['Pak Sule'])).toEqual({ isi: 'Pak Seng', minHuruf: 6 }); // 'Pak Se…'
+    expect(labelSempit('Kipas Dua', 20, px, ['KD'])).toBeNull();
+    // Spasi di ujung potongan dibuang scene ('Bu …' → 'Bu…'), jadi huruf sesudahnya ikut: 'Bu S…'.
+    expect(labelSempit('Bu Sendok', 100, px, ['Budi'])).toEqual({ isi: 'Bu Sendok', minHuruf: 4 });
+    // Nama yang jadi awalan nama lain tidak boleh dipotong sama sekali.
+    expect(labelSempit('Juri', 100, px, ['Jurik'])).toEqual({ isi: 'Juri', minHuruf: 5 });
   });
 
   it('label buangan tidak pernah tinggal satu huruf + elipsis', () => {
@@ -975,15 +995,53 @@ describe("label '+N' buangan terlihat", () => {
 // ---------------------------------------------------------------------------------------------
 
 describe('nama lawan warga kedai & penanda kursi', () => {
-  it('nama bawaan: inisial dan label sempit unik (tidak bisa tertukar di bawah buangan)', () => {
-    const inisial = NAMA_LAWAN_BAWAAN.map((n) => inisialNama(n));
-    expect(inisial.every((x) => x && x.length === 2)).toBe(true);
-    expect(new Set(inisial).size).toBe(NAMA_LAWAN_BAWAAN.length);
-    for (const lebar of [16, 30, 60, 200]) {
-      const label = NAMA_LAWAN_BAWAAN.map((n) => labelSempit(n, lebar, 10));
-      const isi = label.filter(Boolean).map((l) => l!.isi);
-      expect(new Set(isi).size, `lebar ${lebar}`).toBe(isi.length);
+  /** Tiruan pasTeks (MejaScene) dengan kiraLebarTeks: label yang benar-benar tampil, '' kalau disembunyikan. */
+  const labelTampil = (nama: string, lebar: number, namaLain: readonly string[], px = 10): string => {
+    const l = labelSempit(nama, lebar, px, namaLain);
+    if (!l) return '';
+    if (kiraLebarTeks(l.isi, px) <= lebar) return l.isi;
+    let muat = 0;
+    for (let k = 1; k <= l.isi.length; k++) if (kiraLebarTeks(`${l.isi.slice(0, k).trimEnd()}…`, px) <= lebar) muat = k;
+    return muat >= l.minHuruf ? `${l.isi.slice(0, muat).trimEnd()}…` : '';
+  };
+
+  it('nama bawaan: label sempit di bawah buangan tidak pernah kembar di meja yang sama, di lebar mana pun', () => {
+    // Yang diuji teks yang tampil, per meja, di semua lebar sekaligus (kartu teratas lebih lebar daripada kartu di
+    // bawahnya): tiap pasangan nama bawaan, meja penuh (manusia + 5 warga kedai) digeser di sepanjang daftar,
+    // dan manusia yang namanya mirip warga kedai.
+    const N = NAMA_LAWAN_BAWAAN;
+    const daftarMeja: string[][] = [];
+    for (let i = 0; i < N.length; i++) for (let j = i + 1; j < N.length; j++) daftarMeja.push([N[i], N[j]]);
+    for (let g = 0; g < N.length; g++) daftarMeja.push(['Budi', ...Array.from({ length: 5 }, (_, k) => N[(g + k) % N.length])]);
+    daftarMeja.push(['Juri', 'Jurik', 'Juragan'], ['Pak Teguh', 'Pak Tani', 'Pak Seng'], ['KD', 'Kipas Dua'], ['Penguji', 'Penampil', 'Pak Seng']);
+    const salah: string[] = [];
+    for (const meja of daftarMeja) {
+      const pemilik = new Map<string, string>();
+      for (const nama of meja) {
+        const lain = meja.filter((n) => n !== nama);
+        for (let lebar = 10; lebar <= 60; lebar += 0.5) {
+          const isi = labelTampil(nama, lebar, lain);
+          if (!isi) continue;
+          const p = pemilik.get(isi);
+          if (p !== undefined && p !== nama) salah.push(`${meja.join('/')}: '${isi}' = ${p} & ${nama}`);
+          pemilik.set(isi, nama);
+        }
+      }
     }
+    expect(salah).toEqual([]);
+    // Contoh nama bawaan yang awalnya sama.
+    expect(labelTampil('Juragan', 30, ['Jurik'])).toBe('Jura…');
+    expect(labelTampil('Jurik', 28, ['Juragan'])).toBe('');
+  });
+
+  it('nama bawaan: semuanya punya inisial 2 huruf, jadi tetap berlabel di lebar sempit (seperti HP 360 teks besar, 6 pemain)', () => {
+    for (const nama of NAMA_LAWAN_BAWAAN) {
+      expect(inisialNama(nama), nama).toMatch(/^[A-Z]{2}$/);
+      expect(labelTampil(nama, 14, ['Budi']), nama).toBe(inisialNama(nama));
+    }
+    // Satu-satunya pasangan bawaan yang inisialnya kembar ('JU'); di meja yang sama keduanya dipotong sampai beda.
+    const kembar = NAMA_LAWAN_BAWAAN.filter((n, i) => NAMA_LAWAN_BAWAAN.some((m, j) => j !== i && inisialNama(m) === inisialNama(n)));
+    expect(kembar).toEqual(['Jurik', 'Juragan']);
   });
 
   it("kursi warga kedai ditandai ikon kecil (bukan teks 'bot'); level tidak tercermin; manusia tanpa ikon", () => {
@@ -1074,7 +1132,7 @@ describe('nama lawan warga kedai & penanda kursi', () => {
         it(`${n} pemain, ${layar.nama}`, () => {
           const u = ukuran(layar);
           const salah: string[] = [];
-          // Tiap nama bawaan dicoba di tiap kursi lawan (digeser 0..9), dengan skor −125 dan 10 kartu; lawan
+          // Tiap nama bawaan dicoba di tiap kursi lawan (digeser sepanjang daftar), dengan skor −125 dan 10 kartu; lawan
           // pertama juga dicoba tinggal 1 kartu (peringatan).
           for (let geser = 0; geser < NAMA_LAWAN_BAWAAN.length; geser++) {
             for (const bahaya of [false, true]) {
@@ -1410,7 +1468,7 @@ describe('HP lanskap pendek: teks tidak bertumpuk & nama lawan utuh, juga setela
       it(`${n} pemain, ${layar.nama}`, () => {
         const u = ukuran(layar);
         const salah: string[] = [];
-        // Nama warga kedai bawaan digeser di tiap kursi (terpanjang: 'Mbak Teras', 'Mas Sampul').
+        // Nama warga kedai bawaan digeser di tiap kursi (terpanjang: 'Mbak Teras', 'Mas Sampul', 'Ning Kukis').
         for (let geser = 0; geser < NAMA_LAWAN_BAWAAN.length; geser += 2) {
           const dasar: ViewPemain = {
             ...asli,

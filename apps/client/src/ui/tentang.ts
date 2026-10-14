@@ -272,7 +272,7 @@ export function bukaTentang(): void {
      <ul class="tentang-kredit">
        <li>Aturan main: teman-teman tongkrongan di Kedai Madya.</li>
        <li>${esc(KEDAI.kredit)}</li>
-       <li>Nama warga kedai (Kipas Dua, Si Rak, dan kawan-kawan) diambil dari benda dan suasana di kedai, misalnya kipas, rak buku, kursi toska, serta garpu dan sendok di logonya.</li>
+       <li>Sebagian nama warga kedai (Kipas Dua, Si Rak, dan kawan-kawan) diambil dari benda dan suasana di kedai, misalnya kipas, rak buku, kursi toska, serta garpu dan sendok di logonya.</li>
        <li>Huruf judul <b>Baloo 2</b> oleh Ek Type, lisensi SIL Open Font License 1.1 (<a href="/font/OFL-baloo2.txt" target="_blank" rel="noopener">teks lisensi</a>).</li>
        <li>Mesin grafis <a href="https://phaser.io" target="_blank" rel="noopener noreferrer">Phaser</a> (lisensi MIT).</li>
        <li>Kartu, suara, dan musik dibuat langsung oleh aplikasi (tanpa file gambar atau rekaman), jadi tetap jalan offline.</li>

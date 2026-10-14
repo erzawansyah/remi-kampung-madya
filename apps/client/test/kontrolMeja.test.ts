@@ -699,6 +699,47 @@ describe('hancurkan menghentikan pemutar', () => {
   });
 });
 
+describe('bunyi panel mentung (siapa yang kepentung sudah tampil untuk semua orang)', () => {
+  it("aku mentung, orang lain kena: getar mentung, bunyi 'kepentungLain' (pelan), bukan 'kepentung'", async () => {
+    meja = await mejaSiapMentung();
+    tekan('ArrowRight');
+    tekan(' ');
+    tekan('b');
+    await sampai(() => !!document.querySelector('#modal [data-mentung]'));
+    expect(bunyi).toHaveBeenCalledWith('tegang');
+    expect(bunyi).toHaveBeenCalledWith('mentung');
+    expect(getar).toHaveBeenCalledWith('mentung');
+    expect(bunyi).toHaveBeenCalledWith('kepentungLain');
+    expect(bunyi).not.toHaveBeenCalledWith('kepentung');
+    expect(getar).not.toHaveBeenCalledWith('kepentung');
+  });
+
+  it("aku kepentung (kartuku dipungut lalu lawan mentung): bunyi dan getar 'kepentung'", async () => {
+    const g = skenario({
+      rankJoker: 2,
+      tangan: [['3 waru', '4 waru', '8 waru'], ['5 love', '6 love', '9 waru'], ['3 love', '4 love', '8 kriting'], ['J love', 'Q love', '10 waru']],
+      buangan: [['7 love', 0]],
+      giliran: 1,
+    });
+    const m = (meja = new MejaUji(g, { kursi: g.pemain.map((p, i) => ({ jenis: i < 2 ? 'manusia' : 'bot', nama: p.nama, terhubung: true, level: 'normal' })) }));
+    const terapkan = (aksi: Aksi) => {
+      const h = terapkanAksi(m.g, aksi);
+      if (!h.ok) throw new Error(h.error.pesan);
+      m.g = h.state;
+      m.kontrol.perbarui(null, m.view());
+    };
+    terapkan({ jenis: 'mulung', pemain: 1, jumlah: 1, kartuJadi: [spek('5 love', '6 love', '7 love')] });
+    terapkan({ jenis: 'buang', pemain: 1, kartuId: m.g.putaran!.tangan[1][0].id });
+    await sampai(() => !!document.querySelector('#modal [data-mentung]'));
+    expect(document.querySelector('#modal .kotak-status')!.textContent).toContain('KEPENTUNG');
+    expect(bunyi).toHaveBeenCalledWith('kepentung');
+    expect(getar).toHaveBeenCalledWith('kepentung');
+    expect(bunyi).not.toHaveBeenCalledWith('kepentungLain');
+    // Yang mentung lawan: aku tidak ikut getar mentung.
+    expect(getar).not.toHaveBeenCalledWith('mentung');
+  });
+});
+
 describe('kocok & bagi kartu terlihat', () => {
   it('peristiwaAwalPerluDiputar: hanya mulaiPutaran yang belum diikuti aksi dan joker belum kulihat', () => {
     const g = permainanGiliranku();
