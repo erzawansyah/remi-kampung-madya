@@ -68,30 +68,24 @@ afterEach(() => {
 });
 
 describe('konten level', () => {
-  it('semua level engine punya label, pilihan, dan keterangan; urutan sama dengan engine', () => {
+  it('semua level engine punya label dan pilihan; urutan sama dengan engine', () => {
     expect(DAFTAR_LEVEL_WARGA.map((l) => l.level)).toEqual([...DAFTAR_LEVEL_BOT]);
     expect(DAFTAR_LEVEL_WARGA.map((l) => l.label)).toEqual(['Mudah', 'Normal', 'Jago', 'Suhu']);
     for (const l of DAFTAR_LEVEL_WARGA) {
-      expect(l.label && l.pilihan && l.ket, l.level).toBeTruthy();
+      expect(l.label && l.pilihan, l.level).toBeTruthy();
       // Teks UI: istilahnya warga kedai, bukan "bot".
-      expect(`${l.label} ${l.pilihan} ${l.ket}`, l.level).not.toMatch(/\bbot\b/i);
+      expect(`${l.label} ${l.pilihan} ${l.ket ?? ''}`, l.level).not.toMatch(/\bbot\b/i);
+      // Antislop (AGENTS.md) dan tanpa janji mutlak.
+      expect(l.ket ?? '', l.level).not.toMatch(/sekadar|\bselalu\b|pasti menang|nggak terkalahkan/i);
     }
     expect(new Set(DAFTAR_LEVEL_WARGA.map((l) => l.label)).size).toBe(DAFTAR_LEVEL_BOT.length);
-    expect(LEVEL_WARGA.jago.pilihan).toMatch(/susah/);
-    expect(LEVEL_WARGA.suhu.pilihan).toMatch(/susah banget/);
   });
 
-  it('keterangan tidak menjanjikan lebih dari strateginya', () => {
-    for (const l of DAFTAR_LEVEL_WARGA) {
-      // Antislop (AGENTS.md) dan tanpa janji mutlak.
-      expect(l.ket, l.level).not.toMatch(/sekadar|\bselalu\b|pasti menang|nggak terkalahkan/i);
+  it('keputusan pemilik: Jago dan Suhu tanpa petunjuk kesulitan dan tanpa keterangan cara main', () => {
+    for (const l of [LEVEL_WARGA.jago, LEVEL_WARGA.suhu]) {
+      expect(l.pilihan).toBe(l.label);
+      expect(l.ket).toBeUndefined();
     }
-    // Ingatan suhu hanya dari peristiwa yang masih ada di view (BATAS_PERISTIWA_VIEW terakhir),
-    // jadi jangan bilang ingat semua kartu.
-    expect(LEVEL_WARGA.suhu.ket).toMatch(/baru-baru ini/);
-    expect(LEVEL_WARGA.suhu.ket).not.toMatch(/\bsemua\b/i);
-    // Jago tidak memakai riwayat sama sekali.
-    expect(LEVEL_WARGA.jago.ket).not.toMatch(/\bingat kartu\b/i);
   });
 
   it('level tidak dikenal: infoLevel null, label kecil kosong (tidak melempar)', () => {
@@ -102,11 +96,14 @@ describe('konten level', () => {
     expect(labelLevelKecil('suhu')).toBe('suhu');
   });
 
-  it('Bantuan menjelaskan keempat level dari sumber yang sama', () => {
+  it('Bantuan menyebut keempat level dari sumber yang sama, tanpa urutan kesulitan', () => {
     const bab = BAB_BANTUAN.find((b) => b.id === 'online')!;
-    const tabel = bab.isi.find((b) => b.t === 'tabel' && b.kepala[0] === 'Level');
-    expect(tabel).toBeDefined();
-    expect(tabel!.t === 'tabel' && tabel!.baris).toEqual(DAFTAR_LEVEL_WARGA.map((l) => [l.label, l.ket]));
+    expect(bab.isi.some((b) => b.t === 'tabel' && b.kepala[0] === 'Level')).toBe(false);
+    const teks = bab.isi.find((b) => b.t === 'paragraf' && b.teks.includes('Level warga kedai'));
+    expect(teks).toBeDefined();
+    const isi = teks!.t === 'paragraf' ? teks!.teks : '';
+    for (const l of DAFTAR_LEVEL_WARGA) expect(isi).toContain(l.label);
+    expect(isi).not.toMatch(/susah/i);
   });
 });
 
@@ -117,8 +114,8 @@ describe('beranda: level warga kedai', () => {
     expect([...s.options].map((o) => [o.value, o.textContent])).toEqual([
       ['mudah', 'Mudah'],
       ['normal', 'Normal'],
-      ['jago', 'Jago (susah)'],
-      ['suhu', 'Suhu (susah banget)'],
+      ['jago', 'Jago'],
+      ['suhu', 'Suhu'],
     ]);
     expect(terpilih(s)).toEqual(['normal']);
     expect(s.getAttribute('aria-describedby')).toBe('ket-level');
@@ -131,7 +128,10 @@ describe('beranda: level warga kedai', () => {
     renderBeranda(akar(), aksi);
     pilih(akar().querySelector<HTMLSelectElement>('#o-level')!, 'suhu');
     expect(akar().querySelector('#ringkas-meja')!.textContent).toContain('lawan suhu');
-    expect(akar().querySelector('#ket-level')!.textContent).toBe(LEVEL_WARGA.suhu.ket);
+    // Suhu tanpa keterangan: petunjuknya disembunyikan.
+    const ket = akar().querySelector<HTMLElement>('#ket-level')!;
+    expect(ket.hidden).toBe(true);
+    expect(ket.textContent).toBe('');
     expect(simpan.pengaturanOffline().levelBot).toBe('suhu');
     akar().querySelector<HTMLButtonElement>('#mulai-bot')!.click();
     await tunggu();

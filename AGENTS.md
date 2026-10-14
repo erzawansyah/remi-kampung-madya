@@ -24,7 +24,7 @@ Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Atu
 
 ```bash
 npm install
-npm test             # semua test: engine, simulasi 2.160 putaran bot-vs-bot (paling lama, ±26 dtk), golden, meja, server, client
+npm test             # semua test (±30–36 dtk): engine, simulasi 2.160 putaran bot-vs-bot (paling lama, ±26 dtk), golden, meja, server, client
 npm run test:client  # hanya test client (happy-dom), ±4 detik
 npm run typecheck    # engine, meja, server, client (termasuk apps/client/test)
 npm run dev:server   # server WebSocket :2567 (tsx watch)

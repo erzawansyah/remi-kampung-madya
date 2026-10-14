@@ -210,7 +210,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
                   p.levelBot,
                   DAFTAR_LEVEL_WARGA.map((l) => [l.level, l.pilihan]),
                 )}</select></label>
-              <p class="bantuan rapat" id="ket-level">${esc(LEVEL_WARGA[p.levelBot].ket)}</p>
+              <p class="bantuan rapat" id="ket-level"${LEVEL_WARGA[p.levelBot].ket ? '' : ' hidden'}>${esc(LEVEL_WARGA[p.levelBot].ket ?? '')}</p>
               <label class="baris">Tempo warga kedai
                 <select id="o-tempo">${pilihan(p.tempoBot, [
                   ['santai', 'Santai'],
@@ -336,7 +336,9 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
     const baru = bacaPengaturan();
     simpan.setPengaturanOffline(baru);
     el('ringkas-meja')!.textContent = ringkasMeja({ ...p, ...baru });
-    el('ket-level')!.textContent = LEVEL_WARGA[rapikanLevel(baru.levelBot)].ket;
+    const ket = LEVEL_WARGA[rapikanLevel(baru.levelBot)].ket ?? '';
+    el('ket-level')!.textContent = ket;
+    el('ket-level')!.hidden = !ket;
   };
   akar.querySelector('.isi-atur')!.addEventListener('change', perbaruiAtur);
   el('o-dua-baris')!.classList.toggle('tersembunyi', jumlah.value !== '4');

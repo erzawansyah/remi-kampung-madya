@@ -718,12 +718,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: '**Level warga kedai** dipilih di Atur meja (main offline), atau per kursi di lobi oleh host (meja online). Makin tinggi levelnya, makin susah dikalahkan. Warga kedai nggak bisa ngintip kartu orang: yang dilihatnya sama dengan yang terlihat dari kursinya.',
-      },
-      {
-        t: 'tabel',
-        kepala: ['Level', 'Cara mainnya'],
-        baris: DAFTAR_LEVEL_WARGA.map((l) => [l.label, l.ket]),
+        teks: `**Level warga kedai** (${DAFTAR_LEVEL_WARGA.map((l) => l.label).join(', ')}) dipilih di Atur meja (main offline), atau per kursi di lobi oleh host (meja online). Warga kedai nggak bisa ngintip kartu orang: yang dilihatnya sama dengan yang terlihat dari kursinya.`,
       },
       {
         t: 'langkah',
