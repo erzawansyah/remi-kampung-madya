@@ -17,9 +17,7 @@ Tampilan dan teks disesuaikan dengan Kedai Madya, tempat remi ini biasa dimainka
 - Bagian **Kedai Madya** di layar Tentang, lengkap dengan alamat dan tautan yang sama.
 - Satu baris ajakan main di Kedai Madya beserta tautan peta di klasemen akhir. Baris ini tidak muncul di hasil per putaran maupun di latihan.
 - Selama permainan, info kedai tidak pernah muncul sendiri lewat pop-up atau toast, dan meja, susun akhir, popup joker, panel mentung, serta tutorial tidak memuatnya. Kalau mau lihat, buka Tentang kapan saja, juga dari menu ☰ saat bermain.
-- Dua level warga kedai baru: **Jago** (susah) dan **Suhu** (susah banget). Pilih di Atur meja untuk main offline, atau per kursi di lobi untuk meja online. Atur meja menampilkan keterangan singkat level yang dipilih, dan Bantuan (bab Main online & offline) punya tabel keempat level. Level Mudah dan Normal tidak berubah.
-- **Jago** menahan kartu jadinya di tangan sambil menunggu buangan yang pas untuk mentung. Kalau bisa mentung, ia memilih cara yang paling menguntungkan (pentungan mahal, banyak yang kepentung), dan di susun akhir ia memilih susunan kartu jadi yang paling untung. Jago rajin mulung, dan buru-buru menurunkan kartu jadinya begitu ada lawan yang tinggal 2 kartu.
-- **Suhu** mainnya seperti Jago, ditambah: ingat kartu yang baru-baru ini dibuang dan dipungut, lebih hati-hati membuang kartu yang bisa dipakai lawan untuk mentung, dan tidak asal mulung kalau kartu dari deck lebih menjanjikan. Suhu juga tidak ikut buru-buru menurunkan kartu jadi saat lawan tinggal 2 kartu. Seperti level lain, Jago dan Suhu hanya tahu apa yang terlihat dari kursinya.
+- Dua level warga kedai baru: **Jago** dan **Suhu**. Pilih di Atur meja untuk main offline, atau per kursi di lobi untuk meja online. Level Mudah dan Normal tidak berubah.
 - Pentungan joker (250) punya bunyi sendiri yang paling besar, terdengar begitu kartunya terbuka di meja. Sebelum dibuka, bunyinya sama untuk pentungan apa pun, jadi tidak membocorkan isinya.
 
 #### Diubah
@@ -44,7 +42,7 @@ Tampilan dan teks disesuaikan dengan Kedai Madya, tempat remi ini biasa dimainka
 - Mentung lebih menegangkan. Selama pentungan masih tertutup, gebukan kendang dan kecrek makin rapat, lalu berhenti tepat saat kartunya dibuka dan disambut dentuman, gong, dan akord. Musik latar mengecil sebentar selama bunyi-bunyi besar ini, lalu kembali seperti semula.
 - Kalau kamu kepentung, terdengar hentakan berat lalu nada turun yang sendu, dan getarnya lebih terasa. Kalau orang lain yang kepentung, kamu cukup mendengar isyarat pelan.
 - Joker dibuang punya bunyi kejut sendiri yang pas dengan sorakan **JOKER DIBUANG?!**
-- Pilihan isi kursi di lobi sekarang berisi "Tunggu orang" dan kelompok "Warga kedai" dengan empat level: Mudah, Normal, Jago (susah), dan Suhu (susah banget).
+- Pilihan isi kursi di lobi sekarang berisi "Tunggu orang" dan kelompok "Warga kedai" dengan empat level: Mudah, Normal, Jago, dan Suhu.
 - Kalau tempatnya sempit, nama pembuang di bawah kartu buangan disingkat. Nama satu kata sekarang juga punya singkatan dua huruf (Jurik jadi "JU", Budi jadi "BU"), dan nama bertanda hubung disingkat per bagian (Koki-Kun jadi "KK"). Dulu nama satu kata di HP sering tidak tampil sama sekali.
 - Nomor versi di beranda dan layar Tentang sekarang selalu menyertakan kode build, misalnya "v0.2.0 (h-1a2b3c4)" atau kode commit.
 

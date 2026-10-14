@@ -32,7 +32,7 @@ Batch 14 Okt 2026 (level warga kedai Jago dan Suhu, 12 nama warga kedai baru, bu
 - Identitas build otomatis (`scripts/idBuild.mjs`): client dan server selalu sama, `GIT_SHA` opsional. Dicek di live sesudah PR #4: `/healthz` = `"sha":"h-e31a0eb"`, bukan `"dev"` lagi.
 - Penyaring webhook di server pemilik terbukti (riwayat pengiriman webhook GitHub, 14 Okt 2026): push ke `produksi` dijawab `{"status": "ignored"}`, push/merge ke `main` dijawab `{"status": "deploying"}` dan tayang ±1–2 menit kemudian.
 - Lama `npm test` sesudah jago/suhu ikut simulasi: ±30–36 dtk di mesin pengembang (61 berkas, 1561 test); job CI "Docker image" ±1 m 50 dtk.
-- Keterangan level Jago dan Suhu di `apps/client/src/konten/levelWarga.ts` sudah dipertajam sesuai `PARAM_JAGO`/`PARAM_SUHU`. Ingatan Suhu ditulis "baru-baru ini", bukan "semua", karena view hanya membawa 40 peristiwa terakhir (`ingatan.ts`); dijaga `levelWarga.test.ts`.
+- Keterangan level Jago dan Suhu **dihapus** dari UI atas permintaan pemilik (14 Okt 2026): namanya saja, tanpa "(susah)"/"(susah banget)" dan tanpa penjelasan cara main (`levelWarga.ts`, Bantuan, CHANGELOG pemain). Jangan ditambahkan lagi tanpa izin pemilik.
 - CHANGELOG `[Belum dirilis]` sudah mencatat rilis 13 Okt dan batch 14 Okt.
 - Cek versi server sesudah meja bubar: sudah dipaksa sejak awal (`main.ts` memanggil `cekServer(true)` saat "Meja X nggak ketemu."). Cek paksa saat sambungan pulih ternyata mati dan sudah diperbaiki (`PemicuCekServer`, dijaga `cekVersiServer.test.ts`).
 - Keputusan #38 (galat di timer warga kedai/meja) sudah diperbaiki di `packages/meja` (`galat-bot.test.ts`).
