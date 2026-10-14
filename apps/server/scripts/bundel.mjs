@@ -1,24 +1,19 @@
 // Bundel server jadi satu file dist/main.js, termasuk ws dan sirv, supaya image Docker
 // tidak perlu npm install sama sekali (tanpa lockfile = tidak reproducible).
-// Versi (package.json root) dan commit (env GIT_SHA atau git lokal) disuntik lewat define.
+// Versi (package.json root) dan identitas build disuntik lewat define. Identitasnya dari
+// scripts/idBuild.mjs (GIT_SHA > commit git > hash isi sumber "h-…"), sama dengan client.
 
-import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { idBuild } from '../../../scripts/idBuild.mjs';
 
 const akar = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const versi = JSON.parse(readFileSync(resolve(akar, '../../package.json'), 'utf8')).version;
 
-function shaBuild() {
-  if (process.env.GIT_SHA) return process.env.GIT_SHA.slice(0, 7);
-  try {
-    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-  } catch {
-    return 'dev';
-  }
-}
+const { id: sha, sumber } = idBuild();
+console.log(`id build server: ${sha} (${sumber})`);
 
 await build({
   entryPoints: [resolve(akar, 'src/main.ts')],
@@ -33,7 +28,7 @@ await build({
   external: ['bufferutil', 'utf-8-validate'],
   define: {
     __VERSI_SERVER__: JSON.stringify(versi),
-    __SHA_SERVER__: JSON.stringify(shaBuild()),
+    __SHA_SERVER__: JSON.stringify(sha),
   },
   logLevel: 'info',
 });

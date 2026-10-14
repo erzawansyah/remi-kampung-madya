@@ -34,6 +34,7 @@ import {
   CEK_BERKALA_MS,
   JEDA_TOAST_MS,
   pasangPenjawabSapa,
+  PemicuCekServer,
   PengelolaPembaruan,
   pesanSesudahPembaruan,
   serverBeda,
@@ -396,6 +397,7 @@ class Aplikasi implements AppUntukMeja {
     k.saatPesan((p) => {
       if (this.koneksi === k) this.terimaPesan(p);
     });
+    const pemicuCek = new PemicuCekServer();
     k.saatStatus((s) => {
       if (this.koneksi !== k || k.jenis === 'offline') return;
       const sebelum = this.statusKini;
@@ -404,7 +406,8 @@ class Aplikasi implements AppUntukMeja {
       this.saatStatusBerubah(s, sebelum);
       // Baru tersambung ke server: pastikan client ini build yang sama dengan server. Sambung LAGI
       // sesudah putus (server bisa saja baru di-deploy ulang) dicek tanpa jeda minimum.
-      if (s === 'tersambung' && sebelum !== 'tersambung') void this.cekServer(sebelum === 'terputus' || sebelum === 'gagal');
+      const paksa = pemicuCek.status(s);
+      if (paksa !== null && sebelum !== 'tersambung') void this.cekServer(paksa);
     });
   }
 

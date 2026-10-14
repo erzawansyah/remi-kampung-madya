@@ -1,7 +1,10 @@
 // Informasi versi aplikasi (SemVer dari package.json root, disuntik saat build).
 
 export const VERSI: string = __VERSI_APP__;
-/** Commit git pendek, atau 'dev' kalau tidak tersedia (mis. build Docker tanpa ARG GIT_SHA). */
+/**
+ * Identitas build (scripts/idBuild.mjs), sama dengan `sha` di /healthz: commit git pendek, atau hash isi
+ * sumber "h-1a2b3c4" kalau commit tidak diketahui (build Docker tanpa GIT_SHA), atau 'dev' di dev server.
+ */
 export const BUILD_SHA: string = __BUILD_SHA__;
 /** Waktu build (ISO 8601). */
 export const BUILD_WAKTU: string = __BUILD_WAKTU__;

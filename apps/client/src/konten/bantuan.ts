@@ -9,6 +9,7 @@
 
 import type { Bunga, Rank } from '@remi/engine';
 import { TENGGANG_SAMBUNG_MS } from '@remi/meja';
+import { DAFTAR_LEVEL_WARGA } from './levelWarga';
 
 /** Masa tenggang sambung ulang dalam detik (sama dengan yang dipakai meja). */
 const DETIK_TENGGANG = Math.round(TENGGANG_SAMBUNG_MS / 1000);
@@ -716,11 +717,20 @@ export const BAB_BANTUAN: BabBantuan[] = [
         teks: '**Offline bareng warga kedai** jalan sepenuhnya di HP tanpa internet, dan tersimpan otomatis tiap aksi. Kamu bisa lanjut kapan saja dari beranda. **Online** butuh internet dan bisa dimainkan bareng teman.',
       },
       {
+        t: 'paragraf',
+        teks: '**Level warga kedai** dipilih di Atur meja (main offline), atau per kursi di lobi oleh host (meja online). Makin tinggi levelnya, makin susah dikalahkan. Warga kedai nggak bisa ngintip kartu orang: yang dilihatnya sama dengan yang terlihat dari kursinya.',
+      },
+      {
+        t: 'tabel',
+        kepala: ['Level', 'Cara mainnya'],
+        baris: DAFTAR_LEVEL_WARGA.map((l) => [l.label, l.ket]),
+      },
+      {
         t: 'langkah',
         butir: [
           'Isi nama, lalu tekan Buat meja baru. Kamu jadi host.',
           'Bagikan kode meja (5 karakter, huruf dan angka), atau salin dan bagikan link undangannya.',
-          'Atur kursi: tunggu teman masuk, atau ajak warga kedai (pemain komputer). Host juga mengatur jumlah pemain, batas putaran, batas skor, waktu per giliran, tempo warga kedai, dan apakah meja muncul di daftar meja publik.',
+          'Atur kursi: tunggu teman masuk, atau ajak warga kedai (pemain komputer) lalu pilih levelnya. Host juga mengatur jumlah pemain, batas putaran, batas skor, waktu per giliran, tempo warga kedai, dan apakah meja muncul di daftar meja publik.',
           'Kalau semua kursi sudah terisi, host menekan Mulai main.',
         ],
       },

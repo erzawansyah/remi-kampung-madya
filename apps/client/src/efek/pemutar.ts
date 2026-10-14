@@ -198,7 +198,8 @@ export class PemutarPeristiwa {
         if (this.berhenti) return;
         this.k.tampakkan([id]);
         if (e.jokerDibuang) {
-          bunyi('joker');
+          // Peristiwa publik: jokernya sudah terbuka di buangan (bukan joker di tangan).
+          bunyi('jokerDibuang');
           void sorak({ judul: 'JOKER DIBUANG?!', sub: `${nama(e.pemain)} buang ${namaKartu(e.kartu)} · −25`, gaya: 'bahaya', durasi: 1400 });
         }
         const kunci = `${e.putaran}:${e.pemain}`;
@@ -216,14 +217,15 @@ export class PemutarPeristiwa {
         const dari = (e.pemain === saya ? (scene.posisiLepas(id) ?? scene.posisiKartu(id)) : undefined) ?? scene.posisiPemain(e.pemain);
         this.k.sembunyikan([id]);
         // Pentungan dibuang tertutup, tegang sebentar, lalu dibuka: baru ketahuan nilainya.
+        // 'tegang' sama untuk pentungan apa pun; bunyi joker baru diputar saat kartunya sudah terbuka.
         bunyi('tegang');
         await scene.pentung(e.pentungan, dari, e.nilai, e.pentunganJoker, () => {
           if (this.berhenti) return;
-          bunyi('mentung');
+          bunyi(e.pentunganJoker ? 'mentungJoker' : 'mentung');
           document.body.classList.add('goyang');
           // Cadangan bila hentikan() belum dipanggil saat lingkungan DOM dibongkar (test): jangan sentuh DOM yang hilang.
           this.nanti(() => typeof document !== 'undefined' && document.body?.classList.remove('goyang'), 500);
-          if (e.pemain === saya) getar('mentung');
+          if (e.pemain === saya) getar(e.pentunganJoker ? 'mentungJoker' : 'mentung');
         });
         if (this.berhenti) return;
         // Setelah itu panel mentung: tiap pemain langsung tahu kepentung atau tidak,

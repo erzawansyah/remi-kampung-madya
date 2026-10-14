@@ -2,13 +2,13 @@
 
 Dokumen ini merinci baris **#25–#39** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy.
 
-**Pemilik sudah memutuskan sebagian besar butir pada 13 Okt 2026.** Yang masih menunggu: **#30**, **#31**, dan **#38**. Jangan ubah perilaku butir yang masih menunggu sebelum ada keputusan.
+**Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. Dua hal kecil dari 14 Okt 2026 yang masih menunggu tanggapan pemilik ada di [Catatan lain](#catatan-lain-belum-masuk-tabel).
 
 Untuk tiap butir ada: keputusan pemilik (kalau sudah), apa yang terjadi sebelum keputusan, bukti di kode (`file:baris`, per kode saat rilis 0.2.0, jadi nomor baris bisa sudah bergeser), pilihan yang waktu itu ditawarkan, dan dampaknya. Pilihan **bukan aturan baru**, hanya daftar kemungkinan yang ditawarkan ke pemilik.
 
-Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 dan #26, 5 = #27 dan #28, 6 = #29, 7 = #30–#32 (yang dijawab hanya #32), 8 = #34, 9 = #33, 10 = #36, 11 = #37, 12 = #35, 13 = #39.
+Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 dan #26, 5 = #27 dan #28, 6 = #29, 7 = #30–#32 (#32 dijawab langsung; #30 dan #31 diserahkan ke saran pengembang), 8 = #34, 9 = #33, 10 = #36, 11 = #37, 12 = #35, 13 = #39. #38 disetujui 14 Okt 2026, saat pemilik meminta rencana perbaikannya dikerjakan.
 
-**Setelah pemilik memutuskan butir yang tersisa:**
+**Kalau pemilik mengubah keputusan atau ada butir baru:**
 1. Tulis keputusannya di kolom "Keputusan" README dan ubah statusnya.
 2. Kalau menyentuh aturan atau `packages/engine`/`packages/meja`: tambahkan unit test, lalu perbarui golden test dengan peninjauan (lihat [baseline-gameplay.md](baseline-gameplay.md)).
 3. Sesuaikan konten Bantuan/tutorial (`apps/client/src/konten/`) kalau teksnya ikut berubah.
@@ -22,15 +22,15 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 | [27](#k27) | Label "→rank" di kartu jadi dan log "(X jadi Y)" | client + engine (log) | Diputuskan: dipertahankan |
 | [28](#k28) | Sub-teks sorakan JOKER DIBUANG?! menyebut kartunya | client | Diputuskan: dipertahankan |
 | [29](#k29) | Teks aksi singkat "buang 7♥" di panel pemain | client | Diputuskan: jadi "buang kartu" |
-| [30](#k30) | Tangan 1 kartu praktis tidak bisa mulung/mentung lagi | aturan (akibat) | **Menunggu keputusan pemilik** |
-| [31](#k31) | Joker mati di tangan dinilai kartu biasa | aturan skor | **Menunggu keputusan pemilik** |
+| [30](#k30) | Tangan 1 kartu praktis tidak bisa mulung/mentung lagi | aturan (akibat) | Diputuskan: memang begitu |
+| [31](#k31) | Joker mati di tangan dinilai kartu biasa | aturan skor | Diputuskan: kartu biasa |
 | [32](#k32) | 2 deck: kartu kembar boleh jadi joker pengganti di seri yang sama | aturan kartu jadi | Diputuskan: boleh |
 | [33](#k33) | Keluar sebelum OK joker membuat meja macet | `packages/meja` | Diputuskan: diperbaiki |
 | [34](#k34) | Pemain yang menyambung ulang tidak melihat popup joker | `packages/meja` | Diputuskan: diperbaiki |
 | [35](#k35) | Batas waktu basi setelah semua terputus | `packages/meja` | Diputuskan: diperbaiki |
 | [36](#k36) | Voting akhiri tidak dihitung ulang saat pemilih berkurang | `packages/meja` | Diputuskan: diperbaiki |
 | [37](#k37) | Refresh di giliran sendiri langsung dimainkan bot | `packages/meja` | Diputuskan: masa tenggang |
-| [38](#k38) | Error di timer bot bisa mematikan server | `packages/meja` + `apps/server` | **Menunggu keputusan pemilik** (server sudah ditangani) |
+| [38](#k38) | Error di timer bot bisa mematikan server | `packages/meja` + `apps/server` | Diputuskan: diperbaiki |
 | [39](#k39) | Batas meja dan sambungan per jaringan terlalu kecil untuk Wi-Fi kedai | `apps/server` (deploy) | Diputuskan: bawaan dinaikkan |
 
 ---
@@ -179,7 +179,7 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 
 ## Perilaku room (`packages/meja`)
 
-Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Semuanya ada di `packages/meja` (dan satu di `apps/server`), yang dikunci di rilis 0.2.0. Bukti diverifikasi dengan skrip di audit (lihat catatan tiap butir). Perbaikan #33–#37 (keputusan 13 Okt 2026) diuji di `packages/meja/test/` dan bisa menggeser golden meja (lihat [baseline-gameplay.md](baseline-gameplay.md)).
+Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Semuanya ada di `packages/meja` (dan satu di `apps/server`), yang dikunci di rilis 0.2.0. Bukti diverifikasi dengan skrip di audit (lihat catatan tiap butir). Perbaikan #33–#37 (keputusan 13 Okt 2026) dan #38 (14 Okt 2026) diuji di `packages/meja/test/` (#38: `galat-bot.test.ts`); pergeseran golden meja yang ditimbulkannya dicatat di [baseline-gameplay.md](baseline-gameplay.md).
 
 <a id="k33"></a>
 
@@ -251,13 +251,25 @@ Butir 33–38 bukan aturan main, tapi perilaku room yang tampak seperti bug. Sem
 
 ## 38. Error di timer bot bisa mematikan server
 
-**Status: masih menunggu keputusan pemilik** (tidak termasuk daftar pertanyaan 13 Okt 2026). Sisi server sudah ditangani (lihat di bawah).
+**Keputusan pemilik (14 Okt 2026): diperbaiki (saran pengembang).** Galat di langkah warga kedai atau di timer meja lain tidak boleh membuat meja macet, baik di server maupun di mode offline. Perbaikannya di `packages/meja`, jadi berlaku untuk keduanya:
 
-**Sekarang:** `langkahBot()` menangkap error aksi bot pertama lalu mencoba bot mudah, tapi percobaan cadangan itu (dan error lain di `terapkan`/`siarkan` di dalam timer) tidak ditangkap lagi. Di Node, error di dalam `setTimeout` menjadi `uncaughtException`, dan server tidak punya penangan untuk itu. Proses mati dan semua meja (yang hanya ada di memori) hilang. Belum pernah terjadi di simulasi (bot selalu memakai validasi yang sama), jadi ini soal ketahanan.
+- **Cadangan berlapis di `langkahBot()`.** Kalau strategi sesuai level kursi galat atau aksinya ditolak mesin, warga kedai memakai strategi mudah. Kalau itu juga galat, dipakai aksi sah paling sederhana (`aksiAman()`): tahap ambil = ambil dari deck, tahap main = buang kartu pertama yang lolos `validasiBuang` (joker hidup dipilih paling akhir, supaya tidak kena −25 kalau masih ada kartu lain), susun akhir = Selesai. Semuanya tetap divalidasi mesin, jadi tidak ada aturan baru.
+- **Semua cadangan galat:** giliran itu dicoba lagi dengan jeda 2, 4, 8, 16, 32, lalu 60 detik (`JEDA_ULANG_GALAT_MS`, `JEDA_ULANG_GALAT_MAKS_MS`), tidak pernah berputar cepat. Selama menunggu, meja tetap melayani pemain: emote dan keluar meja jalan, dan pemain yang terputus bisa kembali memainkan gilirannya sendiri. Begitu langkahnya berhasil, jeda kembali normal.
+- **Galat sesudah aksi diterapkan** (misalnya saat menyiarkan ke pemain) tidak lagi memicu aksi cadangan. Sebelumnya cadangan diterapkan ke state lama, sehingga aksi yang sudah terjadi bisa tertimpa.
+- **Semua timer meja** (langkah warga kedai, batas waktu giliran, batas waktu pengumuman joker, masa tenggang sambung ulang, celetukan) dipasang lewat `pasangTimer()`. Galat di dalamnya ditangkap, lalu jadwal meja disusun ulang supaya meja tidak tertinggal tanpa timer. Kalau menyusun jadwal itu sendiri galat, dicoba lagi dengan jeda yang sama.
+- **Pencatatan:** galat dilaporkan lewat `OpsiMeja.saatGalat` (bawaan `console.error`). Server menghitungnya sebagai `galatMeja` dan mencatat "galat di timer meja …". Pembungkus penjadwal dan penjaga `uncaughtException` di server tetap ada sebagai jaring terakhir.
 
-**Sudah ditangani di sisi server (Okt 2026, `apps/server`):** callback timer meja dijalankan lewat penjadwal pembungkus yang menangkap galat per meja (dicatat dan dihitung sebagai `galatMeja`, terlihat di log berkala atau `/healthz` dengan `HEALTHZ_DETAIL=1`), ditambah penjaga `uncaughtException`/`unhandledRejection`. Proses tidak mati lagi. **Yang tersisa di `packages/meja`:** meja yang galat di `langkahBot` bisa macet (timer bot tidak dijadwalkan ulang sampai ada perubahan lain), dan mode offline di browser tidak punya pembungkus ini.
+Diuji di `packages/meja/test/galat-bot.test.ts`: galat disuntikkan lewat mock engine dan penjadwal yang tersendat, semuanya digerakkan `JamPalsu`. Jalur normal tidak berubah, jadi golden master meja tidak bergeser.
 
-**Bukti:** `packages/meja/src/meja.ts:550-558` (cadangan `this.terapkan(g, cadangan)` tanpa `try`), `apps/server/src/main.ts` (tidak ada `process.on('uncaughtException')`).
+**Sisa yang diketahui** (seharusnya hanya terjadi kalau engine sendiri rusak; contoh kasus tanpa buangan sah, tangan berisi As semua sebelum punya kartu jadi, tidak mungkin terjadi menurut #5 di README):
+- Kalau aksi sah paling sederhana pun gagal, giliran warga kedai itu tertahan dan dicoba ulang tiap 60 detik. Pemain tetap bisa keluar meja.
+- Kalau giliran pemain yang masih tersambung sudah diambil alih warga kedai karena waktunya habis, lalu semua cadangan gagal, pemain itu tetap tidak bisa memainkan gilirannya sendiri sampai percobaan ulang berhasil (ia tetap bisa keluar meja). Sengaja tidak diubah: melepas pengambilalihan berarti mengulang batas waktu giliran, dan itu perubahan perilaku room.
+
+**Sebelum keputusan:** `langkahBot()` menangkap error aksi bot pertama lalu mencoba bot mudah, tapi percobaan cadangan itu (dan error lain di `terapkan`/`siarkan` di dalam timer) tidak ditangkap lagi. Di Node, error di dalam `setTimeout` menjadi `uncaughtException`. Awalnya server tidak punya penangan untuk itu, jadi proses mati dan semua meja (yang hanya ada di memori) hilang. Belum pernah terjadi di simulasi (bot selalu memakai validasi yang sama), jadi ini soal ketahanan.
+
+Sisi server sudah ditangani lebih dulu (Okt 2026, `apps/server`): callback timer meja dijalankan lewat penjadwal pembungkus yang menangkap galat per meja (dicatat dan dihitung sebagai `galatMeja`, terlihat di log berkala atau `/healthz` dengan `HEALTHZ_DETAIL=1`), ditambah penjaga `uncaughtException`/`unhandledRejection`. Proses tidak mati lagi, tapi meja yang galat di `langkahBot` tetap bisa macet (timer bot tidak dijadwalkan ulang sampai ada perubahan lain), dan mode offline di browser tidak punya pembungkus itu.
+
+**Bukti (kode 0.2.0):** `packages/meja/src/meja.ts:550-558` (cadangan `this.terapkan(g, cadangan)` tanpa `try`), `apps/server/src/main.ts` (waktu itu belum ada `process.on('uncaughtException')`).
 
 **Pilihan:** bungkus callback timer di `Meja` dengan `try/catch` yang mencatat error lalu menjeda meja itu saja, dan/atau pasang penangan proses di server yang mencatat lalu tetap hidup. Tidak menyentuh aturan main.
 
@@ -286,12 +298,18 @@ Temuan audit yang lebih kecil, dicatat supaya tidak hilang:
 - **Urutan bagi kartu:** animasi bagi sudah disamakan dengan engine (mulai dari pengocok, nomor kursi naik, tanpa melihat arah; `apps/client/src/game/MejaScene.ts`, `bagiKartu`). Kalau di Kedai Madya urutannya lain, itu keputusan pemilik dan harus diubah di engine dulu.
 - **Simpanan offline berisi state lengkap** (deck, tangan bot) di `localStorage` (`remi.mejaOffline`). Hanya mode lawan bot, tapi bisa diintip lewat devtools.
 
+**Menunggu konfirmasi pemilik (14 Okt 2026).** Sudah dikerjakan sesuai saran pengembang dan tidak mengubah aturan main, tapi pemilik belum menanggapi secara khusus. Kalau pemilik tidak setuju, ubah di tempat yang disebut:
+- **Bunyi khusus pentung joker.** Pentungan joker (250) memutar bunyi `mentungJoker` yang lebih besar, baru sesudah kartunya terbuka di meja. Bunyi `tegang` sebelum dibuka sama untuk pentungan apa pun, jadi tidak membocorkan isinya (dijaga `apps/client/test/suaraDramatis.test.ts`), dan judul panel PENTUNG JOKER! sudah begitu sejak 0.2.0. Kalau semua pentungan harus berbunyi sama: satu baris di `apps/client/src/efek/pemutar.ts` (peristiwa `mentung`).
+- **Gaya warga kedai Jago dan Suhu yang menahan kartu jadi di tangan.** Sah menurut aturan sekarang, karena semua pemain boleh menurunkan kartu jadi di susun akhir (#19, #24), dan di arena jauh lebih kuat daripada langsung menurunkan (selalu menurunkan rugi sekitar 17–67 poin per putaran). Kalau gaya "antem-anteman" ini dianggap tidak sesuai kebiasaan meja Kedai Madya, itu keputusan aturan (atau parameter strategi di `packages/engine/src/bot/strategi.ts`), bukan perubahan sepihak.
+
 ## Identitas Kedai Madya (sudah diputuskan, Okt 2026)
 
 Bukan aturan main. Dicatat supaya tidak diubah tanpa pemilik:
 
 - **Istilah pemain komputer di UI:** "warga kedai". Kode, protokol, dan dokumen teknis tetap `bot`.
 - **Nama lawan:** konsep "Warga Madya" (Kipas Dua, Cak Kopag, Mbak Teras, Mas Sampul, Si Rak, Pak Seng, Dik Toska, Ning Sore, Om Garpu, Bu Sendok), diacak per meja, urutan tetap untuk latihan. Golden master meja boleh bergeser **hanya** karena nama ini (lihat [baseline-gameplay.md](baseline-gameplay.md)).
+  - **Tambahan pemilik (14 Okt 2026), ejaan persis:** Cak Owner, Penampil, Koki-Kun, Bang IT, Bos Bocil, Jurik, Bajigur, Pak Tani, Juragan, Ning Kukis, Mbak Mata, Om Napi ("Mas Sampul" di permintaan yang sama sudah ada). Ditambahkan di belakang daftar, jadi latihan dan golden meja tetap memakai nama-nama terdepan dan tidak bergeser.
+- **Level warga kedai (14 Okt 2026):** pemilik meminta level susah dan sangat susah dengan nama yang disesuaikan. Jadinya **Mudah, Normal, Jago (susah), Suhu (susah banget)**; nama dipilih pengembang. Label dan keterangannya satu sumber di `apps/client/src/konten/levelWarga.ts`.
 - **Logo:** dianggap sudah diizinkan kedai; kredit "Logo Kedai Madya dipakai dengan izin." di Tentang.
 - **Punggung kartu:** dasar arang + kawung kuning MADYA (#f1a615) + medali krem berisi maskot cangkir (versi mini: siluet cangkir).
 - **Promosi:** soft selling di beranda, Tentang, dan satu baris di klasemen akhir saja. Selama permainan tidak pernah muncul sendiri (tanpa pop-up/toast); pemain bisa melihatnya kapan saja lewat Tentang, termasuk dari menu ☰ saat bermain (rincian di AGENTS.md, "Promosi Kedai Madya").

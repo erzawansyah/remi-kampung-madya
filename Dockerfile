@@ -7,8 +7,10 @@ COPY packages/meja/package.json packages/meja/
 COPY apps/server/package.json apps/server/
 COPY apps/client/package.json apps/client/
 RUN npm ci --no-audit --no-fund
+# Termasuk scripts/idBuild.mjs: identitas build yang sama untuk client dan server (`sha` di /healthz).
 COPY . .
-# Commit yang dibangun (.git tidak ikut ke context): docker build --build-arg GIT_SHA=$(git rev-parse HEAD) .
+# GIT_SHA opsional (.git tidak ikut ke context): docker build --build-arg GIT_SHA=$(git rev-parse HEAD) .
+# Tanpa itu id-nya hash isi sumber "h-xxxxxxx", tetap sama di client dan server.
 ARG GIT_SHA=""
 ENV GIT_SHA=$GIT_SHA
 RUN npm run typecheck && npm test && npm run build

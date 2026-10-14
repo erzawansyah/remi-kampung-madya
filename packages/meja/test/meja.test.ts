@@ -7,6 +7,7 @@ import {
   Meja,
   NAMA_LAWAN_BAWAAN,
   namaLawanAcak,
+  rapikanNama,
   TENGGANG_SAMBUNG_MS,
   validasiPesan,
   type DataMeja,
@@ -882,13 +883,27 @@ describe('validasi pesan dari jaringan', () => {
 describe('nama lawan (warga kedai)', () => {
   const namaKursi = (meja: Meja) => meja.data.kursi.map((k) => k.nama);
 
-  it('daftar bawaan: 10 nama unik, masing-masing ≤ 10 karakter termasuk spasi, inisial tidak kembar', () => {
-    expect(NAMA_LAWAN_BAWAAN).toHaveLength(10);
-    expect(new Set(NAMA_LAWAN_BAWAAN.map((n) => n.toLowerCase())).size).toBe(10);
-    for (const n of NAMA_LAWAN_BAWAAN) expect([...n].length, n).toBeLessThanOrEqual(10);
-    const inisial = NAMA_LAWAN_BAWAAN.map((n) => n.split(' ').map((k) => k[0]).join('').toUpperCase());
-    expect(new Set(inisial).size).toBe(10);
+  it('daftar bawaan: unik tanpa beda huruf besar/kecil, ≤ 10 karakter termasuk spasi, utuh saat dirapikan, tanpa "bot"', () => {
+    expect(new Set(NAMA_LAWAN_BAWAAN.map((n) => n.toLocaleLowerCase('id-ID'))).size).toBe(NAMA_LAWAN_BAWAAN.length);
+    for (const n of NAMA_LAWAN_BAWAAN) {
+      expect([...n].length, n).toBeLessThanOrEqual(10);
+      // Tampil persis seperti ejaan pemilik (tanda hubung "Koki-Kun", huruf besar "Bang IT").
+      expect(rapikanNama(n), n).toBe(n);
+    }
     expect(NAMA_LAWAN_BAWAAN.some((n) => /bot/i.test(n))).toBe(false);
+    // Label sempit di buangan (inisial/potongan) dijaga tidak kembar di apps/client/test/tataMeja.test.ts.
+  });
+
+  it('sepuluh nama lama tetap di depan dengan urutan yang sama (golden meja & latihan); nama pilihan pemilik masing-masing sekali', () => {
+    expect(NAMA_LAWAN_BAWAAN.slice(0, 10)).toEqual([
+      'Kipas Dua', 'Cak Kopag', 'Mbak Teras', 'Mas Sampul', 'Si Rak', 'Pak Seng', 'Dik Toska', 'Ning Sore', 'Om Garpu', 'Bu Sendok',
+    ]);
+    // Permintaan pemilik 14 Okt 2026, ejaan persis. "Mas Sampul" sudah ada sebelumnya.
+    const pilihanPemilik = [
+      'Mas Sampul', 'Cak Owner', 'Penampil', 'Koki-Kun', 'Bang IT', 'Bos Bocil', 'Jurik',
+      'Bajigur', 'Pak Tani', 'Juragan', 'Ning Kukis', 'Mbak Mata', 'Om Napi',
+    ];
+    for (const n of pilihanPemilik) expect(NAMA_LAWAN_BAWAAN.filter((x) => x === n), n).toHaveLength(1);
   });
 
   it('tanpa opsi: urutan tetap NAMA_LAWAN_BAWAAN, semuanya unik', () => {
@@ -993,7 +1008,7 @@ describe('nama lawan (warga kedai)', () => {
     const rng = new Rng(5);
     const b = namaLawanAcak(() => rng.next());
     expect([...b].sort()).toEqual([...NAMA_LAWAN_BAWAAN].sort());
-    expect(namaLawanAcak(() => 0.999999)).toHaveLength(10);
+    expect(namaLawanAcak(() => 0.999999)).toHaveLength(NAMA_LAWAN_BAWAAN.length);
   });
 
   it('celetukan warga kedai semuanya ada di DAFTAR_EMOTE dan lolos validasi', () => {

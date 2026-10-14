@@ -151,6 +151,19 @@ describe('serverBeda (/healthz)', () => {
     expect(serverBeda(BUILD, { sha: 'A1B2C3D' })).toBe(false);
     expect(serverBeda({ sha: 'a1b2c3d4' }, { sha: 'a1b2c3d' })).toBe(false);
   });
+  it('id hash isi sumber (build tanpa GIT_SHA, scripts/idBuild.mjs) ikut dibandingkan', () => {
+    expect(serverBeda({ sha: 'h-1a2b3c4' }, { sha: 'h-1a2b3c4' })).toBe(false);
+    expect(serverBeda({ sha: 'h-1a2b3c4' }, { sha: 'H-1A2B3C4' })).toBe(false);
+    expect(serverBeda({ sha: 'h-1a2b3c4' }, { sha: 'h-9f8e7d6' })).toBe(true);
+    // Commit vs hash isi = dua build berbeda (commit tidak pernah diawali "h-").
+    expect(serverBeda(BUILD, { sha: 'h-a1b2c3d' })).toBe(true);
+    expect(serverBeda({ sha: 'h-a1b2c3d' }, { sha: 'a1b2c3d' })).toBe(true);
+    // Dev server tetap dilewati, juga melawan hash isi; bentuk lain tidak dikenal.
+    expect(serverBeda({ sha: 'dev' }, { sha: 'h-1a2b3c4' })).toBe(false);
+    expect(serverBeda({ sha: 'h-1a2b3c4' }, { sha: 'dev' })).toBe(false);
+    expect(serverBeda({ sha: 'h-1a2b3c4' }, { sha: 'h-xyz' })).toBe(false);
+    expect(serverBeda({ sha: 'h-1a2b3c4' }, { sha: 'a1b2c3d-dirty' })).toBe(false);
+  });
   it('build dev, server tanpa sha, atau jawaban aneh: diabaikan', () => {
     expect(serverBeda({ sha: 'dev' }, { sha: 'e4f5a6b' })).toBe(false);
     expect(serverBeda({ sha: '' }, { sha: 'e4f5a6b' })).toBe(false);
@@ -224,9 +237,9 @@ describe('PengelolaPembaruan', () => {
   let muatUlang: ReturnType<typeof vi.fn>;
   let tombol: ((() => void) | null)[];
 
-  const buat = (penyimpanan: PenyimpananSesi | null = sessionStorage) =>
+  const buat = (penyimpanan: PenyimpananSesi | null = sessionStorage, build: InfoBuild = BUILD) =>
     new PengelolaPembaruan({
-      build: BUILD,
+      build,
       keadaan: () => keadaan,
       tersembunyi: () => tersembunyi,
       aktifkanSW: aktifkanSW as unknown as () => void,
@@ -438,6 +451,21 @@ describe('PengelolaPembaruan', () => {
     p.nilai();
     expect(muatUlang).toHaveBeenCalledTimes(1);
     expect(aktifkanSW).not.toHaveBeenCalled();
+  });
+
+  it('anti-loop dengan id hash isi: /healthz tetap beda sesudah dimuat ulang = paling banyak MAKS kali', () => {
+    // Build tanpa GIT_SHA memakai hash isi sumber. Kalau server terus menjawab id lain (mis. belum
+    // di-redeploy), tiap muat halaman memanggil perluMuatUlangBiasa lagi: jatahnya tetap dibatasi.
+    const buildHash: InfoBuild = { ...BUILD, sha: 'h-1a2b3c4', label: 'v0.2.0 (h-1a2b3c4)' };
+    expect(serverBeda(buildHash, { sha: 'h-9f8e7d6' })).toBe(true);
+    tersembunyi = true;
+    let dimuat = 0;
+    for (let muat = 0; muat < 5; muat++) {
+      muatUlang.mockClear();
+      buat(sessionStorage, buildHash).perluMuatUlangBiasa();
+      dimuat += muatUlang.mock.calls.length;
+    }
+    expect(dimuat).toBe(MAKS_MUAT_ULANG_OTOMATIS);
   });
 });
 

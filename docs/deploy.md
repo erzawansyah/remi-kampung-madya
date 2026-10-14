@@ -6,12 +6,36 @@ Ringkasan cara deploy ada di README (bagian "Deploy ke VPS (Docker)"). Dokumen i
 
 ```bash
 git pull
-GIT_SHA=$(git rev-parse --short HEAD) docker compose up -d --build
+GIT_SHA=$(git rev-parse --short HEAD) docker compose up -d --build   # GIT_SHA opsional, lihat di bawah
 docker compose ps            # STATUS "healthy" ±30 detik setelah start
 docker compose logs --tail 5 # "Remi Kampung Madya v<versi> (<sha>) jalan di port 2567 ..."
 ```
 
 `docker compose up` mengganti container dengan rapi: `SIGTERM` → server menutup WebSocket, meja, dan database → keluar dengan kode 0 (< 1 detik). Meja online yang sedang jalan hilang (meja hanya di memori), jadi pilih waktu sepi. Permainan offline di HP tidak terpengaruh.
+
+### Identitas build (`sha` di `/healthz`)
+
+Setiap build punya satu id pendek yang sama di client dan server. Aplikasi di HP mencocokkannya dengan `sha` di `/healthz` untuk tahu server sudah memakai build lain (lihat "Perilaku update PWA"). Id dihitung `scripts/idBuild.mjs`, dipanggil build client (`apps/client/vite.config.ts`) dan bundel server (`apps/server/scripts/bundel.mjs`), dengan urutan:
+
+1. **`GIT_SHA`** kalau diisi: commit hex 7–40 karakter, dipakai 7 karakter pertama. Nilai yang bukan commit (misalnya `refs/heads/main`) diabaikan dengan peringatan di log build.
+2. **`git rev-parse --short=7 HEAD`** kalau folder proyek adalah puncak repo git (build di luar Docker). Sengaja tanpa akhiran `-dirty`: build sendiri menulis ulang `favicon.svg`, dan status kotor bisa berubah di antara build client dan server sehingga id keduanya beda.
+3. **Hash isi sumber**, `h-` + 7 hex (misalnya `h-1a2b3c4`). Ini yang terpakai di Docker tanpa `GIT_SHA`, karena `.git` tidak ikut ke context. Dihitung dari isi semua file proyek dengan pengecualian yang sama seperti `.dockerignore` (`node_modules`, `dist`, `.git`, dan seterusnya), dan CRLF dianggap LF. Checkout yang sama di Windows dan Linux, atau build ulang dari isi yang sama, memberi id yang sama.
+
+Jadi `GIT_SHA` sekarang opsional: tanpa itu pun pencocokan versi tetap jalan. Mengisinya tetap dianjurkan, karena `/healthz`, log server, dan layar Tentang lalu menampilkan commit yang bisa dicari di GitHub. `"sha":"dev"` hanya muncul dari dev server (`npm run dev:server`) atau image yang dibangun sebelum perubahan ini. `node scripts/idBuild.mjs` mencetak id untuk folder saat itu.
+
+**Mengisi `GIT_SHA` dari penerima webhook GitHub** (event `push`). Contoh skrip yang dijalankan penerima webhook, dengan field `ref` dan `after` dari payload diteruskan sebagai `$REF` dan `$AFTER` (cara meneruskannya tergantung alat penerima webhook yang dipakai):
+
+```bash
+#!/bin/sh
+set -e
+# Webhook juga terkirim untuk push ke produksi dan branch lain: hanya main yang di-deploy.
+[ "$REF" = "refs/heads/main" ] || exit 0
+cd /jalan/ke/remi-kampung-madya
+git pull --ff-only
+GIT_SHA=$(git rev-parse --short HEAD) docker compose up -d --build
+```
+
+`git rev-parse` sesudah `git pull` mencatat commit yang benar-benar dibangun, jadi itu pilihan utama. Field `after` (sha 40 karakter, otomatis dipotong jadi 7) juga bisa dipakai, `GIT_SHA="$AFTER" docker compose up -d --build`, asal tidak ada push lain yang masuk di antara webhook terkirim dan `git pull`. Kalau itu terjadi, yang tercatat commit lama padahal yang dibangun commit baru.
 
 ## Batas per jaringan (Wi-Fi kedai)
 
@@ -31,7 +55,7 @@ Ganti `B` dengan `http://127.0.0.1:2567` (di VPS) atau `https://remi.domainkamu.
 
 | Cek | Perintah | Hasil yang benar |
 |---|---|---|
-| Versi & commit | `curl -s $B/healthz` | `"ok":true`, `"versi"` = versi `package.json`, `"sha"` = commit pendek yang di-deploy |
+| Versi & commit | `curl -s $B/healthz` | `"ok":true`, `"versi"` = versi `package.json`, `"sha"` = commit pendek yang di-deploy (dengan `GIT_SHA`) atau `h-` + 7 hex (tanpa `GIT_SHA`), tidak pernah `"dev"` |
 | Aset ber-hash | `curl -sI -H 'Accept-Encoding: br' $B/assets/<file>.js` | `cache-control: public, max-age=31536000, immutable`, `content-encoding: br` |
 | Shell & SW | `curl -sI $B/` dan `curl -sI $B/sw.js` | `cache-control: no-cache` |
 | Gzip | `curl -sI -H 'Accept-Encoding: gzip' $B/` | `content-encoding: gzip` |
@@ -47,7 +71,7 @@ Lewat proxy, cek juga bahwa `sw.js` tetap `no-cache` (proxy tidak boleh menimpa 
 Versi baru dipasang **otomatis di momen aman**, jadi pemain yang cuma membuka lewat browser HP (tidak memasang ke layar utama) juga ikut terbarui tanpa menekan apa pun. Logikanya di `apps/client/src/pembaruan.ts` (fungsi keputusan murni, diuji `apps/client/test/pembaruan.test.ts`), dirangkai di `apps/client/src/main.ts`.
 
 - `registerType: 'prompt'` tetap: service worker baru diunduh di latar belakang lalu **menunggu** sampai aplikasi menyuruhnya aktif. Jangan diganti `autoUpdate` (bisa memuat ulang di tengah permainan).
-- **Cek versi baru:** saat aplikasi dibuka, saat kembali dari latar belakang atau sinyal kembali (jeda minimal 1 menit), dan berkala tiap 30 menit selama terbuka. Aplikasi juga membandingkan commit-nya dengan `sha` di `/healthz`; kalau server sudah memakai build lain, cek dipaksa. Karena itu deploy dengan `GIT_SHA` (tanpa itu sha tercatat `dev` dan pencocokan dilewati).
+- **Cek versi baru:** saat aplikasi dibuka, saat kembali dari latar belakang atau sinyal kembali (jeda minimal 1 menit), dan berkala tiap 30 menit selama terbuka. Aplikasi juga membandingkan id build-nya dengan `sha` di `/healthz`; kalau server sudah memakai build lain, cek dipaksa. Pencocokan ini jalan dengan atau tanpa `GIT_SHA` (lihat "Identitas build"); hanya `dev` yang dilewati. Sesudah server di-deploy ulang, HP yang sedang tersambung mengecek begitu sambungannya pulih, tanpa jeda minimum (`PemicuCekServer`), dan juga saat meja terakhirnya sudah tidak ada di server ("Meja X nggak ketemu."). Sambungan pertama kali tetap kena jeda 1 menit.
 - **Momen aman, dipasang sendiri:** di beranda saat pemain diam ±5 detik (toast "Pakai versi terbaru, sebentar ya…" ±2 detik, lalu muat ulang; disentuh = batal), atau kapan pun aplikasi sedang di latar belakang.
 - **Momen senyap, hanya ditawarkan selama terlihat:** lobi online, daftar meja, riwayat, klasemen akhir yang sudah tercatat, jeda antarputaran online. Toast "Ada versi baru, Bos." dengan tombol **Muat ulang**, dan tombol menetap di kaki beranda. Begitu aplikasi ke latar belakang, versi baru dipasang.
 - **Tidak pernah:** putaran berjalan, susun akhir, popup joker, panel mentung, meja offline yang belum selesai, dialog terbuka, sedang mengetik, atau menunggu jawaban server.
@@ -78,3 +102,16 @@ Image `node:24-alpine`, 246 MB (aplikasi ±3,2 MB), user `node`.
 | Keluar ke beranda → toast + tombol Muat ulang → versi baru aktif, simpanan offline tetap ada | lulus |
 
 Belum diuji: HTTPS sungguhan di balik Caddy, pemasangan ke layar utama di HP sungguhan, dan job CI Docker/E2E di runner GitHub.
+
+## Uji identitas build (Docker Desktop 29.7.2, 14 Okt 2026)
+
+Snapshot commit `fa67225` tanpa folder `.git`, ditambah perubahan identitas build.
+
+| Pemeriksaan | Hasil |
+|---|---|
+| `npm run build` di Windows tanpa `GIT_SHA` | client dan server sama-sama `h-34e62ae`, sama juga sebelum dan sesudah build |
+| Isi yang sama dengan akhir baris CRLF (seperti checkout Windows) | `h-34e62ae` |
+| `docker build` tanpa `GIT_SHA` (Linux) | client dan server `h-34e62ae`; `/healthz` → `"sha":"h-34e62ae"`, id yang sama ada di bundel client |
+| `GIT_SHA` = sha 40 karakter, lokal dan `docker build --build-arg` | client dan server `fa67225`; cek CI (`sha` = 7 karakter pertama `GITHUB_SHA`) lulus |
+| `GIT_SHA=refs/heads/main` | peringatan di log build, lalu memakai hash isi |
+| Build di repo git tanpa `GIT_SHA` | client dan server = `git rev-parse --short HEAD` |

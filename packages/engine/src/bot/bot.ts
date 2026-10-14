@@ -22,8 +22,13 @@ import { nilaiPentungan } from '../skor.js';
 import type { Rng } from '../rng.js';
 import type { Aksi } from '../state.js';
 import type { ViewPemain, ViewPutaran } from '../view.js';
+import { aksiKuat, PARAM_JAGO, PARAM_SUHU, susunAkhirKuat } from './strategi.js';
 
-export type LevelBot = 'mudah' | 'normal';
+/** Level warga kedai, dari yang paling gampang dikalahkan. Label UI: Mudah, Normal, Jago (susah), Suhu (sangat susah). */
+export type LevelBot = 'mudah' | 'normal' | 'jago' | 'suhu';
+
+/** Semua level, urut dari yang paling mudah. Dipakai validasi pesan dan pilihan di UI. */
+export const DAFTAR_LEVEL_BOT: readonly LevelBot[] = ['mudah', 'normal', 'jago', 'suhu'];
 
 function coba<T>(f: () => T): T | null {
   try {
@@ -140,11 +145,16 @@ function buangSah(view: ViewPemain): Kartu[] {
 export function pilihAksiBot(view: ViewPemain, level: LevelBot, rng: Rng): Aksi {
   const p = view.putaran;
   const saya = view.saya;
-  if (view.status === 'susunAkhir' && p && saya !== null && !p.selesaiSusun[saya]) return aksiSusunAkhir(p, saya);
+  const kuat = level === 'jago' || level === 'suhu';
+  if (view.status === 'susunAkhir' && p && saya !== null && !p.selesaiSusun[saya]) {
+    return (kuat && susunAkhirKuat(view)) || aksiSusunAkhir(p, saya);
+  }
   if (view.status !== 'putaranBerjalan' || !p || saya === null || p.giliran !== saya) {
     throw new Error('Bukan giliran bot ini.');
   }
-  return level === 'mudah' ? aksiMudah(view, p, saya, rng) : aksiNormal(view, p, saya);
+  if (level === 'mudah') return aksiMudah(view, p, saya, rng);
+  if (kuat) return aksiKuat(view, level === 'suhu' ? PARAM_SUHU : PARAM_JAGO) ?? aksiNormal(view, p, saya);
+  return aksiNormal(view, p, saya);
 }
 
 /** Susun akhir: turunkan semua kartu jadi yang ditemukan, lalu selesai. */

@@ -13,6 +13,10 @@ export interface PengaturanMeja {
   publik: boolean;
   /** Batas waktu per giliran untuk pemain manusia; 0 = tanpa batas. Lewat batas, bot yang jalan. */
   detikGiliran: number;
+  /**
+   * Level warga kedai untuk kursi yang diisi tanpa level sendiri (mis. "Ajak warga kedai isi kursi
+   * kosong", atau pemain yang keluar saat main). Nilai sah: DAFTAR_LEVEL_BOT di engine.
+   */
   levelBot: LevelBot;
   /** Jeda antaraksi bot supaya pemain sempat melihat apa yang diambil dan dibuang. */
   tempoBot: TempoBot;
@@ -88,6 +92,10 @@ export interface InfoKursi {
   jenis: JenisKursi;
   nama: string;
   terhubung: boolean;
+  /**
+   * Level warga kedai kursi ini (hanya berarti untuk jenis 'bot'). Aplikasi versi lama hanya mengenal
+   * 'mudah' dan 'normal'; client wajib tahan menerima level yang belum dikenalnya.
+   */
   level: LevelBot;
 }
 

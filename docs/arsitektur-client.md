@@ -1,6 +1,6 @@
 # Arsitektur client (apps/client)
 
-Peta modul client untuk yang mau mengubah tampilan, animasi, suara, atau layar. Ringkasan aturan kerjanya ada di [AGENTS.md](../AGENTS.md); dokumen ini menjelaskan **bagaimana** potongan-potongannya saling terhubung. Semua yang ditulis di sini sesuai kode rilis 0.2.0.
+Peta modul client untuk yang mau mengubah tampilan, animasi, suara, atau layar. Ringkasan aturan kerjanya ada di [AGENTS.md](../AGENTS.md); dokumen ini menjelaskan **bagaimana** potongan-potongannya saling terhubung. Ditulis untuk kode rilis 0.2.0, lalu diperbarui untuk perubahan sesudahnya (terakhir 14 Okt 2026: bunyi dramatis, level warga kedai, pembaruan PWA, identitas build).
 
 Client terdiri dari dua lapis:
 - **HTML** untuk semua layar dan kontrol (beranda, lobi, bar atas, bar aksi, jendela).
@@ -83,35 +83,36 @@ Ada dua tingkat jendela:
 | File | Isi |
 |---|---|
 | `mesinAudio.ts` | Satu `AudioContext`: bus efek dan bus musik → master → limiter. Volume ikut preferensi (kurva kuadrat), unlock lewat gestur (termasuk iOS), di-suspend saat tab tersembunyi atau suara dan musik mati. |
-| `sintesis.ts` | Primitif bunyi murni (gesek, ketuk, bilah, kendang, gong, petik) dari osilator dan derau yang di-cache. Tanpa file audio. |
-| `suara.ts` | API publik: `bunyi(jenis)`, `getar(pola)`, `POLA_GETAR`, `getarDidukung()`, `siapkanAudio()`. Ada batas frekuensi per jenis dan polifoni. |
-| `musik.ts` | Musik latar generatif (bawaan mati), dijadwalkan dengan lookahead; `suasanaMusik('beranda' \| 'meja' \| 'diam')`. |
+| `sintesis.ts` | Primitif bunyi murni (gesek, ketuk, bilah, kendang, gong, petik) dari osilator dan derau yang di-cache. Untuk momen dramatis: `desir` (riser), `dentum`, `kecrek`, `rentetDerau`/`rentetNada` (gulungan dengan satu sumber per lapisan, bukan satu node per pukulan), `tiup` (nada rendah ala kuningan), dan `buatAula` (gema dari empat jalur tunda berumpan balik; sengaja bukan ConvolverNode yang mahal disiapkan di HP). Tanpa file audio. |
+| `suara.ts` | API publik: `bunyi(jenis)`, `getar(pola)`, `POLA_GETAR`, `getarDidukung()`, `siapkanAudio()`. Ada batas frekuensi per jenis dan polifoni. Bunyi dramatis: `tegang` (gulungan sebelum pentungan dibuka, dipotong `mentung`/`mentungJoker` lewat `MEMOTONG`), `mentungJoker` (hanya sesudah pentungan joker terbuka), `kepentung`/`kepentungLain`, dan `jokerDibuang` (dulu `joker`). Bunyi besar memakai gema aula (`PAKAI_AULA`) dan meredam musik (`REDAM_MUSIK`). `rekamBunyi` bisa merekam satu bunyi atau rangkaian secara offline untuk mengukur level. |
+| `musik.ts` | Musik latar generatif (bawaan mati), dijadwalkan dengan lookahead; `suasanaMusik('beranda' \| 'meja' \| 'diam')`. `redamMusik(tingkat, lama)` mengecilkan musik sebentar lewat node peredam antara fader dan bus musik (terpisah dari fader supaya tidak saling timpa). |
 | `pemutar.ts` | Peristiwa → animasi, teks aksi di panel, bunyi, getar, sorakan. |
 | `sorak.ts` | Sorakan besar di tengah layar, antrian maksimal 3, `aria-hidden`. |
 
 ## Layar dan konten
 
-- `main.ts`: kerangka aplikasi (pindah layar, tombol Back lewat penjaga `history`, wake lock, PWA `registerSW` dengan toast "versi baru" yang ditunda selama putaran berjalan, status koneksi, permainan latihan).
+- `main.ts`: kerangka aplikasi (pindah layar, tombol Back lewat penjaga `history`, wake lock, PWA `registerSW`, status koneksi, permainan latihan). Kapan versi baru dicek dan dipasang diputuskan `pembaruan.ts` (fungsi murni `momenPembaruan()`/`putuskanPembaruan()`, `serverBeda()` untuk mencocokkan id build dengan `/healthz`, `PemicuCekServer` untuk cek paksa sesudah sambungan pulih); `main.ts` hanya merangkainya. Jembatan untuk client 0.1.x ada di `public/sw-transisi.js`.
 - `ui/beranda.ts` (urutan DOM = urutan baca HP; dua kolom desktop/lanskap lewat `grid-template-areas` di `layar.css`), `ui/lobi.ts`, `ui/riwayat.ts` (termasuk tab Statistik), `ui/pengaturan.ts`, `ui/bantuan.ts`, `ui/tentang.ts` (versi + CHANGELOG lewat renderer markdown aman; per versi hanya bagian "Untuk pemain", bagian teknis dilipat tertutup, versi kosong disembunyikan), `ui/tutorial.ts` (gelembung latihan yang dipicu keadaan meja nyata), `ui/rincianSkor.ts`.
 - `konten/bantuan.ts` (bab, FAQ, glosarium) dan `konten/tutorial.ts` (teks langkah latihan) adalah **data**. Isinya harus sesuai engine dan README; contoh kartu yang ditandai sah/tidak sah harus memberi hasil yang sama dengan validator engine; dijaga `apps/client/test/kontenAturan.test.ts`, yang gagal kalau satu contoh tidak cocok.
+- `konten/levelWarga.ts`: label dan keterangan level warga kedai (Mudah, Normal, Jago, Suhu), satu sumber untuk Atur meja di beranda, kursi di lobi, dan tabel di Bantuan. Level yang tidak dikenal versi ini (misalnya dari server yang lebih baru) tetap tampil sebagai warga kedai.
 - `konten/kedai.ts`: info Kedai Madya (bio, alamat, tautan) untuk kartu kedai di beranda, bagian Kedai Madya di Tentang, dan baris ajakan di klasemen akhir (`KontrolMeja.htmlAjakanKedai`, tidak tampil di latihan). Hanya fakta terverifikasi, tanpa jam/menu/harga/rating/telepon. `aset/logoMadya.ts`: logo sebagai path SVG (`svgLogo()` untuk HTML, `pathLogo()` untuk Canvas).
 - `ui/lobi.ts` juga memegang `opsiKonfirmasiKeluar()`, satu sumber teks konfirmasi keluar untuk lobi, menu meja, dan tombol Back (`main.ts`).
 - `ui/rincianSkor.ts` memegang konvensi angka: `tanda()` (+12/−7), `angkaSkor()` (−7), `minusTipografis()` untuk teks dari engine. Minus selalu U+2212.
 - `ui/tutorial.ts` `tataGelembung()`: penuh → ringkas → ringkas sempit (480/420/360/300 px) → ringkas satu baris → posisi yang paling sedikit menutupi tangan/tombol → tepi. Kandidat posisi termasuk samping sasaran rata atas (pita di antara bar atas dan tangan di HP lanskap).
 - `koneksi.ts`: `KoneksiOnline` (backoff, watchdog ping, antrian terbatas untuk buat/gabung/daftar (`keluar` tidak diantrikan; `main.ts` mengecek `siapKirim()` dan memberi tahu pemain kalau tidak sampai), status `menyambung`/`tersambung`/`terputus`/`gagal`) dan `KoneksiOffline` (kelas `Meja` di browser, simpan debounce + flush saat `pagehide`/tab tersembunyi).
 - `penyimpanan.ts`: `localStorage` lewat `simpan`. Setiap kunci punya pemeriksa bentuk: nilai yang JSON-nya sah tapi bentuknya salah diganti bawaan dan kuncinya dihapus. `catatanDariView()` (klasemen + tanda bot) dan `kunciPermainan()` (penanda permainan online yang sudah dicatat) dipakai `main.ts` supaya riwayat tidak dobel saat reload.
-- `versi.ts`: `VERSI`, `BUILD_SHA`, `BUILD_WAKTU` dari `define` di `vite.config.ts`; `labelVersi()` tampil di beranda dan Tentang.
+- `versi.ts`: `VERSI`, `BUILD_SHA`, `BUILD_WAKTU` dari `define` di `vite.config.ts`; `labelVersi()` tampil di beranda dan Tentang. `BUILD_SHA` = identitas build dari `scripts/idBuild.mjs` (commit, atau `h-` + hash isi, atau `dev` di dev server), sama dengan `sha` di `/healthz`.
 - Gaya: `gaya.css` hanya `@import` ke `gaya/` (token, dasar, komponen, layar, meja, gerak, responsif), plus `jendela.css` dan `tutorial.css` yang diimpor modulnya sendiri.
 
 ## Info rahasia di client
 
 Berlaku untuk **semua kanal**: kanvas, HTML, log, sorakan, `aria-label`, `umumkan()`, tutorial, bunyi, dan getar.
 - Angka joker hanya di popup joker. Jangan membaca `putaran.rankJoker`/`kartuDibuka` untuk tampilan lain (dijaga `apps/client/test/pemutar.test.ts`).
-- Joker di tangan tidak diberi penanda apa pun, termasuk bunyi atau getar yang berbeda.
+- Joker di tangan tidak diberi penanda apa pun, termasuk bunyi atau getar yang berbeda. Joker yang sudah publik boleh berbunyi sendiri: `jokerDibuang` saat dibuang, `mentungJoker` sesudah pentungan terbuka; `tegang` sebelum dibuka sama untuk pentungan apa pun (dijaga `apps/client/test/suaraDramatis.test.ts`).
 - Tidak ada peringatan atau saran kartu berbahaya.
 - Pengumuman pembaca layar tidak menyebut kartu yang dibuang lawan, dan buangan hanya (jumlah pemain − 1) kartu teratas.
 - Penanda warga kedai (☕ di panel kanvas, label "(warga kedai)" di `umumkan()` giliran dan celetukan) hanya bergantung pada jenis kursi. Sumbernya `PENANDA_WARGA_KEDAI` di `game/tataMeja.ts`.
-- Hal yang masih menunggu keputusan pemilik (label "→rank", sub-teks JOKER DIBUANG?!, teks aksi "buang 7♥") ada di [keputusan-pemilik.md](keputusan-pemilik.md). Jangan diubah sebelum ada keputusan.
+- Keputusan pemilik soal tampilan joker dan buangan (label "→rank" dan sub-teks JOKER DIBUANG?! dipertahankan, teks aksi buang cukup "buang kartu") ada di [keputusan-pemilik.md](keputusan-pemilik.md) #27–#29. Jangan diubah tanpa izin pemilik.
 
 ## Test client
 

@@ -171,18 +171,22 @@ class Pemusik {
   }
 }
 
-/** Jalur musik di satu context: nada → saringan hangat → fader → bus musik, plus gema sendiri. */
+/** Jalur musik di satu context: nada → saringan hangat → fader → peredam → bus musik, plus gema sendiri. */
 interface Jalur {
   readonly a: BaseAudioContext;
   readonly fader: GainNode;
+  /** Peredam sesaat (ducking) saat efek besar berbunyi; terpisah dari fader supaya tidak saling timpa. */
+  readonly redam: GainNode;
   readonly k: Keluaran;
 }
 
 function bangunJalur(r: Rantai, lacak?: (d: number) => void): Jalur {
   const { a } = r;
+  const redam = a.createGain();
+  redam.connect(r.busMusik);
   const fader = a.createGain();
   fader.gain.value = 0;
-  fader.connect(r.busMusik);
+  fader.connect(redam);
   const hangat = a.createBiquadFilter();
   hangat.type = 'lowpass';
   hangat.frequency.value = 3200;
@@ -190,7 +194,7 @@ function bangunJalur(r: Rantai, lacak?: (d: number) => void): Jalur {
   hangat.connect(fader);
   // Gema masuk sebelum fader supaya ikut memudar saat musik dihentikan.
   const gema = buatGema(a, fader, { tunda: 0.34, umpan: 0.3, basah: 0.25, lowpass: 1800 });
-  return { a, fader, k: { a, ke: hangat, gema, derau: r.derau, lacak } };
+  return { a, fader, redam, k: { a, ke: hangat, gema, derau: r.derau, lacak } };
 }
 
 const LOOKAHEAD = 1.2;
@@ -269,6 +273,21 @@ export function suasanaMusik(baru: AdeganMusik): void {
   pasangMusik();
   adegan = baru;
   perbarui();
+}
+
+/**
+ * Redam musik latar sebentar (ducking) supaya efek besar (pentungan dibuka, kepentung, joker dibuang)
+ * terdengar jelas: turun cepat ke `tingkat` (pengali volume), ditahan `lama` detik, lalu pulih pelan.
+ * Panggilan baru menggantikan redaman yang sedang berjalan. Tidak berefek kalau musik belum pernah jalan.
+ */
+export function redamMusik(tingkat: number, lama: number): void {
+  if (!jalur) return;
+  const g = jalur.redam.gain;
+  const kini = jalur.a.currentTime;
+  g.cancelScheduledValues(kini);
+  g.setValueAtTime(g.value, kini);
+  g.setTargetAtTime(tingkat, kini, 0.03);
+  g.setTargetAtTime(1, kini + lama, 0.4);
 }
 
 /** Rekam musik secara offline (volume musik 100%) untuk memeriksa level. Hanya alat ukur. */

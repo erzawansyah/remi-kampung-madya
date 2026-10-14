@@ -119,7 +119,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
 
   // Timer meja (langkah bot, batas waktu giliran, celetukan) berjalan di luar penanganan pesan.
   // Galat di sana tanpa pembungkus jadi uncaughtException dan mematikan proses beserta SEMUA meja.
-  // Di sini galatnya ditangkap per meja dan dicatat; meja lain jalan terus.
+  // Meja sendiri sudah menangkap galat timernya lalu jalan terus (lapor lewat `saatGalat`, lihat
+  // opsiMeja); pembungkus ini jaring terakhir. Keduanya dihitung sebagai galatMeja.
   const penjadwalDasar = opsi.penjadwal ?? penjadwalNyata;
   const penjadwalAman = (kode: string): Penjadwal => ({
     setel: (ms, fn) =>
@@ -264,6 +265,11 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       } catch (e) {
         log('galat menyimpan klasemen akhir', e);
       }
+    },
+    // Galat timer yang sudah ditangkap meja (meja tetap jalan): tetap dihitung dan dicatat.
+    saatGalat: (konteks: string, e: unknown) => {
+      galatMeja++;
+      log(`galat di timer meja ${kode} (${konteks})`, e);
     },
   });
 

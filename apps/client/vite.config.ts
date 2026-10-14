@@ -1,25 +1,25 @@
-import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { idBuild } from '../../scripts/idBuild.mjs';
 
 // Versi tunggal ada di package.json root (SemVer). Semua workspace disamakan dengannya.
 const versi: string = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
-// Commit pendek: dari env GIT_SHA (Docker ARG) atau git lokal. Di Docker .git tidak ikut, jadi jangan sampai gagal.
-function shaBuild(): string {
-  if (process.env.GIT_SHA) return process.env.GIT_SHA.slice(0, 7);
-  try {
-    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-  } catch {
-    return 'dev';
-  }
+// Identitas build: GIT_SHA > commit git > hash isi sumber "h-…" (scripts/idBuild.mjs), sama persis dengan
+// yang disuntik ke server (bundel.mjs) supaya cocok dengan /healthz. Dev server cukup 'dev'. `vite preview`
+// (juga command 'serve') tidak mengubah apa pun: ia menyajikan dist dengan id dari `vite build` sebelumnya.
+function shaBuild(command: 'build' | 'serve'): string {
+  if (command === 'serve') return 'dev';
+  const { id, sumber } = idBuild();
+  console.log(`id build client: ${id} (${sumber})`);
+  return id;
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   define: {
     __VERSI_APP__: JSON.stringify(versi),
-    __BUILD_SHA__: JSON.stringify(shaBuild()),
+    __BUILD_SHA__: JSON.stringify(shaBuild(command)),
     __BUILD_WAKTU__: JSON.stringify(new Date().toISOString()),
   },
   server: {
@@ -86,4 +86,4 @@ export default defineConfig({
       },
     }),
   ],
-});
+}));

@@ -4,7 +4,7 @@
 // diperiksa: nilai yang tidak cocok diganti bawaan dan kuncinya dihapus supaya tidak mengganggu terus.
 
 import type { ViewPemain } from '@remi/engine';
-import type { DataMeja, InfoKursi, PengaturanMeja } from '@remi/meja';
+import { rapikanLevel, type DataMeja, type InfoKursi, type PengaturanMeja } from '@remi/meja';
 import { aturPreferensi, preferensi } from './preferensi';
 
 const KUNCI = {
@@ -107,6 +107,17 @@ const rapikanSesi: Rapikan<SesiOnline | null> = (x) =>
 
 const rapikanDaftarString: Rapikan<string[]> = (x) => (Array.isArray(x) ? x.filter((s): s is string => typeof s === 'string') : undefined);
 
+/**
+ * Pengaturan meja offline terakhir. Level warga kedai yang tidak dikenal (rusak, atau dari versi
+ * lain) jadi bawaan ('normal'); field lain dibiarkan, isiannya tetap disaring Meja.
+ */
+const rapikanPengaturanOffline: Rapikan<Partial<PengaturanMeja>> = (x) => {
+  if (!objek(x)) return undefined;
+  const p = { ...x } as Partial<PengaturanMeja>;
+  if ('levelBot' in p) p.levelBot = rapikanLevel(p.levelBot);
+  return p;
+};
+
 function rapikanBaris(x: unknown): BarisCatatan | null {
   if (!objek(x) || typeof x.nama !== 'string' || !angka(x.skor)) return null;
   return x.bot === true ? { nama: x.nama, skor: x.skor, bot: true } : { nama: x.nama, skor: x.skor };
@@ -180,7 +191,7 @@ export const simpan = {
   mejaOffline: () => baca<DataMeja | null>(KUNCI.offline, null, rapikanObjekAtauNull<DataMeja>),
   setMejaOffline: (d: DataMeja | null) => tulis(KUNCI.offline, d),
 
-  pengaturanOffline: () => baca<Partial<PengaturanMeja>>(KUNCI.pengaturanOffline, {}, rapikanObjek<Partial<PengaturanMeja>>),
+  pengaturanOffline: () => baca<Partial<PengaturanMeja>>(KUNCI.pengaturanOffline, {}, rapikanPengaturanOffline),
   setPengaturanOffline: (p: Partial<PengaturanMeja>) => tulis(KUNCI.pengaturanOffline, p),
 
   riwayat: bacaRiwayat,

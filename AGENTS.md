@@ -2,7 +2,7 @@
 
 **Remi Kampung Madya**: game kartu remi dengan aturan yang berlaku di Kedai Madya (tempat pemilik dan teman-temannya berkumpul), yaitu **aturan tongkrongan** lokal yang **berbeda dari remi/rummy umum**. Monorepo TypeScript: rules engine murni, modul meja/room, server WebSocket, dan client Phaser 4.2.1 + HTML + PWA.
 
-Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Hal yang masih menunggu keputusan pemilik dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** sebelum pemilik memutuskan.
+Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#39 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik.
 
 ## Aturan emas
 
@@ -24,7 +24,7 @@ Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Atu
 
 ```bash
 npm install
-npm test             # semua test (~20 detik): engine, simulasi 2.160 putaran bot-vs-bot, golden, meja, server, client
+npm test             # semua test: engine, simulasi 2.160 putaran bot-vs-bot (paling lama, ±26 dtk), golden, meja, server, client
 npm run test:client  # hanya test client (happy-dom), ±4 detik
 npm run typecheck    # engine, meja, server, client (termasuk apps/client/test)
 npm run dev:server   # server WebSocket :2567 (tsx watch)
@@ -32,6 +32,7 @@ npm run dev:client   # Vite :5173 (strictPort), /ws dan /api diteruskan ke :2567
 npm run build        # build client (PWA + .br/.gz) + bundel server
 npm run e2e          # E2E smoke di Chrome sistem (build + vite preview, HP & desktop)
 docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + test + build
+npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --lawan, --susunan, --meja, --seed, --putaran, --waktu)
 ```
 
 - `npm run e2e` tidak mengunduh browser. Kalau Chrome tidak ketemu otomatis, set `CHROME_PATH`. Opsi: `-- --url=http://localhost:5173` (uji dev server), `-- --perangkat=hp`, `-- --tanpa-build`, `-- --tampil`.
@@ -49,14 +50,18 @@ docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + te
 **Di mana mengubah apa:**
 - **Aturan main:** `packages/engine/src/kartuJadi.ts` (seri/kembar/joker), `giliran.ts` (validasi mulung/turunkan/buang), `mesin.ts` (alur, mentung, skor putaran), `skor.ts`.
   - Fungsi di `giliran.ts` dipakai bersama oleh mesin, bot, dan UI. Ubah aturan di sana, **jangan** menduplikasi logika aturan di UI.
+- **Bot (warga kedai):** `packages/engine/src/bot/`. `bot.ts` = `LevelBot`/`DAFTAR_LEVEL_BOT` (mudah, normal, jago, suhu) dan strategi mudah/normal; `strategi.ts` = jago/suhu (`PARAM_JAGO`, `PARAM_SUHU`); `susun.ts` = pencari susunan kartu jadi; `ingatan.ts` = ingatan dari `ViewPemain`.
+  - Perubahan strategi **diukur di arena** (`packages/engine/scripts/arena.ts`), jangan diasumsikan lebih kuat.
+  - Level baru: tambah di `DAFTAR_LEVEL_BOT` dan `LEVEL_WARGA` (`apps/client/src/konten/levelWarga.ts`, satu sumber label untuk beranda, lobi, Bantuan); validasi meja ikut otomatis. Level dari data tak dipercaya (simpanan, isian UI) dirapikan dengan `rapikanLevel()` dari `@remi/meja`.
 - **Perilaku room/online:** `packages/meja/src/meja.ts` dan `protokol.ts`.
   - Pesan dari jaringan divalidasi di `validasi.ts`. Tambah case di sana setiap ada pesan baru.
+  - Semua timer `Meja` dipasang lewat `pasangTimer()` (galat ditangkap, dilaporkan `OpsiMeja.saatGalat`, jadwal disusun ulang; keputusan #38). Timer baru wajib lewat `pasangTimer()`; hanya `pulihkanJadwal()` yang memanggil `penjadwal.setel` langsung.
 - **Client** (peta lengkap: [docs/arsitektur-client.md](docs/arsitektur-client.md)):
   - **Tata letak meja:** `game/tataMeja.ts`, fungsi **murni** (tanpa Phaser) yang mengubah `ModelMeja` + ukuran layar jadi daftar kartu/teks/hiasan beserta posisinya.
   - **Kanvas meja:** `game/MejaScene.ts` menyamakan objek Phaser dengan hasil tata letak **per kunci** (rekonsiliasi), lewat objek data `ObjKartu`. Input, seret, dan primitif animasi (`terbang`, `naikPanggung`, `pentung`, `bagiKartu`, ...) ada di sini.
   - **Gambar kartu:** `game/kartuGrafisGambar.ts` (Canvas 2D murni, juga untuk kartu di HTML lewat `gambarKartuKeKanvas`) dan `game/kartuGrafis.ts` (tekstur Phaser mini/normal/besar, bayangan, sorot, fokus). Palet kanvas dari token CSS: `game/warnaMeja.ts`.
   - **Alur meja HTML:** `kontrolMeja.ts` (bar atas, bar aksi, keyboard, jendela, antrian animasi). Animasi, sorakan, bunyi, dan getar per peristiwa: `efek/pemutar.ts` dan `efek/sorak.ts`.
-  - **Suara/musik/getar:** `efek/suara.ts` (API `bunyi`, `getar`, `POLA_GETAR`), `efek/mesinAudio.ts` (AudioContext, bus, limiter, unlock), `efek/sintesis.ts`, `efek/musik.ts`.
+  - **Suara/musik/getar:** `efek/suara.ts` (API `bunyi`, `getar`, `POLA_GETAR`), `efek/mesinAudio.ts` (AudioContext, bus, limiter, unlock), `efek/sintesis.ts`, `efek/musik.ts` (termasuk `redamMusik()` untuk mengecilkan musik selama bunyi besar).
   - **Preferensi dan gerak:** `preferensi.ts` (simpan, normalkan, migrasi `remi.efek`, atribut `data-*` di `<html>`) dan `gerak.ts` (`DURASI`, `EASE`, `durasi()`, `kurangiGerak()`, `efekHemat()`, `easePegas()`). Token CSS padanannya di `gaya/token.css`; ubah keduanya bersamaan.
   - **Jendela:** `ui/dom.ts`, dua tingkat. `bukaModal` = modal utama untuk jendela permainan (popup joker, panel mentung, hasil, menu). `bukaDialog`/`konfirmasi` = lapisan di atasnya. **Pengaturan, Bantuan, Tentang, dan konfirmasi wajib lewat `bukaDialog`/`konfirmasi`** supaya tidak menimpa popup joker atau panel mentung yang sedang menahan antrian.
   - **Layar:** `main.ts` (kerangka, Back, PWA, latihan) dan `ui/` (beranda, lobi, riwayat, pengaturan, bantuan, tentang, tutorial, rincianSkor).
@@ -87,14 +92,18 @@ docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + te
 - Log **tidak boleh** menyebut kartu yang dibuang.
 - **Angka joker hanya diumumkan sekali** (popup di awal putaran, harus ditekan OK; pemain online yang tersambung kembali sebelum menekan OK mendapat popup lagi). Jangan tampilkan angka joker di meja, bar atas, log, atau sorakan, selain pengecualian yang diputuskan pemilik di bawah. Client tidak boleh membaca `putaran.rankJoker`/`kartuDibuka` untuk tampilan apa pun selain popup joker (dijaga `apps/client/test/pemutar.test.ts`).
 - Joker di tangan tidak diberi penanda. Tidak ada peringatan "kartu berbahaya", karena itu skill pemain.
-- Semua aturan di atas **juga berlaku untuk `aria-label`, `umumkan()`/aria-live, tutorial, bunyi, dan getar**: tidak ada bunyi/getar/label yang berbeda untuk joker, dan pengumuman pembaca layar tidak menyebut kartu yang dibuang lawan.
+- Semua aturan di atas **juga berlaku untuk `aria-label`, `umumkan()`/aria-live, tutorial, bunyi, dan getar**: tidak ada bunyi/getar/label yang berbeda untuk joker yang masih di tangan atau belum terbuka, dan pengumuman pembaca layar tidak menyebut kartu yang dibuang lawan.
+  - Joker yang sudah publik boleh punya bunyi sendiri: `jokerDibuang` dari peristiwa buang, `mentungJoker` (bunyi dan getar) baru **sesudah** pentungan terbuka. Bunyi `tegang` sebelum dibuka wajib sama untuk pentungan apa pun. Dijaga `apps/client/test/suaraDramatis.test.ts`.
 - **Sudah diputuskan pemilik (13 Okt 2026), jangan diubah sepihak** (rincian: [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md) #25–#29):
   - **Dipertahankan, jangan dihapus:** label "→rank" pada joker pengganti di kartu jadi, teks log "(X jadi Y)", dan sub-teks sorakan JOKER DIBUANG?! yang menyebut kartunya. Seperti di meja asli, joker yang sudah dipasang terlihat semua orang dan boleh jadi petunjuk.
   - **Teks aksi singkat untuk buang di panel pemain cukup "buang kartu"**, tanpa menyebut kartunya. Kartunya tetap terlihat di tumpukan buangan.
   - `rankJoker`/`kartuDibuka` di view dan peristiwa buangan yang sudah tertimbun dibiarkan apa adanya. Pagar UI di atas tetap berlaku.
 
 **Bot**
-- Bot hanya melihat `ViewPemain` dan memvalidasi aksinya dengan fungsi aturan yang sama. Simulasi gagal kalau ada aksi bot yang ditolak.
+- Bot hanya melihat `ViewPemain` dan memvalidasi aksinya dengan fungsi aturan yang sama. Simulasi gagal kalau ada aksi bot yang ditolak. `pilihAksiBot` tetap fungsi murni.
+- Ingatan jago/suhu hanya dari `ViewPemain` dan peristiwa di view (yang juga terlihat pemain di meja asli). Jangan menambah info tersembunyi ke view demi bot.
+- Golden master hanya memainkan level mudah dan normal: strategi keduanya tidak boleh berubah tanpa peninjauan golden. Jago/suhu dijaga `bot-kuat.test.ts`, `bot-susun.test.ts`, simulasi, dan arena.
+- Jago/suhu sengaja **menahan kartu jadi di tangan** (sah: semua pemain boleh menurunkannya di susun akhir, #19 dan #24). Pemilik belum menanggapi gaya ini (lihat `docs/keputusan-pemilik.md`, Catatan lain).
 
 **Client**
 - **Tween kartu hanya menyentuh `ObjKartu`** (atau `ObjKartu.efek`), tidak pernah Image-nya langsung. `update()` yang menyalin data ke Image.
@@ -122,6 +131,7 @@ docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + te
 - **Meja:** `JamPalsu` (waktu manual) dan `KotakSurat` (pesan keluar) ada di `packages/meja/test/bantu.ts`.
   - Setelah `mulai`/`putaranBerikut`, panggil `siapSemua(meja)`, karena permainan menunggu semua manusia menekan OK di pengumuman joker.
   - `jedaBotMs` di opsi test menimpa jeda acak bot.
+  - Meja menangkap galatnya sendiri: pasang `saatGalat` di opsi supaya galat tidak hilang diam-diam di test. Pola menyuntik galat ke langkah warga kedai (`vi.mock('@remi/engine')`, penjadwal yang tersendat) ada di `packages/meja/test/galat-bot.test.ts`.
 - **Simulasi** dipecah per jumlah pemain (`sim-*.test.ts`) supaya paralel. Test yang memblok lama tanpa `await` membuat worker Vitest timeout.
 - **Golden master** (`packages/engine/test/golden.test.ts`, `packages/meja/test/golden-meja.test.ts`, snapshot di `__golden__/`) mengunci aksi, view, peristiwa, log, dan riwayat permainan ber-seed. Perubahan presentasi **tidak boleh** menggeser hash. Kalau hash berubah karena perubahan aturan/bot yang disengaja dan disetujui: tinjau diff ringkasan di snapshot, baru perbarui dengan `npx vitest run <file golden> -u`. Cara lengkapnya di [docs/baseline-gameplay.md](docs/baseline-gameplay.md).
 - **Client** (`apps/client/test/`):
@@ -129,15 +139,19 @@ docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + te
   - Helper `apps/client/test/bantu.ts`: `mainkanBot()` (permainan bot-vs-bot deterministik), `pasangMatchMediaPalsu()`, `pasangLocalStorageRusak()`.
   - Modul ber-cache (`preferensi.ts`): `vi.resetModules()` lalu `await import(...)` per test. Untuk `localStorage` pakai `vi.stubGlobal`, bukan `vi.spyOn(Storage.prototype, ...)` (tidak berefek di happy-dom).
   - Test yang membuka jendela `dom.ts` wajib memanggil `tutupSemuaJendela()` di `afterEach` (state modul dipakai bersama).
+  - Jebakan happy-dom: `<option selected>` yang bukan opsi pertama dibaca meleset satu ke atas (`select.value`/`selectedIndex` salah), dan `option.defaultSelected` selalu false. Di test, cek `option.hasAttribute('selected')`.
 - Contoh-contoh wajib dari dokumen aturan pemilik (mulung Bagian 5, Contoh A/B arah, skor 8.3, kelima contoh joker selang-seling) sudah ada sebagai test. **Jangan diubah** tanpa persetujuan pemilik.
 
 ## Versi, CHANGELOG, dan PWA
 
-- **Versi tunggal** ada di `package.json` root (SemVer). Semua workspace (`packages/*`, `apps/*`) disamakan dengannya. Vite menyuntik `__VERSI_APP__`, `__BUILD_SHA__`, `__BUILD_WAKTU__` (`apps/client/src/versi.ts`); server menyuntik versi/sha lewat `apps/server/scripts/bundel.mjs`. Commit diambil dari env `GIT_SHA` (Docker `--build-arg GIT_SHA=...`) atau git lokal.
+- **Versi tunggal** ada di `package.json` root (SemVer). Semua workspace (`packages/*`, `apps/*`) disamakan dengannya. Vite menyuntik `__VERSI_APP__`, `__BUILD_SHA__`, `__BUILD_WAKTU__` (`apps/client/src/versi.ts`); server menyuntik versi/sha lewat `apps/server/scripts/bundel.mjs`.
+  - **Identitas build** (sha) dihitung satu helper, `scripts/idBuild.mjs`, yang dipakai `vite.config.ts` dan `bundel.mjs`, jadi client dan server selalu sama. Urutan: env `GIT_SHA` (commit hex, dipotong 7) > `git rev-parse --short=7 HEAD` (hanya kalau akar proyek = puncak repo, tanpa `-dirty`) > hash isi sumber `h-` + 7 hex. Hanya Vite dev server (`npm run dev:client`) yang memakai `dev`; `vite preview` (termasuk `npm run e2e`) menyajikan bundel apa adanya, dengan id dari `vite build` sebelumnya.
+  - Daftar pengecualian hash isi di `idBuild.mjs` selaras dengan `.dockerignore`: ubah keduanya bersamaan.
 - **`CHANGELOG.md` wajib diperbarui** untuk setiap perubahan yang terasa pemain atau penting secara teknis, di bagian `## [Belum dirilis]` (format Keep a Changelog, dibagi "Untuk pemain" dan "Teknis"). Perubahan aturan wajib tertulis jelas.
   - CHANGELOG ditampilkan di layar Tentang lewat renderer markdown mini dan diuji `apps/client/test/tentang.test.ts`: pertahankan heading `## [Belum dirilis]`, pakai hanya tautan `https://` (bukan tautan relatif), dan jangan pakai HTML.
 - **PWA `registerType: 'prompt'` + pembaruan otomatis di momen aman** (`apps/client/src/pembaruan.ts`, diuji `apps/client/test/pembaruan.test.ts`): service worker baru menunggu, lalu aplikasi sendiri yang memasangnya (`updateSW(true)`) tanpa pemain harus menekan apa pun.
   - Cek versi baru saat start, saat tab terlihat lagi, saat sinyal kembali, dan tiap 30 menit. Build client juga dicocokkan dengan `/healthz` server (sha); kalau beda, SW dicek saat itu juga.
+  - Cek `/healthz` tanpa jeda minimum saat tersambung lagi sesudah putus (`PemicuCekServer` di `pembaruan.ts`) dan saat meja terakhir sudah tidak ada di server. Diuji `cekVersiServer.test.ts`. Jangan menebak "sempat putus" dari status tepat sebelum `tersambung`, karena itu selalu `menyambung`.
   - Kapan dipasang diputuskan `momenPembaruan()`/`putuskanPembaruan()` (fungsi murni): beranda = toast singkat lalu muat ulang (atau diam-diam saat tab tersembunyi); lobi online, daftar meja, riwayat, klasemen akhir, dan jeda antarputaran online = hanya saat tab tersembunyi; putaran berjalan, susun akhir, popup joker, panel mentung, meja offline yang belum selesai, dialog terbuka, atau isian yang sedang diketik = **ditunda**. Tombol manual "Muat ulang" tetap ada.
   - Anti-loop: muat ulang otomatis dicatat di `sessionStorage` per build, paling banyak 2 kali.
   - Jangan kembali ke `autoUpdate` (bisa memuat ulang di tengah permainan), dan jangan longgarkan momen "tidak" tanpa izin pemilik.
@@ -159,7 +173,9 @@ docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + te
 **Lain-lain**
 - **Riwayat SQLite** (`apps/server/src/riwayat.ts`, modul bawaan `node:sqlite`): hanya klasemen akhir permainan online, lewat kait `OpsiMeja.saatSelesai`. Permainan offline tetap hanya di `localStorage` HP. Peringkat menggabungkan pemain berdasarkan **nama** (belum ada akun).
 - **Emote** hanya boleh dari `DAFTAR_EMOTE` (`packages/meja/src/protokol.ts`), supaya tidak bisa dipakai mengirim pesan bebas. Celetukan bot (`Meja.celetukBot`) hanya boleh menanggapi peristiwa publik, tidak boleh membocorkan kartu.
-- **Nama warga kedai** dari `NAMA_LAWAN_BAWAAN` (`packages/meja/src/meja.ts`) lewat `OpsiMeja.namaLawan`. Urutan diacak dengan `Math.random` (bukan `opsi.acak`, supaya golden celetukan tidak bergeser); latihan memakai urutan tetap. Nama tidak boleh bergantung pada level, kartu, giliran, atau peristiwa.
+- **Nama warga kedai** dari `NAMA_LAWAN_BAWAAN` (`packages/meja/src/meja.ts`, 22 nama: 10 "Warga Madya" lalu 12 tambahan pemilik, ejaan persis) lewat `OpsiMeja.namaLawan`. Urutan diacak dengan `Math.random` (bukan `opsi.acak`, supaya golden celetukan tidak bergeser); latihan memakai urutan tetap. Nama tidak boleh bergantung pada level, kartu, giliran, atau peristiwa.
+  - Nama baru **hanya ditambahkan di belakang** daftar: menyisipkan di depan/tengah menggeser golden meja dan lawan latihan.
+  - Label nama pembuang di bawah buangan: `labelSempit()` (`game/tataMeja.ts`) wajib menerima `namaLain` (nama pemain lain di meja) supaya singkatan tidak pernah kembar (misalnya Jurik dan Juragan sama-sama "JU").
 
 **Promosi Kedai Madya (soft selling, keputusan pemilik)**
 - Hanya di tiga tempat: kartu "Main bareng di Kedai Madya" di beranda (sesudah menu, sebelum kaki), bagian Kedai Madya di Tentang, dan **satu** baris ajakan + tautan peta di klasemen akhir (bukan di hasil per putaran, bukan di latihan).
@@ -180,6 +196,9 @@ docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + te
 **Test**
 - Node ≥ 25 punya `localStorage` bawaan yang menutupi milik happy-dom. `vitest.config.ts` (Vitest 4) mematikannya dengan `test.execArgv: ['--no-experimental-webstorage']` dan `pool: 'forks'` yang ditulis eksplisit; `poolOptions` sudah tidak ada di Vitest 4, jangan dikembalikan. Menjalankan dengan `--pool=threads` membuat test client yang memakai `localStorage` gagal dengan error membingungkan.
 - **Port e2e di Windows:** Hyper-V/WSL/Docker memesan rentang port (cek `netsh interface ipv4 show excludedportrange protocol=tcp`, di mesin ini 3952–4933). Port di rentang itu ditolak `EACCES` walau tidak dipakai proses apa pun. `smoke.mjs` mencoba 4173–4199, lalu 8090–8199, lalu port acak dari OS, dan mencetak port yang dipakai (`[e2e] vite preview di ...`).
+
+**Build**
+- `npm run build` menulis ulang `apps/client/public/favicon.svg` dengan akhir baris LF. Dengan `core.autocrlf=true`, `git diff --quiet` tidak mendeteksinya padahal `git status` menandai M. Kembalikan dengan `git checkout -- apps/client/public/favicon.svg`.
 
 **Mengedit file**
 - Jangan membuka file untuk ditulis sebelum isinya dibaca, misalnya `open(p,'w').write(open(p).read())` di Python, karena file akan kosong.
