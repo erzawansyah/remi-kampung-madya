@@ -2126,7 +2126,12 @@ export class KontrolMeja implements AksiAdegan {
     const nama = v.pemain.map((pm) => pm.nama);
     const peringkat = peringkatSeri(v.skor);
     const juara = nama.filter((_, i) => peringkat[i] === 1);
-    const alasan = { sepakat: 'Semua sepakat berhenti.', batasPutaran: 'Batas putaran tercapai.', batasSkor: 'Ada yang mencapai batas skor.' };
+    const alasan = {
+      sepakat: 'Semua sepakat berhenti.',
+      batasPutaran: 'Batas putaran tercapai.',
+      batasSkor: 'Ada yang mencapai batas skor.',
+      kaldu: 'Putaran kaldu ditutup mentung.',
+    };
     const host = info.kursiSaya === info.host;
     const offline = this.app.jenis === 'offline';
     const menang = v.saya !== null && peringkat[v.saya] === 1;

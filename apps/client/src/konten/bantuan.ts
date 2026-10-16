@@ -629,6 +629,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
         teks: 'Contoh joker, misal joker putaran ini 5: seri 7 dan 8 Kriting ditambah 5 Waru sebagai 9 Kriting bernilai 5 + 5 + 5 = 15. Kalau 5 Waru itu masih di tangan waktu dihitung, nilainya −25.',
       },
       {
+        t: 'paragraf',
+        teks: 'Di **putaran kaldu** (lihat bab Akhir permainan) nilai pentungan **dikali 2**, untuk yang mentung maupun yang kepentung. Bagian skor lainnya tetap.',
+      },
+      {
         t: 'catatan',
         teks: 'Setelah putaran selesai, ketuk nama pemain di tabel skor untuk melihat rincian hitungannya.',
       },
@@ -638,7 +642,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
     id: 'akhir-permainan',
     judul: 'Akhir permainan',
     ikon: '🏁',
-    ringkas: 'Kapan permainan selesai dan siapa pemenangnya.',
+    ringkas: 'Kapan permainan selesai, mode kaldu, dan siapa pemenangnya.',
     isi: [
       {
         t: 'paragraf',
@@ -664,6 +668,29 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'paragraf',
         teks: 'Bawaan aplikasi: tanpa batas putaran dan tanpa batas skor, jadi main terus sampai semua sepakat berhenti.',
+      },
+      {
+        t: 'paragraf',
+        teks: '**Mode kaldu** (opsi meja, bawaan mati): permainan ditutup dengan **putaran kaldu**, putaran terakhir yang nilai pentungannya **dikali 2**, untuk yang mentung maupun tiap yang kepentung. Kartu jadi, tangan, dan −25 buang joker tidak dikali.',
+      },
+      {
+        t: 'daftar',
+        butir: [
+          'Putaran kaldu mulai di putaran ke-N kalau batas putaran diisi N, atau di putaran sesudah semua pemain setuju "putaran berikutnya terakhir" (di antara putaran).',
+          'Putaran kaldu yang ditutup mentung mengakhiri permainan.',
+          'Deck habis dan belum ada yang mentung? Kaldu lagi: putaran berikutnya juga putaran kaldu, sampai ada yang mentung. Pengocoknya tetap yang skornya paling rendah.',
+          'Di mode kaldu batas skor tidak dipakai, dan batas putaran cuma menandai mulainya kaldu. "Akhiri permainan" tetap bisa di antara putaran.',
+        ],
+      },
+      {
+        t: 'tabel',
+        kepala: ['Pentungan di putaran kaldu', 'Yang mentung', 'Tiap yang kepentung'],
+        baris: [
+          ['6 Love (50)', '+100', '−100'],
+          ['As (150)', '+300', '−300'],
+          ['Satu joker (250)', '+500', '−500'],
+          ['Dua joker sekaligus (500)', '+1000', '−1000'],
+        ],
       },
       {
         t: 'paragraf',
@@ -859,6 +886,10 @@ export const GLOSARIUM: { istilah: string; arti: string }[] = [
   { istilah: 'Lompat', arti: 'Pemain tepat sebelum yang mentung tidak kepentung, jadi arah putaran tetap.' },
   { istilah: 'Pengocok', arti: 'Pemain yang membagi kartu dan jalan pertama di putaran itu.' },
   { istilah: 'Putaran', arti: 'Satu babak dari pembagian kartu sampai skor dihitung.' },
+  {
+    istilah: 'Kaldu',
+    arti: 'Mode meja: putaran terakhir (putaran kaldu) nilai pentungannya dikali 2. Kalau putaran kaldu habis tanpa ada yang mentung, kaldu lagi.',
+  },
   { istilah: 'Susun akhir', arti: 'Kesempatan terakhir semua pemain menurunkan kartu jadi setelah mentung atau deck habis.' },
   { istilah: 'Mode ingatan', arti: 'Seperti meja asli: angka joker diumumkan sekali, dan kartu buangan lama harus diingat sendiri.' },
 ];

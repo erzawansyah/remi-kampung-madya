@@ -20,6 +20,12 @@ export interface PengaturanMeja {
   levelBot: LevelBot;
   /** Jeda antaraksi bot supaya pemain sempat melihat apa yang diambil dan dibuang. */
   tempoBot: TempoBot;
+  /**
+   * Mode kaldu (#42, #43): putaran kaldu (pentungan × 2) mulai di batas putaran atau sesudah semua
+   * setuju "putaran berikutnya terakhir"; batas skor tidak dipakai. Hanya bisa diubah di lobi.
+   * Sengaja tidak ada di PENGATURAN_BAWAAN: tidak ada = mati (simpanan lama dan golden tidak berubah).
+   */
+  modeKaldu?: boolean;
 }
 
 export type TempoBot = 'santai' | 'normal' | 'cepat';
@@ -112,6 +118,11 @@ export interface InfoMeja {
   kursiSaya: number | null;
   /** Kursi yang setuju mengakhiri permainan. */
   setujuAkhiri: number[];
+  /**
+   * Mode kaldu (#42): kursi yang setuju putaran berikutnya putaran terakhir (kaldu). Hanya ada di meja
+   * mode kaldu.
+   */
+  setujuKaldu?: number[];
   /** Waktu (ms epoch) batas giliran saat ini; null bila tidak ada batas. */
   batasWaktu: number | null;
   /** Giliran saat ini sedang dijalankan bot karena waktu habis atau pemain terputus. */
@@ -127,11 +138,12 @@ export interface RingkasanAkhir {
   kode: string;
   /** ms epoch */
   selesaiPada: number;
-  alasan: 'sepakat' | 'batasPutaran' | 'batasSkor' | null;
+  /** 'kaldu': putaran kaldu ditutup mentung (#42). */
+  alasan: 'sepakat' | 'batasPutaran' | 'batasSkor' | 'kaldu' | null;
   jumlahPutaran: number;
   /** 1 atau 2 (aturanPembagian di engine). */
   jumlahDeck: number;
-  /** Permainan memakai Mode Kaldu. Selalu false sampai mode itu ada. */
+  /** Permainan memakai mode kaldu (#42). */
   modeKaldu: boolean;
   /** Urut dari peringkat 1. Skor sama = peringkat sama. */
   pemain: {
@@ -171,6 +183,8 @@ export type PesanKlien =
   | { t: 'aksi'; aksi: AksiKlien }
   | { t: 'putaranBerikut'; pengocok?: number }
   | { t: 'akhiri'; setuju: boolean }
+  /** Mode kaldu (#42): setuju/batal "putaran berikutnya terakhir". Hanya di antara putaran. */
+  | { t: 'putaranTerakhir'; setuju: boolean }
   | { t: 'siapJoker' }
   | { t: 'emote'; isi: Emote }
   | { t: 'mainLagi' }

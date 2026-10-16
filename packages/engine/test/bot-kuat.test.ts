@@ -16,8 +16,9 @@ import {
   type GameState,
   type LevelBot,
 } from '../src/index.js';
-import { aksiKuat, BATAS_TANGAN_KUAT, PARAM_JAGO, PARAM_SUHU } from '../src/bot/strategi.js';
-import { id, skenario } from './bantu.js';
+import { aksiKuat, BATAS_TANGAN_KUAT, PARAM_JAGO, PARAM_SUHU, Penilai } from '../src/bot/strategi.js';
+import { isiDari } from '../src/bot/susun.js';
+import { id, kartuSemua, skenario } from './bantu.js';
 
 const cariMentung = (g: GameState) => g.peristiwa.find((e) => e.jenis === 'mentung') as Extract<GameState['peristiwa'][number], { jenis: 'mentung' }> | undefined;
 
@@ -298,5 +299,64 @@ describe('warga kedai jago dan suhu', () => {
     }
     // Per putaran; arena memberi kira-kira +30 di meja 4 pemain.
     expect(selisih / jumlah / 3).toBeGreaterThan(5);
+  });
+});
+
+describe('putaran kaldu (#42): jago/suhu menimbang mentung dua kali lipat', () => {
+  // Tangan 5-6 Love + K Kriting: 4 atau 7 Love dari buangan membuat tangan siap mentung.
+  const buat = (kaldu: boolean) =>
+    skenario({
+      modeKaldu: true,
+      kaldu,
+      konfigurasi: { batasPutaran: kaldu ? 1 : null },
+      rankJoker: 9,
+      giliran: 0,
+      tangan: [['5 love', '6 love', 'K kriting', '2 waru'], ['3 waru', '8 wajik', 'J waru'], ['4 waru', '10 kriting', 'Q love']],
+      buangan: [['3 kriting', 1]],
+    });
+  const nilaiDari = (kaldu: boolean, par = PARAM_SUHU) => {
+    const v = viewUntuk(buat(kaldu), 0);
+    return new Penilai(v, v.putaran!, 0, par);
+  };
+
+  it('pengali dibaca dari view (info publik): 2 di putaran kaldu, 1 di putaran biasa', () => {
+    expect(viewUntuk(buat(true), 0).putaran!.kaldu).toBe(true);
+    expect(nilaiDari(true).pengali).toBe(2);
+    expect(nilaiDari(false).pengali).toBe(1);
+  });
+
+  it('nilai tangan: hanya bagian kesiapan mentung yang dikali dua', () => {
+    const biasa = nilaiDari(false);
+    const kaldu = nilaiDari(true);
+    // Tangan sesudah membuang 2 Waru.
+    const tangan = kartuSemua('5 love', '6 love', 'K kriting');
+    const isi = isiDari(tangan, biasa.ctx);
+    const k = biasa.komponen(isi, false);
+    expect(k.mentung).toBeGreaterThan(0);
+    expect(kaldu.komponen(isiDari(tangan, kaldu.ctx), false)).toEqual(k);
+    const selisih = kaldu.nilai(isiDari(tangan, kaldu.ctx), false) - biasa.nilai(isi, false);
+    expect(selisih).toBeCloseTo(biasa.skala * PARAM_SUHU.mentung * k.mentung, 9);
+  });
+
+  it('bahaya buangan (suhu): bagian kepentung dikali dua, bagian suap tetap', () => {
+    const kartu = viewUntuk(buat(false), 0).putaran!.tangan[0]![3];
+    const biasa = nilaiDari(false).bahaya(kartu);
+    const kaldu = nilaiDari(true).bahaya(kartu);
+    const tanpaSuap = (nl: Penilai) => new Penilai(nl.view, nl.p, 0, { ...PARAM_SUHU, suap: 0 }).bahaya(kartu);
+    const tanpaBahaya = (nl: Penilai) => new Penilai(nl.view, nl.p, 0, { ...PARAM_SUHU, bahaya: 0 }).bahaya(kartu);
+    expect(tanpaSuap(nilaiDari(false))).toBeGreaterThan(0);
+    expect(tanpaSuap(nilaiDari(true))).toBeCloseTo(2 * tanpaSuap(nilaiDari(false)), 9);
+    expect(tanpaBahaya(nilaiDari(true))).toBeCloseTo(tanpaBahaya(nilaiDari(false)), 9);
+    expect(kaldu).toBeGreaterThanOrEqual(biasa);
+  });
+
+  it('mudah dan normal tidak berubah di putaran kaldu; jago/suhu tetap mengirim aksi sah', () => {
+    for (const level of ['mudah', 'normal'] as const) {
+      expect(pilihAksiBot(viewUntuk(buat(true), 0), level, new Rng(3))).toEqual(pilihAksiBot(viewUntuk(buat(false), 0), level, new Rng(3)));
+    }
+    for (const level of ['jago', 'suhu'] as const) {
+      const s = buat(true);
+      expect(terapkanAksi(s, pilihAksiBot(viewUntuk(s, 0), level, new Rng(3))).ok).toBe(true);
+    }
   });
 });

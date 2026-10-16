@@ -4,11 +4,13 @@
 //   npx tsx packages/engine/scripts/arena.ts --uji=suhu --lawan=jago
 //   npx tsx packages/engine/scripts/arena.ts --susunan=suhu,jago,normal,mudah --meja=4
 //   npx tsx packages/engine/scripts/arena.ts --waktu                # ukur lama tiap keputusan bot
+//   npx tsx packages/engine/scripts/arena.ts --kaldu --putaran=3    # mode kaldu: putaran ke-3 dst. kaldu
 //
 // Opsi: --uji=a,b (level yang diuji, satu kursi), --lawan=normal (level kursi lain), --susunan=...
 // (isi meja sendiri; mengganti --uji/--lawan, jumlah pemain = panjangnya), --meja=2,3,4,4d,5,6
 // (4d = 4 pemain 2 deck), --seed=200 (jumlah seed per meja), --seedAwal=1, --putaran=4,
-// --pekerja=<jumlah CPU − 1>, --waktu.
+// --pekerja=<jumlah CPU − 1>, --waktu, --kaldu (mode kaldu #42: putaran ke-N, N = --putaran, dan
+// seterusnya putaran kaldu; permainan selesai saat putaran kaldu ditutup mentung, jadi panjangnya beda-beda).
 //
 // Cara menghitung: setiap seed dimainkan dengan susunan level diputar ke semua kursi (kursi dan
 // pengocok tidak menguntungkan siapa pun), lalu selisih "skor rata-rata level A − skor rata-rata
@@ -51,6 +53,8 @@ interface Tugas {
   seed: number;
   putaran: number;
   waktu: boolean;
+  /** Mode kaldu (#42): batas putaran memicu putaran kaldu, bukan mengakhiri permainan. */
+  kaldu: boolean;
 }
 
 /** Ember histogram waktu keputusan: 0,05 ms per ember sampai 200 ms. */
@@ -80,7 +84,13 @@ function mainkanSatu(t: Tugas, rotasi: number, hasil: HasilTugas): void {
   let g: GameState = buatPermainan({
     pemain: level.map((l, i) => `${l} ${i + 1}`),
     seed: t.seed,
-    konfigurasi: { duaDeckUntukEmpat: meja.duaDeck, batasPutaran: t.putaran, batasSkorAtas: null, batasSkorBawah: null },
+    konfigurasi: {
+      duaDeckUntukEmpat: meja.duaDeck,
+      batasPutaran: t.putaran,
+      batasSkorAtas: null,
+      batasSkorBawah: null,
+      ...(t.kaldu ? { modeKaldu: true } : {}),
+    },
   });
   const rng = new Rng(t.seed * 7919 + 1 + rotasi * 104729);
   let langkah = 0;
@@ -168,6 +178,7 @@ async function utama(): Promise<void> {
   const jumlahSeed = Number(opsi('seed', '200'));
   const seedAwal = Number(opsi('seedAwal', '1'));
   const waktu = process.argv.includes('--waktu');
+  const kaldu = process.argv.includes('--kaldu');
   const pekerja = Number(opsi('pekerja', String(Math.max(1, availableParallelism() - 1))));
   const daftarMeja = opsi('meja', '2,3,4,4d,5,6').split(',').map((k) => {
     const m = SEMUA_MEJA[k];
@@ -196,7 +207,7 @@ async function utama(): Promise<void> {
   const semuaTugas: { i: number; t: Tugas }[] = [];
   percobaan.forEach((c, i) => {
     for (let s = seedAwal; s < seedAwal + jumlahSeed; s++) {
-      semuaTugas.push({ i, t: { meja: c.meja, susunan: c.susunan, seed: s, putaran, waktu } });
+      semuaTugas.push({ i, t: { meja: c.meja, susunan: c.susunan, seed: s, putaran, waktu, kaldu } });
     }
   });
 
@@ -223,7 +234,8 @@ async function utama(): Promise<void> {
   );
   const detik = (performance.now() - mulai) / 1000;
 
-  console.log(`Arena: ${jumlahSeed} seed × rotasi kursi × ${putaran} putaran per permainan, ${k} pekerja, ${detik.toFixed(1)} dtk.`);
+  const jenisPermainan = kaldu ? `mode kaldu mulai putaran ${putaran}` : `${putaran} putaran per permainan`;
+  console.log(`Arena: ${jumlahSeed} seed × rotasi kursi × ${jenisPermainan}, ${k} pekerja, ${detik.toFixed(1)} dtk.`);
   console.log('Selisih = skor per putaran level uji − rata-rata level pembanding di meja yang sama (CI 95%).\n');
   const waktuGabung: Record<string, { ember: number[]; maks: number; jumlah: number }> = {};
   percobaan.forEach((c, i) => {
@@ -234,18 +246,21 @@ async function utama(): Promise<void> {
     console.log(
       `${c.meja.label} [${c.susunan.join(', ')}]: ${totalPutaran} putaran, deck habis ${((100 * deckHabis) / totalPutaran).toFixed(0)}%`,
     );
-    // Rata-rata skor per kursi per putaran untuk tiap level.
-    const perKursiPutaran = (h: HasilTugas, l: string) => h.perLevel[l].skor / h.perLevel[l].kursi / putaran;
+    // Rata-rata skor per kursi per putaran untuk tiap level. Satu rotasi kursi = satu permainan; di mode
+    // kaldu panjang permainannya beda-beda, jadi dibagi rata-rata putaran per permainan tugas itu.
+    const putaranPermainan = (h: HasilTugas) => h.putaran / c.meja.n;
+    const perKursiPutaran = (h: HasilTugas, l: string) => h.perLevel[l].skor / h.perLevel[l].kursi / putaranPermainan(h);
     for (const l of levelUnik) {
       const r = ringkas(hs.map((h) => perKursiPutaran(h, l)));
       const st = hs.reduce(
         (a, h) => {
           const x = h.perLevel[l];
-          return { m: a.m + x.mentung, p: a.p + x.pentungan, k: a.k + x.kepentung, j: a.j + x.jokerDibuang, kursi: a.kursi + x.kursi };
+          const pk = a.pk + x.kursi * putaranPermainan(h);
+          return { m: a.m + x.mentung, p: a.p + x.pentungan, k: a.k + x.kepentung, j: a.j + x.jokerDibuang, pk };
         },
-        { m: 0, p: 0, k: 0, j: 0, kursi: 0 },
+        { m: 0, p: 0, k: 0, j: 0, pk: 0 },
       );
-      const putaranKursi = st.kursi * putaran;
+      const putaranKursi = st.pk;
       console.log(
         `  ${l.padEnd(7)} skor/putaran ${f1(r.rata).padStart(7)} ± ${r.ci.toFixed(1).padEnd(5)}` +
           ` mentung ${((100 * st.m) / putaranKursi).toFixed(1).padStart(5)}%` +

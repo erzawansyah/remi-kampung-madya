@@ -81,6 +81,15 @@ describe('bukaBantuan', () => {
     expect(badan.querySelector('strong')).not.toBeNull();
     expect(badan.innerHTML).not.toContain('**');
   });
+
+  it('**tebal** hanya dipakai di paragraf (daftar, langkah, tabel, catatan, dan contoh menampilkannya mentah)', () => {
+    for (const bab of BAB_BANTUAN) {
+      for (const b of bab.isi) {
+        const mentah = b.t === 'daftar' || b.t === 'langkah' ? b.butir : b.t === 'tabel' ? [...b.kepala, ...b.baris.flat()] : b.t === 'catatan' ? [b.teks] : b.t === 'contoh' ? [b.judul, b.ket] : [];
+        for (const teks of mentah) expect(teks, `${bab.id}: ${teks}`).not.toContain('**');
+      }
+    }
+  });
 });
 
 describe('konten: status keputusan pemilik dan isi menu', () => {

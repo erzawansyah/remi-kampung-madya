@@ -8,11 +8,14 @@ import { describe, expect, it } from 'vitest';
 import {
   AturanError,
   bukaKartuJoker,
+  hitungSkorPemain,
   maksimalMulung,
   Rng,
   NILAI_PENTUNGAN_JOKER,
+  nilaiPentungan,
   nilaiPentunganTotal,
   PENALTI_JOKER_DIBUANG,
+  PENGALI_KALDU,
   validasiBuang,
   validasiKartuJadi,
   validasiMulung,
@@ -235,6 +238,37 @@ describe('klaim kunci di Bantuan sama dengan engine', () => {
     expect(buang(j, [j[0].id, j[1].id]).kode).toBe('BUANG_SATU_KARTU');
     expect(buang(j.slice(0, 2), [j[0].id, j[1].id], 'deck').kode).toBe('NUTUP_TANPA_MULUNG');
     expect(buang(j.slice(0, 2), [j[0].id, j[1].id], 'buangan', [j[1].id]).kode).toBe('PENTUNGAN_BUKAN_JOKER');
+  });
+
+  it('mode kaldu: pentungan dikali PENGALI_KALDU, kaldu lagi kalau deck habis, tanpa batas skor (#42, #43)', () => {
+    const teks = teksBab('akhir-permainan');
+    expect(PENGALI_KALDU).toBe(2);
+    expect(teks).toContain(`**dikali ${PENGALI_KALDU}**`);
+    expect(teksBab('skor')).toContain(`**dikali ${PENGALI_KALDU}**`);
+    expect(teks).toContain('Kaldu lagi: putaran berikutnya juga putaran kaldu');
+    expect(teks).toContain('batas skor tidak dipakai');
+    expect(teks).toContain('tetap bisa di antara putaran');
+    expect(GLOSARIUM.find((g) => g.istilah === 'Kaldu')!.arti).toContain(`dikali ${PENGALI_KALDU}`);
+    // Tabel contoh dihitung ulang dengan rumus skor engine.
+    const tabel = BAB_BANTUAN.find((b) => b.id === 'akhir-permainan')!.isi.find((x) => x.t === 'tabel');
+    if (tabel?.t !== 'tabel') throw new Error('tabel contoh kaldu tidak ada');
+    const kartu = pembuatKartu();
+    const joker = [kartu({ bunga: 'waru', rank: 5 }), kartu({ bunga: 'love', rank: 5 })];
+    const dasar = [
+      nilaiPentungan(kartu({ bunga: 'love', rank: 6 }), false),
+      nilaiPentungan(kartu({ bunga: 'waru', rank: 1 }), false),
+      nilaiPentunganTotal(joker[0], true),
+      nilaiPentunganTotal(joker[0], true, [joker[1]]),
+    ];
+    expect(tabel.baris).toHaveLength(dasar.length);
+    const minus = (x: number) => `−${x}`;
+    tabel.baris.forEach(([label, mentung, kepentung], i) => {
+      const skor = (status: 'mentung' | 'kepentung') =>
+        hitungSkorPemain({ pemain: 0, status, kartuJadi: [], tangan: [], nilaiPentungan: dasar[i], pengaliPentungan: PENGALI_KALDU, jumlahJokerDibuang: 0, ctx: ctx5 }).nilaiPentungan;
+      expect(label).toContain(`(${dasar[i]})`);
+      expect(mentung).toBe(`+${skor('mentung')}`);
+      expect(kepentung).toBe(minus(-skor('kepentung')));
+    });
   });
 
   it('buang joker hidup kena −25; pentungan joker bernilai 250 tanpa penalti', () => {

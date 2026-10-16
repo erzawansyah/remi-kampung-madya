@@ -18,6 +18,15 @@ export interface KonfigurasiPermainan {
   arahAwal: Arah;
   /** Aturan Terbuka: apakah As yang ber-angka joker boleh dibuang sebelum punya kartu jadi. Default false. */
   asJokerBolehDibuangTanpaJadi: boolean;
+  /**
+   * Mode kaldu (keputusan #42, #43). Putaran kaldu dimulai saat nomor putaran mencapai `batasPutaran`
+   * atau sesudah semua sepakat "putaran berikutnya terakhir" (`GameState.kalduDiminta`). Di putaran kaldu
+   * pentungan dikali PENGALI_KALDU. Putaran kaldu yang ditutup mentung mengakhiri permainan; yang deck-nya
+   * habis disusul putaran kaldu lagi. Batas skor tidak dipakai, dan `batasPutaran` hanya memicu kaldu
+   * (tidak mengakhiri permainan). Sengaja tidak ada di KONFIGURASI_BAWAAN: tidak ada = mati, jadi
+   * simpanan lama dan golden tidak berubah. Hanya ditulis kalau true.
+   */
+  modeKaldu?: boolean;
 }
 
 export const KONFIGURASI_BAWAAN: Omit<KonfigurasiPermainan, 'jumlahPemain'> = {
@@ -87,6 +96,8 @@ export interface StatePutaran {
   asalKartu: Record<string, number>;
   /** Penomoran id kartu jadi. */
   urutanKartuJadi: number;
+  /** Putaran kaldu (#42): pentungan dikali PENGALI_KALDU. Hanya ditulis kalau true. */
+  kaldu?: true;
 }
 
 export type StatusSkor = 'mentung' | 'kepentung' | 'aman';
@@ -99,8 +110,13 @@ export interface RincianSkor {
   nilaiTangan: number;
   /** Nilai tiap kartu di tangan (sejajar dengan `tangan`): joker hidup 25, selain itu nilai dasar. */
   nilaiKartuTangan: number[];
-  /** Positif untuk yang mentung, negatif untuk yang kepentung, 0 lainnya. */
+  /** Positif untuk yang mentung, negatif untuk yang kepentung, 0 lainnya. Di putaran kaldu sudah dikali. */
   nilaiPentungan: number;
+  /**
+   * Untuk tampilan: pengali yang sudah dimasukkan ke `nilaiPentungan` (PENGALI_KALDU di putaran kaldu).
+   * Hanya ditulis untuk yang mentung/kepentung di putaran kaldu; tidak ada = 1.
+   */
+  pengaliPentungan?: number;
   jumlahJokerDibuang: number;
   penaltiJoker: number;
   total: number;
@@ -119,8 +135,13 @@ export interface HasilPutaran {
   pentunganJoker: boolean;
   /** Keputusan #41: joker hidup lain yang ikut jadi pentungan (nutup pakai beberapa joker). Tidak ada = satu kartu. */
   pentunganLain?: Kartu[];
-  /** Nilai pentungan penuh (sebelum diberi tanda), jumlah semua pentungan. */
+  /**
+   * Nilai pentungan penuh (sebelum diberi tanda): jumlah semua pentungan, dan di putaran kaldu sudah
+   * dikali PENGALI_KALDU. Yang mentung dapat nilai ini, tiap kepentung kena nilai ini.
+   */
   nilaiPentungan: number;
+  /** Putaran kaldu (#42). Hanya ditulis kalau true. */
+  kaldu?: true;
   kepentung: number[];
   rincian: RincianSkor[];
   arahSebelumnya: Arah;
@@ -141,7 +162,13 @@ export type StatusPermainan = 'menungguPutaran' | 'putaranBerjalan' | 'susunAkhi
  * pemain di meja asli (kartu yang dibuang/dipungut, kartu jadi), tidak pernah isi tangan.
  */
 export type IsiPeristiwa =
-  | { jenis: 'mulaiPutaran'; pengocok: number; rankJoker: Rank }
+  | {
+      jenis: 'mulaiPutaran';
+      pengocok: number;
+      rankJoker: Rank;
+      /** Putaran kaldu (#42). Hanya ditulis kalau true. */
+      kaldu?: true;
+    }
   | { jenis: 'ambilDeck'; pemain: number; deckHabis: boolean }
   | {
       jenis: 'mulung';
@@ -171,10 +198,12 @@ export type IsiPeristiwa =
       pentunganJoker: boolean;
       /** Keputusan #41: joker hidup lain yang ikut jadi pentungan. */
       pentunganLain?: Kartu[];
-      /** Jumlah nilai semua pentungan. */
+      /** Jumlah nilai semua pentungan; di putaran kaldu sudah dikali PENGALI_KALDU. */
       nilai: number;
       kepentung: number[];
       dibalik: boolean;
+      /** Putaran kaldu (#42). Hanya ditulis kalau true. */
+      kaldu?: true;
     }
   | { jenis: 'susunAkhir'; sebab: 'deckHabis' | 'mentung' }
   | { jenis: 'putaranSelesai'; cara: 'mentung' | 'deckHabis' };
@@ -199,7 +228,14 @@ export interface GameState {
   rng: number;
   log: EntriLog[];
   peristiwa: Peristiwa[];
-  alasanSelesai: 'sepakat' | 'batasPutaran' | 'batasSkor' | null;
+  /**
+   * Mode kaldu (#42): semua sepakat putaran berikutnya putaran terakhir (aksi `putaranTerakhir`).
+   * Tetap true sampai permainan selesai, jadi putaran kaldu yang deck-nya habis disusul kaldu lagi.
+   * Hanya ditulis kalau true.
+   */
+  kalduDiminta?: true;
+  /** 'kaldu': putaran kaldu ditutup mentung (#42). */
+  alasanSelesai: 'sepakat' | 'batasPutaran' | 'batasSkor' | 'kaldu' | null;
 }
 
 export type Aksi =
@@ -218,4 +254,6 @@ export type Aksi =
       kartuIdLain?: string[];
     }
   | { jenis: 'selesaiSusun'; pemain: number }
-  | { jenis: 'akhiriPermainan' };
+  | { jenis: 'akhiriPermainan' }
+  /** Mode kaldu (#42): putaran berikutnya jadi putaran kaldu. Hanya di antara putaran; meja yang memutuskan lewat voting. */
+  | { jenis: 'putaranTerakhir' };

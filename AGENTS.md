@@ -2,7 +2,7 @@
 
 **Remi Kampung Madya**: game kartu remi dengan aturan yang berlaku di Kedai Madya (tempat pemilik dan teman-temannya berkumpul), yaitu **aturan tongkrongan** lokal yang **berbeda dari remi/rummy umum**. Monorepo TypeScript: rules engine murni, modul meja/room, server WebSocket, dan client Phaser 4.2.1 + HTML + PWA.
 
-Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#47 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik. #40 (joker beda dari putaran sebelumnya) dan #41 (mentung pakai beberapa joker) sudah diterapkan. #42–#43 dan #47 (16 Okt 2026) sudah diputuskan tapi baru diterapkan di rilis berikutnya; sampai saat itu aturan dan bot untuk butir itu tetap seperti sekarang.
+Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#47 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik. #40 (joker beda dari putaran sebelumnya), #41 (mentung pakai beberapa joker), dan #42–#43 (mode kaldu; engine, meja, server, dan warga kedai, tampilan client menyusul) sudah diterapkan. #47 (16 Okt 2026) sudah diputuskan tapi baru diterapkan di rilis berikutnya; sampai saat itu bot untuk butir itu tetap seperti sekarang.
 
 ## Aturan emas
 
@@ -247,6 +247,14 @@ Daftar lengkap ada di README. Yang paling sering terlupa:
 - **Deck habis:** pemain yang mengambil kartu terakhir menyelesaikan gilirannya dulu.
 - **Mentung:** kepentung dan arah ditentukan saat mentung. Peristiwa `mentung` dipancarkan saat itu juga, dan skor dihitung setelah susun akhir. Info mentung disimpan di `StatePutaran.mentung`.
 - Keduanya disusul **fase susun akhir**: semua pemain boleh menurunkan kartu jadi tanpa mulung, lalu menekan Selesai.
+
+**Mode kaldu (#42, #43, opsi meja, bawaan mati)**
+- Putaran kaldu: nilai pentungan **× `PENGALI_KALDU` (2)** untuk yang mentung dan tiap kepentung; kartu jadi, tangan, dan −25 tidak dikali. Dua joker di putaran kaldu = ±1000.
+- Putaran kaldu dimulai di putaran ke-`batasPutaran` atau sesudah voting "putaran berikutnya terakhir" (aksi `putaranTerakhir`, hanya di antara putaran). Satu sumber: `putaranBerikutKaldu()` di `mesin.ts`, berlaku untuk `GameState` maupun `ViewPemain`; jangan menghitung ulang syaratnya di UI.
+- Putaran kaldu yang ditutup mentung mengakhiri permainan (`alasanSelesai: 'kaldu'`). Yang **deck-nya habis tidak mengakhiri permainan**: kaldu lagi, pengocok tetap skor terendah.
+- Mode kaldu **tidak memakai batas skor** (meja mengirim `null`, engine juga mengabaikannya), dan batas putaran hanya memicu kaldu. "Akhiri permainan" tetap jalan sebagai jalan keluar.
+- Voting kaldu di meja meniru voting akhiri persis, termasuk hitung ulang saat pemilih berkurang (#36): `lepasKursi` → `cekVotingAkhiri() || cekVotingKaldu()`.
+- Semua field kaldu opsional dan hanya ditulis kalau aktif (`modeKaldu`, `kalduDiminta`, `kaldu`, `pengaliPentungan`, `setujuKaldu`); meja tanpa kaldu harus tetap byte-identik (golden).
 
 **Bot**
 - Tempo bawaan "santai": bot mikir 3–10 detik acak sebelum aksi pertama di gilirannya, lalu 1,5–3 detik untuk aksi lanjutan.

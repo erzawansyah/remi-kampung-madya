@@ -174,6 +174,10 @@ export function validasiPengaturan(x: unknown): Partial<PengaturanMeja> | null {
     if (x.tempoBot !== 'santai' && x.tempoBot !== 'normal' && x.tempoBot !== 'cepat') return null;
     hasil.tempoBot = x.tempoBot;
   }
+  if (x.modeKaldu !== undefined) {
+    if (typeof x.modeKaldu !== 'boolean') return null;
+    hasil.modeKaldu = x.modeKaldu;
+  }
   return hasil;
 }
 
@@ -213,7 +217,8 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       return aksi ? { t: 'aksi', aksi } : null;
     }
     case 'akhiri':
-      return typeof x.setuju === 'boolean' ? { t: 'akhiri', setuju: x.setuju } : null;
+    case 'putaranTerakhir':
+      return typeof x.setuju === 'boolean' ? { t: x.t, setuju: x.setuju } : null;
     case 'emote': {
       if (typeof x.isi !== 'string') return null;
       if ((DAFTAR_EMOTE as readonly string[]).includes(x.isi)) return { t: 'emote', isi: x.isi as Emote };

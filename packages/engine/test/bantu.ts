@@ -70,6 +70,12 @@ export interface Skenario {
   jokerMati?: string[];
   konfigurasi?: Partial<Omit<KonfigurasiPermainan, 'jumlahPemain'>>;
   skor?: number[];
+  /** Mode kaldu (#42): pintasan untuk `konfigurasi.modeKaldu`. */
+  modeKaldu?: boolean;
+  /** Putaran ini putaran kaldu (StatePutaran.kaldu). */
+  kaldu?: boolean;
+  /** Sudah sepakat putaran berikutnya putaran terakhir (GameState.kalduDiminta). */
+  kalduDiminta?: boolean;
 }
 
 /** State putaran berjalan dengan isi yang ditentukan test. Kartu yang tidak disebut masuk deck. */
@@ -78,8 +84,10 @@ export function skenario(s: Skenario): GameState {
   const g = buatPermainan({
     pemain: Array.from({ length: n }, (_, i) => `Pemain ${i + 1}`),
     seed: 1,
-    konfigurasi: s.konfigurasi,
+    konfigurasi: { ...s.konfigurasi, ...(s.modeKaldu ? { modeKaldu: true } : {}) },
   });
+  // Field opsional hanya ditulis kalau dipakai, sama seperti mesin.
+  if (s.kalduDiminta) g.kalduDiminta = true;
   const tangan = s.tangan.map((t) => t.map(kartu));
   const buangan = (s.buangan ?? []).map(([t, pemilik]) => ({ kartu: kartu(t), pemilik }));
   // Seperti di permainan nyata: joker yang ada di buangan pasti sudah pernah dibuang, jadi mati.
@@ -133,6 +141,7 @@ export function skenario(s: Skenario): GameState {
     mentung: null,
     asalKartu: {},
     urutanKartuJadi: 0,
+    ...(s.kaldu ? { kaldu: true as const } : {}),
   };
   return g;
 }

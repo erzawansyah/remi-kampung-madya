@@ -7,6 +7,10 @@
 // dan disusun ulang untuk mentung, dan semuanya tetap boleh diturunkan di susun akhir (#19, #24).
 // Arena: selalu menurunkan kartu jadi rugi 17–67 poin per putaran dibanding menahannya.
 // Mentung pakai beberapa joker hidup sekaligus (#41) dipakai kalau sisa tangan bisa habis jadi kartu jadi.
+// Putaran kaldu (#42): pentungan dikali dua, jadi kesiapan mentung, bahaya kepentung, dan pilihan cara
+// mentung ditimbang dua kali lipat (Penilai.pengali); bagian nilai lain tetap. Arena mini kaldu 16 Okt 2026
+// (150 seed, 2/3/4/4d pemain, dengan vs tanpa pengali): selisihnya di dalam selang kepercayaan di semua
+// meja (tidak terukur lebih kuat maupun lebih lemah), lama mikir praktis sama.
 // Arena 16 Okt 2026 (--uji=jago,suhu --lawan=normal, 200 seed, sebelum → sesudah #41): selisih atas
 // normal tidak turun di meja mana pun (jago +71,6 → +73,9 di 2 pemain, +59,1 → +61,4 di 4 pemain 2 deck;
 // suhu +92,2 → +95,9 di 4 pemain 2 deck), dan p99 lama mikir praktis sama (jago 7,25 → 7,40 ms,
@@ -17,7 +21,7 @@ import { AS, type Kartu } from '../kartu.js';
 import { AturanError } from '../error.js';
 import { isJokerHidup, type KonteksJoker, type SpesifikasiKartuJadi } from '../kartuJadi.js';
 import { maksimalMulung, validasiBuang, validasiMulung, validasiTurunkan } from '../giliran.js';
-import { NILAI_PENTUNGAN_JOKER, nilaiPentungan, PENALTI_JOKER_DIBUANG } from '../skor.js';
+import { NILAI_PENTUNGAN_JOKER, nilaiPentungan, PENALTI_JOKER_DIBUANG, PENGALI_KALDU } from '../skor.js';
 import type { Aksi, EntriBuangan } from '../state.js';
 import type { ViewPemain, ViewPutaran } from '../view.js';
 import { bacaIngatan, type Ingatan } from './ingatan.js';
@@ -143,6 +147,8 @@ export class Penilai {
   readonly n: number;
   /** Perkiraan sisa kesempatan ambil kartu untuk pemain ini. */
   readonly sisaGiliran: number;
+  /** Pengali pentungan putaran ini: PENGALI_KALDU di putaran kaldu (#42, info publik di view), selain itu 1. */
+  readonly pengali: number;
   private cache = new Map<string, Komponen>();
 
   constructor(
@@ -155,6 +161,7 @@ export class Penilai {
     this.ingat = bacaIngatan(view, par.ingatRiwayat);
     this.n = view.konfigurasi.jumlahPemain;
     this.sisaGiliran = p.jumlahDeck / this.n;
+    this.pengali = p.kaldu ? PENGALI_KALDU : 1;
   }
 
   get punyaJadi(): boolean {
@@ -219,10 +226,10 @@ export class Penilai {
     return Math.min(this.sisaGiliran, this.par.batasCakrawala) / Math.max(1, this.ingat.totalBelum);
   }
 
-  /** Nilai tangan di akhir giliran: dasar + peluang membaik + kesiapan mentung. */
+  /** Nilai tangan di akhir giliran: dasar + peluang membaik + kesiapan mentung (dikali dua di putaran kaldu). */
   nilai(isi: IsiTangan, punyaJadi: boolean): number {
     const k = this.komponen(isi, punyaJadi);
-    return k.dasar + this.skala * (this.par.potensi * k.potensi + this.par.mentung * k.mentung);
+    return k.dasar + this.skala * (this.par.potensi * k.potensi + this.par.mentung * this.pengali * k.mentung);
   }
 
   /**
@@ -258,7 +265,10 @@ export class Penilai {
     return Math.min(1, peluang);
   }
 
-  /** Perkiraan kerugian bila `d` dibuang: lawan mentung memakainya (kepentung) atau sekadar mulung. */
+  /**
+   * Perkiraan kerugian bila `d` dibuang: lawan mentung memakainya (kepentung, dikali dua di putaran kaldu)
+   * atau sekadar mulung.
+   */
   bahaya(d: Kartu): number {
     const { par, p, n, saya } = this;
     // Dengan 2 deck tiap kartu punya kembaran, jadi perkiraan "lawan memegang pasangannya" jauh kurang tajam.
@@ -272,7 +282,7 @@ export class Penilai {
       if (pasangan === 0) continue;
       // Tangan 2 kartu baru bisa mentung bila kartu ini bukan yang teratas saat gilirannya.
       const siap = h === 2 && jarak === 1 ? 0 : par.siapLawan[Math.min(h, par.siapLawan.length - 1)];
-      total += pasangan * (par.bahaya * siap + par.suap);
+      total += pasangan * (par.bahaya * siap * this.pengali + par.suap);
     }
     return total * skala;
   }
@@ -651,7 +661,8 @@ export function aksiKuat(view: ViewPemain, par: ParamStrategi): Aksi | null {
       const korban = new Set(
         o.diambil.filter((e) => e.pemilik !== saya && !idPentungan.has(e.kartu.id)).map((e) => e.pemilik),
       ).size;
-      const skor = r.pentungan * (1 + par.korban * korban) + o.nilaiJadi;
+      // Putaran kaldu: yang mentung dapat pentungan × 2 dan tiap korban kena × 2.
+      const skor = r.pentungan * nl.pengali * (1 + par.korban * korban) + o.nilaiJadi;
       if (!mentung || skor > mentung.skor) mentung = { o, skor };
     }
     if (mentung) return { jenis: 'mulung', pemain: saya, jumlah: mentung.o.jumlah, kartuJadi: mentung.o.spek };
