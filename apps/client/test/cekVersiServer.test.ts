@@ -2,56 +2,18 @@
 // Cek versi server (/healthz) di sekitar meja bubar. Kasus nyata: server di-deploy ulang → sambungan
 // putus → client menyambung lagi ke server baru → meja lama sudah tidak ada ("nggak ketemu").
 // Yang dijaga: cek sesudah itu TIDAK tertahan JEDA_CEK_MIN_MS, jadi versi baru tidak menunggu cek
-// berkala 30 menit.
+// berkala 30 menit. Setiap sambungan yang berhasil (termasuk yang pertama) juga dicek paksa: deploy
+// bisa selesai kurang dari semenit sesudah cek saat start.
 //
 // main.ts tidak bisa diimpor di test (langsung menyalakan aplikasi), jadi rangkaiannya ditiru di
 // `rakit()` baris per baris: gerbang awal cekServer, pendengar status di pasangKoneksi, dan cabang
 // 'error' "nggak ketemu" di terimaPesan. KoneksiOnline, PemicuCekServer, dan bolehCek yang asli.
 
-import type { PesanKlien, PesanServer } from '@remi/meja';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KoneksiOnline, type StatusKoneksi } from '../src/koneksi';
 import { bolehCek, JEDA_CEK_MIN_MS, PemicuCekServer } from '../src/pembaruan';
 import { simpan } from '../src/penyimpanan';
-
-class WsPalsu {
-  static readonly CONNECTING = 0;
-  static readonly OPEN = 1;
-  static readonly CLOSING = 2;
-  static readonly CLOSED = 3;
-  static semua: WsPalsu[] = [];
-  static terakhir(): WsPalsu {
-    return WsPalsu.semua[WsPalsu.semua.length - 1]!;
-  }
-
-  readyState = WsPalsu.CONNECTING;
-  terkirim: PesanKlien[] = [];
-  onopen: (() => void) | null = null;
-  onmessage: ((e: { data: string }) => void) | null = null;
-  onclose: ((e: { code: number }) => void) | null = null;
-
-  constructor(readonly url: string) {
-    WsPalsu.semua.push(this);
-  }
-  buka() {
-    this.readyState = WsPalsu.OPEN;
-    this.onopen?.();
-  }
-  send(s: string) {
-    this.terkirim.push(JSON.parse(s) as PesanKlien);
-  }
-  kirimDariServer(p: PesanServer) {
-    this.onmessage?.({ data: JSON.stringify(p) });
-  }
-  close() {
-    this.readyState = WsPalsu.CLOSED;
-  }
-  /** Diputus dari sisi server (1001 = server dimatikan) atau jaringan. */
-  putus(code = 1006) {
-    this.readyState = WsPalsu.CLOSED;
-    this.onclose?.({ code });
-  }
-}
+import { WsPalsu } from './bantu';
 
 interface CatatanCek {
   paksa: boolean;
@@ -115,14 +77,15 @@ afterEach(() => {
 });
 
 describe('PemicuCekServer', () => {
-  it('tersambung pertama = cek biasa; tersambung lagi sesudah putus/gagal = paksa; status lain = tidak cek', () => {
+  it('tersambung pertama = paksa; tersambung lagi sesudah putus/gagal = paksa; status lain = tidak cek', () => {
     const p = new PemicuCekServer();
     expect(p.status('menyambung')).toBeNull();
-    expect(p.status('tersambung')).toBe(false);
+    // Sambungan pertama juga dipaksa: cek saat start bisa saja baru beberapa detik lalu.
+    expect(p.status('tersambung')).toBe(true);
     expect(p.status('terputus')).toBeNull();
     expect(p.status('menyambung')).toBeNull();
     expect(p.status('tersambung')).toBe(true);
-    // Sudah dipakai: sambungan berikutnya tanpa putus kembali cek biasa.
+    // Sudah dipakai: 'tersambung' ulang tanpa putus di antaranya cukup cek biasa.
     expect(p.status('tersambung')).toBe(false);
     for (const s of ['menyambung', 'gagal', 'menyambung', 'terputus', 'menyambung'] as const) expect(p.status(s)).toBeNull();
     expect(p.status('tersambung')).toBe(true);
@@ -134,7 +97,8 @@ describe('cek versi server sesudah meja bubar', () => {
     const r = rakit();
     // Aplikasi dibuka: cek saat start.
     r.cekServer();
-    // 20 detik kemudian pemain masuk meja: tersambung pertama kali = cek biasa, tertahan jeda minimum.
+    // 20 detik kemudian pemain masuk meja: sambungan pertama dicek paksa, walau baru 20 detik sejak cek start
+    // (kalau server baru selesai di-deploy di sela itu, client lama tidak sempat main di server baru).
     await vi.advanceTimersByTimeAsync(20_000);
     const k = r.pasangKoneksi();
     koneksiDibuka.push(k);
@@ -156,12 +120,13 @@ describe('cek versi server sesudah meja bubar', () => {
 
     expect(r.cek).toEqual([
       { paksa: false, jalan: true, t: 0 },
-      { paksa: false, jalan: false, t: 20_000 },
+      { paksa: true, jalan: true, t: 20_000 },
       { paksa: true, jalan: true, t: 46_500 },
       { paksa: true, jalan: true, t: 46_500 },
     ]);
-    // Keduanya masih di dalam jeda minimum sejak cek terakhir yang jalan (t=0): tanpa paksa pasti tertelan.
-    expect(bolehCek(0, 46_500)).toBe(false);
+    // Semuanya di dalam jeda minimum sejak cek sebelumnya: tanpa paksa pasti tertelan.
+    expect(bolehCek(0, 20_000)).toBe(false);
+    expect(bolehCek(20_000, 46_500)).toBe(false);
     expect(simpan.sesi()).toBeNull();
   });
 
@@ -176,8 +141,8 @@ describe('cek versi server sesudah meja bubar', () => {
     }
     const keTersambung = r.peralihan.filter(([, s]) => s === 'tersambung').map(([sebelum]) => sebelum);
     expect(keTersambung).toEqual(['menyambung', 'menyambung', 'menyambung', 'menyambung']);
-    // Yang dipakai pemicu: sempat putus sejak tersambung terakhir.
-    expect(r.cek.map((c) => c.paksa)).toEqual([false, true, true, true]);
+    // Yang dipakai pemicu: belum ada cek paksa sejak sambungan terakhir terbuka (awal koneksi atau sesudah putus).
+    expect(r.cek.map((c) => c.paksa)).toEqual([true, true, true, true]);
   });
 
   it('tanpa meja (mis. daftar meja publik, tidak ada "nggak ketemu"): sambung ulang ke server baru tetap dicek paksa', async () => {
@@ -189,7 +154,7 @@ describe('cek versi server sesudah meja bubar', () => {
     WsPalsu.terakhir().buka();
     expect(WsPalsu.terakhir().terkirim.some((p) => p.t === 'gabung')).toBe(false);
     expect(r.cek).toEqual([
-      { paksa: false, jalan: true, t: 0 },
+      { paksa: true, jalan: true, t: 0 },
       // Baru setengah detik sejak cek sebelumnya: cek biasa pasti tertelan jeda minimum.
       { paksa: true, jalan: true, t: 500 },
     ]);

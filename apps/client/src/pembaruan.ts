@@ -404,21 +404,25 @@ export function bolehCek(terakhir: number | null, sekarang: number, paksa = fals
 }
 
 /**
- * Cek /healthz yang dipicu status koneksi online (satu objek per koneksi). Tersambung pertama kali =
- * cek biasa (kena JEDA_CEK_MIN_MS; start aplikasi biasanya baru saja mengecek). Tersambung LAGI sesudah
- * sempat putus/gagal = cek paksa: server bisa saja baru di-deploy ulang.
- * KoneksiOnline selalu melapor 'menyambung' tepat sebelum 'tersambung', juga saat sambung ulang, jadi
- * status persis sebelumnya tidak bisa dipakai. Yang diingat: ada putus sejak tersambung terakhir.
+ * Cek /healthz yang dipicu status koneksi online (satu objek per koneksi). Setiap sambungan yang
+ * berhasil = cek paksa (tanpa JEDA_CEK_MIN_MS), termasuk sambungan pertama: deploy bisa selesai
+ * kurang dari semenit sesudah cek saat start, dan tanpa paksa client lama bisa main di server baru
+ * sampai mejanya selesai. KoneksiOnline hanya melapor 'tersambung' dari onopen, jadi yang dipaksa
+ * memang hanya sambungan yang benar-benar terbuka.
+ * 'tersambung' berulang tanpa putus di antaranya (tidak terjadi di KoneksiOnline, tapi aman kalau
+ * pemanggil melapor ulang) = cek biasa. Status persis sebelumnya tidak bisa dipakai penanda putus,
+ * karena KoneksiOnline selalu melapor 'menyambung' tepat sebelum 'tersambung', juga saat sambung ulang.
  */
 export class PemicuCekServer {
-  private sempatPutus = false;
+  /** Belum ada cek paksa sejak sambungan terakhir terbuka (awal koneksi, atau sesudah putus/gagal). */
+  private perluPaksa = true;
 
   /** Status koneksi berubah. Null = tidak perlu cek; false = cek biasa; true = cek paksa. */
   status(s: StatusKoneksi): boolean | null {
-    if (s === 'terputus' || s === 'gagal') this.sempatPutus = true;
+    if (s === 'terputus' || s === 'gagal') this.perluPaksa = true;
     if (s !== 'tersambung') return null;
-    const paksa = this.sempatPutus;
-    this.sempatPutus = false;
+    const paksa = this.perluPaksa;
+    this.perluPaksa = false;
     return paksa;
   }
 }

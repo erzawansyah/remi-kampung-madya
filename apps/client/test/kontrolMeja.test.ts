@@ -40,6 +40,7 @@ import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { _setelUlangCache, preferensi } from '../src/preferensi';
 import { mejaMasukPeringkat, opsiKonfirmasiKeluar } from '../src/ui/lobi';
 import type { MejaScene, ModelMeja } from '../src/game/MejaScene';
+import type { StatusKoneksi } from '../src/koneksi';
 
 // ---------- perlengkapan ----------
 
@@ -469,6 +470,39 @@ describe('pengumuman giliran untuk pembaca layar', () => {
     const g = meja.g.putaran!.giliran;
     expect(giliranDiumumkan()).toEqual([`Giliran ${meja.g.pemain[g].nama}.`]);
     for (const [t] of vi.mocked(umumkan).mock.calls) expect(t).not.toMatch(/warga kedai/);
+  });
+});
+
+describe('pengumuman koneksi untuk pembaca layar', () => {
+  const PESAN_KONEKSI = /Koneksi putus|Tersambung lagi|Server nggak bisa dihubungi/;
+  const koneksiDiumumkan = () => vi.mocked(umumkan).mock.calls.map(([t]) => t).filter((t) => PESAN_KONEKSI.test(t));
+
+  it('putus lalu sambung ulang yang gagal berkali-kali: tepat dua pengumuman (putus, tersambung lagi)', async () => {
+    let status: StatusKoneksi = 'tersambung';
+    meja = new MejaUji(permainanGiliranku(), {}, { jenis: 'online', statusKoneksi: () => status });
+    await tunggu();
+    // Seperti KoneksiOnline: setiap percobaan sambung ulang yang gagal mengulang menyambung → terputus.
+    const deret: StatusKoneksi[] = ['terputus', 'menyambung', 'terputus', 'menyambung', 'terputus', 'menyambung', 'tersambung'];
+    for (const s of deret) {
+      status = s;
+      meja.kontrol.perbarui(meja.info, null);
+    }
+    expect(koneksiDiumumkan()).toEqual(['Koneksi putus, lagi nyambung ulang.', 'Tersambung lagi.']);
+    // Lencana bar atas tetap mengikuti status terkini.
+    expect(meja.akar.querySelector('.status-koneksi')!.classList.contains('tersembunyi')).toBe(true);
+  });
+
+  it('status pertama tidak diumumkan; meja dibuka saat putus tetap mengumumkan "Tersambung lagi."', async () => {
+    let status: StatusKoneksi = 'terputus';
+    meja = new MejaUji(permainanGiliranku(), {}, { jenis: 'online', statusKoneksi: () => status });
+    await tunggu();
+    expect(koneksiDiumumkan()).toEqual([]);
+    expect(meja.akar.querySelector('.status-koneksi')!.textContent).toContain('Terputus');
+    status = 'menyambung';
+    meja.kontrol.perbarui(meja.info, null);
+    status = 'tersambung';
+    meja.kontrol.perbarui(meja.info, null);
+    expect(koneksiDiumumkan()).toEqual(['Tersambung lagi.']);
   });
 });
 

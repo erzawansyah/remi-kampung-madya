@@ -14,6 +14,45 @@ import { simpan } from './penyimpanan';
  */
 export type StatusKoneksi = 'menyambung' | 'tersambung' | 'terputus' | 'gagal';
 
+/** Kabar koneksi yang layak disampaikan ke pemain (toast, pembaca layar). */
+export type Kabar = 'putus' | 'gagal' | 'pulih';
+
+/**
+ * Menentukan kapan pemain perlu dikabari soal koneksi (satu objek per koneksi). Murni, tanpa DOM.
+ * - `terputus` → 'putus' sekali; putus berikutnya sebelum tersambung lagi diam.
+ * - `gagal` → 'gagal' sekali (boleh menyusul 'putus', karena kabarnya lebih buruk).
+ * - `tersambung` → 'pulih' kalau sejak tersambung terakhir sudah ada kabar putus/gagal; kalau tidak, diam.
+ * - `menyambung` → diam.
+ *
+ * Kenapa tidak membandingkan dengan status sebelumnya: KoneksiOnline selalu melapor 'menyambung'
+ * tepat sebelum 'tersambung' (juga saat sambung ulang), dan setiap percobaan sambung ulang yang gagal
+ * mengulang 'menyambung' → 'terputus'. Jadi "sebelumnya terputus" tidak pernah benar saat tersambung,
+ * sementara "terputus" muncul berkali-kali dalam satu putus. Sebabnya sama dengan PemicuCekServer
+ * (pembaruan.ts): yang diingat adalah kabar terakhir sejak tersambung terakhir.
+ */
+export class KabarKoneksi {
+  private terakhir: 'putus' | 'gagal' | null = null;
+
+  /** Status koneksi berubah. Null = tidak perlu mengabari apa-apa. */
+  status(s: StatusKoneksi): Kabar | null {
+    switch (s) {
+      case 'terputus':
+        if (this.terakhir) return null;
+        return (this.terakhir = 'putus');
+      case 'gagal':
+        if (this.terakhir === 'gagal') return null;
+        return (this.terakhir = 'gagal');
+      case 'tersambung': {
+        const adaKabar = this.terakhir !== null;
+        this.terakhir = null;
+        return adaKabar ? 'pulih' : null;
+      }
+      default:
+        return null;
+    }
+  }
+}
+
 export interface Koneksi {
   readonly jenis: 'online' | 'offline';
   kirim(p: PesanKlien): void;

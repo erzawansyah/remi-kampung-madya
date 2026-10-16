@@ -6,7 +6,7 @@ import { registerSW } from 'virtual:pwa-register';
 import type { ViewPemain } from '@remi/engine';
 import type { InfoMeja, PengaturanMeja, PesanKlien, PesanServer } from '@remi/meja';
 import { pasangPreferensi } from './preferensi';
-import { KoneksiOffline, KoneksiOnline, urlServer, type Koneksi, type StatusKoneksi } from './koneksi';
+import { KabarKoneksi, KoneksiOffline, KoneksiOnline, urlServer, type Kabar, type Koneksi, type StatusKoneksi } from './koneksi';
 import { catatanDariView, kunciPermainan, simpan } from './penyimpanan';
 import { bangunkanGame, buatGame, tidurkanGame, type PenampungGame } from './game/game';
 import { KontrolMeja, type AppUntukMeja } from './kontrolMeja';
@@ -439,27 +439,32 @@ class Aplikasi implements AppUntukMeja {
       if (this.koneksi === k) this.terimaPesan(p);
     });
     const pemicuCek = new PemicuCekServer();
+    // Dihitung di setiap status, layar apa pun, supaya "putus" yang terjadi di meja tidak dikabarkan
+    // ulang di lobi dan "Tersambung lagi." hanya muncul sesudah ada kabar putus.
+    const kabarKoneksi = new KabarKoneksi();
     k.saatStatus((s) => {
       if (this.koneksi !== k || k.jenis === 'offline') return;
       const sebelum = this.statusKini;
       this.statusKini = s;
       if (s === 'tersambung' && sebelum !== 'tersambung') this.sambunganKe++;
-      this.saatStatusBerubah(s, sebelum);
-      // Baru tersambung ke server: pastikan client ini build yang sama dengan server. Sambung LAGI
-      // sesudah putus (server bisa saja baru di-deploy ulang) dicek tanpa jeda minimum.
+      this.saatStatusBerubah(s, kabarKoneksi.status(s));
+      // Setiap sambungan yang berhasil: pastikan client ini build yang sama dengan server, tanpa jeda
+      // minimum (server bisa saja baru di-deploy ulang, juga sebelum sambungan pertama).
       const paksa = pemicuCek.status(s);
       if (paksa !== null && sebelum !== 'tersambung') void this.cekServer(paksa);
     });
   }
 
-  private saatStatusBerubah(s: StatusKoneksi, sebelum: StatusKoneksi) {
+  /** `kabar` dari KabarKoneksi koneksi ini: null = tidak ada yang perlu dikabarkan. */
+  private saatStatusBerubah(s: StatusKoneksi, kabar: Kabar | null) {
     if (this.layar === 'beranda' || this.layar === 'publik') {
       if (s !== 'gagal') {
         this.beranda?.aturStatusOnline(s === 'terputus' ? 'menyambung' : s);
         return;
       }
       // Jangan coba terus di belakang layar dari beranda: niat yang tertahan bisa tiba-tiba
-      // terkirim lama kemudian. Pemain bisa menekan "Coba lagi" kapan saja.
+      // terkirim lama kemudian. Pemain bisa menekan "Coba lagi" kapan saja. Koneksinya ditutup di
+      // sini, jadi 'gagal' hanya ditangani sekali per koneksi.
       this.koneksi?.tutup();
       this.koneksi = null;
       const cobaLagi = this.niatOnline ? () => this.cobaLagiOnline() : null;
@@ -475,8 +480,8 @@ class Aplikasi implements AppUntukMeja {
     }
     // Di meja, indikator koneksi di bar atas (KontrolMeja membaca statusKoneksi()) sudah memberi tahu.
     if (this.layar === 'meja') return;
-    if (s === 'terputus' && sebelum !== 'terputus') toast('Koneksi putus, mencoba menyambung lagi…', true);
-    if (s === 'tersambung' && (sebelum === 'terputus' || sebelum === 'gagal')) toast('Tersambung lagi.');
+    if (kabar === 'putus') toast('Koneksi putus, mencoba menyambung lagi…', true);
+    if (kabar === 'pulih') toast('Tersambung lagi.');
   }
 
   private cobaLagiOnline() {

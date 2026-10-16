@@ -59,7 +59,11 @@ export const SEED = [1, 2, 3, 7, 42, 99, 2024, 31337];
 /** Putaran per permainan. Permainan berakhir karena batas putaran. */
 export const BATAS_PUTARAN = 3;
 
-/** Campuran level bot, sama polanya dengan simulasi.ts. */
+/**
+ * Campuran level bot per seed dan kursi: sengaja hanya mudah dan normal (kursi dengan (seed + i) % 3 === 0
+ * mudah, sisanya normal), supaya strategi keduanya terkunci hash. Beda dengan simulasi.ts, yang memutar
+ * keempat level (mudah, normal, jago, suhu) bergantian kursi; jago/suhu dijaga test lain (AGENTS.md, Bot).
+ */
 const levelUntuk = (seed: number, n: number): LevelBot[] =>
   Array.from({ length: n }, (_, i) => ((seed + i) % 3 === 0 ? 'mudah' : 'normal'));
 

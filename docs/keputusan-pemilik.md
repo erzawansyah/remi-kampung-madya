@@ -1,12 +1,12 @@
-# Keputusan pemilik: rincian butir #25–#39
+# Keputusan pemilik: rincian butir #25–#47
 
-Dokumen ini merinci baris **#25–#39** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy.
+Dokumen ini merinci baris **#25–#47** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #44–#46 sudah diterapkan, sedangkan #40–#43 dan #47 sudah diputuskan tapi baru diterapkan di rilis berikutnya (ditandai **Diputuskan, diterapkan di rilis berikutnya**; aturan dan kode untuk butir itu belum berubah).
 
-**Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. Dua hal kecil dari 14 Okt 2026 yang masih menunggu tanggapan pemilik ada di [Catatan lain](#catatan-lain-belum-masuk-tabel).
+**Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026, #40–#47 pada 16 Okt 2026. Baris #20–#23 README (susun akhir) juga sudah diputuskan 16 Okt 2026: sesuai bawaan yang sudah berjalan. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. Yang masih perlu dikonfirmasi pemilik hanya dua tafsiran: #43 (mode kaldu tanpa batas skor) dan kelompok "berubah-ubah" di #47. Catatan kecil dari 14 Okt 2026 (bunyi dramatis, gaya Jago/Suhu) sudah ditanggapi, lihat [Catatan lain](#catatan-lain-belum-masuk-tabel).
 
 Untuk tiap butir ada: keputusan pemilik (kalau sudah), apa yang terjadi sebelum keputusan, bukti di kode (`file:baris`, per kode saat rilis 0.2.0, jadi nomor baris bisa sudah bergeser), pilihan yang waktu itu ditawarkan, dan dampaknya. Pilihan **bukan aturan baru**, hanya daftar kemungkinan yang ditawarkan ke pemilik.
 
-Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 dan #26, 5 = #27 dan #28, 6 = #29, 7 = #30–#32 (#32 dijawab langsung; #30 dan #31 diserahkan ke saran pengembang), 8 = #34, 9 = #33, 10 = #36, 11 = #37, 12 = #35, 13 = #39. #38 disetujui 14 Okt 2026, saat pemilik meminta rencana perbaikannya dikerjakan.
+Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 dan #26, 5 = #27 dan #28, 6 = #29, 7 = #30–#32 (#32 dijawab langsung; #30 dan #31 diserahkan ke saran pengembang), 8 = #34, 9 = #33, 10 = #36, 11 = #37, 12 = #35, 13 = #39. #38 disetujui 14 Okt 2026, saat pemilik meminta rencana perbaikannya dikerjakan. #40–#47 dijawab 16 Okt 2026 lewat komentar atas rencana peningkatan (tujuh permintaan sesudah main bareng di kedai).
 
 **Kalau pemilik mengubah keputusan atau ada butir baru:**
 1. Tulis keputusannya di kolom "Keputusan" README dan ubah statusnya.
@@ -32,9 +32,14 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 | [37](#k37) | Refresh di giliran sendiri langsung dimainkan bot | `packages/meja` | Diputuskan: masa tenggang |
 | [38](#k38) | Error di timer bot bisa mematikan server | `packages/meja` + `apps/server` | Diputuskan: diperbaiki |
 | [39](#k39) | Batas meja dan sambungan per jaringan terlalu kecil untuk Wi-Fi kedai | `apps/server` (deploy) | Diputuskan: bawaan dinaikkan |
+| [40](#k40) | Angka joker boleh sama dengan putaran sebelumnya | aturan (persiapan putaran) | Diputuskan, diterapkan di rilis berikutnya |
+| [41](#k41) | Mentung hanya dengan satu kartu | aturan mentung + skor | Diputuskan, diterapkan di rilis berikutnya |
+| [42](#k42) | Mode kaldu: pentungan ×2 di putaran terakhir | aturan (opsi meja) | Diputuskan, diterapkan di rilis berikutnya |
+| [43](#k43) | Mode kaldu dan batas skor | aturan (opsi meja) | Diputuskan (tafsiran, perlu konfirmasi), diterapkan di rilis berikutnya |
 | [44](#k44) | Batas skor kaku ±500 | `packages/meja` (validasi) + client | Diputuskan: angka bebas kelipatan 10 |
 | [45](#k45) | Leaderboard terasa tidak adil | `packages/meja` + `apps/server` + client | Diputuskan: banyak urutan, bawaan rata-rata per permainan |
 | [46](#k46) | Banyak teman tidak tahu game ini bisa dipasang | client (beranda) | Diputuskan: tombol pasang melayang hanya di beranda, "Nanti saja" 3 hari |
+| [47](#k47) | Warga kedai gampang dibaca, bahkan Suhu | `packages/engine` (bot) + `packages/meja` | Diputuskan (kelompok berubah-ubah perlu konfirmasi), diterapkan di rilis berikutnya |
 
 ---
 
@@ -290,6 +295,60 @@ Sisi server sudah ditangani lebih dulu (Okt 2026, `apps/server`): callback timer
 
 **Bukti:** konstanta `BAWAAN_MAKS_MEJA_PER_IP` dan `BAWAAN_MAKS_SAMBUNGAN_PER_IP` di `apps/server/src/server.ts`; env dibaca di `apps/server/src/main.ts`. Dikunci test `apps/server/test/ketahanan.test.ts` (meja ke-61 ditolak) dan `apps/server/test/keamanan.test.ts` (sambungan ke-151 ditolak 429).
 
+<a id="k40"></a>
+
+## 40. Angka joker tidak boleh sama dengan putaran sebelumnya
+
+**Diputuskan, diterapkan di rilis berikutnya.** Aturan dan kode belum berubah.
+
+**Keputusan pemilik (16 Okt 2026):** angka joker tidak boleh sama dengan angka joker **putaran tepat sebelumnya**. Kalau kartu yang dibuka angkanya sama, kartu itu dianulir (disisihkan, lalu diselipkan kembali ke deck secara acak) dan kartu berikutnya dibuka, sampai angkanya beda. Hanya dibandingkan dengan putaran tepat sebelumnya: putaran 3 boleh sama dengan putaran 1. Berlaku di semua meja (bukan opsi). **Tidak ada penjelasan anulir di popup joker**: popup tetap hanya menampilkan kartu joker yang berlaku.
+
+**Sekarang:** kartu dibuka sesudah semua kartu dibagi lalu diselipkan acak ke deck (`packages/engine/src/mesin.ts:198-200`), tanpa membandingkan dengan putaran sebelumnya. Bagian "joker dibuka sesudah semua kartu dibagi, lalu diselipkan acak" sudah persis seperti permintaan pemilik dan tidak diubah.
+
+**Rencana penerapan:** `bukaKartuJoker(deck, rankSebelumnya, rng)` baru di `mesin.ts` menggantikan baris 198-200 (pembanding `s.riwayat.at(-1)?.rankJoker`); kartu joker diselipkan dengan satu `rng.int` seperti sekarang, kartu yang dianulir ikut diselipkan acak supaya jumlah kartu deck tetap; jalur tanpa anulir tidak memakai RNG tambahan; tidak ada field baru di state/view; invarian baru di `invarian.ts`; satu kalimat aturan anulir di Bantuan (`apps/client/src/konten/bantuan.ts`).
+
+**Test yang direncanakan:** `packages/engine/test/joker-putaran.test.ts` (anulir satu dan beberapa kali, putaran 3 boleh sama dengan putaran 1, jumlah kartu tetap), assertion angka joker berurutan selalu beda di golden. Golden berkas 2 dan 3 pemain wajib tidak berubah; berkas yang mengulang angka joker ditinjau lalu dicatat di [baseline-gameplay.md](baseline-gameplay.md).
+
+<a id="k41"></a>
+
+## 41. Mentung pakai beberapa joker
+
+**Diputuskan, diterapkan di rilis berikutnya.** Aturan dan kode belum berubah.
+
+**Keputusan pemilik (16 Okt 2026):** mentung dengan 2 kartu atau lebih hanya boleh kalau **semuanya joker hidup**. Joker mati dihitung kartu biasa (tidak boleh ikut). Nilainya **250 per joker** (2 joker = 500, 3 joker = 750, dan seterusnya).
+
+**Sekarang:** mentung selalu dengan tepat satu kartu terakhir (`validasiBuang`, `packages/engine/src/giliran.ts:144`).
+
+**Rencana penerapan:** aksi buang mendapat `kartuIdLain?: string[]`; `validasiBuang` memeriksa berurutan (kartu ada di tangan, tidak dobel, jumlahnya sama dengan seluruh tangan, giliran diawali mulung, baru semuanya joker hidup), supaya pesan penolakan tidak membocorkan joker; `nilaiPentunganTotal()` di `skor.ts` (tanpa −25, tiap kepentung kena nilai total, yang mentung dapat sekali); tetap **satu** peristiwa `buang` dengan `kartuLain?`. Client tidak pernah memeriksa seluruh tangan sebelum pemain memilih (bisa membocorkan joker), panel mentung menampilkan "PENTUNG 2 JOKER!", dan bunyi `tegang` sebelum kartu dibuka tetap sama. Jago/Suhu (`rencanaMentung`, `packages/engine/src/bot/strategi.ts:516`) ikut mencoba, diukur di arena; Mudah/Normal tidak diubah (dikunci golden).
+
+**Test yang direncanakan:** describe #41 di `packages/engine/test/mentung.test.ts` (2 dan 3 joker, campur joker mati ditolak, campur kartu biasa ditolak, urutan pesan penolakan), validasi `kartuIdLain` di `packages/meja`, test kebocoran dan panel di client.
+
+<a id="k42"></a>
+
+## 42. Mode kaldu
+
+**Diputuskan, diterapkan di rilis berikutnya.** Aturan dan kode belum berubah.
+
+**Keputusan pemilik (16 Okt 2026):** opsi meja **Mode kaldu**. Di putaran terakhir, nilai pentungan dikali dua untuk yang mentung **dan** yang kepentung. Putaran terakhir = putaran ke-N kalau batas putaran diisi, atau sesudah voting **"putaran berikutnya terakhir"**. Putaran kaldu yang habis tanpa mentung (deck habis) diikuti putaran kaldu lagi, sampai ada yang mentung. Voting "Akhiri permainan" tetap ada sebagai jalan keluar.
+
+**Rencana penerapan:**
+- Engine: field opsional yang tidak ditulis kalau mati (`KonfigurasiPermainan.modeKaldu?`, `GameState.kalduDiminta?`, `StatePutaran.kaldu?`, `HasilPutaran.kaldu?`, `RincianSkor.pengaliPentungan?`), jadi golden tidak bergeser; `putaranBerikutKaldu()` = `modeKaldu && (kalduDiminta || nomor ≥ batasPutaran)`; aksi baru `putaranTerakhir` (hanya di antara putaran); `selesaikanPutaran` (`packages/engine/src/mesin.ts:431`) mengakhiri permainan dengan alasan `'kaldu'` kalau putaran kaldu ditutup mentung, dan melanjutkan putaran kaldu kalau deck habis. Pentungan dikali `PENGALI_KALDU` (2) untuk yang mentung dan setiap kepentung; bagian skor lain tetap.
+- Meja: `PengaturanMeja.modeKaldu?` hanya bisa diubah di lobi; voting `{ t: 'putaranTerakhir', setuju }` meniru voting akhiri (`packages/meja/src/meja.ts:509`, `cekVotingAkhiri`), termasuk hitung ulang saat pemilih berkurang (#36); di mode offline satu manusia berarti langsung berlaku.
+- Client, teks di meja sesingkat mungkin: kotak centang "Mode kaldu" di Atur meja dan lobi; bar atas dan judul popup joker "Putaran 6 · Kaldu"; panel mentung "×2"; rincian skor "150 × 2"; modal hasil putaran dengan tombol "Putaran terakhir (n/m)" dan baris "Belum ada yang mentung, kaldu lagi."; bab Mode Kaldu di Bantuan.
+- Jago/Suhu menimbang mentung ×2 di putaran kaldu.
+
+**Test yang direncanakan:** `packages/engine/test/kaldu.test.ts`, `sim-kaldu.test.ts` (setiap permainan kaldu pasti berakhir), voting dan validasi di `packages/meja`, `kontenAturan.test.ts`.
+
+<a id="k43"></a>
+
+## 43. Mode kaldu tanpa batas skor
+
+**Diputuskan, diterapkan di rilis berikutnya.** Aturan dan kode belum berubah. **Tafsiran, perlu dikonfirmasi pemilik.**
+
+**Keputusan pemilik (16 Okt 2026), ditafsirkan pengembang dari komentar "Tidak ada batas skor":** mode kaldu **tidak memakai batas skor**. Saat kaldu dicentang, isian batas skor (#44) disembunyikan dan engine mengabaikannya; `mulai()` di meja mengirim batas skor `null`. Permainan kaldu berakhir lewat putaran kaldu yang ditutup mentung (#42) atau voting "Akhiri permainan". Kalau pemilik ternyata bermaksud lain, ubah sebelum Mode kaldu diterapkan.
+
+**Test yang direncanakan:** di `kaldu.test.ts` (batas skor yang tercapai tidak mengakhiri permainan kaldu) dan test isian Atur meja/lobi (isian batas skor tersembunyi saat kaldu dicentang).
+
 <a id="k44"></a>
 
 ## 44. Batas skor kaku ±500
@@ -368,6 +427,31 @@ Sisi server sudah ditangani lebih dulu (Okt 2026, `apps/server`): callback timer
 
 **Test:** `apps/client/test/pasangAplikasi.test.ts` (user agent asli: Safari iPhone, iPadOS desktop dengan sentuh 5 vs 0, Chrome iOS, Instagram/Threads/Facebook iOS dan Android, WhatsApp, WebView polos, Chrome/Samsung/Firefox Android dengan dan tanpa prompt, desktop; terpasang/bukan HTTPS; batas 3 hari ±1 ms, jam dimundurkan, sudah pasang vs prompt), `apps/client/test/penyimpanan.test.ts` (perapian `remi.tawaranPasang`), `apps/client/test/beranda.test.ts` (ubin + tombol saat melayang, ubin saja saat ditunda, tidak ada apa-apa saat null, tidak dobel, isian dan lipatan selamat, Nanti saja dan fokus, anak terakhir sesudah kaki, `inert` saat dialog, lobi tanpa tombol), `apps/client/test/kedai.test.ts` (tombol di luar kartu kedai, tanpa teks kedai), `apps/client/test/dialogPasang.test.ts` (tiga varian, tombol, clipboard dan cadangannya, tidak menimpa modal utama), `antislop.test.ts` (`konten/pasang.ts`). E2E `apps/client/e2e/smoke.mjs` alur `pasang` (Chrome Android 360×780 dan 780×360).
 
+<a id="k47"></a>
+
+## 47. Gaya main warga kedai per persona
+
+**Diputuskan, diterapkan di rilis berikutnya.** Strategi bot belum berubah.
+
+**Keputusan pemilik (16 Okt 2026):** warga kedai gampang dibaca, bahkan level Suhu (Londo dan As selalu dibuang di awal). Setiap persona (nama warga kedai) mendapat **gaya main** sendiri, terpisah dari level. Gaya **tidak ditampilkan** ke pemain: tidak ada di UI, Bantuan, protokol, maupun CHANGELOG bagian pemain (cukup ditulis umum, tanpa nama). Pemetaan nama ke gaya di bawah disetujui, ditambah **satu kelompok yang gayanya berubah-ubah** tiap putaran. "Ngurutin" = membuang kartu yang menyambung buangan pemain sebelumnya.
+
+**Pemetaan yang disetujui** (nanti di `packages/meja/src/gayaWarga.ts`; jangan ditampilkan ke pemain):
+
+| Gaya | Inti perilaku (hanya dari info yang terlihat di view) | Persona |
+|---|---|---|
+| Kilat | Mulung lebih agresif, menurunkan kartu jadi lebih cepat, nutup secepatnya | Kipas Dua, Dik Toska, Bu Sendok |
+| Sabar Londo | Tidak membuang Londo sebelum ada pemain lain yang membuang Londo di putaran itu; dilonggarkan menjelang deck habis | Cak Kopag, Ning Sore, Koki-Kun, Pak Tani |
+| Ngurutin | Kalau merasa tidak bakal menang, membuang kartu yang menyambung buangan teratas pemain sebelumnya (meja ≥ 3 orang) | Mas Sampul, Si Rak, Ning Kukis |
+| Pemburu pentungan | Menyimpan satu calon pentungan besar (As > Londo), bobot mentung dan korban lebih tinggi | Pak Seng, Om Garpu, Penampil, Juragan |
+| Penahan | Menahan kartu yang kemungkinan dibutuhkan pemain berikutnya (dilihat dari kartu yang dipungutnya) | Mbak Teras, Cak Owner, Bang IT, Mbak Mata |
+| Berubah-ubah | Tiap putaran memakai salah satu dari lima gaya di atas, dipilih dari info publik putaran itu (tetap fungsi murni, tidak bisa ditebak dari putaran sebelumnya) | Jurik, Bos Bocil, Om Napi, Bajigur |
+
+**Perlu konfirmasi pemilik:** cara kerja kelompok "berubah-ubah" (berganti tiap putaran di antara lima gaya) adalah tafsiran pengembang.
+
+**Rencana penerapan:** `GayaBot` dan `DEFINISI_GAYA` di `packages/engine/src/bot/gaya.ts` (gaya `standar` = perilaku sekarang, tanpa rng); `pilihAksiBot(view, level, rng, gaya = 'standar')`; "mood" per putaran dan pilihan acak di antara nilai yang hampir seri supaya satu persona pun tidak terbaca; Mudah mengabaikan gaya (latihan tidak berubah), susun akhir tanpa gaya. Di meja, `gayaKursi(k)`: persona memakai gayanya, nama lain ("Warga N"), kursi yang ditinggal manusia (`Kursi.keluar`), dan giliran manusia yang diambil alih memakai `standar`. Diukur di arena (`packages/engine/scripts/arena.ts`) dengan syarat: Suhu bergaya apa pun tetap signifikan di atas Normal, tiap gaya terukur beda di metrik khasnya, peluang Londo/As dibuang di awal turun ≥ 30 %, dan p99 lama mikir ≤ 1,15× level yang sama.
+
+**Test yang direncanakan:** setiap nama di `NAMA_LAWAN_BAWAAN` wajib punya gaya; golden engine lolos tanpa `-u`; golden meja bergeser hanya karena gaya (dibuktikan dengan `gayaKursi` dipaksa `standar`), lalu ditinjau dan dicatat; simulasi ikut memutar gaya tanpa aksi yang ditolak.
+
 ---
 
 ## Catatan lain (belum masuk tabel)
@@ -379,9 +463,10 @@ Temuan audit yang lebih kecil, dicatat supaya tidak hilang:
 - **Urutan bagi kartu:** animasi bagi sudah disamakan dengan engine (mulai dari pengocok, nomor kursi naik, tanpa melihat arah; `apps/client/src/game/MejaScene.ts`, `bagiKartu`). Kalau di Kedai Madya urutannya lain, itu keputusan pemilik dan harus diubah di engine dulu.
 - **Simpanan offline berisi state lengkap** (deck, tangan bot) di `localStorage` (`remi.mejaOffline`). Hanya mode lawan bot, tapi bisa diintip lewat devtools.
 
-**Menunggu konfirmasi pemilik (14 Okt 2026).** Sudah dikerjakan sesuai saran pengembang dan tidak mengubah aturan main, tapi pemilik belum menanggapi secara khusus. Kalau pemilik tidak setuju, ubah di tempat yang disebut:
-- **Bunyi khusus pentung joker.** Pentungan joker (250) memutar bunyi `mentungJoker` yang lebih besar, baru sesudah kartunya terbuka di meja. Bunyi `tegang` sebelum dibuka sama untuk pentungan apa pun, jadi tidak membocorkan isinya (dijaga `apps/client/test/suaraDramatis.test.ts`), dan judul panel PENTUNG JOKER! sudah begitu sejak 0.2.0. Kalau semua pentungan harus berbunyi sama: satu baris di `apps/client/src/efek/pemutar.ts` (peristiwa `mentung`).
-- **Gaya warga kedai Jago dan Suhu yang menahan kartu jadi di tangan.** Sah menurut aturan sekarang, karena semua pemain boleh menurunkan kartu jadi di susun akhir (#19, #24), dan di arena jauh lebih kuat daripada langsung menurunkan (selalu menurunkan rugi sekitar 17–67 poin per putaran). Kalau gaya "antem-anteman" ini dianggap tidak sesuai kebiasaan meja Kedai Madya, itu keputusan aturan (atau parameter strategi di `packages/engine/src/bot/strategi.ts`), bukan perubahan sepihak.
+**Ditanggapi pemilik (16 Okt 2026).** Dua hal dari 14 Okt 2026 yang dulu dikerjakan sesuai saran pengembang sekarang sudah disetujui. Jangan diubah tanpa izin pemilik:
+- **Bunyi dramatis dan bunyi khusus pentung joker: sudah oke** ("kayaknya sudah oke"). Pentungan joker (250) memutar bunyi `mentungJoker` yang lebih besar, baru sesudah kartunya terbuka di meja. Bunyi `tegang` sebelum dibuka sama untuk pentungan apa pun, jadi tidak membocorkan isinya (dijaga `apps/client/test/suaraDramatis.test.ts`), dan judul panel PENTUNG JOKER! sudah begitu sejak 0.2.0. Tempatnya: `apps/client/src/efek/pemutar.ts` (peristiwa `mentung`).
+- **Gaya warga kedai Jago dan Suhu yang menahan kartu jadi di tangan: disetujui, tetap.** Sah menurut aturan, karena semua pemain boleh menurunkan kartu jadi di susun akhir (#19, #24), dan di arena jauh lebih kuat daripada langsung menurunkan (selalu menurunkan rugi sekitar 17–67 poin per putaran). Parameternya di `packages/engine/src/bot/strategi.ts`. Gaya main per persona (#47) nanti ditambahkan di atas gaya ini.
+- **Aturan Terbuka #20–#23 (susun akhir): disetujui sesuai bawaan yang sudah berjalan** ("sesuaikan aja"): semua pemain ikut susun akhir termasuk yang mengambil kartu terakhir (#20), boleh menurunkan sampai tangan habis tanpa dihitung mentung (#21), serentak (#22), batas waktu sama dengan batas giliran lalu warga kedai menurunkan yang bisa dijadikan dan selesai (#23). Tidak ada kode yang berubah.
 
 ## Identitas Kedai Madya (sudah diputuskan, Okt 2026)
 
