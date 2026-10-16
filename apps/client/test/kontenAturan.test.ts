@@ -7,7 +7,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   AturanError,
+  bukaKartuJoker,
   maksimalMulung,
+  Rng,
   NILAI_PENTUNGAN_JOKER,
   PENALTI_JOKER_DIBUANG,
   validasiBuang,
@@ -20,7 +22,7 @@ import {
   type PilihanKartu,
   type Rank,
 } from '@remi/engine';
-import { BAB_BANTUAN, type KartuContoh } from '../src/konten/bantuan';
+import { BAB_BANTUAN, FAQ, type KartuContoh } from '../src/konten/bantuan';
 
 type Contoh = { bab: string; judul: string; kartu: KartuContoh[]; ket: string; sah: boolean };
 
@@ -186,6 +188,23 @@ describe('klaim kunci di Bantuan sama dengan engine', () => {
     const t = [kartu({ bunga: 'love', rank: 7 })];
     const dariBuangan = validasiBuang({ tangan: t, punyaKartuJadi: true, sumberAmbil: 'buangan', kartuId: t[0].id, ctx: ctx5, asJokerBolehDibuangTanpaJadi: false });
     expect(dariBuangan.mentung).toBe(true);
+  });
+
+  it('joker tidak boleh sama dengan putaran tepat sebelumnya: kartunya dianulir, buka kartu berikutnya (#40)', () => {
+    expect(teksBab('joker')).toContain('tidak boleh sama dengan putaran tepat sebelumnya');
+    expect(teksBab('joker')).toContain('joker putaran 3 boleh sama dengan putaran 1');
+    expect(teksBab('mulai')).toContain('Kalau angkanya sama dengan joker putaran sebelumnya, kartu itu dianulir');
+    expect(FAQ.some((f) => f.jawab.includes('dianulir') && f.jawab.includes('putaran 3 sama dengan putaran 1'))).toBe(true);
+    const kartu = pembuatKartu();
+    // Dari bawah ke atas; joker putaran lalu 7, dua kartu teratas 7.
+    const deck = [kartu({ bunga: 'waru', rank: 3 }), kartu({ bunga: 'love', rank: 9 }), kartu({ bunga: 'kriting', rank: 7 }), kartu({ bunga: 'love', rank: 7 })];
+    const joker = bukaKartuJoker(deck, 7 as Rank, new Rng(1));
+    expect(joker.rank).toBe(9);
+    expect(deck).toHaveLength(4);
+    expect(deck.filter((k) => k.rank === 7)).toHaveLength(2);
+    // Tanpa joker sebelumnya (putaran pertama), kartu teratas langsung jadi joker.
+    const deck2 = [kartu({ bunga: 'waru', rank: 3 }), kartu({ bunga: 'wajik', rank: 7 })];
+    expect(bukaKartuJoker(deck2, undefined, new Rng(1)).rank).toBe(7);
   });
 
   it('buang joker hidup kena −25; pentungan joker bernilai 250 tanpa penalti', () => {

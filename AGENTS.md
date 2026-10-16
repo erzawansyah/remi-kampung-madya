@@ -2,7 +2,7 @@
 
 **Remi Kampung Madya**: game kartu remi dengan aturan yang berlaku di Kedai Madya (tempat pemilik dan teman-temannya berkumpul), yaitu **aturan tongkrongan** lokal yang **berbeda dari remi/rummy umum**. Monorepo TypeScript: rules engine murni, modul meja/room, server WebSocket, dan client Phaser 4.2.1 + HTML + PWA.
 
-Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#47 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik. #40–#43 dan #47 (16 Okt 2026) sudah diputuskan tapi baru diterapkan di rilis berikutnya; sampai saat itu aturan dan bot tetap seperti sekarang.
+Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#47 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik. #40 (joker beda dari putaran sebelumnya) sudah diterapkan. #41–#43 dan #47 (16 Okt 2026) sudah diputuskan tapi baru diterapkan di rilis berikutnya; sampai saat itu aturan dan bot untuk butir itu tetap seperti sekarang.
 
 ## Aturan emas
 
@@ -219,6 +219,9 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
 ## Keputusan pemilik yang sering terlupa
 
 Daftar lengkap ada di README. Yang paling sering terlupa:
+
+**Joker di awal putaran**
+- Kartu yang dibuka berangka sama dengan joker **putaran tepat sebelumnya** dianulir, lalu kartu berikutnya dibuka sampai beda (#40, `bukaKartuJoker` di `mesin.ts`). Bandingkan hanya dengan `riwayat.at(-1)`: putaran 3 boleh sama dengan putaran 1, dan putaran pertama (juga sesudah "Main lagi") bebas. Kartu yang dianulir diselipkan lagi ke deck sesudah kartu joker, masing-masing satu `rng.int`; jalur tanpa anulir tidak boleh memakai RNG tambahan (golden 2 dan 3 pemain menjaganya). Popup joker tidak menjelaskan anulir.
 
 **Kartu jadi**
 - Seri angka hanya 2–10 (maksimal 9 kartu). Seri Londo hanya J-Q-K. Angka dan Londo tidak bisa disambung, dan As tidak bisa masuk seri.

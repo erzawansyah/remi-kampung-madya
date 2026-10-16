@@ -19,7 +19,7 @@ import {
   type Peristiwa,
   type StatePutaran,
 } from './state.js';
-import type { Kartu } from './kartu.js';
+import type { Kartu, Rank } from './kartu.js';
 
 export type HasilAksi =
   | { ok: true; state: GameState }
@@ -177,6 +177,31 @@ function nama(s: GameState, i: number): string {
   return s.pemain[i].nama;
 }
 
+/**
+ * Buka kartu joker dari atas deck (sesudah semua kartu dibagi), lalu selipkan kembali ke posisi acak.
+ * Keputusan #40: kalau angkanya sama dengan joker putaran tepat sebelumnya (`rankSebelumnya`), kartu itu
+ * dianulir dan disisihkan dulu, lalu kartu berikutnya dibuka, sampai angkanya beda. Kartu joker
+ * diselipkan dengan satu `rng.int` (persis cara lama), baru kartu yang dianulir diselipkan acak satu per
+ * satu, jadi jumlah kartu deck tetap dan tidak ada kartu yang dibuka dua kali. Tanpa anulir, pemakaian
+ * RNG dan urutan deck sama persis dengan sebelum aturan ini. Mengubah `deck` di tempat.
+ */
+export function bukaKartuJoker(deck: Kartu[], rankSebelumnya: Rank | null | undefined, rng: Rng): Kartu {
+  const dianulir: Kartu[] = [];
+  let kartu = deck.pop();
+  while (kartu && kartu.rank === rankSebelumnya) {
+    dianulir.push(kartu);
+    kartu = deck.pop();
+  }
+  // Mustahil di meja sungguhan: sisa deck minimal 28 kartu, satu angka paling banyak 8 kartu.
+  if (!kartu) {
+    deck.push(...dianulir.reverse());
+    return langgar('KONFIGURASI_TIDAK_SAH', 'Isi deck-nya angka joker putaran lalu semua, nggak bisa buka joker baru.');
+  }
+  deck.splice(rng.int(deck.length + 1), 0, kartu);
+  for (const k of dianulir) deck.splice(rng.int(deck.length + 1), 0, k);
+  return kartu;
+}
+
 function mulaiPutaran(s: GameState, pengocokDipilih: number | undefined): void {
   if (s.status !== 'menungguPutaran' && s.status !== 'putaranSelesai') {
     langgar('STATUS_SALAH', 'Putaran masih berjalan.');
@@ -195,9 +220,8 @@ function mulaiPutaran(s: GameState, pengocokDipilih: number | undefined): void {
   for (let i = 0; i < kartuPerPemain; i++) {
     for (let p = 0; p < n; p++) tangan[(pengocok + p) % n].push(deck.pop()!);
   }
-  // Kartu dibuka, angkanya jadi angka joker, lalu diselipkan kembali ke posisi acak.
-  const kartuDibuka = deck.pop()!;
-  deck.splice(rng.int(deck.length + 1), 0, kartuDibuka);
+  // Riwayat hanya berisi putaran yang sudah selesai, jadi entri terakhirnya putaran tepat sebelumnya.
+  const kartuDibuka = bukaKartuJoker(deck, s.riwayat.at(-1)?.rankJoker, rng);
 
   s.rng = rng.state;
   s.putaran = {

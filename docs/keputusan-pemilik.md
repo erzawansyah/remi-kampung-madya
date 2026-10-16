@@ -1,6 +1,6 @@
 # Keputusan pemilik: rincian butir #25–#47
 
-Dokumen ini merinci baris **#25–#47** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #44–#46 sudah diterapkan, sedangkan #40–#43 dan #47 sudah diputuskan tapi baru diterapkan di rilis berikutnya (ditandai **Diputuskan, diterapkan di rilis berikutnya**; aturan dan kode untuk butir itu belum berubah).
+Dokumen ini merinci baris **#25–#47** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #40 dan #44–#46 sudah diterapkan, sedangkan #41–#43 dan #47 sudah diputuskan tapi baru diterapkan di rilis berikutnya (ditandai **Diputuskan, diterapkan di rilis berikutnya**; aturan dan kode untuk butir itu belum berubah).
 
 **Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026, #40–#47 pada 16 Okt 2026. Baris #20–#23 README (susun akhir) juga sudah diputuskan 16 Okt 2026: sesuai bawaan yang sudah berjalan. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. Yang masih perlu dikonfirmasi pemilik hanya dua tafsiran: #43 (mode kaldu tanpa batas skor) dan kelompok "berubah-ubah" di #47. Catatan kecil dari 14 Okt 2026 (bunyi dramatis, gaya Jago/Suhu) sudah ditanggapi, lihat [Catatan lain](#catatan-lain-belum-masuk-tabel).
 
@@ -32,7 +32,7 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 | [37](#k37) | Refresh di giliran sendiri langsung dimainkan bot | `packages/meja` | Diputuskan: masa tenggang |
 | [38](#k38) | Error di timer bot bisa mematikan server | `packages/meja` + `apps/server` | Diputuskan: diperbaiki |
 | [39](#k39) | Batas meja dan sambungan per jaringan terlalu kecil untuk Wi-Fi kedai | `apps/server` (deploy) | Diputuskan: bawaan dinaikkan |
-| [40](#k40) | Angka joker boleh sama dengan putaran sebelumnya | aturan (persiapan putaran) | Diputuskan, diterapkan di rilis berikutnya |
+| [40](#k40) | Angka joker boleh sama dengan putaran sebelumnya | aturan (persiapan putaran) | Diputuskan: dianulir, buka kartu lagi (diterapkan) |
 | [41](#k41) | Mentung hanya dengan satu kartu | aturan mentung + skor | Diputuskan, diterapkan di rilis berikutnya |
 | [42](#k42) | Mode kaldu: pentungan ×2 di putaran terakhir | aturan (opsi meja) | Diputuskan, diterapkan di rilis berikutnya |
 | [43](#k43) | Mode kaldu dan batas skor | aturan (opsi meja) | Diputuskan (tafsiran, perlu konfirmasi), diterapkan di rilis berikutnya |
@@ -299,15 +299,20 @@ Sisi server sudah ditangani lebih dulu (Okt 2026, `apps/server`): callback timer
 
 ## 40. Angka joker tidak boleh sama dengan putaran sebelumnya
 
-**Diputuskan, diterapkan di rilis berikutnya.** Aturan dan kode belum berubah.
+**Diputuskan pemilik (16 Okt 2026), diterapkan.** Aturan baru; tercatat di CHANGELOG `[Belum dirilis]`.
 
 **Keputusan pemilik (16 Okt 2026):** angka joker tidak boleh sama dengan angka joker **putaran tepat sebelumnya**. Kalau kartu yang dibuka angkanya sama, kartu itu dianulir (disisihkan, lalu diselipkan kembali ke deck secara acak) dan kartu berikutnya dibuka, sampai angkanya beda. Hanya dibandingkan dengan putaran tepat sebelumnya: putaran 3 boleh sama dengan putaran 1. Berlaku di semua meja (bukan opsi). **Tidak ada penjelasan anulir di popup joker**: popup tetap hanya menampilkan kartu joker yang berlaku.
 
-**Sekarang:** kartu dibuka sesudah semua kartu dibagi lalu diselipkan acak ke deck (`packages/engine/src/mesin.ts:198-200`), tanpa membandingkan dengan putaran sebelumnya. Bagian "joker dibuka sesudah semua kartu dibagi, lalu diselipkan acak" sudah persis seperti permintaan pemilik dan tidak diubah.
+**Sebelum keputusan:** kartu dibuka sesudah semua kartu dibagi lalu diselipkan acak ke deck (`packages/engine/src/mesin.ts`, dulu baris 198-200), tanpa membandingkan dengan putaran sebelumnya. Bagian "joker dibuka sesudah semua kartu dibagi, lalu diselipkan acak" sudah persis seperti permintaan pemilik dan tidak diubah.
 
-**Rencana penerapan:** `bukaKartuJoker(deck, rankSebelumnya, rng)` baru di `mesin.ts` menggantikan baris 198-200 (pembanding `s.riwayat.at(-1)?.rankJoker`); kartu joker diselipkan dengan satu `rng.int` seperti sekarang, kartu yang dianulir ikut diselipkan acak supaya jumlah kartu deck tetap; jalur tanpa anulir tidak memakai RNG tambahan; tidak ada field baru di state/view; invarian baru di `invarian.ts`; satu kalimat aturan anulir di Bantuan (`apps/client/src/konten/bantuan.ts`).
+**Penerapan:** `bukaKartuJoker(deck, rankSebelumnya, rng)` di `packages/engine/src/mesin.ts`, dipanggil `mulaiPutaran` dengan `s.riwayat.at(-1)?.rankJoker` (riwayat hanya berisi putaran yang sudah selesai, jadi entri terakhir selalu putaran tepat sebelumnya; permainan baru, termasuk sesudah "Main lagi", mulai dengan riwayat kosong dan bebas). Urutannya:
+1. Kartu teratas deck dibuka. Selama angkanya sama dengan `rankSebelumnya`, kartu itu disisihkan ke daftar sementara dan kartu berikutnya dibuka. Tidak ada kartu yang dibuka dua kali.
+2. Kartu joker diselipkan dengan **satu** `rng.int(deck.length + 1)`, persis cara lama.
+3. Kartu yang dianulir diselipkan acak satu per satu (satu `rng.int` per kartu, urut dari yang pertama dibuka), jadi jumlah dan isi deck tetap.
 
-**Test yang direncanakan:** `packages/engine/test/joker-putaran.test.ts` (anulir satu dan beberapa kali, putaran 3 boleh sama dengan putaran 1, jumlah kartu tetap), assertion angka joker berurutan selalu beda di golden. Golden berkas 2 dan 3 pemain wajib tidak berubah; berkas yang mengulang angka joker ditinjau lalu dicatat di [baseline-gameplay.md](baseline-gameplay.md).
+Tanpa anulir, pemakaian RNG dan urutan deck sama persis dengan sebelum aturan ini (dibuktikan golden 2 dan 3 pemain yang tidak berubah). Kalau seluruh sisa deck berangka sama, `KONFIGURASI_TIDAK_SAH` dilempar; ini mustahil di meja sungguhan (sisa deck minimal 28 kartu, satu angka paling banyak 8 kartu). Tidak ada field baru di state, view, maupun peristiwa; popup joker, log, dan bunyi tidak berubah. Invarian baru di `packages/engine/src/invarian.ts`: angka joker putaran berjalan beda dengan `riwayat[nomor − 2]`, dan angka joker berurutan di riwayat selalu beda. Bantuan (`apps/client/src/konten/bantuan.ts`): satu kalimat di bab Mulai main, satu paragraf di bab Joker, dan satu tanya-jawab (FAQ). Tutorial tidak diubah (hanya memainkan putaran pertama, yang tidak pernah menganulir).
+
+**Test:** `packages/engine/test/joker-putaran.test.ts` (tanpa joker sebelumnya dan tanpa anulir sama persis dengan cara lama, termasuk state RNG; anulir sekali dan beruntun di 2 deck; setiap kartu dibuka paling banyak sekali; jumlah dan isi deck tetap; urutan deck persis untuk seed tetap; RNG dipakai 1 + jumlah anulir; `mulaiPutaran` di semua konfigurasi selalu beda dari putaran sebelumnya dengan invarian lolos; putaran pertama tidak pernah menganulir; putaran 3 boleh sama dengan putaran 1; deck yang isinya angka lama semua ditolak tanpa diubah), `packages/meja/test/meja.test.ts` (putaran pertama sesudah "Main lagi" boleh sama dengan putaran terakhir permainan lama), `apps/client/test/kontenAturan.test.ts` (klaim Bantuan cocok dengan engine), dan assertion angka joker berurutan selalu beda di `packages/engine/test/golden.test.ts`. Golden engine bergeser hanya di enam permainan yang dulu mengulang angka joker, mulai dari putaran yang dianulir (rincian di [baseline-gameplay.md](baseline-gameplay.md)); golden meja tidak berubah. `packages/meja/test/batas-skor.test.ts` kasus 600/−400 memakai seed meja 5, karena seed bawaannya menganulir di putaran 4 dan permainannya jadi 34 putaran (melewati batas waktu test).
 
 <a id="k41"></a>
 

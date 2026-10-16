@@ -70,7 +70,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
         t: 'langkah',
         butir: [
           'Pengocok membagikan kartu ke semua pemain.',
-          'Pengocok membuka satu kartu dari sisa deck. Angkanya jadi angka joker putaran itu, lalu kartunya diselipkan lagi ke deck.',
+          'Pengocok membuka satu kartu dari sisa deck. Angkanya jadi angka joker putaran itu, lalu kartunya diselipkan lagi ke deck. Kalau angkanya sama dengan joker putaran sebelumnya, kartu itu dianulir dan pengocok membuka kartu berikutnya.',
           'Angka joker diumumkan sekali lewat popup di awal putaran. Ingat baik-baik, karena angkanya tidak dipajang di meja.',
           'Joker yang sudah dipasang di kartu jadi diberi label angka yang diwakilinya (misalnya →7) dan tercatat di log. Sama seperti di meja asli, semua orang bisa melihatnya, jadi itu bisa jadi petunjuk.',
           'Pengocok jalan pertama. Tiap giliran: ambil 1 kartu dari deck atau mulung dari buangan, turunkan kartu jadi kalau mau, lalu buang 1 kartu.',
@@ -154,6 +154,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'paragraf',
         teks: 'Di awal putaran, pengocok membuka satu kartu dari sisa deck. **Semua kartu yang angkanya sama** dengan kartu itu jadi joker untuk putaran itu, apa pun bunganya. Kartu yang dibuka lalu diselipkan lagi ke deck.',
+      },
+      {
+        t: 'paragraf',
+        teks: 'Angka joker **tidak boleh sama dengan putaran tepat sebelumnya**. Kalau kartu yang dibuka angkanya sama, kartu itu dianulir dan diselipkan lagi ke deck, lalu pengocok membuka kartu berikutnya sampai angkanya beda. Dengan putaran yang lebih lama boleh sama: joker putaran 3 boleh sama dengan putaran 1.',
       },
       {
         t: 'paragraf',
@@ -759,6 +763,10 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   {
     tanya: 'Kenapa angka joker nggak muncul lagi setelah popup?',
     jawab: 'Itu disengaja (mode ingatan). Seperti di meja asli, angka joker cuma diumumkan sekali di awal putaran. Setelah itu kamu harus ingat sendiri, dan joker di tangan tidak diberi tanda.',
+  },
+  {
+    tanya: 'Angka joker bisa sama dengan putaran kemarin?',
+    jawab: 'Dengan putaran tepat sebelumnya nggak bisa. Kartu yang angkanya sama dianulir, diselipkan lagi ke deck, lalu pengocok membuka kartu berikutnya. Dengan putaran yang lebih lama boleh sama, misalnya putaran 3 sama dengan putaran 1.',
   },
   {
     tanya: 'Bisa nggak aplikasi menandai joker atau kartu yang bahaya dibuang?',

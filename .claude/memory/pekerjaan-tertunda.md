@@ -14,11 +14,10 @@ Batch 14 Okt 2026 (level warga kedai Jago dan Suhu, 12 nama warga kedai baru, bu
 ## Belum selesai
 
 0. **Sebelum PR Rilis A di-merge ke `main`** (merge = deploy otomatis lewat webhook, lihat `cara-kerja.md`): minta pemilik mengambil cadangan `VACUUM INTO` database riwayat di server (perintahnya di `docs/deploy.md`, "Rilis leaderboard"), karena skema SQLite v0 → v1 langsung dijalankan di database produksi. **Sesudah tayang:** cek log server memuat `skema riwayat dimigrasi v0 → v1`; `curl -s "$B/api/peringkat"` harus array (aplikasi lama) dan `curl -s "$B/api/peringkat?v=2&urut=rata"` harus objek; `/healthz` versi/sha baru; lalu coba tombol pasang di HP sungguhan (lihat butir 5).
-1. **Rilis B, aturan baru** (sudah diputuskan, belum dikerjakan; rinci di `docs/keputusan-pemilik.md` #40–#43):
-   - #40 joker beda dari putaran tepat sebelumnya (anulir, selipkan acak, buka kartu berikutnya; popup tanpa penjelasan anulir).
+1. **Rilis B, aturan baru** (sudah diputuskan; rinci di `docs/keputusan-pemilik.md` #40–#43). Commit Rilis B tetap lokal di `produksi` (belum di-push) sampai ketiga tahap selesai, karena PR #6 (Rilis A) masih menunggu:
+   - #40 joker beda dari putaran tepat sebelumnya: **sudah dikerjakan** (B1, `bukaKartuJoker`; golden engine bergeser di 6 permainan, dicatat di `docs/baseline-gameplay.md`).
    - #41 mentung multi-kartu kalau semuanya joker hidup, 250 per joker.
    - #42/#43 Mode kaldu (pentungan ×2 di putaran terakhir, kaldu lagi kalau habis tanpa mentung, voting "putaran berikutnya terakhir", tanpa batas skor).
-   - Golden engine bergeser karena #40 (berkas 2 dan 3 pemain wajib tetap); tinjau dan catat di `docs/baseline-gameplay.md`.
 2. **Rilis C, gaya warga kedai per persona** (#47): `bot/gaya.ts`, `packages/meja/src/gayaWarga.ts`, diukur di arena dengan syarat di `docs/keputusan-pemilik.md` #47. Menyentuh `aksiKuat`/`rencanaMentung` yang sama dengan Rilis B, jadi dikerjakan sesudahnya. Gaya tidak boleh tampil ke pemain.
 3. **Minta konfirmasi pemilik** (tafsiran pengembang, belum dijawab):
    - #43: mode kaldu tidak memakai batas skor (tafsiran komentar "Tidak ada batas skor").

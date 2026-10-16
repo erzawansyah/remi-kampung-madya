@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Rng, type GameState, type HasilPutaran } from '@remi/engine';
+import { buatPermainan, Rng, terapkan, type GameState, type HasilPutaran } from '@remi/engine';
 import {
   BATAS_JOKER_SAMBUNG_MS,
   buatRingkasanAkhir,
@@ -354,6 +354,30 @@ describe('permainan', () => {
     expect(ctx.surat.view('host').alasanSelesai).toBe('sepakat');
     meja.terima('host', { t: 'mainLagi' });
     expect(meja.status).toBe('lobi');
+  });
+
+  it('main lagi: putaran pertama permainan baru bebas, joker boleh sama dengan putaran terakhir permainan lama (#40)', () => {
+    let seedBerikut = 1;
+    const ctx = siapkan({ buatSeed: () => seedBerikut });
+    const meja = Meja.buat(ctx.opsi, 'host', 'Budi', { jumlahPemain: 2, detikGiliran: 0, batasPutaran: null });
+    meja.terima('host', { t: 'aturKursi', kursi: 1, jenis: 'bot' });
+    meja.terima('host', { t: 'mulai', pengocok: 0 });
+    siapSemua(meja);
+    mainkanSampaiPutaranSelesai(meja, ctx, ['host']);
+    const rankLama = meja.data.game!.riwayat.at(-1)!.rankJoker;
+    if (meja.status !== 'selesai') meja.terima('host', { t: 'akhiri', setuju: true });
+    expect(meja.status).toBe('selesai');
+    meja.terima('host', { t: 'mainLagi' });
+    // Seed yang putaran pertamanya membuka angka yang sama dengan joker terakhir permainan lama.
+    const bukaPertama = (seed: number) =>
+      terapkan(buatPermainan({ pemain: ['A', 'B'], seed }), { jenis: 'mulaiPutaran', pengocok: 0 }).putaran!.rankJoker;
+    seedBerikut = Array.from({ length: 500 }, (_, i) => i + 2).find((s) => bukaPertama(s) === rankLama)!;
+    expect(seedBerikut).toBeDefined();
+    meja.terima('host', { t: 'mulai', pengocok: 0 });
+    const g = meja.data.game!;
+    expect(g.riwayat).toEqual([]);
+    expect(g.putaran!.nomor).toBe(1);
+    expect(g.putaran!.rankJoker).toBe(rankLama);
   });
 
   it('simpanan dari versi lama (tanpa field baru) tetap bisa dilanjutkan', () => {

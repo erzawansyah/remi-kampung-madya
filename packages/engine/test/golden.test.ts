@@ -256,6 +256,8 @@ describe('golden master: permainan bot-vs-bot deterministik', () => {
       for (const r of rekaman) {
         expect(r.putaran).toHaveLength(BATAS_PUTARAN);
         expect(r.alasanSelesai).toBe('batasPutaran');
+        // Keputusan #40: angka joker tidak pernah sama dengan putaran tepat sebelumnya.
+        r.putaran.slice(1).forEach((p, i) => expect(p.rankJoker, `seed ${r.seed} putaran ${p.nomor}`).not.toBe(r.putaran[i].rankJoker));
       }
       semuaRekaman.set(k.label, rekaman);
       const isi = { konfigurasi: k, batasPutaran: BATAS_PUTARAN, sidikJariGabungan: sha(jsonTerurut(rekaman)), rekaman };

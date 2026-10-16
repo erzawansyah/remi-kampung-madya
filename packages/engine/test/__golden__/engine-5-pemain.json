@@ -5,7 +5,7 @@
     "duaDeck": false
   },
   "batasPutaran": 3,
-  "sidikJariGabungan": "540862ca336d16901d31b505de3591bcb72d9c0ae46bc67bb7e42d0e93639a33",
+  "sidikJariGabungan": "b47363c334453b60aecb0c15273dded0b9ee08d5dc6f53dd5959ba74944c9c45",
   "rekaman": [
     {
       "seed": 1,
@@ -763,8 +763,8 @@
         "normal",
         "mudah"
       ],
-      "jumlahAksi": 419,
-      "jumlahView": 172,
+      "jumlahAksi": 361,
+      "jumlahView": 156,
       "putaran": [
         {
           "nomor": 1,
@@ -793,70 +793,73 @@
         {
           "nomor": 2,
           "pengocok": 1,
-          "rankJoker": 12,
+          "rankJoker": 13,
           "cara": "deckHabis",
           "pementung": null,
           "nilaiPentungan": 0,
           "kepentung": [],
           "dibalik": false,
           "total": [
-            35,
-            -50,
-            15,
-            35,
-            5
+            25,
+            -30,
+            25,
+            45,
+            -60
           ],
           "skorAkumulasi": [
-            75,
-            -135,
-            0,
-            50,
-            5
+            65,
+            -115,
+            10,
+            60,
+            -60
           ]
         },
         {
           "nomor": 3,
           "pengocok": 1,
           "rankJoker": 10,
-          "cara": "deckHabis",
-          "pementung": null,
-          "nilaiPentungan": 0,
-          "kepentung": [],
+          "cara": "mentung",
+          "pementung": 2,
+          "nilaiPentungan": 50,
+          "kepentung": [
+            0,
+            4
+          ],
           "dibalik": false,
           "total": [
-            45,
-            80,
+            -15,
             15,
-            15,
-            10
+            125,
+            25,
+            -25
           ],
           "skorAkumulasi": [
-            120,
-            -55,
-            15,
-            65,
-            15
+            50,
+            -100,
+            135,
+            85,
+            -85
           ]
         }
       ],
       "skorAkhir": [
-        120,
-        -55,
-        15,
-        65,
-        15
+        50,
+        -100,
+        135,
+        85,
+        -85
       ],
       "pemenang": [
-        0
+        2
       ],
       "alasanSelesai": "batasPutaran",
       "hash": {
-        "aksi": "2dea96e0a3d53e6455d1d3c3a14da6e886825ae2d7720b31006867966394f435",
-        "view": "9995aaf48620a28215a02bc125b027592611d0a47f5a2bebe53f95c4a6532af0",
-        "peristiwa": "fe71c4a02f2356b429c1a1ce65a7a54a29bf717e7a63281c734d7876ab3b3527",
-        "log": "5fe15d3788911c1eb9f5f4e357fe55e73afbaa3356cb765914ef43051968cd95",
-        "riwayat": "c62b802dab2d621329a3905961ba64cd77667861568736ff4d0a3b826c1a08be",
-        "stateAkhir": "342a29ed346583baef33e280398d06219bf729f39d82fbc65be37bfb07f335e0"
+        "aksi": "e5eb700368e654aa3fa8226ceeac72f085f2268a513aab84f0b6d9a3658e5a46",
+        "view": "0427d17d887785bb506e016f75578d9ebb7f44c0bfcc60058af0cd4389d11916",
+        "peristiwa": "d78d8e423c182b433964c2cef5b4ac7b3374c71ae89b7678b93ca9346378b85d",
+        "log": "0461dbc2d45f6088a03cca8a865e6708790ad25d563541149229bcc31fda2a13",
+        "riwayat": "fc0c9be2196820172c2e44ed786603d338134e2db77e45bfb49f4d5bcc7edbe8",
+        "stateAkhir": "139bd2613588d677c00483c80eacd15c37e8442995973c25570add1d143225b1"
       }
     }
   ]

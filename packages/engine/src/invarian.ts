@@ -16,6 +16,10 @@ export function periksaInvarian(state: GameState): string[] {
       state.skor.map(() => 0),
     );
     if (jumlahTotal.some((x, i) => x !== state.skor[i])) salah.push('skor bukan jumlah skor per putaran');
+    // Keputusan #40: angka joker tidak pernah sama dengan putaran tepat sebelumnya.
+    state.riwayat.forEach((h, i) => {
+      if (i > 0 && h.rankJoker === state.riwayat[i - 1].rankJoker) salah.push(`joker putaran ${h.nomor} sama dengan putaran sebelumnya`);
+    });
   }
 
   const p = state.putaran;
@@ -30,6 +34,12 @@ export function periksaInvarian(state: GameState): string[] {
   if (semua.length !== total) salah.push(`jumlah kartu ${semua.length}, harusnya ${total}`);
   const id = new Set(semua.map((k) => k.id));
   if (id.size !== semua.length) salah.push('ada kartu ganda');
+
+  // Riwayat berisi putaran yang sudah selesai: putaran ke-k ada di indeks k − 1, jadi putaran
+  // sebelumnya ada di indeks nomor − 2 (putaran pertama, termasuk sesudah "Main lagi", tanpa syarat).
+  const sebelumnya = p.nomor >= 2 ? state.riwayat[p.nomor - 2] : undefined;
+  if (sebelumnya && sebelumnya.rankJoker === p.rankJoker) salah.push(`joker putaran ${p.nomor} sama dengan putaran sebelumnya`);
+  if (p.kartuDibuka.rank !== p.rankJoker) salah.push('angka joker tidak sama dengan kartu yang dibuka');
 
   const ctx = ctxPutaran(p);
   p.kartuJadi.forEach((daftar, i) =>

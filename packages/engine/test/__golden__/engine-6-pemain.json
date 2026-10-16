@@ -5,7 +5,7 @@
     "duaDeck": false
   },
   "batasPutaran": 3,
-  "sidikJariGabungan": "be48729bf686defa6799053705035d42bef8217b51cffef379844e3557ac453a",
+  "sidikJariGabungan": "14ad63ee8bdd5c13ce7e4aa1b0ef578ef8b5bdfee02c741c44cb302a786d6886",
   "rekaman": [
     {
       "seed": 1,
@@ -17,7 +17,7 @@
         "normal",
         "mudah"
       ],
-      "jumlahAksi": 305,
+      "jumlahAksi": 308,
       "jumlahView": 149,
       "putaran": [
         {
@@ -78,49 +78,49 @@
         {
           "nomor": 3,
           "pengocok": 2,
-          "rankJoker": 1,
+          "rankJoker": 9,
           "cara": "deckHabis",
           "pementung": null,
           "nilaiPentungan": 0,
           "kepentung": [],
           "dibalik": false,
           "total": [
-            20,
-            -10,
-            -30,
-            25,
+            10,
             -5,
-            20
+            -20,
+            20,
+            25,
+            15
           ],
           "skorAkumulasi": [
-            -5,
-            -50,
-            -95,
-            110,
-            10,
-            -25
+            -15,
+            -45,
+            -85,
+            105,
+            40,
+            -30
           ]
         }
       ],
       "skorAkhir": [
-        -5,
-        -50,
-        -95,
-        110,
-        10,
-        -25
+        -15,
+        -45,
+        -85,
+        105,
+        40,
+        -30
       ],
       "pemenang": [
         3
       ],
       "alasanSelesai": "batasPutaran",
       "hash": {
-        "aksi": "e79ddbb797d9570bf98e7c8d988c8ac6612966e3c571ee387e0633a67096ec8e",
-        "view": "2d1388e77ad9dcfc2daa9e403af0676884594b179b0bf8871712c7178fdab0a2",
-        "peristiwa": "ab66241dfaff562b32d3e3fdbf0951dbaf56b5f5da4e8e9ce21d45db4bbd690a",
-        "log": "9891d1eea395a8273f34be065e29c112126371aa88e67f508852ed9a1a459013",
-        "riwayat": "85e9b590629ee2d3d0cfe535b31bb58253ca53ec7d65a1c8f961b827b77c4fb3",
-        "stateAkhir": "a7626673224d1258a755c804975fbf7e872a7577144785f29b8d94977819b16d"
+        "aksi": "f9a5f00c35a1181e4d8427df15bf11a0f632b4c90095813d0d79a363e2f83c9c",
+        "view": "0d540d800940dcf2e4e99ef8bc55bd7341957c40c26916d9d769d069e24d5523",
+        "peristiwa": "aa5070b571091c70410084f4485595614231920f85c97f1f92b94cd4744a80f5",
+        "log": "0589f18379d14a80d55c4181beb8c244ae2c719087f7430554fea485a0439b92",
+        "riwayat": "4808a8f31ac65923f6a0740f75917e288a58f065a85f0c0d2b196cf50dc76e5b",
+        "stateAkhir": "f42df01e71c3dd36b94127e98cbc03bcb7c197e1dfa5e103988776234513ebeb"
       }
     },
     {
