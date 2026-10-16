@@ -76,6 +76,8 @@ Ganti `B` dengan `http://127.0.0.1:2567` (di VPS) atau `https://remi.domainkamu.
 | Skema riwayat | `docker compose logs remi \| grep 'skema riwayat'` | sekali `skema riwayat dimigrasi v0 → v1` sesudah deploy rilis leaderboard |
 | WebSocket | buka aplikasi → Buat meja baru | lobi muncul dengan kode meja |
 | PWA | Chrome DevTools → Application | service worker `activated`, precache 12 entri, manifest tanpa error |
+| Tombol pasang (Android) | buka situs di Chrome Android (bukan dari aplikasi yang sudah terpasang) | tombol **Pasang aplikasi** melayang di kanan bawah beranda; diketuk = jendela pasang Chrome (atau dialog petunjuk menu ⋮ kalau Chrome belum menawarkannya); **Nanti saja** menyembunyikannya dan tetap tersembunyi sesudah muat ulang; tidak ada di lobi maupun meja |
+| Tombol pasang (iPhone) | buka situs di Safari iPhone | tombol **Pasang aplikasi** melayang; diketuk = dialog Bagikan → Tambah ke Layar Utama; sesudah dipasang, aplikasi dari layar utama tidak menampilkan tombol maupun ubin pasang. Dari browser bawaan Instagram/WhatsApp muncul dialog **Buka di browser dulu** dengan **Salin link** |
 
 Lewat proxy, cek juga bahwa `sw.js` tetap `no-cache` (proxy tidak boleh menimpa header cache) dan `/ws` tersambung (Caddy meneruskan WebSocket otomatis).
 

@@ -113,6 +113,22 @@ describe('kartu kedai di beranda', () => {
     expect(kedaiPertama).toBeGreaterThan(fokus.findIndex((e) => e.id === 'mulai-bot'));
   });
 
+  it('tombol pasang melayang (keputusan #46) sesudah kaki, di luar kartu kedai, tanpa teks kedai', () => {
+    renderBeranda(document.getElementById('ui')!, { ...aksiPalsu(), pasangAplikasi: { melayang: true, pasang: vi.fn(), nanti: vi.fn() } });
+    const m = document.querySelector<HTMLElement>('.pasang-melayang')!;
+    const kaki = document.querySelector('.beranda-kaki')!;
+    expect(kaki.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(m.closest('.kartu-kedai')).toBeNull();
+    expect(document.querySelector('.kartu-kedai .pasang-melayang, .kartu-kedai [data-nav=pasang]')).toBeNull();
+    // Urutan kartu kedai tidak berubah: tetap sesudah menu, sebelum kaki.
+    const urutan = [...document.querySelectorAll('.beranda-nav, .kartu-kedai, .beranda-kaki, .pasang-melayang')].map((e) => e.className.split(' ')[0]);
+    expect(urutan).toEqual(['beranda-nav', 'kartu-kedai', 'beranda-kaki', 'pasang-melayang']);
+    // Tawaran pasang bukan tempat promosi kedai.
+    expect(m.textContent).not.toMatch(/kedai|madya/i);
+    expect(m.innerHTML).not.toMatch(/https?:/);
+    expect(m.textContent).not.toMatch(POLA_KLISE);
+  });
+
   it('isi: judul, bio, alamat singkat, empat tautan, catatan jam (tanpa angka jam)', () => {
     renderBeranda(document.getElementById('ui')!, aksiPalsu());
     const k = document.querySelector<HTMLElement>('section.kartu-kedai')!;

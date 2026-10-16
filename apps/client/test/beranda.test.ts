@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-// Beranda: gerbang simpanan offline, sisipan tombol tanpa gambar ulang, pesan gagal online,
-// dan pendengar preferensi kipas yang tidak menumpuk.
+// Beranda: gerbang simpanan offline, sisipan tombol tanpa gambar ulang, tawaran pasang aplikasi
+// (ubin + tombol melayang, keputusan #46), pesan gagal online, dan pendengar preferensi kipas yang
+// tidak menumpuk.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,9 +10,11 @@ vi.hoisted(() => {
   Object.assign(globalThis, { __VERSI_APP__: '0.0.0', __BUILD_SHA__: 'dev', __BUILD_WAKTU__: '2026-10-12T00:00:00.000Z' });
 });
 
+import { Meja, type InfoMeja, type PesanServer } from '@remi/meja';
 import { _setelUlangCache, aturPreferensi } from '../src/preferensi';
-import { konfirmasiTimpaSimpanan, renderBeranda, type AksiBeranda } from '../src/ui/beranda';
-import { tutupDialogTeratas } from '../src/ui/dom';
+import { konfirmasiTimpaSimpanan, renderBeranda, type AksiBeranda, type TawaranPasangBeranda } from '../src/ui/beranda';
+import { bukaDialog, tutupDialogTeratas } from '../src/ui/dom';
+import { renderLobi } from '../src/ui/lobi';
 import { pasangMatchMediaPalsu } from './bantu';
 
 /** Simpanan offline minimal yang dianggap masih bisa dilanjutkan oleh beranda. */
@@ -31,6 +34,10 @@ const aksiPalsu = (): AksiBeranda => ({
   pasangAplikasi: null,
   muatUlang: null,
 });
+
+const tawaranPalsu = (melayang = true): TawaranPasangBeranda => ({ melayang, pasang: vi.fn(), nanti: vi.fn() });
+const melayang = () => document.querySelectorAll('.pasang-melayang');
+const ubin = () => document.querySelectorAll('.beranda-nav [data-nav=pasang]');
 
 const tunggu = async () => {
   for (let i = 0; i < 5; i++) await Promise.resolve();
@@ -96,28 +103,126 @@ describe('renderBeranda', () => {
     const nama = document.querySelector<HTMLInputElement>('#nama')!;
     nama.value = 'Budiman';
     document.querySelector<HTMLDetailsElement>('.atur-meja')!.open = true;
-    expect(document.querySelector('[data-nav=pasang]')).toBeNull();
+    expect(ubin()).toHaveLength(0);
+    expect(melayang()).toHaveLength(0);
 
-    const pasang = vi.fn();
-    b.aturPasang(pasang);
-    b.aturPasang(pasang); // tidak dobel
-    expect(document.querySelectorAll('[data-nav=pasang]')).toHaveLength(1);
+    const t = tawaranPalsu();
+    b.aturPasang(t);
+    b.aturPasang(t); // tidak dobel
+    b.aturPasang({ ...t });
+    expect(ubin()).toHaveLength(1);
+    expect(melayang()).toHaveLength(1);
+    expect(document.querySelector('.layar.beranda')!.classList.contains('ada-pasang')).toBe(true);
     const muatUlang = vi.fn();
     b.aturMuatUlang(muatUlang);
     expect(document.querySelector<HTMLInputElement>('#nama')).toBe(nama);
     expect(nama.value).toBe('Budiman');
     expect(document.querySelector<HTMLDetailsElement>('.atur-meja')!.open).toBe(true);
 
-    document.querySelector<HTMLElement>('[data-nav=pasang] span:last-child')!.click();
+    document.querySelector<HTMLElement>('.beranda-nav [data-nav=pasang] span:last-child')!.click();
+    document.querySelector<HTMLElement>('.pasang-melayang [data-nav=pasang] span:last-child')!.click();
     document.querySelector<HTMLElement>('[data-nav=muat-ulang]')!.click();
-    expect(pasang).toHaveBeenCalledOnce();
+    expect(t.pasang).toHaveBeenCalledTimes(2);
+    expect(t.nanti).not.toHaveBeenCalled();
     expect(muatUlang).toHaveBeenCalledOnce();
 
+    // Ditunda: ubin saja.
+    b.aturPasang(tawaranPalsu(false));
+    expect(ubin()).toHaveLength(1);
+    expect(melayang()).toHaveLength(0);
+    expect(document.querySelector('.layar.beranda')!.classList.contains('ada-pasang')).toBe(false);
+
     b.aturPasang(null);
-    expect(document.querySelector('[data-nav=pasang]')).toBeNull();
+    expect(ubin()).toHaveLength(0);
+    expect(melayang()).toHaveLength(0);
+    expect(nama.value).toBe('Budiman');
     // Ubin bawaan tetap jalan lewat pendengar yang sama.
     document.querySelector<HTMLElement>('[data-nav=riwayat]')!.click();
     expect(aksi.lihatRiwayat).toHaveBeenCalledOnce();
+  });
+
+  it('tawaran awal: melayang = ubin + tombol; ditunda = ubin saja; null = tidak ada apa-apa', () => {
+    const ui = document.getElementById('ui')!;
+    renderBeranda(ui, { ...aksiPalsu(), pasangAplikasi: tawaranPalsu(true) });
+    expect([ubin().length, melayang().length]).toEqual([1, 1]);
+    const m = melayang()[0]!;
+    expect(m.tagName).toBe('ASIDE');
+    expect(m.getAttribute('aria-label')).toBe('Pasang aplikasi');
+    expect(m.querySelector('[data-pasang-nanti]')!.getAttribute('aria-label')).toBe('Nanti saja, sembunyikan 3 hari');
+    expect(m.querySelector('[data-nav=pasang]')!.textContent).toContain('Pasang aplikasi');
+    expect(m.querySelectorAll('button')).toHaveLength(2);
+
+    renderBeranda(ui, { ...aksiPalsu(), pasangAplikasi: tawaranPalsu(false) });
+    expect([ubin().length, melayang().length]).toEqual([1, 0]);
+    renderBeranda(ui, aksiPalsu());
+    expect([ubin().length, melayang().length]).toEqual([0, 0]);
+  });
+
+  it('"Nanti saja" memanggil nanti(), menyembunyikan tombol melayang, fokus pindah ke ubin menu', () => {
+    const t = tawaranPalsu();
+    renderBeranda(document.getElementById('ui')!, { ...aksiPalsu(), pasangAplikasi: t });
+    const nanti = document.querySelector<HTMLElement>('.pasang-melayang [data-pasang-nanti]')!;
+    nanti.focus();
+    nanti.click();
+    expect(t.nanti).toHaveBeenCalledOnce();
+    expect(t.pasang).not.toHaveBeenCalled();
+    expect(melayang()).toHaveLength(0);
+    expect(ubin()).toHaveLength(1);
+    expect(document.activeElement).toBe(ubin()[0]);
+    // Ubin tetap memanggil pasang() yang sama.
+    (ubin()[0] as HTMLElement).click();
+    expect(t.pasang).toHaveBeenCalledOnce();
+  });
+
+  it('tombol melayang hilang saat sedang difokus: fokus tidak jatuh ke <body>', () => {
+    const b = renderBeranda(document.getElementById('ui')!, { ...aksiPalsu(), pasangAplikasi: tawaranPalsu() });
+    document.querySelector<HTMLElement>('.pasang-melayang [data-nav=pasang]')!.focus();
+    b.aturPasang(tawaranPalsu(false));
+    expect(document.activeElement).toBe(ubin()[0]);
+    document.querySelector<HTMLElement>('.beranda-nav [data-nav=pasang]')!.focus();
+    b.aturPasang(null);
+    expect(document.activeElement).toBe(document.querySelector('[data-nav=bantuan]'));
+  });
+
+  it('tombol melayang = anak terakhir .layar.beranda, sesudah .beranda-kaki dan di luar area grid', () => {
+    renderBeranda(document.getElementById('ui')!, { ...aksiPalsu(), pasangAplikasi: tawaranPalsu() });
+    const layar = document.querySelector<HTMLElement>('#ui > .layar.beranda')!;
+    const m = melayang()[0]!;
+    expect(layar.lastElementChild).toBe(m);
+    expect(m.parentElement).toBe(layar);
+    expect(m.closest('.beranda-isi, .beranda-sisi, .beranda-aksi, .kartu-kedai')).toBeNull();
+    const kaki = document.querySelector('.beranda-kaki')!;
+    expect(kaki.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Urutan Tab: tombol melayang paling akhir, sesudah semua isi beranda.
+    const fokus = [...document.querySelectorAll<HTMLElement>('a[href], button, input, select, summary')];
+    expect(fokus.slice(-2)).toEqual([...m.querySelectorAll('button')]);
+  });
+
+  it('#ui (termasuk tombol melayang) inert selama dialog bukaDialog terbuka', () => {
+    renderBeranda(document.getElementById('ui')!, { ...aksiPalsu(), pasangAplikasi: tawaranPalsu() });
+    const ui = document.getElementById('ui')!;
+    const d = bukaDialog('<h2>Uji</h2><button type="button" data-tutup>Tutup</button>');
+    expect(ui.inert).toBe(true);
+    expect(melayang()[0]!.closest('[inert]')).toBe(ui);
+    d.tutup();
+    expect(ui.inert).toBe(false);
+  });
+
+  it('pindah ke lobi: tombol melayang ikut hilang (lobi tidak pernah memuatnya)', () => {
+    renderBeranda(document.getElementById('ui')!, { ...aksiPalsu(), pasangAplikasi: tawaranPalsu() });
+    expect(melayang()).toHaveLength(1);
+    let info: InfoMeja | null = null;
+    const meja = Meja.buat(
+      { kode: 'ABCDE', penjadwal: { setel: () => 0, batal: () => undefined, sekarang: () => 0 }, kirim: (_: string, p: PesanServer) => p.t === 'meja' && (info = p.info) },
+      'host',
+      'Budi',
+      { jumlahPemain: 3 },
+    );
+    meja.hentikan();
+    renderLobi(document.getElementById('ui')!, info!, vi.fn(), vi.fn());
+    expect(document.querySelector('.layar-lobi')).not.toBeNull();
+    expect(melayang()).toHaveLength(0);
+    expect(document.querySelector('[data-nav=pasang], [data-pasang-nanti]')).toBeNull();
   });
 
   it("status 'gagal': pesan + Coba lagi di panel online; status lain menyembunyikannya", () => {

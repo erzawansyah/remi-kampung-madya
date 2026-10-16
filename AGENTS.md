@@ -30,12 +30,12 @@ npm run typecheck    # engine, meja, server, client (termasuk apps/client/test)
 npm run dev:server   # server WebSocket :2567 (tsx watch)
 npm run dev:client   # Vite :5173 (strictPort), /ws dan /api diteruskan ke :2567
 npm run build        # build client (PWA + .br/.gz) + bundel server
-npm run e2e          # E2E smoke di Chrome sistem (build + vite preview, HP & desktop)
+npm run e2e          # E2E smoke di Chrome sistem (build + vite preview, HP & desktop, tombol pasang di Chrome Android)
 docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + test + build
 npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --lawan, --susunan, --meja, --seed, --putaran, --waktu)
 ```
 
-- `npm run e2e` tidak mengunduh browser. Kalau Chrome tidak ketemu otomatis, set `CHROME_PATH`. Opsi: `-- --url=http://localhost:5173` (uji dev server), `-- --perangkat=hp`, `-- --tanpa-build`, `-- --tampil`.
+- `npm run e2e` tidak mengunduh browser. Kalau Chrome tidak ketemu otomatis, set `CHROME_PATH`. Opsi: `-- --url=http://localhost:5173` (uji dev server), `-- --perangkat=hp` (`hp`, `desktop`, `pasang`, dipisah koma), `-- --tanpa-build`, `-- --tampil`.
 - Pekerjaan dianggap selesai kalau `npm test` dan `npm run typecheck` lolos. Perubahan client juga dicek di browser sungguhan (Vite dev atau `npm run e2e`); jangan klaim uji yang tidak dijalankan.
 
 ## Struktur dan batas lapisan
@@ -69,6 +69,9 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
   - **Kedai Madya:** `konten/kedai.ts` = satu sumber info kedai (bio, alamat, tautan peta/IG/Threads/Rak Buku). Logo di `aset/logoMadya.ts` (`svgLogo()` inline SVG `fill=currentColor` untuk HTML, `pathLogo()` untuk Canvas); jangan tambah file gambar. Lihat bagian "Promosi Kedai Madya" di bawah.
   - **Batas skor** (keputusan #44): isiannya hanya lewat `ui/batasSkor.ts` (Atur meja dan lobi), pembulatan kelipatan 10 dan validasinya hanya `rapikanBatasSkor()`/`batasSkorSah()` dari `@remi/meja`. Batas bawah diketik positif dan disimpan negatif. Kalau ada pilihan yang tidak memakai batas skor, sembunyikan bungkus `.isian-batas-skor` utuh.
   - **Konfirmasi keluar meja:** teksnya satu sumber, `opsiKonfirmasiKeluar()` di `ui/lobi.ts`, dipakai tombol di lobi, menu ☰ meja, dan tombol Back (`main.ts`). Jangan menulis teks konfirmasi keluar sendiri di tempat lain. Jalur keluar meja online mengisi `masukPeringkat: mejaMasukPeringkat(info)` supaya kalimat juru kunci (#45) muncul di meja yang punya ≥ 2 kursi manusia.
+  - **Tombol pasang aplikasi (keputusan #46):** deteksi murni di `pasangAplikasi.ts` (`caraPasang`, `keadaanPasang`, `perangkatApel` yang juga dipakai `mesinAudio.ts`), simpanan `remi.tawaranPasang` di `penyimpanan.ts`, rangkaian di `main.ts` (`tawaranPasang()`, `jalankanPasang()`, `segarkanPasang()`), tampilan `aturPasang()` di `ui/beranda.ts`, dialog petunjuk `ui/pasang.ts` (teks `konten/pasang.ts`, lewat `bukaDialog`).
+    - Tombol melayang **hanya di beranda** dan wajib tetap anak terakhir `.layar.beranda` (ikut `inert` saat ada jendela, ikut hilang saat `#ui` diganti). Jangan pernah memunculkannya di lobi, meja, susun akhir, atau selama permainan, dan jangan menambah toast/pop-up yang menawarkan pemasangan sendiri.
+    - "Nanti saja" hanya menyembunyikan tombol melayang (3 hari, `TUNDA_PASANG_MS`); ubin menu "Pasang ke layar utama" tetap ada selama `keadaanPasang()` tidak null.
   - **Angka negatif:** minus tipografis "−" (U+2212) lewat `tanda()`/`angkaSkor()`/`minusTipografis()` di `ui/rincianSkor.ts`, bukan tanda hubung ASCII.
   - **Gaya:** `gaya.css` hanya `@import` ke `gaya/` (token, dasar, komponen, layar, meja, gerak, responsif).
 
@@ -210,7 +213,7 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
 - Utamakan tool Edit/Write. Untuk perubahan besar lewat skrip, tulis skripnya ke file dulu, jangan lewat heredoc panjang di shell.
 
 **Simpanan dan sesi di browser**
-- Simpanan offline (`remi.mejaOffline`), sesi online (`remi.sesiOnline`), dan preferensi (`remi.preferensi`) ada di `localStorage` per origin. `localhost:5173` dan `127.0.0.1:5173` adalah origin berbeda, dan berguna untuk menguji dua pemain di satu mesin.
+- Simpanan offline (`remi.mejaOffline`), sesi online (`remi.sesiOnline`), preferensi (`remi.preferensi`), dan tawaran pasang aplikasi (`remi.tawaranPasang`; hapus kuncinya untuk memunculkan lagi tombol pasang yang ditunda) ada di `localStorage` per origin. `localhost:5173` dan `127.0.0.1:5173` adalah origin berbeda, dan berguna untuk menguji dua pemain di satu mesin.
 - Service worker tidak bisa didaftarkan di browser pane alat pengembang. Uji PWA di Chrome atau HP sungguhan lewat HTTPS.
 
 ## Keputusan pemilik yang sering terlupa

@@ -650,6 +650,108 @@ html[data-efek='hemat'] .kipas canvas {
   }
 }
 
+/* ---------- Tombol pasang aplikasi melayang (keputusan #46, ui/beranda.ts) ----------
+   Hanya di beranda: anak terakhir .layar.beranda (di luar grid), fixed di kanan bawah. z-index-nya
+   di dalam #ui (z-ui 1), jadi tetap di bawah modal (10), dialog (18), dan toast (20), dan ikut
+   inert saat ada jendela. Pil gelap bergaris emas, tanpa isi kuningan: tidak menyaingi kartu kedai
+   yang krem maupun tombol utama. Puncaknya ±70 px dari bawah layar, di bawah tumpukan toast
+   (118 px, tablet 132 px, lanskap 100 px), jadi keduanya tidak bertabrakan. Muncul ±1,2 detik
+   sesudah beranda tampil (gerak dikurangi: pudar saja, gerak.css). */
+.pasang-melayang {
+  position: fixed;
+  right: calc(var(--ruang-4) + var(--aman-kanan));
+  bottom: calc(var(--ruang-4) + var(--aman-bawah));
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ruang-1);
+  max-width: calc(100% - 2 * var(--ruang-4) - var(--aman-kiri) - var(--aman-kanan));
+  padding: var(--ruang-1);
+  background: rgba(22, 17, 11, 0.95);
+  border: 1px solid var(--emas);
+  border-radius: var(--radius-pil);
+  box-shadow: var(--bayangan-3);
+  animation: pasang-masuk var(--durasi-lambat) var(--ease-pegas) 1.2s backwards;
+}
+.pasang-melayang button {
+  --bayang-tombol: 0 0 0 transparent;
+  min-height: var(--sentuh);
+  padding: 0 var(--ruang-4);
+  font-size: var(--teks-sm);
+  border-radius: var(--radius-pil);
+  box-shadow: none;
+}
+.pasang-melayang button.hantu {
+  color: var(--teks-redup);
+  border-color: transparent;
+}
+.pasang-melayang .pasang-utama {
+  color: var(--emas-muda);
+  background: rgba(var(--emas-rgb), 0.14);
+  border: 1px solid rgba(var(--emas-rgb), 0.6);
+}
+@keyframes pasang-masuk {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+}
+/* Isi beranda bisa digulir sampai lewat tombol melayang. */
+.layar.beranda.ada-pasang {
+  padding-bottom: calc(88px + var(--aman-bawah));
+}
+
+/* ---------- Dialog petunjuk pasang (ui/pasang.ts) ---------- */
+.pasang-manfaat {
+  font-weight: 600;
+}
+.langkah-pasang {
+  margin: 0;
+  padding-left: 1.5em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+  line-height: var(--baris-normal);
+}
+.langkah-pasang .ikon-langkah {
+  display: inline-flex;
+  vertical-align: -4px;
+  margin-right: 6px;
+  color: var(--emas-muda);
+}
+.salin-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+}
+.salin-link input {
+  width: 100%;
+  min-width: 0;
+  font-size: var(--teks-sm);
+}
+
+@media (min-width: 1100px) {
+  .pasang-melayang {
+    right: calc(var(--ruang-6) + var(--aman-kanan));
+    bottom: calc(var(--ruang-6) + var(--aman-bawah));
+  }
+  .layar.beranda.ada-pasang {
+    padding-bottom: calc(96px + var(--aman-bawah));
+  }
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  /* Layar pendek: lebih rapat ke pojok supaya tidak menutupi kolom kanan terlalu banyak. */
+  .pasang-melayang {
+    right: calc(var(--ruang-3) + var(--aman-kanan));
+    bottom: calc(var(--ruang-2) + var(--aman-bawah));
+  }
+  .layar.beranda.ada-pasang {
+    padding-bottom: calc(72px + var(--aman-bawah));
+  }
+}
+
 /* =============================================================================================
    DAFTAR MEJA PUBLIK, RIWAYAT, STATISTIK
    ============================================================================================= */

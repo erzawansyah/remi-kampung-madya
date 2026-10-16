@@ -5,6 +5,7 @@
 
 import type { ViewPemain } from '@remi/engine';
 import { rapikanBatasSkor, rapikanLevel, type DataMeja, type InfoKursi, type PengaturanMeja } from '@remi/meja';
+import type { TawaranPasang } from './pasangAplikasi';
 import { aturPreferensi, preferensi } from './preferensi';
 
 const KUNCI = {
@@ -19,6 +20,8 @@ const KUNCI = {
   efek: 'remi.efek',
   /** Permainan latihan (tutorial) yang sedang tersimpan di slot offline. */
   latihan: 'remi.latihanTersimpan',
+  /** Tawaran pasang aplikasi di beranda (keputusan #46): "Nanti saja" / "Sudah kupasang". */
+  tawaranPasang: 'remi.tawaranPasang',
 } as const;
 
 /** Riwayat lokal yang disimpan (permainan terbaru di depan). */
@@ -104,6 +107,18 @@ const rapikanObjekAtauNull = <T>(x: unknown): T | null | undefined => (x === nul
 
 const rapikanSesi: Rapikan<SesiOnline | null> = (x) =>
   x === null ? null : objek(x) && typeof x.kode === 'string' && typeof x.token === 'string' && x.kode && x.token ? { kode: x.kode, token: x.token } : undefined;
+
+/**
+ * Tawaran pasang aplikasi: hanya waktu (ms) yang angka terhingga dan positif yang dipakai, field
+ * lain dibuang. Bukan objek sama sekali = rusak (jatuh ke {} dan kuncinya dihapus).
+ */
+export const rapikanTawaranPasang: Rapikan<TawaranPasang> = (x) => {
+  if (!objek(x)) return undefined;
+  const t: TawaranPasang = {};
+  if (angka(x.tundaSampai) && x.tundaSampai > 0) t.tundaSampai = x.tundaSampai;
+  if (angka(x.sudahPasang) && x.sudahPasang > 0) t.sudahPasang = x.sudahPasang;
+  return t;
+};
 
 const rapikanDaftarString: Rapikan<string[]> = (x) => (Array.isArray(x) ? x.filter((s): s is string => typeof s === 'string') : undefined);
 
@@ -225,6 +240,13 @@ export const simpan = {
   },
   setPengaturanEfek: (e: PengaturanEfek) => {
     aturPreferensi({ suara: e.suara, getar: e.getar });
+  },
+
+  tawaranPasang: () => baca<TawaranPasang>(KUNCI.tawaranPasang, {}, rapikanTawaranPasang),
+  /** Objek kosong menghapus kuncinya. */
+  setTawaranPasang: (t: TawaranPasang) => {
+    const rapi = rapikanTawaranPasang(t) ?? {};
+    tulis(KUNCI.tawaranPasang, Object.keys(rapi).length ? rapi : null);
   },
 
   urutanTangan: () => baca<string[]>(KUNCI.urutanTangan, [], rapikanDaftarString),

@@ -34,6 +34,7 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 | [39](#k39) | Batas meja dan sambungan per jaringan terlalu kecil untuk Wi-Fi kedai | `apps/server` (deploy) | Diputuskan: bawaan dinaikkan |
 | [44](#k44) | Batas skor kaku ±500 | `packages/meja` (validasi) + client | Diputuskan: angka bebas kelipatan 10 |
 | [45](#k45) | Leaderboard terasa tidak adil | `packages/meja` + `apps/server` + client | Diputuskan: banyak urutan, bawaan rata-rata per permainan |
+| [46](#k46) | Banyak teman tidak tahu game ini bisa dipasang | client (beranda) | Diputuskan: tombol pasang melayang hanya di beranda, "Nanti saja" 3 hari |
 
 ---
 
@@ -341,6 +342,31 @@ Sisi server sudah ditangani lebih dulu (Okt 2026, `apps/server`): callback timer
   - Konfirmasi keluar (`opsiKonfirmasiKeluar()`, `ui/lobi.ts`): di tengah permainan online yang punya ≥ 2 kursi manusia (`mejaMasukPeringkat()`) ditambah "Di peringkat online kamu dihitung juru kunci." Bantuan ikut diperbarui.
 
 **Test:** `packages/meja/test/peringkat.test.ts` (nilai efektif termasuk yang keluar dengan skor tertinggi, warga kedai di atas manusia, seri; semua urutan dan pemutus serinya; belum cukup main; perapian; batas bulan WIB), `packages/meja/test/meja.test.ts` ("tanda keluar untuk peringkat"), `apps/server/test/riwayat.test.ts` (migrasi dari database v0 buatan tangan termasuk main sendirian dan "budi"/"Budi", buka ulang idempoten, baris dari server lama, kolom baru di `simpan`, saringan/keluar/nama/batas WIB/cache/belum cukup, endpoint lama tetap array vs `v=2` objek, parameter salah, 405), `apps/client/test/riwayat.test.ts` (permintaan bawaan, ganti saringan mengambil ulang vs ganti urutan tidak, jawaban telat, server lama, galat, lencana, tanpa kata "bot"), `apps/client/test/kontrolMeja.test.ts` (teks konfirmasi keluar), `antislop.test.ts` (teks `konten/peringkat.ts`). Golden meja: hanya teks `ringkasanAkhir` yang bertambah `jumlahDeck`/`modeKaldu`, hash tetap ([baseline-gameplay.md](baseline-gameplay.md)).
+
+<a id="k46"></a>
+
+## 46. Tombol pasang aplikasi
+
+**Keputusan pemilik (16 Okt 2026):** tombol pasang aplikasi (PWA) yang mengambang, karena banyak teman yang tidak tahu game ini bisa dipasang. Tombolnya **hanya di beranda**, hanya selama belum terpasang. **"Nanti saja" menyembunyikannya 3 hari.** Tidak pernah muncul di lobi, meja, atau selama permainan.
+
+**Sebelum keputusan:** ubin "Pasang ke layar utama" hanya muncul di menu beranda kalau browser mengirim `beforeinstallprompt` (Chrome/Edge di Android dan desktop). Safari iPhone/iPad dan browser bawaan aplikasi (Instagram, WhatsApp, dll.) tidak pernah mendapat tawaran atau petunjuk apa pun.
+
+**Default yang tidak dikomentari pemilik (dipakai):** "Nanti saja" hanya menyembunyikan tombol melayang, ubin menu tetap ada sebagai jalan yang tidak mengganggu. Prompt browser yang ditolak dihitung sama dengan "Nanti saja" (3 hari). Tunda yang lebih jauh dari 3 hari ke depan (jam HP pernah dimundurkan) dianggap sudah lewat. "Sudah kupasang" menutup tawaran (tombol dan ubin), kecuali browser menawarkan prompt lagi. Desktop tanpa prompt (Firefox, Safari Mac) tidak ditawari.
+
+**Yang dikerjakan:**
+- **Deteksi** di `apps/client/src/pasangAplikasi.ts` (fungsi murni, diuji di Node):
+  - `caraPasang()` → `prompt` (ada `beforeinstallprompt`), `inapp` (penanda Facebook/Messenger, Instagram, Threads (`Barcelona`), WhatsApp, Line, TikTok, Twitter, Snapchat, Pinterest, LinkedIn, aplikasi Google (`GSA/`), WebView Android `; wv)`, atau iPhone/iPad tanpa `Safari/`), `ios` (iPhone/iPad, termasuk iPadOS yang mengaku Mac dengan layar sentuh, dan Chrome iOS), `android`, atau null (bukan HTTPS, sudah terpasang, desktop tanpa prompt).
+  - `sedangTerpasang()`: `display-mode` standalone/minimal-ui, fullscreen **tanpa** `document.fullscreenElement` (layar penuh dari menu meja di `kontrolMeja.ts` tidak dihitung terpasang), atau `navigator.standalone`.
+  - `perangkatApel()` dipakai bersama `efek/mesinAudio.ts`.
+  - `keadaanPasang(cara, simpanan, sekarang)` → null atau `{ cara, melayang }`; `tundaPasang()`, `tandaiSudahPasang()`, `lupakanSudahPasang()`; `TUNDA_PASANG_MS` = 3 hari.
+- **Simpanan** `remi.tawaranPasang` di `apps/client/src/penyimpanan.ts` (`simpan.tawaranPasang()`/`setTawaranPasang()`), bentuk `{ tundaSampai?, sudahPasang? }` (ms). Hanya angka terhingga positif yang dipakai; bentuk lain jatuh ke `{}` dan kuncinya dihapus. Objek kosong menghapus kunci.
+- **Rangkaian** di `apps/client/src/main.ts`: `beforeinstallprompt` (tetap `preventDefault`) menyimpan event dan menghapus `sudahPasang`; `appinstalled` mengisi `sudahPasang`; perubahan `display-mode` menilai ulang. Semua penilaian ulang lewat `segarkanPasang()`, yang hanya bekerja di beranda. `tawaranPasang()` memberi beranda `{ melayang, pasang(), nanti() }` atau null. `jalankanPasang(cara)`: dengan prompt, `prompt()` lalu `userChoice` (`dismissed` = tunda 3 hari, `accepted` = sudah pasang, event sekali pakai dibuang); tanpa prompt, dialog petunjuk.
+- **Beranda** (`apps/client/src/ui/beranda.ts`): `aturPasang(tawaran)` mengatur ubin dan tombol melayang tanpa menggambar ulang (isian dan lipatan yang terbuka aman). Tombol melayang `<aside class="pasang-melayang">` (tombol "Nanti saja" dan "Pasang aplikasi") selalu anak terakhir `.layar.beranda`, sesudah `.beranda-kaki` dan di luar area grid, jadi ikut `inert` saat ada jendela dan ikut hilang saat `#ui` diganti layar lain. `.ada-pasang` menambah ruang bawah supaya isi bisa digulir melewatinya. Sesudah "Nanti saja" fokus pindah ke ubin menu, ditambah toast "Oke, tombolnya disimpan dulu 3 hari. …".
+- **Dialog** `apps/client/src/ui/pasang.ts` lewat `bukaDialog` (teks di `apps/client/src/konten/pasang.ts`, ikut test antislop). Setiap varian dibuka dengan satu baris manfaat. iPhone/iPad: Bagikan (ikon SVG kecil) → Tambah ke Layar Utama → Tambah, catatan "buka di Safari dulu", tombol Nanti saja / Sudah kupasang. Android: menu ⋮ Chrome atau ≡ Samsung Internet → Instal aplikasi, tombol yang sama. In-app: "Buka di browser dulu", langkah Buka di browser/Chrome/Safari, kotak link readonly dengan **Salin link** (`navigator.clipboard.writeText`, cadangan `select()` + `execCommand('copy')`), tombol Nanti saja / Tutup.
+- **Gaya** (`gaya/layar.css`, `gaya/gerak.css`): pil gelap `rgba(22, 17, 11, .95)` bergaris `--emas`, `position: fixed` kanan bawah dengan `--aman-*`, `z-index` 2 di dalam `#ui` (di bawah modal, dialog, dan toast), muncul ±1,2 detik sesudah beranda tampil (gerak dikurangi: pudar saja). Puncaknya ±70 px dari bawah, di bawah tumpukan toast.
+- `apps/client/index.html`: `<meta name="apple-mobile-web-app-title" content="Remi Madya">`. Deskripsi manifest tidak berubah.
+
+**Test:** `apps/client/test/pasangAplikasi.test.ts` (user agent asli: Safari iPhone, iPadOS desktop dengan sentuh 5 vs 0, Chrome iOS, Instagram/Threads/Facebook iOS dan Android, WhatsApp, WebView polos, Chrome/Samsung/Firefox Android dengan dan tanpa prompt, desktop; terpasang/bukan HTTPS; batas 3 hari ±1 ms, jam dimundurkan, sudah pasang vs prompt), `apps/client/test/penyimpanan.test.ts` (perapian `remi.tawaranPasang`), `apps/client/test/beranda.test.ts` (ubin + tombol saat melayang, ubin saja saat ditunda, tidak ada apa-apa saat null, tidak dobel, isian dan lipatan selamat, Nanti saja dan fokus, anak terakhir sesudah kaki, `inert` saat dialog, lobi tanpa tombol), `apps/client/test/kedai.test.ts` (tombol di luar kartu kedai, tanpa teks kedai), `apps/client/test/dialogPasang.test.ts` (tiga varian, tombol, clipboard dan cadangannya, tidak menimpa modal utama), `antislop.test.ts` (`konten/pasang.ts`). E2E `apps/client/e2e/smoke.mjs` alur `pasang` (Chrome Android 360×780 dan 780×360).
 
 ---
 

@@ -4,12 +4,18 @@
 // Bantuan/Pengaturan/Riwayat/Tentang, kartu info Kedai Madya, dan label versi. Juga layar daftar
 // meja publik.
 //
+// Tawaran pasang aplikasi (keputusan #46) HANYA di sini: ubin "Pasang ke layar utama" di menu, plus
+// tombol melayang (anak terakhir .layar.beranda) yang bisa disembunyikan 3 hari lewat "Nanti saja".
+// Keputusan kapan tampil ada di pasangAplikasi.ts dan main.ts; lobi, meja, dan permainan tidak
+// pernah memuatnya.
+//
 // "Warga kedai" = istilah untuk pemain komputer (kode tetap memakai 'bot').
 
 import { rapikanLevel, type DataMeja, type PengaturanMeja, type RingkasanMeja } from '@remi/meja';
 import { svgLogo } from '../aset/logoMadya';
 import { gambarKartuKeKanvas, type KartuGambar } from '../game/kartuGrafisGambar';
 import { htmlTautanKedai, KEDAI } from '../konten/kedai';
+import { TEKS_TAWARAN } from '../konten/pasang';
 import { DAFTAR_LEVEL_WARGA, LEVEL_WARGA, labelLevelKecil } from '../konten/levelWarga';
 import { aturPreferensi, preferensi, saatPreferensiBerubah } from '../preferensi';
 import { simpan } from '../penyimpanan';
@@ -32,9 +38,20 @@ export interface AksiBeranda {
   bantuan(): void;
   pengaturan(): void;
   tentang(): void;
-  pasangAplikasi: (() => void) | null;
+  /** Tawaran pasang aplikasi, atau null kalau tidak ada yang bisa ditawarkan (sudah terpasang, desktop, …). */
+  pasangAplikasi: TawaranPasangBeranda | null;
   /** Ada versi baru yang siap: muat ulang sekarang. Null kalau tidak ada. */
   muatUlang: (() => void) | null;
+}
+
+/** Tawaran pasang aplikasi untuk beranda (dirangkai main.ts dari pasangAplikasi.ts). */
+export interface TawaranPasangBeranda {
+  /** Tombol melayang tampil. False = sedang ditunda "Nanti saja"; ubin menu tetap ada. */
+  melayang: boolean;
+  /** Ubin menu atau tombol melayang ditekan: prompt browser atau dialog petunjuk. */
+  pasang(): void;
+  /** "Nanti saja" di tombol melayang: simpan tundanya (beranda sendiri yang menyembunyikan tombolnya). */
+  nanti(): void;
 }
 
 export interface OpsiBeranda {
@@ -51,8 +68,11 @@ export interface BerandaTerpasang {
   aturStatusOnline(s: StatusOnline, cobaLagi?: (() => void) | null): void;
   /** Pesan gagal di panel online sedang terlihat di layar (tidak tergulir keluar). */
   pesanGagalTerlihat(): boolean;
-  /** Munculkan/sembunyikan ubin "Pasang ke layar utama" tanpa menggambar ulang beranda. */
-  aturPasang(pasang: (() => void) | null): void;
+  /**
+   * Atur ubin "Pasang ke layar utama" dan tombol melayang tanpa menggambar ulang beranda (isian dan
+   * lipatan yang terbuka aman). Null = keduanya hilang; `melayang: false` = ubin saja.
+   */
+  aturPasang(tawaran: TawaranPasangBeranda | null): void;
   /** Munculkan tombol "Ada versi baru · Muat ulang" di kaki beranda tanpa menggambar ulang. */
   aturMuatUlang(muatUlang: (() => void) | null): void;
   /** Pindahkan fokus keyboard ke ubin navigasi (mis. 'riwayat' sesudah kembali dari Riwayat). */
@@ -277,6 +297,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
       </div>
     </div>
   </div>`;
+  const layarEl = akar.querySelector<HTMLElement>('.layar.beranda')!;
 
   const el = <T extends HTMLElement>(id: string) => akar.querySelector<T>(`#${id}`);
   const nama = () => {
@@ -430,11 +451,14 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   aturStatusOnline(opsi.statusOnline ?? (navigator.onLine ? 'siap' : 'offline'));
 
   // ---------- navigasi ----------
-  let pasangAplikasi = aksi.pasangAplikasi;
+  let tawaran = aksi.pasangAplikasi;
   let muatUlang = aksi.muatUlang;
-  // Satu pendengar untuk semua [data-nav], termasuk tombol yang disisipkan belakangan.
-  akar.querySelector('.beranda-sisi')!.addEventListener('click', (e) => {
-    const b = (e.target as Element | null)?.closest<HTMLElement>('[data-nav]');
+  // Satu pendengar untuk semua [data-nav] (menu, kaki, tombol melayang), termasuk tombol yang
+  // disisipkan belakangan.
+  layarEl.addEventListener('click', (e) => {
+    const sasaran = e.target as Element | null;
+    if (sasaran?.closest('[data-pasang-nanti]')) return nantiPasang();
+    const b = sasaran?.closest<HTMLElement>('[data-nav]');
     if (!b) return;
     switch (b.dataset.nav) {
       case 'bantuan':
@@ -446,27 +470,58 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
       case 'tentang':
         return aksi.tentang();
       case 'pasang':
-        return pasangAplikasi?.();
+        return tawaran?.pasang();
       case 'muat-ulang':
         return muatUlang?.();
     }
   });
 
   const nav = akar.querySelector<HTMLElement>('.beranda-nav')!;
-  const aturPasang = (f: (() => void) | null) => {
-    pasangAplikasi = f;
-    const ada = nav.querySelector<HTMLElement>('[data-nav=pasang]');
-    if (!f) {
-      // Jangan buang fokus ke <body>: pindahkan dulu ke ubin lain.
-      if (ada && ada === document.activeElement) nav.querySelector<HTMLElement>('[data-nav=bantuan]')?.focus();
-      ada?.remove();
-      return;
+  const ubinPasang = () => nav.querySelector<HTMLElement>('[data-nav=pasang]');
+  /** Sasaran fokus kalau tombol yang sedang difokus hilang: ubin pasang, atau ubin Bantuan. */
+  const fokusPengganti = () => (ubinPasang() ?? nav.querySelector<HTMLElement>('[data-nav=bantuan]'))?.focus();
+  const aturPasang = (t: TawaranPasangBeranda | null) => {
+    tawaran = t;
+    // Ubin menu: ada selama tawarannya ada (jalan yang tidak mengganggu).
+    const ubin = ubinPasang();
+    if (!t) {
+      if (ubin) {
+        // Jangan buang fokus ke <body>: pindahkan dulu ke ubin lain.
+        if (ubin === document.activeElement) nav.querySelector<HTMLElement>('[data-nav=bantuan]')?.focus();
+        ubin.remove();
+      }
+    } else if (!ubin) {
+      nav.insertAdjacentHTML(
+        'beforeend',
+        `<button type="button" class="nav-ubin nav-lebar" data-nav="pasang"><span class="nav-ikon" aria-hidden="true">📲</span><span>${esc(TEKS_TAWARAN.ubin)}</span></button>`,
+      );
     }
-    if (ada) return;
-    nav.insertAdjacentHTML(
-      'beforeend',
-      '<button type="button" class="nav-ubin nav-lebar" data-nav="pasang"><span class="nav-ikon" aria-hidden="true">📲</span><span>Pasang ke layar utama</span></button>',
-    );
+    // Tombol melayang: anak terakhir .layar.beranda (di luar grid, ikut inert dan ikut hilang
+    // bersama #ui), hanya kalau tidak sedang ditunda.
+    const melayang = !!t?.melayang;
+    const ada = layarEl.querySelector<HTMLElement>('.pasang-melayang');
+    if (!melayang && ada) {
+      const berfokus = ada.contains(document.activeElement);
+      ada.remove();
+      if (berfokus) fokusPengganti();
+    } else if (melayang && !ada) {
+      layarEl.insertAdjacentHTML(
+        'beforeend',
+        `<aside class="pasang-melayang" aria-label="${esc(TEKS_TAWARAN.labelTawaran)}">
+           <button type="button" class="hantu" data-pasang-nanti aria-label="${esc(TEKS_TAWARAN.labelNanti)}">${esc(TEKS_TAWARAN.nanti)}</button>
+           <button type="button" class="pasang-utama" data-nav="pasang"><span aria-hidden="true">📲</span><span>${esc(TEKS_TAWARAN.tombol)}</span></button>
+         </aside>`,
+      );
+    }
+    layarEl.classList.toggle('ada-pasang', melayang);
+  };
+  /** "Nanti saja": tunda disimpan main.ts; tombol melayang disembunyikan, fokus pindah ke ubin menu. */
+  const nantiPasang = () => {
+    const t = tawaran;
+    if (!t) return;
+    t.nanti();
+    aturPasang({ ...t, melayang: false });
+    ubinPasang()?.focus();
   };
   const kakiKanan = akar.querySelector<HTMLElement>('.kaki-kanan')!;
   const aturMuatUlang = (f: (() => void) | null) => {

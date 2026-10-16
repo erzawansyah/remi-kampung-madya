@@ -4,7 +4,7 @@ Game kartu Remi versi digital dengan **aturan yang kami berlakukan saat main di 
 
 - **Online:** buat meja, undang teman pakai kode/link, isi kursi dengan orang, warga kedai (pemain komputer), atau biarkan kosong untuk menunggu orang masuk.
 - **Offline bareng warga kedai:** jalan sepenuhnya di HP tanpa internet, tersimpan otomatis.
-- **PWA:** bisa dipasang ke layar utama HP, jalan fullscreen.
+- **PWA:** bisa dipasang ke layar utama HP, jalan fullscreen. Beranda menawarkannya lewat tombol **Pasang aplikasi** yang melayang (lihat di bawah).
 
 Istilah: di UI, pemain komputer disebut **warga kedai** (Kipas Dua, Cak Kopag, Si Rak, dan kawan-kawan). Di kode dan dokumen teknis tetap disebut `bot`.
 
@@ -40,6 +40,12 @@ Istilah: di UI, pemain komputer disebut **warga kedai** (Kipas Dua, Cak Kopag, S
 - Permainan offline tersimpan otomatis, juga saat aplikasi ditutup atau dipindah ke latar belakang.
 - Versi baru terpasang sendiri di momen yang aman (di beranda, atau saat aplikasi sedang di latar belakang), juga untuk pemain yang cuma membuka lewat browser HP. Tidak pernah memuat ulang di tengah putaran.
 - Nomor versi tampil di beranda dan di layar Tentang (beserta catatan perubahan).
+- **Tombol pasang aplikasi** (keputusan pemilik #46), **hanya di beranda**: pil gelap bergaris emas **Pasang aplikasi** melayang di kanan bawah selama aplikasi belum terpasang, plus ubin menu **Pasang ke layar utama** yang selalu ada selama pemasangan bisa ditawarkan. **Nanti saja** menyembunyikan tombol melayang 3 hari (ubin menu tetap ada). Lobi, meja, dan selama permainan tidak pernah memuat tombol ini.
+  - Chrome/Edge/Samsung Internet yang menawarkan pemasangan: tombol langsung membuka jendela pasang browser. Ditolak = dianggap Nanti saja, diterima = tawaran selesai.
+  - iPhone/iPad (Safari, juga Chrome iOS): dialog petunjuk Bagikan → Tambah ke Layar Utama → Tambah. iOS tidak memberi tahu aplikasi sudah dipasang, jadi ada tombol **Sudah kupasang**.
+  - Android tanpa tawaran browser: dialog petunjuk menu ⋮ (Chrome) atau ≡ (Samsung Internet) → Instal aplikasi.
+  - Dibuka dari browser bawaan Instagram, Threads, WhatsApp, Facebook, dan sejenisnya: dialog **Buka di browser dulu** dengan tombol **Salin link**, karena browser bawaan aplikasi tidak bisa memasang.
+  - Tidak ditawarkan kalau sudah dibuka sebagai aplikasi (layar penuh dari menu meja tidak dihitung), bukan HTTPS, atau desktop yang tidak menawarkan pemasangan. Simpanannya di `localStorage` (`remi.tawaranPasang`).
 - Online: lencana status koneksi, sambung ulang otomatis, konfirmasi sebelum keluar meja (teksnya sama di semua jalur), dan pesan ramah kalau server tidak bisa dihubungi.
 - Riwayat dan statistik: permainan online dari server, permainan di HP ini, dan statistik pribadi.
 - Leaderboard online (keputusan pemilik #45): bawaannya urut **rata-rata skor akhir per permainan** (Σ skor ÷ jumlah main, contoh 200 dan 100 → 150). Bisa diurutkan dari skor terbaik, persen juara, jumlah juara (urutan lama), paling sering main, paling sering mentung, atau poin posisi (juara 100, juru kunci 0, dirata-rata). Rata-rata, persen, dan poin posisi butuh minimal 3 kali main; yang kurang ada di daftar "Belum cukup main". Saringan: jumlah pemain (2–6), deck (1/2), dan periode (sepanjang masa atau bulan ini, WIB).
@@ -84,7 +90,7 @@ npm start            # http://localhost:2567
 **E2E smoke** (opsional): build client produksi, sajikan dengan `vite preview`, lalu mainkan alur pendek di Chrome sistem untuk HP dan desktop.
 
 ```bash
-npm run e2e                                   # build + jalankan (hp, desktop)
+npm run e2e                                   # build + jalankan (hp, desktop, pasang)
 npm run e2e -- --url=http://localhost:5173    # uji server dev yang sudah jalan
 CHROME_PATH="/jalan/ke/chrome" npm run e2e    # kalau Chrome tidak ketemu otomatis
 ```
@@ -160,6 +166,7 @@ apps/server/              HTTP + WebSocket (ws). Melayani file PWA, /healthz, /a
   scripts/bundel.mjs      Bundel server (esbuild) + suntik versi/commit
 apps/client/              Phaser 4 + HTML + Vite + vite-plugin-pwa
   src/main.ts             Kerangka aplikasi: pindah layar, Back, PWA, status koneksi, latihan
+  src/pasangAplikasi.ts   Tawaran pasang aplikasi (deteksi browser, tunda 3 hari), fungsi murni
   src/kontrolMeja.ts      Layar meja HTML: bar atas, bar aksi, jendela, keyboard, antrian animasi
   src/koneksi.ts          Koneksi online (WebSocket + sambung ulang) dan offline (meja di browser)
   src/preferensi.ts       Preferensi pemain per HP (suara, gerak, tampilan, ...)
@@ -406,6 +413,7 @@ Kartu bergambar joker tidak dipakai.
 | 39 | Deploy: batas meja dan sambungan per jaringan, padahal semua HP di Wi-Fi kedai keluar lewat satu IP publik | Bawaan dinaikkan: `MAKS_MEJA_PER_IP` 60 (dulu 20) dan `MAKS_SAMBUNGAN_PER_IP` 150 (dulu 50). Tetap bisa diubah lewat env ([rinci](docs/keputusan-pemilik.md#k39)) | Diputuskan pemilik (13 Okt 2026) |
 | 44 | Batas skor hanya bisa ±500 (offline) atau 300/500/1000 (lobi) | Angka bebas kelipatan 10 untuk batas atas dan batas bawah, kosong = tanpa batas. Batas bawah diketik positif dan disimpan negatif. Nilai lama tetap sah ([rinci](docs/keputusan-pemilik.md#k44)) | Diputuskan pemilik (16 Okt 2026) |
 | 45 | Leaderboard terasa tidak adil (urut jumlah juara, jadi yang paling sering main selalu di atas; meja sendirian dicampur; kabur di tengah permainan tidak tercatat; nama beda huruf besar/kecil dianggap orang lain) | Banyak pilihan urutan, bawaan rata-rata skor akhir per permainan. Meja 1 orang + warga kedai tidak dihitung. Yang keluar di tengah permainan dihitung juru kunci. Default yang tidak dikomentari pemilik: minimal 3 kali main untuk rata-rata/persen/posisi, periode bawaan sepanjang masa (pilihan bulan ini, WIB), yang keluar diberi skor terendah di meja, menutup aplikasi tanpa Keluar tidak dihitung kabur ([rinci](docs/keputusan-pemilik.md#k45)) | Diputuskan pemilik (16 Okt 2026) |
+| 46 | Banyak teman tidak tahu game ini bisa dipasang ke layar utama | Tombol **Pasang aplikasi** melayang, **hanya di beranda**, selama belum terpasang. "Nanti saja" menyembunyikannya 3 hari; ubin menu "Pasang ke layar utama" tetap ada. Petunjuk khusus iPhone/iPad, Android, dan browser bawaan aplikasi (Instagram, WhatsApp, dll.). Tidak pernah muncul di lobi, meja, atau selama permainan ([rinci](docs/keputusan-pemilik.md#k46)) | Diputuskan pemilik (16 Okt 2026) |
 
 ## Test
 
@@ -427,8 +435,8 @@ Cakupan test:
 - **Fuzz:** aksi acak yang sering ilegal. Aksi yang ditolak harus tidak mengubah state, aksi yang diterima harus menghasilkan state legal.
 - **Meja:** lobi, host, atur kursi, mulai, kartu rahasia per pemain, permainan penuh 1 manusia + 3 bot, timer giliran diambil alih bot, putus/sambung ulang, jeda saat semua pergi, voting akhiri, simpan/lanjut, level warga kedai dan perapiannya (`level.test.ts`), galat di langkah warga kedai dan timer meja (`galat-bot.test.ts`, keputusan #38), aturan hitung leaderboard (`peringkat.test.ts`: skor/peringkat efektif, semua urutan dan pemutus seri, belum cukup main, saringan, batas bulan WIB) dan tanda keluar di klasemen akhir (`meja.test.ts`, keputusan #45), batas skor bebas kelipatan 10: validasi, perapian, dan permainan penuh yang selesai karena batas skor pilihan host (`batas-skor.test.ts`, keputusan #44).
 - **Server:** integrasi WebSocket nyata (buat/gabung pakai kode, kartu rahasia, sambung ulang dengan token, daftar meja publik, pesan rusak), riwayat SQLite (migrasi skema v0 → v1 dari database buatan tangan, leaderboard v2 dengan saringan, endpoint lama tetap array), batas bawaan per jaringan (60 meja, 150 sambungan), identitas build (`idBuild.test.ts`).
-- **Client** (`apps/client/test`, happy-dom): preferensi dan migrasinya, gerak, penyimpanan, versi, jendela dan fokus (`dom.ts`), koneksi (watchdog, antrian, simpan offline), kontrol meja (keyboard, tolak, kunci kirim, popup joker), pemutar peristiwa (info rahasia: tidak membaca angka joker, kartu lawan tetap tertutup), bunyi dramatis tanpa membocorkan joker (`suaraDramatis.test.ts`), level warga kedai di beranda/lobi/Bantuan (`levelWarga.test.ts`), label nama pembuang yang tidak pernah kembar (`tataMeja.test.ts`), isian batas skor di beranda/lobi/simpanan (`batasSkor.test.ts`), pembaruan PWA dan cek versi server sesudah sambungan pulih (`pembaruan.test.ts`, `cekVersiServer.test.ts`), rincian skor, tutorial, Bantuan, Pengaturan, Tentang (CHANGELOG), Riwayat, beranda.
-- **E2E smoke** (`npm run e2e`, tidak ikut `npm test`): alur beranda → main → joker → ambil → buang → Pengaturan → Bantuan → Tentang → simpan → lanjutkan di Chrome sungguhan, untuk HP dan desktop. Gagal kalau ada error di konsol atau ketukan tembus ke kanvas.
+- **Client** (`apps/client/test`, happy-dom): preferensi dan migrasinya, gerak, penyimpanan, versi, jendela dan fokus (`dom.ts`), koneksi (watchdog, antrian, simpan offline), kontrol meja (keyboard, tolak, kunci kirim, popup joker), pemutar peristiwa (info rahasia: tidak membaca angka joker, kartu lawan tetap tertutup), bunyi dramatis tanpa membocorkan joker (`suaraDramatis.test.ts`), level warga kedai di beranda/lobi/Bantuan (`levelWarga.test.ts`), label nama pembuang yang tidak pernah kembar (`tataMeja.test.ts`), isian batas skor di beranda/lobi/simpanan (`batasSkor.test.ts`), tawaran pasang aplikasi dari user agent asli, tunda 3 hari, tombol melayang hanya di beranda, dan dialog petunjuk (`pasangAplikasi.test.ts`, `beranda.test.ts`, `dialogPasang.test.ts`), pembaruan PWA dan cek versi server sesudah sambungan pulih (`pembaruan.test.ts`, `cekVersiServer.test.ts`), rincian skor, tutorial, Bantuan, Pengaturan, Tentang (CHANGELOG), Riwayat, beranda.
+- **E2E smoke** (`npm run e2e`, tidak ikut `npm test`): alur beranda → main → joker → ambil → buang → Pengaturan → Bantuan → Tentang → simpan → lanjutkan di Chrome sungguhan, untuk HP dan desktop. Alur ketiga (`pasang`) memakai user agent Chrome Android di 360×780 dan 780×360: tombol pasang melayang terlihat utuh, tidak meluber, tidak menabrak toast, "Nanti saja" bertahan sesudah muat ulang, dan tidak ada di meja. Gagal kalau ada error di konsol atau ketukan tembus ke kanvas.
 
 ## Catatan & rencana berikutnya
 

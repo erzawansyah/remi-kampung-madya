@@ -5,6 +5,7 @@ import { BAB_BANTUAN, FAQ, GLOSARIUM } from '../src/konten/bantuan';
 import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { KEDAI, TAUTAN_KEDAI } from '../src/konten/kedai';
 import * as PERINGKAT from '../src/konten/peringkat';
+import * as PASANG from '../src/konten/pasang';
 
 // Penjaga gaya teks (antislop) untuk konten yang dibaca pemain: Bantuan, tutorial, info kedai,
 // dan emote/celetukan. Yang dijaga hanya pola formulaik yang jelas (negasi kontras, klise promosi,
@@ -33,6 +34,8 @@ const sumber: [string, string[]][] = [
   ['Emote', [...DAFTAR_EMOTE]],
   // Leaderboard (keputusan #45): fungsi (labelBulan) dilewati, contoh bulan ikut diperiksa.
   ['Peringkat', [...semuaTeks(PERINGKAT), PERINGKAT.labelBulan('2026-10')]],
+  // Tawaran pasang aplikasi (keputusan #46): tombol melayang, toast, dialog petunjuk.
+  ['Pasang aplikasi', semuaTeks(PASANG)],
 ];
 
 describe('antislop: teks pemain', () => {
