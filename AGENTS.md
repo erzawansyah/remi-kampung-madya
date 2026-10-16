@@ -32,7 +32,7 @@ npm run dev:client   # Vite :5173 (strictPort), /ws dan /api diteruskan ke :2567
 npm run build        # build client (PWA + .br/.gz) + bundel server
 npm run e2e          # E2E smoke di Chrome sistem (build + vite preview, HP & desktop, tombol pasang di Chrome Android)
 docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + test + build
-npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --lawan, --susunan, --meja, --seed, --putaran, --waktu)
+npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan dan keterbacaan level bot (--uji, --lawan, --susunan, --gaya, --meja, --seed, --putaran, --waktu, --baca, --kaldu)
 ```
 
 - `npm run e2e` tidak mengunduh browser. Kalau Chrome tidak ketemu otomatis, set `CHROME_PATH`. Opsi: `-- --url=http://localhost:5173` (uji dev server), `-- --perangkat=hp` (`hp`, `desktop`, `pasang`, dipisah koma), `-- --tanpa-build`, `-- --tampil`.
@@ -52,6 +52,8 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
   - Fungsi di `giliran.ts` dipakai bersama oleh mesin, bot, dan UI. Ubah aturan di sana, **jangan** menduplikasi logika aturan di UI.
 - **Bot (warga kedai):** `packages/engine/src/bot/`. `bot.ts` = `LevelBot`/`DAFTAR_LEVEL_BOT` (mudah, normal, jago, suhu) dan strategi mudah/normal; `strategi.ts` = jago/suhu (`PARAM_JAGO`, `PARAM_SUHU`); `susun.ts` = pencari susunan kartu jadi; `ingatan.ts` = ingatan dari `ViewPemain`.
   - Perubahan strategi **diukur di arena** (`packages/engine/scripts/arena.ts`), jangan diasumsikan lebih kuat.
+    - Peserta arena ditulis `level` atau `level:gaya` (`scripts/peserta.ts`). Baris `baca:` mengukur seberapa gampang buangan warga kedai dibaca (Londo/As dibuang di awal, buangan menyambung, disuap ke pemain berikutnya, entropi buangan awal); definisinya di `scripts/keterbacaan.ts`, diuji `test/arena-alat.test.ts`.
+    - Pekerja arena mendaftarkan tsx sendiri (`buatPekerja()`), karena loader tsx tidak selalu ikut ke worker thread (di Node 22.22 impor `.js` → `.ts` gagal). Jangan kembali ke `new Worker(new URL(import.meta.url))`.
   - Level baru: tambah di `DAFTAR_LEVEL_BOT` dan `LEVEL_WARGA` (`apps/client/src/konten/levelWarga.ts`, satu sumber label untuk beranda, lobi, Bantuan); validasi meja ikut otomatis. Level dari data tak dipercaya (simpanan, isian UI) dirapikan dengan `rapikanLevel()` dari `@remi/meja`.
 - **Perilaku room/online:** `packages/meja/src/meja.ts` dan `protokol.ts`.
   - Pesan dari jaringan divalidasi di `validasi.ts`. Tambah case di sana setiap ada pesan baru.
