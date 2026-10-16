@@ -687,9 +687,23 @@ html[data-efek='hemat'] .kipas canvas {
   border-radius: var(--radius-pil);
   box-shadow: none;
 }
+.pasang-melayang .nanti-ikon {
+  display: none;
+}
 @media (max-width: 359px) {
   .pasang-melayang button {
     padding: 0 var(--ruang-2);
+  }
+  /* Layar sempit: "Nanti saja" cukup ikon ✕ (nama aksesibelnya tetap lewat aria-label), supaya
+     tombol tetap satu baris walau font HP-nya lebar (DejaVu/Roboto + teks besar). */
+  .pasang-melayang [data-pasang-nanti] {
+    min-width: var(--sentuh);
+  }
+  .pasang-melayang .nanti-teks {
+    display: none;
+  }
+  .pasang-melayang .nanti-ikon {
+    display: inline;
   }
 }
 .pasang-melayang button.hantu {

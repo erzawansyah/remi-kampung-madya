@@ -510,7 +510,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
       layarEl.insertAdjacentHTML(
         'beforeend',
         `<aside class="pasang-melayang" aria-label="${esc(TEKS_TAWARAN.labelTawaran)}">
-           <button type="button" class="hantu" data-pasang-nanti aria-label="${esc(TEKS_TAWARAN.labelNanti)}">${esc(TEKS_TAWARAN.nanti)}</button>
+           <button type="button" class="hantu" data-pasang-nanti aria-label="${esc(TEKS_TAWARAN.labelNanti)}"><span class="nanti-teks">${esc(TEKS_TAWARAN.nanti)}</span><span class="nanti-ikon" aria-hidden="true">✕</span></button>
            <button type="button" class="pasang-utama" data-nav="pasang"><span aria-hidden="true">📲</span><span>${esc(TEKS_TAWARAN.tombol)}</span></button>
          </aside>`,
       );

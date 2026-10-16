@@ -148,7 +148,11 @@ describe('renderBeranda', () => {
     const m = melayang()[0]!;
     expect(m.tagName).toBe('ASIDE');
     expect(m.getAttribute('aria-label')).toBe('Pasang aplikasi');
-    expect(m.querySelector('[data-pasang-nanti]')!.getAttribute('aria-label')).toBe('Nanti saja, sembunyikan 3 hari');
+    const nanti = m.querySelector('[data-pasang-nanti]')!;
+    expect(nanti.getAttribute('aria-label')).toBe('Nanti saja, sembunyikan 3 hari');
+    // Layar sempit hanya menampilkan ✕ (CSS); teks "Nanti saja" tetap ada dan ikonnya disembunyikan dari pembaca layar.
+    expect(nanti.querySelector('.nanti-teks')!.textContent).toBe('Nanti saja');
+    expect(nanti.querySelector('.nanti-ikon')!.getAttribute('aria-hidden')).toBe('true');
     expect(m.querySelector('[data-nav=pasang]')!.textContent).toContain('Pasang aplikasi');
     expect(m.querySelectorAll('button')).toHaveLength(2);
 
