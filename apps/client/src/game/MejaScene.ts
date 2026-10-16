@@ -1097,25 +1097,34 @@ export class MejaScene extends Phaser.Scene {
 
   /**
    * Pentungan: kartu dibuang tertutup ke tengah meja, jeda tegang, lalu dibuka dan nilainya muncul.
-   * `saatDibuka` dipanggil tepat sekali ketika kartu terbuka (untuk bunyi/goyang).
+   * Bisa beberapa kartu sekaligus (keputusan #41, nutup pakai beberapa joker): semuanya berjajar di
+   * panggung, bergetar dan dibalik bersamaan, lalu satu label nilai total, dan berangkat ke buangan
+   * bergiliran. `saatDibuka` dipanggil tepat sekali ketika kartunya terbuka (untuk bunyi/goyang).
    */
-  pentung(kartu: Kartu, dari: Titik | undefined, nilai: number, merah: boolean, saatDibuka?: () => void): Promise<void> {
+  pentung(daftar: { kartu: Kartu; dari?: Titik }[], nilai: number, merah: boolean, saatDibuka?: () => void): Promise<void> {
     let dibuka = false;
     const buka = () => {
       if (dibuka) return;
       dibuka = true;
       saatDibuka?.();
     };
-    if (!this.bisaAnimasi()) {
+    if (!daftar.length || !this.bisaAnimasi()) {
       buka();
       return Promise.resolve();
     }
     const d = this.tata.d;
-    const pg = this.panggung(1);
-    const w = pg.w * 1.25;
-    const asal = dari ?? { x: pg.x, y: this.scale.height, w: w / 2 };
-    const o = this.buatBebas(null, { ...asal, sudut: -25 }, w * 1.05, LAPIS.animasi + 30);
-    o.tinggi = 1;
+    const n = daftar.length;
+    const pg = this.panggung(n);
+    // Satu kartu: ukuran lama. Beberapa kartu: sedikit lebih kecil supaya berjajar muat di layar.
+    const w = pg.w * (n > 1 ? 1.1 : 1.25);
+    const jarak = w * 1.1;
+    const xKe = (i: number) => pg.x + (i - (n - 1) / 2) * jarak;
+    const os = daftar.map(({ dari }) => {
+      const asal = dari ?? { x: pg.x, y: this.scale.height, w: w / 2 };
+      const o = this.buatBebas(null, { ...asal, sudut: -25 }, w * 1.05, LAPIS.animasi + 30);
+      o.tinggi = 1;
+      return o;
+    });
     const label = this.add
       .text(pg.x, pg.y + (w * RASIO_KARTU) / 2 + 14 * d, `+${nilai}`, {
         fontFamily: FONT,
@@ -1129,35 +1138,50 @@ export class MejaScene extends Phaser.Scene {
       .setScale(0)
       .setAlpha(0)
       .setDepth(LAPIS.animasi + 40);
+    const hidup = () => os.filter((o) => o.hidup);
     const jalan = (async () => {
-      // 1. Dibuang tertutup ke tengah meja.
-      await this.luncur(o, { x: o.x, y: o.y, w: o.w, sudut: -25 }, { x: pg.x, y: pg.y, w, sudut: -4 }, { lama: durasi(480), benih: kartu.id, lengkung: 0.12 });
-      if (!o.hidup) return;
+      // 1. Dibuang tertutup ke tengah meja (beberapa kartu: bergiliran sedikit).
+      await Promise.all(
+        os.map((o, i) =>
+          this.luncur(o, { x: o.x, y: o.y, w: o.w, sudut: -25 }, { x: xKe(i), y: pg.y, w, sudut: -4 }, {
+            lama: durasi(480),
+            jeda: durasi(i * 110),
+            benih: daftar[i].kartu.id,
+            lengkung: 0.12,
+          }),
+        ),
+      );
+      if (!hidup().length) return;
       bunyi('letak');
-      // 2. Hening sebentar (hit-stop), lalu kartu bergetar tegang.
+      // 2. Hening sebentar (hit-stop), lalu kartu bergetar tegang bersamaan.
       await this.jeda(70);
-      if (!kurangiGerak()) await this.tw({ targets: o, sudut: 4, duration: durasi(90), yoyo: true, repeat: 4 });
-      // 3. Dibalik: nilainya baru ketahuan.
-      o.sudut = 0;
-      await this.balik(o, kartu, w * 1.05, false);
+      if (!kurangiGerak()) await this.tw({ targets: hidup(), sudut: 4, duration: durasi(90), yoyo: true, repeat: 4 });
+      // 3. Dibalik bersamaan: nilainya baru ketahuan.
+      for (const o of os) o.sudut = 0;
+      await Promise.all(os.map((o, i) => this.balik(o, daftar[i].kartu, w * 1.05, false)));
       buka();
-      this.percik({ x: pg.x, y: pg.y, w }, merah ? 'merah' : 'emas', 28);
-      // 4. Nilai pentungan muncul.
+      os.forEach((o, i) => this.percik({ x: xKe(i), y: pg.y, w }, merah ? 'merah' : 'emas', Math.round(28 / Math.min(n, 2))));
+      // 4. Nilai pentungan (totalnya) muncul.
       if (label.active) await this.tw({ targets: label, scale: 1, alpha: 1, duration: durasi(300), delay: 50, ease: EASE.pegas });
-      // 5. Tahan sebentar, lalu ke buangan.
+      // 5. Tahan sebentar, lalu ke buangan (bergiliran).
       await this.jeda(durasi(1100));
       if (label.active) this.tweens.add({ targets: label, alpha: 0, duration: durasi(250) });
       const ke = this.tata.titik.buangan ?? pg;
-      if (o.hidup) await this.luncur(o, { x: o.x, y: o.y, w: o.w, sudut: 0 }, ke, { lama: durasi(380), benih: `${kartu.id}-p`, lengkung: 0.08 });
-      await this.mendarat(o);
+      await Promise.all(
+        os.map(async (o, i) => {
+          if (o.hidup) await this.luncur(o, { x: o.x, y: o.y, w: o.w, sudut: 0 }, ke, { lama: durasi(380), jeda: durasi(i * 140), benih: `${daftar[i].kartu.id}-p`, lengkung: 0.08 });
+          await this.mendarat(o);
+        }),
+      );
     })();
-    // Cadangan total: apa pun yang terjadi, pentungan selesai dan dibersihkan.
-    const cadangan = new Promise<void>((ok) => setTimeout(ok, 6500));
+    // Cadangan total: apa pun yang terjadi, pentungan selesai dan dibersihkan (tiap kartu tambahan
+    // memperpanjang alur di atas sedikit, jadi cadangannya ikut).
+    const cadangan = new Promise<void>((ok) => setTimeout(ok, 6500 + 400 * (n - 1)));
     return Promise.race([jalan, cadangan]).then(() => {
       buka();
       this.tweens.killTweensOf(label);
       if (label.active) label.destroy();
-      this.serahkan(o);
+      os.forEach((o) => this.serahkan(o));
     });
   }
 

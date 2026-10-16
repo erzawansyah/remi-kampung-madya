@@ -6,13 +6,22 @@
 // (antem-anteman, seperti pemain kedai yang jago): di tangan, kartu jadi masih bisa jadi modal mulung
 // dan disusun ulang untuk mentung, dan semuanya tetap boleh diturunkan di susun akhir (#19, #24).
 // Arena: selalu menurunkan kartu jadi rugi 17–67 poin per putaran dibanding menahannya.
+// Mentung pakai beberapa joker hidup sekaligus (#41) dipakai kalau sisa tangan bisa habis jadi kartu jadi.
+// Putaran kaldu (#42): pentungan dikali dua, jadi kesiapan mentung, bahaya kepentung, dan pilihan cara
+// mentung ditimbang dua kali lipat (Penilai.pengali); bagian nilai lain tetap. Arena mini kaldu 16 Okt 2026
+// (150 seed, 2/3/4/4d pemain, dengan vs tanpa pengali): selisihnya di dalam selang kepercayaan di semua
+// meja (tidak terukur lebih kuat maupun lebih lemah), lama mikir praktis sama.
+// Arena 16 Okt 2026 (--uji=jago,suhu --lawan=normal, 200 seed, sebelum → sesudah #41): selisih atas
+// normal tidak turun di meja mana pun (jago +71,6 → +73,9 di 2 pemain, +59,1 → +61,4 di 4 pemain 2 deck;
+// suhu +92,2 → +95,9 di 4 pemain 2 deck), dan p99 lama mikir praktis sama (jago 7,25 → 7,40 ms,
+// suhu 14,6 → 15,3 ms, diukur bersamaan di mesin yang sama).
 // Semua aksi divalidasi dengan fungsi di giliran.ts; bot hanya melihat ViewPemain.
 
 import { AS, type Kartu } from '../kartu.js';
 import { AturanError } from '../error.js';
 import { isJokerHidup, type KonteksJoker, type SpesifikasiKartuJadi } from '../kartuJadi.js';
 import { maksimalMulung, validasiBuang, validasiMulung, validasiTurunkan } from '../giliran.js';
-import { nilaiPentungan, PENALTI_JOKER_DIBUANG } from '../skor.js';
+import { NILAI_PENTUNGAN_JOKER, nilaiPentungan, PENALTI_JOKER_DIBUANG, PENGALI_KALDU } from '../skor.js';
 import type { Aksi, EntriBuangan } from '../state.js';
 import type { ViewPemain, ViewPutaran } from '../view.js';
 import { bacaIngatan, type Ingatan } from './ingatan.js';
@@ -138,6 +147,8 @@ export class Penilai {
   readonly n: number;
   /** Perkiraan sisa kesempatan ambil kartu untuk pemain ini. */
   readonly sisaGiliran: number;
+  /** Pengali pentungan putaran ini: PENGALI_KALDU di putaran kaldu (#42, info publik di view), selain itu 1. */
+  readonly pengali: number;
   private cache = new Map<string, Komponen>();
 
   constructor(
@@ -150,6 +161,7 @@ export class Penilai {
     this.ingat = bacaIngatan(view, par.ingatRiwayat);
     this.n = view.konfigurasi.jumlahPemain;
     this.sisaGiliran = p.jumlahDeck / this.n;
+    this.pengali = p.kaldu ? PENGALI_KALDU : 1;
   }
 
   get punyaJadi(): boolean {
@@ -214,10 +226,10 @@ export class Penilai {
     return Math.min(this.sisaGiliran, this.par.batasCakrawala) / Math.max(1, this.ingat.totalBelum);
   }
 
-  /** Nilai tangan di akhir giliran: dasar + peluang membaik + kesiapan mentung. */
+  /** Nilai tangan di akhir giliran: dasar + peluang membaik + kesiapan mentung (dikali dua di putaran kaldu). */
   nilai(isi: IsiTangan, punyaJadi: boolean): number {
     const k = this.komponen(isi, punyaJadi);
-    return k.dasar + this.skala * (this.par.potensi * k.potensi + this.par.mentung * k.mentung);
+    return k.dasar + this.skala * (this.par.potensi * k.potensi + this.par.mentung * this.pengali * k.mentung);
   }
 
   /**
@@ -253,7 +265,10 @@ export class Penilai {
     return Math.min(1, peluang);
   }
 
-  /** Perkiraan kerugian bila `d` dibuang: lawan mentung memakainya (kepentung) atau sekadar mulung. */
+  /**
+   * Perkiraan kerugian bila `d` dibuang: lawan mentung memakainya (kepentung, dikali dua di putaran kaldu)
+   * atau sekadar mulung.
+   */
   bahaya(d: Kartu): number {
     const { par, p, n, saya } = this;
     // Dengan 2 deck tiap kartu punya kembaran, jadi perkiraan "lawan memegang pasangannya" jauh kurang tajam.
@@ -267,7 +282,7 @@ export class Penilai {
       if (pasangan === 0) continue;
       // Tangan 2 kartu baru bisa mentung bila kartu ini bukan yang teratas saat gilirannya.
       const siap = h === 2 && jarak === 1 ? 0 : par.siapLawan[Math.min(h, par.siapLawan.length - 1)];
-      total += pasangan * (par.bahaya * siap + par.suap);
+      total += pasangan * (par.bahaya * siap * this.pengali + par.suap);
     }
     return total * skala;
   }
@@ -512,11 +527,20 @@ function turunkanDemiAs(
   return terbaik?.spek ?? null;
 }
 
-/** Cari cara mentung dari tangan ini (tepat satu kartu sisa); null bila tidak bisa. */
-export function rencanaMentung(nl: Penilai, tangan: readonly Kartu[]): { spek: SpesifikasiKartuJadi[]; sisa: Kartu; pentungan: number } | null {
+export interface RencanaMentung {
+  /** Kartu jadi yang diturunkan dulu (kosong = langsung buang). */
+  spek: SpesifikasiKartuJadi[];
+  /** Pentungan: satu kartu, atau 2+ joker hidup sekaligus (keputusan #41). */
+  sisa: Kartu[];
+  /** Jumlah nilai pentungan. */
+  pentungan: number;
+}
+
+/** Cara mentung dengan tepat satu kartu sisa sebagai pentungan; null bila tidak bisa. */
+function mentungSatu(nl: Penilai, tangan: readonly Kartu[]): RencanaMentung | null {
   if (tangan.length === 1) {
     const k = tangan[0];
-    return { spek: [], sisa: k, pentungan: nilaiPentungan(k, isJokerHidup(k, nl.ctx)) };
+    return { spek: [], sisa: [k], pentungan: nilaiPentungan(k, isJokerHidup(k, nl.ctx)) };
   }
   const m = nl.susun.cari(isiDari(tangan, nl.ctx), true, { tepat: 1, catat: true });
   if (!m) return null;
@@ -525,7 +549,85 @@ export function rencanaMentung(nl: Penilai, tangan: readonly Kartu[]): { spek: S
   const v = coba(() => validasiTurunkan(tangan, spek, true, 'buangan', nl.ctx));
   if (!v || v.sisaTangan.length !== 1) return null;
   const sisa = v.sisaTangan[0];
-  return { spek, sisa, pentungan: nilaiPentungan(sisa, isJokerHidup(sisa, nl.ctx)) };
+  return { spek, sisa: [sisa], pentungan: nilaiPentungan(sisa, isJokerHidup(sisa, nl.ctx)) };
+}
+
+/** Semua cara memilih `j` kartu dari `daftar`, tanpa mengulang kombinasi tipe yang sama (kartu kembar deck kedua). */
+function pilihanJoker(daftar: readonly Kartu[], j: number): Kartu[][] {
+  const hasil: Kartu[][] = [];
+  const sudah = new Set<string>();
+  const jalan = (mulai: number, isi: Kartu[]) => {
+    if (isi.length === j) {
+      const kunci = isi
+        .map(tipeKartu)
+        .sort((a, b) => a - b)
+        .join(',');
+      if (!sudah.has(kunci)) {
+        sudah.add(kunci);
+        hasil.push([...isi]);
+      }
+      return;
+    }
+    for (let i = mulai; i <= daftar.length - (j - isi.length); i++) {
+      isi.push(daftar[i]);
+      jalan(i + 1, isi);
+      isi.pop();
+    }
+  };
+  jalan(0, []);
+  return hasil;
+}
+
+/**
+ * Keputusan #41: mentung pakai j ≥ 2 joker hidup sekaligus (250 per joker). Coba sisakan kelompok joker
+ * terbesar sebagai pentungan, sisa tangan lain habis jadi kartu jadi (tanpa sisa). Tangan yang isinya
+ * joker semua langsung dibuang tanpa turunkan. Rencana divalidasi dengan validasiTurunkan dan
+ * validasiBuang, sama seperti mesin.
+ */
+function mentungBeberapaJoker(nl: Penilai, tangan: readonly Kartu[]): RencanaMentung | null {
+  const joker = tangan.filter((k) => isJokerHidup(k, nl.ctx));
+  for (let j = joker.length; j >= 2; j--) {
+    let terbaik: { r: RencanaMentung; jadi: number } | null = null;
+    for (const pentungan of pilihanJoker(joker, j)) {
+      const idPentungan = new Set(pentungan.map((k) => k.id));
+      const lain = tangan.filter((k) => !idPentungan.has(k.id));
+      let spek: SpesifikasiKartuJadi[] = [];
+      let jadi = 0;
+      if (lain.length) {
+        const m = nl.susun.cari(isiDari(lain, nl.ctx), true, { tepat: 0, catat: true });
+        const s2 = m && keSpesifikasi(m.susunan, lain, nl.ctx);
+        if (!m || !s2) continue;
+        const v = coba(() => validasiTurunkan(tangan, s2, true, 'buangan', nl.ctx));
+        if (!v || v.sisaTangan.length !== j || v.sisaTangan.some((k) => !idPentungan.has(k.id))) continue;
+        spek = s2;
+        jadi = m.nilaiJadi;
+      }
+      const buang = coba(() =>
+        validasiBuang({
+          tangan: pentungan,
+          punyaKartuJadi: true,
+          sumberAmbil: 'buangan',
+          kartuId: pentungan[0].id,
+          kartuIdLain: pentungan.slice(1).map((k) => k.id),
+          ctx: nl.ctx,
+          asJokerBolehDibuangTanpaJadi: nl.view.konfigurasi.asJokerBolehDibuangTanpaJadi,
+        }),
+      );
+      if (!buang) continue;
+      if (!terbaik || jadi > terbaik.jadi) terbaik = { r: { spek, sisa: pentungan, pentungan: j * NILAI_PENTUNGAN_JOKER }, jadi };
+    }
+    // Pentungan j joker selalu lebih besar daripada j − 1 joker atau satu kartu apa pun.
+    if (terbaik) return terbaik.r;
+  }
+  return null;
+}
+
+/**
+ * Cari cara mentung dari tangan ini; null bila tidak bisa. Pentungan beberapa joker (#41) didahulukan
+ * karena nilainya (≥ 500) selalu di atas pentungan satu kartu (paling besar 250).
+ */
+export function rencanaMentung(nl: Penilai, tangan: readonly Kartu[]): RencanaMentung | null {
+  return mentungBeberapaJoker(nl, tangan) ?? mentungSatu(nl, tangan);
 }
 
 /**
@@ -555,10 +657,12 @@ export function aksiKuat(view: ViewPemain, par: ParamStrategi): Aksi | null {
     for (const o of opsi) {
       const r = rencanaMentung(nl, o.tangan);
       if (!r) continue;
+      const idPentungan = new Set(r.sisa.map((k) => k.id));
       const korban = new Set(
-        o.diambil.filter((e) => e.pemilik !== saya && e.kartu.id !== r.sisa.id).map((e) => e.pemilik),
+        o.diambil.filter((e) => e.pemilik !== saya && !idPentungan.has(e.kartu.id)).map((e) => e.pemilik),
       ).size;
-      const skor = r.pentungan * (1 + par.korban * korban) + o.nilaiJadi;
+      // Putaran kaldu: yang mentung dapat pentungan × 2 dan tiap korban kena × 2.
+      const skor = r.pentungan * nl.pengali * (1 + par.korban * korban) + o.nilaiJadi;
       if (!mentung || skor > mentung.skor) mentung = { o, skor };
     }
     if (mentung) return { jenis: 'mulung', pemain: saya, jumlah: mentung.o.jumlah, kartuJadi: mentung.o.spek };
@@ -587,7 +691,12 @@ export function aksiKuat(view: ViewPemain, par: ParamStrategi): Aksi | null {
   if (p.sumberAmbil === 'buangan') {
     const r = rencanaMentung(nl, tangan);
     if (r) {
-      if (r.spek.length === 0) return { jenis: 'buang', pemain: saya, kartuId: r.sisa.id };
+      if (r.spek.length === 0) {
+        const [pertama, ...lain] = r.sisa;
+        // Nutup pakai beberapa joker (#41): semua dibuang sekaligus dalam satu aksi.
+        if (lain.length) return { jenis: 'buang', pemain: saya, kartuId: pertama.id, kartuIdLain: lain.map((k) => k.id) };
+        return { jenis: 'buang', pemain: saya, kartuId: pertama.id };
+      }
       return { jenis: 'turunkan', pemain: saya, kartuJadi: r.spek };
     }
   }

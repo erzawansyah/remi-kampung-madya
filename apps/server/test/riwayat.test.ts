@@ -224,6 +224,26 @@ describe('riwayat SQLite: migrasi skema v0 → v1', () => {
   });
 });
 
+describe('riwayat SQLite: mode kaldu (#42)', () => {
+  it('simpan menulis mode_kaldu = 1 dan alasan kaldu, daftar membacanya kembali', () => {
+    const db = new DatabaseSync(':memory:');
+    const r = bukaRiwayat(db);
+    r.simpan({ ...ringkasan('KALDU', Date.UTC(2026, 9, 16), [['Budi', 420], ['Siti', -380], ['Kipas Dua', 10, true]]), alasan: 'kaldu', modeKaldu: true });
+    r.simpan(ringkasan('BIASA', Date.UTC(2026, 9, 16, 1), [['Budi', 20], ['Siti', -20]]));
+    const baris = db.prepare('SELECT kode_meja, alasan, mode_kaldu FROM permainan ORDER BY id').all().map((x) => ({ ...x }));
+    expect(baris).toEqual([
+      { kode_meja: 'KALDU', alasan: 'kaldu', mode_kaldu: 1 },
+      { kode_meja: 'BIASA', alasan: 'sepakat', mode_kaldu: 0 },
+    ]);
+    const daftar = r.daftar(10);
+    expect(daftar.find((g) => g.kodeMeja === 'KALDU')).toMatchObject({ alasan: 'kaldu', dihitung: true });
+    // Permainan kaldu ikut peringkat seperti permainan lain.
+    expect(r.peringkat().find((p) => p.nama === 'Budi')).toMatchObject({ main: 2, juara: 2 });
+    r.tutup();
+    db.close();
+  });
+});
+
 describe('riwayat SQLite: papan peringkat v2', () => {
   const OKT = Date.UTC(2026, 9, 16, 5);
 

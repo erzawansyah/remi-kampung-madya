@@ -24,6 +24,8 @@ interface Statistik {
   dibalik: number;
   penaltiJoker: number;
   susunAkhir: number;
+  /** Nutup pakai beberapa joker sekaligus (#41). */
+  mentungBeberapaJoker: number;
 }
 
 export function mainkan(jumlahPemain: number, duaDeck: boolean, seed: number, level: LevelBot[], stat: Statistik) {
@@ -62,6 +64,7 @@ export function mainkan(jumlahPemain: number, duaDeck: boolean, seed: number, le
       stat.putaran++;
       if (r.cara === 'mentung') stat.mentung++;
       else stat.deckHabis++;
+      if (r.pentunganLain) stat.mentungBeberapaJoker++;
       if (r.dibalik) stat.dibalik++;
       stat.penaltiJoker += r.rincian.reduce((s, x) => s + x.jumlahJokerDibuang, 0);
       // Skor per pemain sesuai rumus.
@@ -79,7 +82,17 @@ export function mainkan(jumlahPemain: number, duaDeck: boolean, seed: number, le
 /** 60 permainan × 6 putaran = 360 putaran per konfigurasi. */
 export function ujiSimulasi(judul: string, n: number, duaDeck: boolean): void {
   describe(`simulasi bot-vs-bot: ${judul}`, () => {
-    const stat: Statistik = { putaran: 0, aksi: 0, mentung: 0, deckHabis: 0, mulung: 0, dibalik: 0, penaltiJoker: 0, susunAkhir: 0 };
+    const stat: Statistik = {
+      putaran: 0,
+      aksi: 0,
+      mentung: 0,
+      deckHabis: 0,
+      mulung: 0,
+      dibalik: 0,
+      penaltiJoker: 0,
+      susunAkhir: 0,
+      mentungBeberapaJoker: 0,
+    };
     for (let awal = 1; awal <= 60; awal += 10) {
       it(`seed ${awal}–${awal + 9}: tanpa state ilegal maupun aksi ditolak`, async () => {
         for (let seed = awal; seed < awal + 10; seed++) {

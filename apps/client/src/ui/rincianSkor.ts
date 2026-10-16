@@ -3,9 +3,11 @@
 // ditampilkan apa adanya, tidak ada yang dihitung ulang.
 
 import {
+  daftarNama,
   namaKartu,
   namaRank,
   nilaiKartuDiMeja,
+  PENGALI_KALDU,
   teksPerhitungan,
   type Bunga,
   type EntriLog,
@@ -14,6 +16,7 @@ import {
   type KartuJadi,
   type RincianSkor,
 } from '@remi/engine';
+import { TEKS_KALDU } from '../konten/kaldu';
 import { esc } from './dom';
 
 const SIMBOL: Record<Bunga, string> = { love: '♥', wajik: '♦', waru: '♠', kriting: '♣' };
@@ -107,9 +110,11 @@ function htmlKomponen(r: RincianSkor, h: HasilPutaran, nama: (i: number) => stri
       ? `<div class="chips">${r.tangan.map((k, i) => chip(k, perKartu[i], perKartu[i] === 25 ? 'joker' : undefined)).join('')}</div>`
       : '<div class="chips redup">tangan kosong</div>',
   );
-  // Pentungan (teks polos dulu, di-escape sekali saat dipasang)
+  // Pentungan (teks polos dulu, di-escape sekali saat dipasang). Putaran kaldu (#42): "(150 × 2)".
   if (r.nilaiPentungan !== 0 && h.pentungan) {
-    const pentungan = `${namaKartu(h.pentungan)}${h.pentunganJoker ? ' (joker)' : ''}`;
+    const pengali = r.pengaliPentungan ?? 1;
+    const kali = pengali !== 1 ? `${Math.abs(r.nilaiPentungan) / pengali} × ${pengali}` : '';
+    const pentungan = teksPentungan(h, kali);
     const teks = r.status === 'mentung' ? `Pentungan: ${pentungan}` : `Kena pentung ${nama(h.pementung!)}: ${pentungan}`;
     baris.push(`<div class="komp"><span>${esc(teks)}</span><b class="${kelas(r.nilaiPentungan)}">${tanda(r.nilaiPentungan)}</b></div>`);
   }
@@ -223,11 +228,29 @@ export function htmlKlasemen(nama: string[], skor: number[], saya: number | null
 
 /**
  * Kalimat cara putaran selesai, teks polos (di-escape pemanggil). Hanya info publik: siapa yang
- * mentung dan pentungannya memang dibuka di meja untuk semua pemain.
+ * mentung dan pentungannya memang dibuka di meja untuk semua pemain. Putaran kaldu (#42): nilainya
+ * ditulis "(150 × 2 = 300)".
  */
 export function teksCaraSelesai(h: HasilPutaran, nama: (i: number) => string): string {
   if (h.cara === 'deckHabis') return 'Deck habis. Semua dihitung skor dasar.';
-  return `${nama(h.pementung!)} mentung pakai ${h.pentungan ? namaKartu(h.pentungan) : ''} (${angkaSkor(h.nilaiPentungan)}).`;
+  const nilai = h.kaldu ? `${h.nilaiPentungan / PENGALI_KALDU} × ${PENGALI_KALDU} = ${h.nilaiPentungan}` : angkaSkor(h.nilaiPentungan);
+  return `${nama(h.pementung!)} mentung pakai ${daftarNama(kartuPentungan(h).map(namaKartu))} (${nilai}).`;
+}
+
+/** Semua kartu pentungan putaran ini: biasanya satu, beberapa kalau nutup pakai beberapa joker (#41). */
+function kartuPentungan(h: HasilPutaran): Kartu[] {
+  return h.pentungan ? [h.pentungan, ...(h.pentunganLain ?? [])] : [];
+}
+
+/**
+ * "7 Waru (joker)", atau "7 Waru dan 7 Love (joker semua)" kalau pentungannya beberapa joker. `kali`
+ * (putaran kaldu, "250 × 2") masuk kurung yang sama: "7 Waru (joker, 250 × 2)". Teks polos.
+ */
+function teksPentungan(h: HasilPutaran, kali = ''): string {
+  const kartu = kartuPentungan(h);
+  const joker = h.pentunganJoker ? (kartu.length > 1 ? 'joker semua' : 'joker') : '';
+  const catatan = [joker, kali].filter(Boolean).join(', ');
+  return `${daftarNama(kartu.map(namaKartu))}${catatan ? ` (${catatan})` : ''}`;
 }
 
 /**
@@ -251,7 +274,8 @@ export function htmlRiwayat(nama: (i: number) => string, riwayat: HasilPutaran[]
     .reverse()
     .map((h) => {
       const terbaik = [...h.rincian].sort((a, b) => b.total - a.total)[0];
-      const cara = h.cara === 'mentung' ? `${nama(h.pementung!)} mentung` : 'deck habis';
+      // Putaran kaldu (#42) ditandai singkat: "Budi mentung · kaldu".
+      const cara = `${h.cara === 'mentung' ? `${nama(h.pementung!)} mentung` : 'deck habis'}${h.kaldu ? ` · ${TEKS_KALDU.riwayat}` : ''}`;
       const milikku = saya !== null ? h.rincian[saya] : null;
       return `<details class="akordion putaran-akordion">
         <summary tabindex="0">
@@ -293,7 +317,7 @@ export function jenisLog(pesan: string): JenisLog {
   // semua entrinya salah ikon). Urutan tetap penting: pembuka susun akhir ("… boleh menurunkan kartu
   // jadi…") dan ambil kartu terakhir deck ("… kesempatan terakhir menurunkan kartu jadi.") sama-sama
   // memuat " menurunkan ", jadi harus tertangkap sebelum cek 'turun'.
-  if (/^Putaran \d+ dimulai\. .+ ngocok\.$/.test(pesan)) return 'mulai';
+  if (/^Putaran \d+ dimulai\. .+ ngocok\.( Putaran kaldu: pentungan dikali dua\.)?$/.test(pesan)) return 'mulai';
   if (/ ambil kartu dari deck\.( Deck habis\. Setelah giliran ini .+)?$/.test(pesan)) return 'ambil';
   if (/ buang kartu\.$/.test(pesan)) return 'buang';
   if (/ mulung \d+ kartu dari buangan, menjadikan .+\.$/.test(pesan)) return 'mulung';

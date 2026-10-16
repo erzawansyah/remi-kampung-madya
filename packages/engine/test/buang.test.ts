@@ -91,6 +91,33 @@ describe('setelah ambil dari deck tidak bisa nutup (Aturan Terbuka 3)', () => {
     expect(!h.ok && h.error.kode).toBe('SISAKAN_KARTU');
   });
 
+  it('validasi buang satu kartu: kartuLain selalu array kosong', () => {
+    const dasar = { punyaKartuJadi: true, ctx: ctx(9), asJokerBolehDibuangTanpaJadi: false } as const;
+    expect(validasiBuang({ ...dasar, tangan: kartuSemua('K waru', '2 love'), sumberAmbil: 'deck', kartuId: id('K waru') })).toMatchObject({
+      kartuLain: [],
+      mentung: false,
+      kenaPenaltiJoker: false,
+    });
+    expect(
+      validasiBuang({ ...dasar, tangan: kartuSemua('K waru'), sumberAmbil: 'buangan', kartuId: id('K waru'), kartuIdLain: [] }),
+    ).toMatchObject({ kartuLain: [], mentung: true });
+  });
+
+  it('validasi buang beberapa joker (#41): kartu pertama + kartuLain, mentung tanpa penalti', () => {
+    const h = validasiBuang({
+      tangan: kartuSemua('9 waru', '9 love'),
+      punyaKartuJadi: true,
+      sumberAmbil: 'buangan',
+      kartuId: id('9 love'),
+      kartuIdLain: [id('9 waru')],
+      ctx: ctx(9),
+      asJokerBolehDibuangTanpaJadi: false,
+    });
+    expect(h.kartu.id).toBe(id('9 love'));
+    expect(h.kartuLain.map((k) => k.id)).toEqual([id('9 waru')]);
+    expect(h).toMatchObject({ mentung: true, kenaPenaltiJoker: false });
+  });
+
   it('validasi buang menolak membuang kartu terakhir tanpa mulung', () => {
     expect(() =>
       validasiBuang({

@@ -5,7 +5,7 @@ import { buatDeck, namaKartu, namaRank } from './kartu.js';
 import { AturanError, langgar } from './error.js';
 import { isJokerHidup, type KartuJadi, type KonteksJoker, type SpesifikasiKartuJadi } from './kartuJadi.js';
 import { validasiBuang, validasiMulung, validasiTurunkan, type HasilTurunkan } from './giliran.js';
-import { hitungSkorPemain, nilaiPentungan } from './skor.js';
+import { hitungSkorPemain, nilaiPentunganTotal, PENGALI_KALDU } from './skor.js';
 import { Rng, seedKeState } from './rng.js';
 import { daftarNama, deskripsiKartuJadi } from './deskripsi.js';
 import {
@@ -19,7 +19,7 @@ import {
   type Peristiwa,
   type StatePutaran,
 } from './state.js';
-import type { Kartu } from './kartu.js';
+import type { Kartu, Rank } from './kartu.js';
 
 export type HasilAksi =
   | { ok: true; state: GameState }
@@ -87,6 +87,22 @@ export function kandidatPengocok(state: GameState): number[] {
 }
 
 /**
+ * Mode kaldu (#42): apakah putaran berikutnya (nomor riwayat + 1) putaran kaldu. Ya kalau meja memakai
+ * mode kaldu dan semua sudah sepakat "putaran berikutnya terakhir", atau nomornya sudah mencapai batas
+ * putaran. Keduanya tidak pernah balik, jadi sesudah putaran kaldu yang deck-nya habis, putaran
+ * berikutnya kaldu lagi. Bisa dipakai pada GameState maupun ViewPemain (info publik).
+ */
+export function putaranBerikutKaldu(g: {
+  konfigurasi: Pick<KonfigurasiPermainan, 'batasPutaran' | 'modeKaldu'>;
+  riwayat: readonly unknown[];
+  kalduDiminta?: boolean;
+}): boolean {
+  const k = g.konfigurasi;
+  if (k.modeKaldu !== true) return false;
+  return g.kalduDiminta === true || (k.batasPutaran !== null && g.riwayat.length + 1 >= k.batasPutaran);
+}
+
+/**
  * Salinan untuk diubah. Entri `riwayat` dan `log` tidak pernah diubah setelah ditulis,
  * jadi cukup array-nya yang disalin; sisanya disalin dalam.
  */
@@ -122,6 +138,10 @@ export function migrasiState(state: GameState): GameState {
   const s = state as GameState & Partial<Pick<GameState, 'peristiwa'>>;
   const n = s.pemain.length;
   const p = s.putaran as (StatePutaran & Partial<Pick<StatePutaran, 'selesaiSusun' | 'mulungBeruntun' | 'mentung' | 'asalKartu'>>) | null;
+  // Field opsional tanpa nilai awal (tidak ada = bawaan lama): InfoMentung.pentunganLain dan
+  // HasilPutaran.pentunganLain (#41, tidak ada = mentung satu kartu); pembacanya memakai `?? []`.
+  // Mode kaldu (#42): KonfigurasiPermainan.modeKaldu, GameState.kalduDiminta, StatePutaran.kaldu,
+  // HasilPutaran.kaldu, RincianSkor.pengaliPentungan; tidak ada = mati/bukan kaldu/pengali 1.
   return {
     ...s,
     peristiwa: s.peristiwa ?? [],
@@ -148,6 +168,8 @@ function jalankan(s: GameState, aksi: Aksi): void {
       return mulaiPutaran(s, aksi.pengocok);
     case 'akhiriPermainan':
       return akhiriPermainan(s);
+    case 'putaranTerakhir':
+      return putaranTerakhir(s);
     case 'ambilDeck':
       return ambilDeck(s, aksi.pemain);
     case 'mulung':
@@ -158,7 +180,7 @@ function jalankan(s: GameState, aksi: Aksi): void {
     case 'selesaiSusun':
       return selesaiSusun(s, aksi.pemain);
     case 'buang':
-      return buang(s, aksi.pemain, aksi.kartuId);
+      return buang(s, aksi.pemain, aksi.kartuId, aksi.kartuIdLain);
   }
 }
 
@@ -175,6 +197,31 @@ const isKembarAsEmpat = (kj: { jenis: string; kartu: unknown[] }) => kj.jenis ==
 
 function nama(s: GameState, i: number): string {
   return s.pemain[i].nama;
+}
+
+/**
+ * Buka kartu joker dari atas deck (sesudah semua kartu dibagi), lalu selipkan kembali ke posisi acak.
+ * Keputusan #40: kalau angkanya sama dengan joker putaran tepat sebelumnya (`rankSebelumnya`), kartu itu
+ * dianulir dan disisihkan dulu, lalu kartu berikutnya dibuka, sampai angkanya beda. Kartu joker
+ * diselipkan dengan satu `rng.int` (persis cara lama), baru kartu yang dianulir diselipkan acak satu per
+ * satu, jadi jumlah kartu deck tetap dan tidak ada kartu yang dibuka dua kali. Tanpa anulir, pemakaian
+ * RNG dan urutan deck sama persis dengan sebelum aturan ini. Mengubah `deck` di tempat.
+ */
+export function bukaKartuJoker(deck: Kartu[], rankSebelumnya: Rank | null | undefined, rng: Rng): Kartu {
+  const dianulir: Kartu[] = [];
+  let kartu = deck.pop();
+  while (kartu && kartu.rank === rankSebelumnya) {
+    dianulir.push(kartu);
+    kartu = deck.pop();
+  }
+  // Mustahil di meja sungguhan: sisa deck minimal 28 kartu, satu angka paling banyak 8 kartu.
+  if (!kartu) {
+    deck.push(...dianulir.reverse());
+    return langgar('KONFIGURASI_TIDAK_SAH', 'Isi deck-nya angka joker putaran lalu semua, nggak bisa buka joker baru.');
+  }
+  deck.splice(rng.int(deck.length + 1), 0, kartu);
+  for (const k of dianulir) deck.splice(rng.int(deck.length + 1), 0, k);
+  return kartu;
 }
 
 function mulaiPutaran(s: GameState, pengocokDipilih: number | undefined): void {
@@ -195,9 +242,9 @@ function mulaiPutaran(s: GameState, pengocokDipilih: number | undefined): void {
   for (let i = 0; i < kartuPerPemain; i++) {
     for (let p = 0; p < n; p++) tangan[(pengocok + p) % n].push(deck.pop()!);
   }
-  // Kartu dibuka, angkanya jadi angka joker, lalu diselipkan kembali ke posisi acak.
-  const kartuDibuka = deck.pop()!;
-  deck.splice(rng.int(deck.length + 1), 0, kartuDibuka);
+  // Riwayat hanya berisi putaran yang sudah selesai, jadi entri terakhirnya putaran tepat sebelumnya.
+  const kartuDibuka = bukaKartuJoker(deck, s.riwayat.at(-1)?.rankJoker, rng);
+  const kaldu = putaranBerikutKaldu(s);
 
   s.rng = rng.state;
   s.putaran = {
@@ -222,14 +269,16 @@ function mulaiPutaran(s: GameState, pengocokDipilih: number | undefined): void {
     mentung: null,
     asalKartu: {},
     urutanKartuJadi: 0,
+    // Hanya ditulis kalau kaldu, supaya golden dan simpanan lama tidak berubah.
+    ...(kaldu ? { kaldu: true as const } : {}),
   };
   s.status = 'putaranBerjalan';
   catat(
     s,
     // Angka joker hanya diumumkan sekali di awal putaran, jadi tidak dicatat di log.
-    `Putaran ${s.putaran.nomor} dimulai. ${nama(s, pengocok)} ngocok.`,
+    `Putaran ${s.putaran.nomor} dimulai. ${nama(s, pengocok)} ngocok.${kaldu ? ' Putaran kaldu: pentungan dikali dua.' : ''}`,
   );
-  terjadi(s, { jenis: 'mulaiPutaran', pengocok, rankJoker: kartuDibuka.rank });
+  terjadi(s, { jenis: 'mulaiPutaran', pengocok, rankJoker: kartuDibuka.rank, ...(kaldu ? { kaldu: true as const } : {}) });
 }
 
 function akhiriPermainan(s: GameState): void {
@@ -239,6 +288,20 @@ function akhiriPermainan(s: GameState): void {
   s.status = 'selesai';
   s.alasanSelesai = 'sepakat';
   catat(s, 'Semua sepakat berhenti. Permainan selesai.');
+}
+
+/**
+ * Mode kaldu (#42): putaran berikutnya jadi putaran kaldu (meja memanggilnya sesudah semua manusia
+ * setuju). Hanya di antara putaran, hanya di meja mode kaldu, dan tidak bisa diulang.
+ */
+function putaranTerakhir(s: GameState): void {
+  if (s.status !== 'menungguPutaran' && s.status !== 'putaranSelesai') {
+    langgar('STATUS_SALAH', 'Putaran terakhir cuma bisa diminta di antara putaran.');
+  }
+  if (s.konfigurasi.modeKaldu !== true) langgar('KONFIGURASI_TIDAK_SAH', 'Meja ini nggak pakai mode kaldu.');
+  if (putaranBerikutKaldu(s)) langgar('STATUS_SALAH', 'Putaran berikutnya memang sudah putaran terakhir.');
+  s.kalduDiminta = true;
+  catat(s, 'Sepakat: putaran berikutnya putaran kaldu.');
 }
 
 function putaranAktif(s: GameState, pemain: number, tahap: StatePutaran['tahap']): StatePutaran {
@@ -327,7 +390,7 @@ function turunkan(s: GameState, pemain: number, spesifikasi: SpesifikasiKartuJad
   terjadi(s, { jenis: 'turunkan', pemain, idKartuJadi: baru.map((kj) => kj.id), kembarAs: baru.some(isKembarAsEmpat) });
 }
 
-function buang(s: GameState, pemain: number, kartuId: string): void {
+function buang(s: GameState, pemain: number, kartuId: string, kartuIdLain: string[] | undefined): void {
   const p = putaranAktif(s, pemain, 'main');
   const ctx = ctxPutaran(p);
   const hasil = validasiBuang({
@@ -335,32 +398,49 @@ function buang(s: GameState, pemain: number, kartuId: string): void {
     punyaKartuJadi: p.kartuJadi[pemain].length > 0,
     sumberAmbil: p.sumberAmbil!,
     kartuId,
+    kartuIdLain,
     ctx,
     asJokerBolehDibuangTanpaJadi: s.konfigurasi.asJokerBolehDibuangTanpaJadi,
   });
-  const { kartu } = hasil;
+  const { kartu, kartuLain } = hasil;
+  // Status joker dibaca sebelum ada yang ditandai mati. Kartu lain (keputusan #41) pasti joker hidup.
   const jokerHidup = isJokerHidup(kartu, ctx);
-  p.tangan[pemain] = p.tangan[pemain].filter((k) => k.id !== kartuId);
+  const semua = [kartu, ...kartuLain];
+  const dibuang = new Set(semua.map((k) => k.id));
+  p.tangan[pemain] = p.tangan[pemain].filter((k) => !dibuang.has(k.id));
   // Joker yang dibuang kehilangan status jokernya.
   if (jokerHidup) p.jokerMati.push(kartu.id);
+  for (const k of kartuLain) p.jokerMati.push(k.id);
   if (hasil.kenaPenaltiJoker) p.jokerDibuang[pemain]++;
-  p.buangan.push({ kartu, pemilik: pemain });
-  terjadi(s, { jenis: 'buang', pemain, kartu, jokerDibuang: hasil.kenaPenaltiJoker, sisaTangan: p.tangan[pemain].length });
+  for (const k of semua) p.buangan.push({ kartu: k, pemilik: pemain });
+  // Tetap satu peristiwa buang; `kartuLain` hanya ditulis kalau ada (golden dan simpanan lama tidak berubah).
+  terjadi(s, {
+    jenis: 'buang',
+    pemain,
+    kartu,
+    ...(kartuLain.length ? { kartuLain } : {}),
+    jokerDibuang: hasil.kenaPenaltiJoker,
+    sisaTangan: p.tangan[pemain].length,
+  });
 
   if (hasil.mentung) {
-    catat(s, `${nama(s, pemain)} mentung pakai ${namaKartu(kartu)}!`);
+    catat(s, `${nama(s, pemain)} mentung pakai ${daftarNama(semua.map(namaKartu))}!`);
     // Kepentung dan arah ditentukan sekarang; skor dihitung setelah susun akhir.
     const kepentung = hitungKepentung(p, pemain);
-    p.mentung = { pemain, pentungan: kartu, pentunganJoker: jokerHidup, kepentung };
+    const lain = kartuLain.length ? { pentunganLain: kartuLain } : {};
+    p.mentung = { pemain, pentungan: kartu, pentunganJoker: jokerHidup, kepentung, ...lain };
     const tepatSebelum = berikutnya(pemain, (-p.arah) as Arah, s.konfigurasi.jumlahPemain);
     terjadi(s, {
       jenis: 'mentung',
       pemain,
       pentungan: kartu,
       pentunganJoker: jokerHidup,
-      nilai: nilaiPentungan(kartu, jokerHidup),
+      ...lain,
+      // Putaran kaldu (#42): nilainya sudah dikali, sama dengan yang nanti masuk skor.
+      nilai: nilaiPentunganTotal(kartu, jokerHidup, kartuLain) * (p.kaldu ? PENGALI_KALDU : 1),
       kepentung,
       dibalik: kepentung.includes(tepatSebelum),
+      ...(p.kaldu ? { kaldu: true as const } : {}),
     });
     return mulaiSusunAkhir(s, 'mentung');
   }
@@ -394,8 +474,8 @@ function mulaiSusunAkhir(s: GameState, sebab: 'deckHabis' | 'mentung'): void {
 
 function selesaiSemuaSusun(s: GameState): void {
   const m = s.putaran!.mentung;
-  if (m) selesaikanPutaran(s, m.pemain, m.pentungan, m.pentunganJoker);
-  else selesaikanPutaran(s, null, null, false);
+  if (m) selesaikanPutaran(s, m.pemain, m.pentungan, m.pentunganJoker, m.pentunganLain ?? []);
+  else selesaikanPutaran(s, null, null, false, []);
 }
 
 function pemainSusunAkhir(s: GameState, pemain: number): StatePutaran {
@@ -433,12 +513,18 @@ function selesaikanPutaran(
   pementung: number | null,
   pentungan: Kartu | null,
   pentunganJoker: boolean,
+  /** Keputusan #41: joker hidup lain yang ikut jadi pentungan (kosong = satu kartu). */
+  pentunganLain: Kartu[],
 ): void {
   const p = s.putaran!;
   const n = s.konfigurasi.jumlahPemain;
   const ctx = ctxPutaran(p);
   const kepentung = pementung === null ? [] : (p.mentung?.kepentung ?? hitungKepentung(p, pementung));
-  const nilai = pentungan ? nilaiPentungan(pentungan, pentunganJoker) : 0;
+  // Satu nilai total: yang mentung dapat sekali, tiap kepentung kena penuh. Putaran kaldu (#42): dikali
+  // PENGALI_KALDU untuk keduanya, bagian skor lain tetap.
+  const dasarPentungan = pentungan ? nilaiPentunganTotal(pentungan, pentunganJoker, pentunganLain) : 0;
+  const pengali = p.kaldu ? PENGALI_KALDU : 1;
+  const nilai = dasarPentungan * pengali;
   const tepatSebelum = pementung === null ? null : berikutnya(pementung, (-p.arah) as Arah, n);
   const dibalik = tepatSebelum !== null && kepentung.includes(tepatSebelum);
   const arahBerikutnya = (dibalik ? -p.arah : p.arah) as Arah;
@@ -449,7 +535,8 @@ function selesaikanPutaran(
       status: i === pementung ? 'mentung' : kepentung.includes(i) ? 'kepentung' : 'aman',
       kartuJadi: p.kartuJadi[i],
       tangan: p.tangan[i],
-      nilaiPentungan: nilai,
+      nilaiPentungan: dasarPentungan,
+      ...(pengali !== 1 ? { pengaliPentungan: pengali } : {}),
       jumlahJokerDibuang: p.jokerDibuang[i],
       ctx,
     }),
@@ -464,7 +551,10 @@ function selesaikanPutaran(
     pementung,
     pentungan,
     pentunganJoker,
+    // Hanya ditulis kalau ada, supaya riwayat lama dan golden tidak berubah.
+    ...(pentunganLain.length ? { pentunganLain } : {}),
     nilaiPentungan: nilai,
+    ...(p.kaldu ? { kaldu: true as const } : {}),
     kepentung,
     rincian,
     arahSebelumnya: p.arah,
@@ -486,9 +576,14 @@ function selesaikanPutaran(
   }
 
   const k = s.konfigurasi;
-  if (k.batasSkorAtas !== null && s.skor.some((x) => x >= k.batasSkorAtas!)) s.alasanSelesai = 'batasSkor';
+  if (k.modeKaldu === true) {
+    // Mode kaldu (#42, #43): hanya putaran kaldu yang ditutup mentung yang mengakhiri permainan. Batas
+    // skor diabaikan, dan batas putaran cuma memicu kaldu. Selain itu tetap bisa "Akhiri permainan".
+    if (p.kaldu && pementung !== null) s.alasanSelesai = 'kaldu';
+  } else if (k.batasSkorAtas !== null && s.skor.some((x) => x >= k.batasSkorAtas!)) s.alasanSelesai = 'batasSkor';
   else if (k.batasSkorBawah !== null && s.skor.some((x) => x <= k.batasSkorBawah!)) s.alasanSelesai = 'batasSkor';
   else if (k.batasPutaran !== null && s.riwayat.length >= k.batasPutaran) s.alasanSelesai = 'batasPutaran';
   s.status = s.alasanSelesai ? 'selesai' : 'putaranSelesai';
   if (s.status === 'selesai') catat(s, 'Permainan selesai.');
+  else if (p.kaldu) catat(s, 'Belum ada yang mentung, kaldu lagi.');
 }

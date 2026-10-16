@@ -1,4 +1,5 @@
-// Satu meja (room): kursi, host, bot, batas waktu giliran, sambung ulang, dan voting akhiri.
+// Satu meja (room): kursi, host, bot, batas waktu giliran, sambung ulang, voting akhiri, dan voting
+// "putaran berikutnya terakhir" (mode kaldu).
 // Tidak tahu apa-apa soal jaringan: pesan keluar lewat `kirim`, waktu lewat `Penjadwal`.
 // Dipakai server (online) dan client (offline lawan warga kedai).
 
@@ -9,6 +10,7 @@ import {
   isJokerHidup,
   migrasiState,
   pilihAksiBot,
+  putaranBerikutKaldu,
   Rng,
   terapkanAksi,
   validasiBuang,
@@ -78,6 +80,11 @@ export interface DataMeja {
   game: GameState | null;
   rngBot: number;
   setujuAkhiri: number[];
+  /**
+   * Mode kaldu (#42): kursi yang setuju putaran berikutnya putaran terakhir. Hanya ditulis kalau ada
+   * isinya (simpanan lama dan golden tidak berubah); tidak ada = belum ada yang setuju.
+   */
+  setujuKaldu?: number[];
   /** Bertambah setiap giliran berganti; identitas giliran untuk timer. */
   giliranKe: number;
   /** Kursi manusia yang belum menekan OK di pengumuman joker awal putaran. */
@@ -204,6 +211,7 @@ export class Meja {
         ? data.sudahLihatJoker
         : data.kursi.map((_, i) => i).filter((i) => !menungguJoker.includes(i)),
     };
+    this.aturSetujuKaldu(Array.isArray(data.setujuKaldu) ? data.setujuKaldu.filter((i) => Number.isInteger(i)) : []);
     this.penjadwal = opsi.penjadwal ?? penjadwalNyata;
     const sekarang = this.penjadwal.sekarang();
     this.d.kursi.forEach((k, i) => {
@@ -361,14 +369,22 @@ export class Meja {
 
   /**
    * Kursi i tidak lagi ikut menentukan (terputus atau keluar): tidak ditunggu di pengumuman joker,
-   * suaranya di voting akhiri dicabut, lalu voting dicek ulang dengan pemilih yang tersisa.
+   * suaranya di voting akhiri dan voting kaldu dicabut, lalu kedua voting dicek ulang dengan pemilih
+   * yang tersisa (keputusan #36). Akhiri didahulukan.
    */
   private lepasKursi(i: number): void {
     this.d.setujuAkhiri = this.d.setujuAkhiri.filter((x) => x !== i);
+    this.aturSetujuKaldu((this.d.setujuKaldu ?? []).filter((x) => x !== i));
     this.d.menungguJoker = this.d.menungguJoker.filter((x) => x !== i);
     this.perbaruiHost();
-    if (this.cekVotingAkhiri()) return;
+    if (this.cekVotingAkhiri() || this.cekVotingKaldu()) return;
     this.berubah();
+  }
+
+  /** Simpan suara voting kaldu; daftar kosong tidak ditulis (DataMeja lama dan golden tetap sama). */
+  private aturSetujuKaldu(kursi: number[]): void {
+    if (kursi.length) this.d.setujuKaldu = kursi;
+    else delete this.d.setujuKaldu;
   }
 
   /** Tangani satu pesan dari pemain. Kesalahan dikirim balik sebagai pesan error. */
@@ -411,6 +427,8 @@ export class Meja {
         return this.berubah();
       case 'akhiri':
         return this.akhiri(kursi, pesan.setuju);
+      case 'putaranTerakhir':
+        return this.putaranTerakhir(kursi, pesan.setuju);
       case 'mainLagi':
         return this.mainLagi(kursi);
       case 'ping':
@@ -470,17 +488,22 @@ export class Meja {
     if (this.d.kursi.some((k) => k.jenis === 'kosong')) galat('Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.');
     hapusTandaKeluar(this.d.kursi);
     const p = this.d.pengaturan;
+    const kaldu = p.modeKaldu === true;
     const game = buatPermainan({
       pemain: this.d.kursi.map((k) => k.nama),
       seed: (this.opsi.buatSeed ?? acak)(),
       konfigurasi: {
         duaDeckUntukEmpat: p.duaDeckUntukEmpat,
         batasPutaran: p.batasPutaran,
-        batasSkorAtas: p.batasSkorAtas,
-        batasSkorBawah: p.batasSkorBawah,
+        // Mode kaldu tidak memakai batas skor (#43); isiannya tetap tersimpan di pengaturan.
+        batasSkorAtas: kaldu ? null : p.batasSkorAtas,
+        batasSkorBawah: kaldu ? null : p.batasSkorBawah,
+        // Hanya dikirim kalau aktif, supaya konfigurasi meja biasa (dan golden) tidak berubah.
+        ...(kaldu ? { modeKaldu: true } : {}),
       },
     });
     this.d.setujuAkhiri = [];
+    this.aturSetujuKaldu([]);
     this.terapkan(game, { jenis: 'mulaiPutaran', pengocok });
   }
 
@@ -488,6 +511,7 @@ export class Meja {
     this.wajibHost(oleh);
     if (this.d.game?.status !== 'putaranSelesai') galat('Putaran belum selesai.');
     this.d.setujuAkhiri = [];
+    this.aturSetujuKaldu([]);
     this.terapkan(this.d.game, { jenis: 'mulaiPutaran', pengocok });
   }
 
@@ -530,12 +554,55 @@ export class Meja {
     return true;
   }
 
+  /**
+   * Mode kaldu (#42): setuju/batal "putaran berikutnya terakhir". Sama seperti voting akhiri: hanya di
+   * antara putaran, berlaku kalau semua manusia yang masih terhubung setuju (meja offline dengan satu
+   * manusia: langsung berlaku).
+   */
+  private putaranTerakhir(kursi: number, setuju: boolean): void {
+    const g = this.d.game;
+    if (g?.status !== 'putaranSelesai') galat('Putaran terakhir cuma bisa diminta di antara putaran.');
+    if (g.konfigurasi.modeKaldu !== true) galat('Meja ini nggak pakai mode kaldu.');
+    if (putaranBerikutKaldu(g)) galat('Putaran berikutnya memang sudah putaran terakhir.');
+    const set = new Set(this.d.setujuKaldu ?? []);
+    if (setuju) set.add(kursi);
+    else set.delete(kursi);
+    this.aturSetujuKaldu([...set].sort((a, b) => a - b));
+    if (this.cekVotingKaldu()) return;
+    this.berubah();
+  }
+
+  /**
+   * Jadikan putaran berikutnya putaran kaldu kalau semua manusia yang masih terhubung sudah setuju
+   * (aturan sama dengan cekVotingAkhiri, termasuk saat pemilih berkurang, keputusan #36). True =
+   * diterapkan.
+   */
+  private cekVotingKaldu(): boolean {
+    const g = this.d.game;
+    const setuju = this.d.setujuKaldu ?? [];
+    if (g?.status !== 'putaranSelesai' || !setuju.length) return false;
+    if (g.konfigurasi.modeKaldu !== true || putaranBerikutKaldu(g)) {
+      // Suara yang sudah tidak berarti (misalnya dari simpanan rusak): dibuang.
+      this.aturSetujuKaldu([]);
+      return false;
+    }
+    const pemilih = this.d.kursi
+      .map((k, i) => ({ k, i }))
+      .filter(({ k }) => k.jenis === 'manusia' && k.terhubung)
+      .map(({ i }) => i);
+    if (!pemilih.length || !pemilih.every((i) => setuju.includes(i))) return false;
+    this.aturSetujuKaldu([]);
+    this.terapkan(g, { jenis: 'putaranTerakhir' });
+    return true;
+  }
+
   private mainLagi(oleh: number): void {
     this.wajibHost(oleh);
     if (this.status !== 'selesai') galat('Permainan belum selesai.');
     hapusTandaKeluar(this.d.kursi);
     this.d.game = null;
     this.d.setujuAkhiri = [];
+    this.aturSetujuKaldu([]);
     this.berubah();
   }
 
@@ -866,6 +933,8 @@ export class Meja {
       host: this.d.host,
       kursiSaya,
       setujuAkhiri: [...this.d.setujuAkhiri],
+      // Hanya di meja mode kaldu, supaya info meja biasa (dan golden) tidak berubah.
+      ...(this.d.pengaturan.modeKaldu === true ? { setujuKaldu: [...(this.d.setujuKaldu ?? [])] } : {}),
       batasWaktu: this.batasWaktu,
       diambilAlihBot: this.ambilAlih !== null && this.ambilAlih === this.kunciGiliran(),
       menungguJoker: [...this.d.menungguJoker],
@@ -922,8 +991,7 @@ export function buatRingkasanAkhir(kode: string, kursi: Kursi[], game: GameState
     alasan: game.alasanSelesai,
     jumlahPutaran: game.riwayat.length,
     jumlahDeck: aturanPembagian(game.pemain.length, game.konfigurasi.duaDeckUntukEmpat).jumlahDeck,
-    // Mode Kaldu belum ada (Rilis B); kolomnya disiapkan supaya riwayat bisa disaring nanti.
-    modeKaldu: false,
+    modeKaldu: game.konfigurasi.modeKaldu === true,
     pemain,
   };
 }

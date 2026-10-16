@@ -509,10 +509,13 @@ body.goyang #game {
 
 /* ---------- Kartu pamer (popup joker, panel mentung) ----------
    Wadah kanvas dari gambarKartuKeKanvas(): kartu digambar sama persis dengan kartu di meja
-   (termasuk mode empat warna). Ukuran kanvas diatur JS sesuai layar. */
+   (termasuk mode empat warna). Ukuran kanvas diatur JS sesuai layar; pentung beberapa joker
+   (keputusan #41) = beberapa kanvas berjajar. */
 .kartu-pamer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  gap: var(--ruang-2);
   margin: var(--ruang-1) auto;
   perspective: 600px;
 }
@@ -623,6 +626,13 @@ details.akordion.saya > summary .nama-skor b {
 }
 .aksi-hasil-lanjut > button {
   width: 100%;
+}
+/* Mode kaldu (#42): satu baris pendek di atas tombol lanjut ("Putaran berikutnya kaldu."). */
+.info-kaldu {
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--emas);
 }
 .juara-teks {
   margin: 0;

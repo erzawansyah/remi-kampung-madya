@@ -106,14 +106,19 @@ describe('rapikanBatasSkor: isian UI dan simpanan', () => {
 });
 
 describe('permainan penuh dengan batas skor pilihan host', () => {
-  // Seed tetap: 250/−120 selesai di putaran pertama (pentungan joker 250), 600/−400 butuh banyak putaran.
+  // Seed tetap: 250/−120 selesai di putaran pertama (pentungan joker 250), 600/−400 butuh banyak putaran
+  // (seed meja 5: 9 putaran; seed bawaan jadi 34 putaran sejak joker beda dari putaran sebelumnya, #40).
   it.each([
-    [250, -120, 1],
-    [600, -400, 5],
-  ])('host atur %j / %j di lobi: permainan selesai karena batas skor, tidak lebih awal', (atas, bawah, minPutaran) => {
+    [250, -120, 1, undefined],
+    [600, -400, 5, 5],
+  ])('host atur %j / %j di lobi: permainan selesai karena batas skor, tidak lebih awal', (atas, bawah, minPutaran, seedMeja) => {
     let ringkasan: RingkasanAkhir | null = null;
     const galat: unknown[] = [];
-    const ctx = siapkan({ saatSelesai: (r) => (ringkasan = r), saatGalat: (_k, e) => galat.push(e) });
+    const ctx = siapkan({
+      saatSelesai: (r) => (ringkasan = r),
+      saatGalat: (_k, e) => galat.push(e),
+      ...(seedMeja === undefined ? {} : { buatSeed: () => seedMeja }),
+    });
     const meja = Meja.buat(ctx.opsi, 'host', 'Budi', { jumlahPemain: 3, detikGiliran: 0, batasPutaran: null });
     for (let i = 1; i < 3; i++) meja.terima('host', { t: 'aturKursi', kursi: i, jenis: 'bot' });
     meja.terima('host', { t: 'pengaturan', pengaturan: { batasSkorAtas: atas, batasSkorBawah: bawah } });

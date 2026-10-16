@@ -16,8 +16,11 @@ import {
   type GameState,
   type LevelBot,
 } from '../src/index.js';
-import { aksiKuat, BATAS_TANGAN_KUAT, PARAM_JAGO, PARAM_SUHU } from '../src/bot/strategi.js';
-import { id, skenario } from './bantu.js';
+import { aksiKuat, BATAS_TANGAN_KUAT, PARAM_JAGO, PARAM_SUHU, Penilai } from '../src/bot/strategi.js';
+import { isiDari } from '../src/bot/susun.js';
+import { id, kartuSemua, skenario } from './bantu.js';
+
+const cariMentung = (g: GameState) => g.peristiwa.find((e) => e.jenis === 'mentung') as Extract<GameState['peristiwa'][number], { jenis: 'mentung' }> | undefined;
 
 interface HasilMain {
   skor: number[];
@@ -107,6 +110,100 @@ describe('warga kedai jago dan suhu', () => {
       expect(g.putaran!.mentung).toMatchObject({ pemain: 0, pentunganJoker: true, kepentung: [1] });
       expect(g.putaran!.mentung!.pentungan.id).toBe(id('9 kriting'));
     }
+  });
+
+  describe('#41: nutup pakai beberapa joker', () => {
+    /** Mainkan giliran pemain 0 sampai putaran tidak berjalan lagi (paling banyak 4 aksi). */
+    const gilirkan = (g: GameState, level: LevelBot) => {
+      const aksi: Aksi[] = [];
+      for (let i = 0; i < 4 && g.status === 'putaranBerjalan' && g.putaran!.giliran === 0; i++) {
+        const a = pilihAksiBot(viewUntuk(g, 0), level, new Rng(1));
+        aksi.push(a);
+        g = terapkan(g, a);
+      }
+      return { g, aksi };
+    };
+    const lawan = [
+      ['2 waru', '3 wajik', 'K waru'],
+      ['4 waru', 'J wajik', 'Q kriting'],
+    ];
+
+    it('pilih pentungan dua joker (500), bukan satu joker (250)', () => {
+      for (const level of ['jago', 'suhu'] as const) {
+        // Joker 9. 5-6 Love + 9 Kriting + 9 Waru; buangan teratas 7 Love milik pemain 1. Bisa juga
+        // 5-6-7-(9 jadi 8) Love lalu mentung pakai satu joker, tapi dua joker bernilai 500.
+        const g0 = skenario({
+          rankJoker: 9,
+          giliran: 0,
+          tangan: [['5 love', '6 love', '9 kriting', '9 waru'], ...lawan],
+          buangan: [['7 love', 1]],
+        });
+        const { g, aksi } = gilirkan(g0, level);
+        expect(g.status).toBe('susunAkhir');
+        const m = g.putaran!.mentung!;
+        expect([m.pentungan.id, ...m.pentunganLain!.map((k) => k.id)].sort()).toEqual([id('9 kriting'), id('9 waru')].sort());
+        expect(m).toMatchObject({ pemain: 0, pentunganJoker: true, kepentung: [1] });
+        // Satu aksi buang berisi kedua joker.
+        expect(aksi.at(-1)).toMatchObject({ jenis: 'buang', kartuIdLain: [expect.any(String)] });
+        expect(cariMentung(g)!.nilai).toBe(500);
+      }
+    });
+
+    it('turunkan dulu sisa kartu jadi, lalu nutup pakai dua joker', () => {
+      for (const level of ['jago', 'suhu'] as const) {
+        const g0 = skenario({
+          rankJoker: 9,
+          giliran: 0,
+          tangan: [['5 love', '6 love', 'J kriting', 'Q kriting', 'K kriting', '9 kriting', '9 waru'], ...lawan],
+          buangan: [['7 love', 1]],
+        });
+        const { g, aksi } = gilirkan(g0, level);
+        expect(aksi.map((a) => a.jenis)).toEqual(['mulung', 'turunkan', 'buang']);
+        expect(g.putaran!.mentung!.pentunganLain).toHaveLength(1);
+        expect(cariMentung(g)!.nilai).toBe(500);
+      }
+    });
+
+    it('joker mati (sudah pernah dibuang) bukan pentungan joker: kembali ke nutup satu kartu', () => {
+      for (const level of ['jago', 'suhu'] as const) {
+        // 9 Waru di tangan sudah pernah dibuang (dipungut lagi), jadi kartu biasa (9 = 50).
+        const g0 = skenario({
+          rankJoker: 9,
+          giliran: 0,
+          tangan: [['5 love', '6 love', '9 kriting', '9 waru'], ...lawan],
+          buangan: [['7 love', 1]],
+          jokerMati: ['9 waru'],
+        });
+        const { g, aksi } = gilirkan(g0, level);
+        expect(g.status).toBe('susunAkhir');
+        const m = g.putaran!.mentung!;
+        expect(m).not.toHaveProperty('pentunganLain');
+        expect(m.pentungan.id).toBe(id('9 waru'));
+        expect(m.pentunganJoker).toBe(false);
+        expect(aksi.some((a) => a.jenis === 'buang' && a.kartuIdLain)).toBe(false);
+      }
+    });
+
+    it('murni dan tidak bergantung rng: aksi sama untuk rng berbeda, view tidak berubah', () => {
+      const g0 = skenario({
+        rankJoker: 9,
+        giliran: 0,
+        tangan: [['5 love', '6 love', '9 kriting', '9 waru'], ...lawan],
+        buangan: [['7 love', 1]],
+      });
+      let g = g0;
+      for (let i = 0; i < 3 && g.status === 'putaranBerjalan'; i++) {
+        const v = viewUntuk(g, 0);
+        const salinan = JSON.stringify(v);
+        for (const level of ['jago', 'suhu'] as const) {
+          const a = pilihAksiBot(v, level, new Rng(1));
+          expect(pilihAksiBot(v, level, new Rng(99))).toEqual(a);
+          expect(JSON.stringify(v)).toBe(salinan);
+        }
+        g = terapkan(g, pilihAksiBot(v, 'suhu', new Rng(1)));
+      }
+      expect(g.status).toBe('susunAkhir');
+    });
   });
 
   it('tahan kartu jadi: suhu menyimpan seri di tangan, jago menurunkannya begitu ada lawan tinggal 2 kartu', () => {
@@ -202,5 +299,64 @@ describe('warga kedai jago dan suhu', () => {
     }
     // Per putaran; arena memberi kira-kira +30 di meja 4 pemain.
     expect(selisih / jumlah / 3).toBeGreaterThan(5);
+  });
+});
+
+describe('putaran kaldu (#42): jago/suhu menimbang mentung dua kali lipat', () => {
+  // Tangan 5-6 Love + K Kriting: 4 atau 7 Love dari buangan membuat tangan siap mentung.
+  const buat = (kaldu: boolean) =>
+    skenario({
+      modeKaldu: true,
+      kaldu,
+      konfigurasi: { batasPutaran: kaldu ? 1 : null },
+      rankJoker: 9,
+      giliran: 0,
+      tangan: [['5 love', '6 love', 'K kriting', '2 waru'], ['3 waru', '8 wajik', 'J waru'], ['4 waru', '10 kriting', 'Q love']],
+      buangan: [['3 kriting', 1]],
+    });
+  const nilaiDari = (kaldu: boolean, par = PARAM_SUHU) => {
+    const v = viewUntuk(buat(kaldu), 0);
+    return new Penilai(v, v.putaran!, 0, par);
+  };
+
+  it('pengali dibaca dari view (info publik): 2 di putaran kaldu, 1 di putaran biasa', () => {
+    expect(viewUntuk(buat(true), 0).putaran!.kaldu).toBe(true);
+    expect(nilaiDari(true).pengali).toBe(2);
+    expect(nilaiDari(false).pengali).toBe(1);
+  });
+
+  it('nilai tangan: hanya bagian kesiapan mentung yang dikali dua', () => {
+    const biasa = nilaiDari(false);
+    const kaldu = nilaiDari(true);
+    // Tangan sesudah membuang 2 Waru.
+    const tangan = kartuSemua('5 love', '6 love', 'K kriting');
+    const isi = isiDari(tangan, biasa.ctx);
+    const k = biasa.komponen(isi, false);
+    expect(k.mentung).toBeGreaterThan(0);
+    expect(kaldu.komponen(isiDari(tangan, kaldu.ctx), false)).toEqual(k);
+    const selisih = kaldu.nilai(isiDari(tangan, kaldu.ctx), false) - biasa.nilai(isi, false);
+    expect(selisih).toBeCloseTo(biasa.skala * PARAM_SUHU.mentung * k.mentung, 9);
+  });
+
+  it('bahaya buangan (suhu): bagian kepentung dikali dua, bagian suap tetap', () => {
+    const kartu = viewUntuk(buat(false), 0).putaran!.tangan[0]![3];
+    const biasa = nilaiDari(false).bahaya(kartu);
+    const kaldu = nilaiDari(true).bahaya(kartu);
+    const tanpaSuap = (nl: Penilai) => new Penilai(nl.view, nl.p, 0, { ...PARAM_SUHU, suap: 0 }).bahaya(kartu);
+    const tanpaBahaya = (nl: Penilai) => new Penilai(nl.view, nl.p, 0, { ...PARAM_SUHU, bahaya: 0 }).bahaya(kartu);
+    expect(tanpaSuap(nilaiDari(false))).toBeGreaterThan(0);
+    expect(tanpaSuap(nilaiDari(true))).toBeCloseTo(2 * tanpaSuap(nilaiDari(false)), 9);
+    expect(tanpaBahaya(nilaiDari(true))).toBeCloseTo(tanpaBahaya(nilaiDari(false)), 9);
+    expect(kaldu).toBeGreaterThanOrEqual(biasa);
+  });
+
+  it('mudah dan normal tidak berubah di putaran kaldu; jago/suhu tetap mengirim aksi sah', () => {
+    for (const level of ['mudah', 'normal'] as const) {
+      expect(pilihAksiBot(viewUntuk(buat(true), 0), level, new Rng(3))).toEqual(pilihAksiBot(viewUntuk(buat(false), 0), level, new Rng(3)));
+    }
+    for (const level of ['jago', 'suhu'] as const) {
+      const s = buat(true);
+      expect(terapkanAksi(s, pilihAksiBot(viewUntuk(s, 0), level, new Rng(3))).ok).toBe(true);
+    }
   });
 });

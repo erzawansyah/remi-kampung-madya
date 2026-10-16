@@ -20,6 +20,7 @@ import {
 } from './ui/beranda';
 import { bukaPetunjukPasang } from './ui/pasang';
 import { TEKS_TAWARAN } from './konten/pasang';
+import { PENGATURAN_LATIHAN } from './konten/tutorial';
 import {
   bacaLingkunganPasang,
   caraPasang,
@@ -75,17 +76,6 @@ pasangPreferensi();
 siapkanAudio();
 
 const BUILD: InfoBuild = { versi: VERSI, sha: BUILD_SHA, waktu: BUILD_WAKTU, label: labelVersi() };
-
-/** Pengaturan permainan latihan: tiga pemain (kamu + 2 warga kedai mudah), satu putaran, kamu ngocok & jalan duluan. */
-const PENGATURAN_LATIHAN: Partial<PengaturanMeja> = {
-  jumlahPemain: 3,
-  duaDeckUntukEmpat: false,
-  levelBot: 'mudah',
-  tempoBot: 'santai',
-  batasPutaran: 1,
-  batasSkorAtas: null,
-  batasSkorBawah: null,
-};
 
 const PESAN_SERVER_GAGAL = 'Server-nya belum bisa dihubungi, Bos. Coba lagi nanti.';
 /**

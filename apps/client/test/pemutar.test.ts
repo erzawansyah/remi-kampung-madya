@@ -9,10 +9,12 @@
 //   memang sedang terbuka di peristiwa itu (kartu yang dibuang/dipungut/pentungan), tidak pernah
 //   kartu lain (mis. isi buangan yang sudah tertimbun atau kartu yang diambil lawan dari deck).
 // - Kartu yang diambil lawan dari deck tidak pernah diperlihatkan (terbang tertutup, tanpa nama).
-// - Pentungan tidak disebut saat dibuang; ia dibuka lewat animasi mentung.
+// - Pentungan tidak disebut saat dibuang; ia dibuka lewat animasi mentung. Pentungan beberapa joker
+//   (#41) dibuka bersamaan lewat satu panggilan pentung yang membawa semua kartunya.
 
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { namaKartu, viewUntuk, type Kartu, type Peristiwa, type ViewPemain } from '@remi/engine';
+import { namaKartu, terapkanAksi, viewUntuk, type Aksi, type GameState, type Kartu, type Peristiwa, type ViewPemain } from '@remi/engine';
+import { id, skenario, spek } from '../../../packages/engine/test/bantu';
 import { mainkanBot, type LangkahPermainan } from './bantu';
 
 vi.mock('../src/efek/suara', () => ({ bunyi: vi.fn(), getar: vi.fn() }));
@@ -70,11 +72,11 @@ function sceneTiruan(catat: PanggilanScene[]): KonteksPemutar['scene'] {
 function kartuTerbuka(e: Peristiwa): Kartu[] {
   switch (e.jenis) {
     case 'buang':
-      return [e.kartu];
+      return [e.kartu, ...(e.kartuLain ?? [])];
     case 'mulung':
       return e.kartu.map((x) => x.kartu);
     case 'mentung':
-      return [e.pentungan];
+      return [e.pentungan, ...(e.pentunganLain ?? [])];
     default:
       return [];
   }
@@ -264,5 +266,59 @@ describe('pemutar peristiwa: info rahasia', () => {
         expect(rek[i + 1].scene.some((c) => c.metode === 'pentung')).toBe(true);
       }
     }
+  });
+});
+
+describe('#41: pentung beberapa joker (permainan buatan)', () => {
+  /** Joker 7: kursi 0 mulung 4 Love (punya kursi 1), lalu nutup pakai 7 Waru + 7 Kriting, lalu susun akhir. */
+  function nutupDuaJoker(): LangkahPermainan[] {
+    let g: GameState = skenario({
+      rankJoker: 7,
+      tangan: [['5 love', '6 love', '7 waru', '7 kriting'], ['3 waru', '4 waru', '5 waru'], ['3 love', '8 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+      buangan: [['4 love', 1]],
+      giliran: 0,
+    });
+    const langkah: LangkahPermainan[] = [];
+    const jalan = (aksi: Aksi) => {
+      const h = terapkanAksi(g, aksi);
+      if (!h.ok) throw new Error(h.error.pesan);
+      langkah.push({ aksi, sebelum: g, sesudah: h.state });
+      g = h.state;
+    };
+    jalan({ jenis: 'mulung', pemain: 0, jumlah: 1, kartuJadi: [spek('4 love', '5 love', '6 love')] });
+    jalan({ jenis: 'buang', pemain: 0, kartuId: id('7 waru'), kartuIdLain: [id('7 kriting')] });
+    for (let i = 0; i < 4; i++) if (g.status === 'susunAkhir' && !g.putaran!.selesaiSusun[i]) jalan({ jenis: 'selesaiSusun', pemain: i });
+    return langkah;
+  }
+
+  it('diputar ulang tanpa galat dari kedua sisi: satu pentung dengan semua kartunya, teks hanya kartu yang terbuka', async () => {
+    const langkah = nutupDuaJoker();
+    const aksesSebelum = aksesRahasia.length;
+    for (const saya of [0, 1]) {
+      const rek = await putarUlang(langkah, saya);
+      const i = rek.findIndex((r) => r.peristiwa.jenis === 'mentung');
+      expect(i).toBeGreaterThan(0);
+      // Tetap satu peristiwa buang (dengan kartuLain), dan itu tidak dianimasikan sendiri.
+      const b = rek[i - 1];
+      expect(b.peristiwa).toMatchObject({ jenis: 'buang', kartu: { id: id('7 waru') }, kartuLain: [{ id: id('7 kriting') }] });
+      expect(b.teks).toEqual([]);
+      expect(b.scene).toEqual([]);
+      // Mentung: teks aksi singkat tetap "MENTUNG!", satu panggilan pentung membawa kedua kartu dan nilai total.
+      const m = rek[i];
+      expect(m.teks).toEqual(['MENTUNG!']);
+      const pentung = m.scene.filter((c) => c.metode === 'pentung');
+      expect(pentung).toHaveLength(1);
+      const [daftar, nilai, merah] = pentung[0].args as [{ kartu: Kartu }[], number, boolean];
+      expect(daftar.map((d) => d.kartu.id)).toEqual([id('7 waru'), id('7 kriting')]);
+      expect(nilai).toBe(500);
+      expect(merah).toBe(true);
+      // Semua teks hanya menyebut kartu yang memang terbuka di peristiwanya.
+      for (const r of rek) {
+        const boleh = new Set(kartuTerbuka(r.peristiwa).flatMap((k) => [labelKartu(k), namaKartu(k)]));
+        for (const t of r.teks) for (const sebut of t.match(POLA_KARTU) ?? []) expect(boleh, `"${t}" (${r.peristiwa.jenis})`).toContain(sebut);
+      }
+      expect(rek.some((r) => r.peristiwa.jenis === 'putaranSelesai')).toBe(true);
+    }
+    expect(aksesRahasia.length).toBe(aksesSebelum);
   });
 });

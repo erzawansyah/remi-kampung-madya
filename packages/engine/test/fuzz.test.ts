@@ -1,7 +1,20 @@
 // Fuzz: aksi acak (sering ilegal) tidak pernah merusak state.
 
 import { describe, expect, it } from 'vitest';
-import { buatPermainan, periksaInvarian, pilihAksiBot, Rng, terapkanAksi, viewUntuk, type Aksi, type GameState } from '../src/index.js';
+import {
+  buatPermainan,
+  periksaInvarian,
+  pilihAksiBot,
+  Rng,
+  terapkan,
+  terapkanAksi,
+  viewUntuk,
+  type Aksi,
+  type Bunga,
+  type GameState,
+  type Rank,
+} from '../src/index.js';
+import { kartu, semuaSelesaiSusun, skenario, spek } from './bantu.js';
 
 describe('fuzz: aksi acak (sering ilegal) tidak pernah merusak state', () => {
   it('aksi ditolak tidak mengubah state; aksi diterima tetap legal', () => {
@@ -61,4 +74,116 @@ describe('fuzz: aksi acak (sering ilegal) tidak pernah merusak state', () => {
     expect(diterima).toBeGreaterThan(100);
     expect(ditolak).toBeGreaterThan(100);
   }, 120_000);
+});
+
+describe('fuzz #41: buang beberapa kartu acak', () => {
+  const BUNGA: Bunga[] = ['waru', 'love', 'kriting', 'wajik'];
+  const namaR = (r: number) => (r === 1 ? 'As' : r === 11 ? 'J' : r === 12 ? 'Q' : r === 13 ? 'K' : String(r));
+  const teks = (r: number, b: Bunga, d: number) => `${namaR(r)} ${b}${d ? '#1' : ''}`;
+
+  it('ditolak = state tidak berubah dan kodenya sesuai urutan; diterima hanya kalau semua sisa tangan joker hidup sesudah mulung', () => {
+    const rng = new Rng(4141);
+    let diterima = 0;
+    const kode: Record<string, number> = {};
+    for (let uji = 0; uji < 1500; uji++) {
+      const duaDeck = rng.next() < 0.5;
+      const n = duaDeck ? 4 + rng.int(3) : 2 + rng.int(3);
+      const deck = duaDeck ? 2 : 1;
+      const rankJoker = (1 + rng.int(13)) as Rank;
+      const seri = rankJoker >= 2 && rankJoker <= 4 ? [8, 9, 10] : [2, 3, 4];
+      const dipakai = new Set<string>(seri.map((r) => teks(r, 'love', 0)));
+      const ambilKartu = (syarat: (r: number) => boolean): string | null => {
+        for (let coba = 0; coba < 200; coba++) {
+          const t = teks(1 + rng.int(13), rng.pick(BUNGA), rng.int(deck));
+          if (!dipakai.has(t) && syarat(kartu(t).rank)) {
+            dipakai.add(t);
+            return t;
+          }
+        }
+        return null;
+      };
+      const biasa = () => ambilKartu((r) => r !== rankJoker)!;
+      const pementung = n - 1;
+      const lewatDeck = rng.next() < 0.2;
+      const mati: string[] = [];
+      const tambahan: string[] = [];
+      for (let i = 1 + rng.int(4); i > 0; i--) {
+        // 0–1: joker hidup, 2: joker mati, 3: kartu biasa.
+        const jenis = rng.int(4);
+        const j = jenis < 3 ? ambilKartu((r) => r === rankJoker) : null;
+        if (j && jenis === 2) mati.push(j);
+        tambahan.push(j ?? biasa());
+      }
+      const lain = Array.from({ length: n - 1 }, () => [biasa()]);
+      const atasDeck = lewatDeck ? (rng.next() < 0.5 ? ambilKartu((r) => r === rankJoker) : null) ?? biasa() : null;
+      let g = skenario({
+        rankJoker,
+        giliran: pementung,
+        konfigurasi: { duaDeckUntukEmpat: duaDeck && n === 4 },
+        tangan: [...lain, lewatDeck ? tambahan : [teks(seri[0], 'love', 0), teks(seri[1], 'love', 0), ...tambahan]],
+        buangan: lewatDeck ? [] : [[teks(seri[2], 'love', 0), (pementung + n - 1) % n]],
+        jokerMati: mati,
+      });
+      if (lewatDeck) {
+        const d = g.putaran!.deck;
+        const i = d.findIndex((k) => k.id === kartu(atasDeck!).id);
+        d.push(...d.splice(i, 1));
+        g = terapkan(g, { jenis: 'ambilDeck', pemain: pementung });
+      } else {
+        g = terapkan(g, { jenis: 'mulung', pemain: pementung, jumlah: 1, kartuJadi: [spek(...seri.map((r) => teks(r, 'love', 0)))] });
+      }
+      expect(periksaInvarian(g)).toEqual([]);
+
+      const p = g.putaran!;
+      const tangan = p.tangan[pementung];
+      let pilih = rng.next() < 0.6 ? [...tangan] : tangan.filter(() => rng.next() < 0.6);
+      pilih = rng.shuffle(pilih);
+      const ids = pilih.map((k) => k.id);
+      if (rng.next() < 0.1 && ids.length) ids.push(rng.pick(ids));
+      if (rng.next() < 0.1) ids.splice(rng.int(ids.length + 1), 0, rng.next() < 0.5 ? p.tangan[0][0].id : 'bukan-kartu');
+      if (ids.length < 2) continue;
+
+      const ada = new Set(tangan.map((k) => k.id));
+      // Dipakai hanya setelah semua id dipastikan ada di tangan.
+      const hidup = (id: string) => tangan.find((k) => k.id === id)!.rank === rankJoker && !p.jokerMati.includes(id);
+      const harap = ids.some((x) => !ada.has(x))
+        ? 'KARTU_TIDAK_ADA'
+        : new Set(ids).size !== ids.length
+          ? 'KARTU_DOBEL'
+          : ids.length !== tangan.length
+            ? 'BUANG_SATU_KARTU'
+            : p.sumberAmbil !== 'buangan'
+              ? 'NUTUP_TANPA_MULUNG'
+              : !ids.every(hidup)
+                ? 'PENTUNGAN_BUKAN_JOKER'
+                : null;
+
+      const sebelum = JSON.stringify(g);
+      const h = terapkanAksi(g, { jenis: 'buang', pemain: pementung, kartuId: ids[0], kartuIdLain: ids.slice(1) });
+      expect(JSON.stringify(g)).toBe(sebelum);
+      if (!h.ok) {
+        expect(h.error.kode).toBe(harap);
+        kode[h.error.kode] = (kode[h.error.kode] ?? 0) + 1;
+        continue;
+      }
+      expect(harap).toBeNull();
+      diterima++;
+      expect(periksaInvarian(h.state)).toEqual([]);
+      expect(h.state.status).toBe('susunAkhir');
+      expect(h.state.putaran!.tangan[pementung]).toEqual([]);
+      expect(h.state.peristiwa.slice(g.peristiwa.length).filter((e) => e.jenis === 'buang')).toHaveLength(1);
+      const akhir = semuaSelesaiSusun(h.state);
+      expect(periksaInvarian(akhir)).toEqual([]);
+      const r = akhir.riwayat.at(-1)!;
+      expect(r.nilaiPentungan).toBe(250 * ids.length);
+      expect(r.rincian[pementung]).toMatchObject({ status: 'mentung', nilaiPentungan: 250 * ids.length, penaltiJoker: 0 });
+      for (const k of r.kepentung) expect(r.rincian[k].nilaiPentungan).toBe(-250 * ids.length);
+      expect(JSON.parse(JSON.stringify(akhir))).toEqual(akhir);
+    }
+    console.log({ diterima, kode });
+    expect(diterima).toBeGreaterThan(20);
+    for (const k of ['KARTU_TIDAK_ADA', 'KARTU_DOBEL', 'BUANG_SATU_KARTU', 'NUTUP_TANPA_MULUNG', 'PENTUNGAN_BUKAN_JOKER']) {
+      expect(kode[k] ?? 0).toBeGreaterThan(0);
+    }
+  }, 60_000);
 });

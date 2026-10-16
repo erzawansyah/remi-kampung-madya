@@ -100,6 +100,49 @@ describe('peristiwa', () => {
   });
 });
 
+describe('peristiwa nutup pakai beberapa joker (#41)', () => {
+  const s = skenario({
+    rankJoker: 7,
+    giliran: 3,
+    tangan: [['2 waru'], ['3 waru'], ['4 waru'], ['5 love', '6 love', '7 waru', '7 kriting']],
+    buangan: [['4 love', 2]],
+  });
+  const g0 = mulung(s, 3, 1, ['4 love', '5 love', '6 love']);
+  const g = terapkan(g0, { jenis: 'buang', pemain: 3, kartuId: id('7 waru'), kartuIdLain: [id('7 kriting')] });
+  const baru = g.peristiwa.slice(g0.peristiwa.length);
+
+  it('tetap satu peristiwa buang, dengan kartuLain; tanpa penalti joker', () => {
+    const buang = baru.filter((e) => e.jenis === 'buang');
+    expect(buang).toHaveLength(1);
+    expect(buang[0]).toMatchObject({ jenis: 'buang', pemain: 3, kartu: { id: id('7 waru') }, jokerDibuang: false, sisaTangan: 0 });
+    expect((buang[0] as Extract<IsiPeristiwa, { jenis: 'buang' }>).kartuLain!.map((k) => k.id)).toEqual([id('7 kriting')]);
+    // Urutan: buang, mentung, susun akhir.
+    expect(baru.map((e) => e.jenis)).toEqual(['buang', 'mentung', 'susunAkhir']);
+  });
+
+  it('peristiwa mentung: pentunganLain dan nilai total', () => {
+    const m = cari(g, 'mentung')[0];
+    expect(m).toMatchObject({ pemain: 3, pentunganJoker: true, nilai: 500, kepentung: [2], dibalik: true });
+    expect(m.pentungan.id).toBe(id('7 waru'));
+    expect(m.pentunganLain!.map((k) => k.id)).toEqual([id('7 kriting')]);
+  });
+
+  it('buang dan mentung satu kartu tidak memuat field baru', () => {
+    const t = skenario({ rankJoker: 7, giliran: 3, tangan: [['2 waru'], ['3 waru'], ['4 waru'], ['5 love', '6 love', '7 waru']], buangan: [['4 love', 2]] });
+    const satu = terapkan(mulung(t, 3, 1, ['4 love', '5 love', '6 love']), { jenis: 'buang', pemain: 3, kartuId: id('7 waru') });
+    expect(cari(satu, 'buang')[0]).not.toHaveProperty('kartuLain');
+    expect(cari(satu, 'mentung')[0]).not.toHaveProperty('pentunganLain');
+    expect(cari(satu, 'mentung')[0].nilai).toBe(250);
+  });
+
+  it('info mentung (sudah terbuka) ikut di view semua pemain selama susun akhir', () => {
+    for (const saya of [0, 1, 2, 3]) {
+      const v = viewUntuk(g, saya);
+      expect(v.putaran!.mentung!.pentunganLain!.map((k) => k.id)).toEqual([id('7 kriting')]);
+    }
+  });
+});
+
 describe('jejak kartu: kartu jadi mencatat asal buangan', () => {
   it('kartu pungutan di kartu jadi diberi tanda pemilik buangannya', () => {
     const s = skenario({

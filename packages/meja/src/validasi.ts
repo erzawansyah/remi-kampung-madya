@@ -75,6 +75,12 @@ export function rapikanBatasSkor(x: unknown, arah: ArahBatasSkor): number | null
   return arah === 'atas' ? mutlak : -mutlak;
 }
 
+/**
+ * Kartu lain paling banyak di satu aksi buang (#41): 2 deck punya 8 kartu seangka joker, jadi
+ * nutup pakai joker paling banyak 1 + 7 kartu.
+ */
+export const MAKS_KARTU_BUANG_LAIN = 7;
+
 function spesifikasi(x: unknown): SpesifikasiKartuJadi[] | null {
   if (!Array.isArray(x) || x.length < 1 || x.length > 8) return null;
   const hasil: SpesifikasiKartuJadi[] = [];
@@ -104,8 +110,16 @@ export function validasiAksi(x: unknown): AksiKlien | null {
       return { jenis: 'ambilDeck' };
     case 'selesaiSusun':
       return { jenis: 'selesaiSusun' };
-    case 'buang':
-      return isStr(x.kartuId, 40) ? { jenis: 'buang', kartuId: x.kartuId } : null;
+    case 'buang': {
+      if (!isStr(x.kartuId, 40)) return null;
+      // Keputusan #41: nutup pakai beberapa joker. Hanya bentuknya yang dicek di sini; sah tidaknya
+      // (semua sisa tangan, joker hidup semua, sesudah mulung) diputuskan validasiBuang di engine.
+      const lain = x.kartuIdLain;
+      if (lain === undefined) return { jenis: 'buang', kartuId: x.kartuId };
+      if (!Array.isArray(lain) || lain.length > MAKS_KARTU_BUANG_LAIN || !lain.every((id) => isStr(id, 40))) return null;
+      // Daftar kosong = buang satu kartu; tidak diteruskan supaya aksinya sama persis dengan yang lama.
+      return lain.length ? { jenis: 'buang', kartuId: x.kartuId, kartuIdLain: [...lain] } : { jenis: 'buang', kartuId: x.kartuId };
+    }
     case 'turunkan': {
       const kj = spesifikasi(x.kartuJadi);
       return kj ? { jenis: 'turunkan', kartuJadi: kj } : null;
@@ -160,6 +174,10 @@ export function validasiPengaturan(x: unknown): Partial<PengaturanMeja> | null {
     if (x.tempoBot !== 'santai' && x.tempoBot !== 'normal' && x.tempoBot !== 'cepat') return null;
     hasil.tempoBot = x.tempoBot;
   }
+  if (x.modeKaldu !== undefined) {
+    if (typeof x.modeKaldu !== 'boolean') return null;
+    hasil.modeKaldu = x.modeKaldu;
+  }
   return hasil;
 }
 
@@ -199,7 +217,8 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       return aksi ? { t: 'aksi', aksi } : null;
     }
     case 'akhiri':
-      return typeof x.setuju === 'boolean' ? { t: 'akhiri', setuju: x.setuju } : null;
+    case 'putaranTerakhir':
+      return typeof x.setuju === 'boolean' ? { t: x.t, setuju: x.setuju } : null;
     case 'emote': {
       if (typeof x.isi !== 'string') return null;
       if ((DAFTAR_EMOTE as readonly string[]).includes(x.isi)) return { t: 'emote', isi: x.isi as Emote };

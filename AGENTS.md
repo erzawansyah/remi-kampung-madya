@@ -2,7 +2,7 @@
 
 **Remi Kampung Madya**: game kartu remi dengan aturan yang berlaku di Kedai Madya (tempat pemilik dan teman-temannya berkumpul), yaitu **aturan tongkrongan** lokal yang **berbeda dari remi/rummy umum**. Monorepo TypeScript: rules engine murni, modul meja/room, server WebSocket, dan client Phaser 4.2.1 + HTML + PWA.
 
-Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#47 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik. #40–#43 dan #47 (16 Okt 2026) sudah diputuskan tapi baru diterapkan di rilis berikutnya; sampai saat itu aturan dan bot tetap seperti sekarang.
+Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#47 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik. #40 (joker beda dari putaran sebelumnya), #41 (mentung pakai beberapa joker), dan #42–#43 (mode kaldu; engine, meja, server, warga kedai, dan aplikasi) sudah diterapkan. #47 (16 Okt 2026) sudah diputuskan tapi baru diterapkan di rilis berikutnya; sampai saat itu bot untuk butir itu tetap seperti sekarang.
 
 ## Aturan emas
 
@@ -220,6 +220,9 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
 
 Daftar lengkap ada di README. Yang paling sering terlupa:
 
+**Joker di awal putaran**
+- Kartu yang dibuka berangka sama dengan joker **putaran tepat sebelumnya** dianulir, lalu kartu berikutnya dibuka sampai beda (#40, `bukaKartuJoker` di `mesin.ts`). Bandingkan hanya dengan `riwayat.at(-1)`: putaran 3 boleh sama dengan putaran 1, dan putaran pertama (juga sesudah "Main lagi") bebas. Kartu yang dianulir diselipkan lagi ke deck sesudah kartu joker, masing-masing satu `rng.int`; jalur tanpa anulir tidak boleh memakai RNG tambahan (golden 2 dan 3 pemain menjaganya). Popup joker tidak menjelaskan anulir.
+
 **Kartu jadi**
 - Seri angka hanya 2–10 (maksimal 9 kartu). Seri Londo hanya J-Q-K. Angka dan Londo tidak bisa disambung, dan As tidak bisa masuk seri.
 - Kembar hanya untuk As, dan bunganya harus beda semua (3 atau 4 kartu). 3 As butuh kartu jadi lain, boleh yang diturunkan bersamaan di aksi yang sama.
@@ -234,11 +237,25 @@ Daftar lengkap ada di README. Yang paling sering terlupa:
 - Membuang joker: −25, dan kartu itu jadi kartu biasa (joker mati).
 - Pentungan joker bernilai **250**. Joker yang sudah pernah dibuang, lalu dipungut dan dipakai sebagai pentungan, dinilai sebagai kartu aslinya.
 - Habis ambil dari deck tidak bisa nutup.
+- **Nutup pakai beberapa joker** (#41): buang 2+ kartu hanya sah kalau semuanya **joker hidup**, semuanya sisa tangan, dan giliran diawali mulung. 250 per joker, tanpa −25; yang mentung dapat totalnya sekali, tiap kepentung kena totalnya.
+  - Tetap **satu** peristiwa `buang` (`kartuLain?`) dan satu peristiwa `mentung` (`pentunganLain?`, `nilai` = total). Jangan dipecah jadi beberapa peristiwa buang: golden, pemutar, dan ingatan warga kedai bergantung pada itu. Field baru hanya ditulis kalau ada.
+  - Urutan cek di `validasiBuang` (ada di tangan, tidak dobel, semua sisa tangan, sesudah mulung, baru joker hidup) jangan diubah: pesan penolakan tidak boleh menyebut joker sebelum syarat struktur terpenuhi. UI tidak boleh memeriksa seluruh tangan sebelum pemain memilih: `KontrolMeja.statusTombol()` hanya memvalidasi kartu yang dipilih, dan penanda mentung tetap dari buang satu kartu (dijaga test kebocoran di `apps/client/test/kontrolMeja.test.ts`).
+  - Client: 2+ kartu dipilih = tombol "Mentung pakai N kartu!" atau "Buang N kartu" (alasan dari engine), tidak pernah menyebut joker. Seret = nutup pakai semuanya hanya kalau kartu yang diseret ikut pilihan seluruh tangan; yang tidak sah ditolak, bukan jadi buang satu kartu. `MejaScene.pentung` menerima daftar semua kartu pentungan; `bunyi('tegang')` sebelum dibuka sama untuk berapa pun kartunya.
+  - Banyaknya kartu pentungan yang dibuang tertutup adalah info meja yang terlihat semua orang (seperti di meja asli); isinya baru terbuka saat pentungan dibuka.
 
 **Akhir putaran (deck habis atau mentung)**
 - **Deck habis:** pemain yang mengambil kartu terakhir menyelesaikan gilirannya dulu.
 - **Mentung:** kepentung dan arah ditentukan saat mentung. Peristiwa `mentung` dipancarkan saat itu juga, dan skor dihitung setelah susun akhir. Info mentung disimpan di `StatePutaran.mentung`.
 - Keduanya disusul **fase susun akhir**: semua pemain boleh menurunkan kartu jadi tanpa mulung, lalu menekan Selesai.
+
+**Mode kaldu (#42, #43, opsi meja, bawaan mati)**
+- Putaran kaldu: nilai pentungan **× `PENGALI_KALDU` (2)** untuk yang mentung dan tiap kepentung; kartu jadi, tangan, dan −25 tidak dikali. Dua joker di putaran kaldu = ±1000.
+- Putaran kaldu dimulai di putaran ke-`batasPutaran` atau sesudah voting "putaran berikutnya terakhir" (aksi `putaranTerakhir`, hanya di antara putaran). Satu sumber: `putaranBerikutKaldu()` di `mesin.ts`, berlaku untuk `GameState` maupun `ViewPemain`; jangan menghitung ulang syaratnya di UI.
+- Putaran kaldu yang ditutup mentung mengakhiri permainan (`alasanSelesai: 'kaldu'`). Yang **deck-nya habis tidak mengakhiri permainan**: kaldu lagi, pengocok tetap skor terendah.
+- Mode kaldu **tidak memakai batas skor** (meja mengirim `null`, engine juga mengabaikannya), dan batas putaran hanya memicu kaldu. "Akhiri permainan" tetap jalan sebagai jalan keluar.
+- Voting kaldu di meja meniru voting akhiri persis, termasuk hitung ulang saat pemilih berkurang (#36): `lepasKursi` → `cekVotingAkhiri() || cekVotingKaldu()`.
+- Semua field kaldu opsional dan hanya ditulis kalau aktif (`modeKaldu`, `kalduDiminta`, `kaldu`, `pengaliPentungan`, `setujuKaldu`); meja tanpa kaldu harus tetap byte-identik (golden).
+- Client: teks di meja **sesingkat mungkin** (keputusan pemilik), satu sumber di `konten/kaldu.ts`: bar atas dan judul popup joker "Putaran N · Kaldu", tombol "Putaran terakhir" di modal hasil (meniru tombol Akhiri), satu baris "Putaran berikutnya kaldu."/"Belum ada yang mentung, kaldu lagi.", lencana "×2 KALDU", "150 × 2" di rincian skor. **Popup joker tidak diberi penjelasan apa pun** selain judulnya. Isian batas skor disembunyikan selama Mode kaldu dicentang, tapi angkanya tetap disimpan (Atur meja offline maupun lobi); `Meja.mulai()` yang mengirim `null` ke engine; latihan selalu `modeKaldu: false` (`PENGATURAN_LATIHAN` di `konten/tutorial.ts`).
 
 **Bot**
 - Tempo bawaan "santai": bot mikir 3–10 detik acak sebelum aksi pertama di gilirannya, lalu 1,5–3 detik untuk aksi lanjutan.

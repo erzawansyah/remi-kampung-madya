@@ -41,6 +41,8 @@ export interface ViewPutaran {
   selesaiSusun: boolean[];
   /** Info mentung (sudah terbuka untuk semua) selama susun akhir sesudah mentung. */
   mentung: InfoMentung | null;
+  /** Putaran kaldu (#42, info publik). Hanya ada kalau true. */
+  kaldu?: true;
 }
 
 export interface ViewPemain {
@@ -57,6 +59,8 @@ export interface ViewPemain {
   /** Kejadian terakhir (untuk animasi dan sorakan). */
   peristiwa: Peristiwa[];
   alasanSelesai: GameState['alasanSelesai'];
+  /** Mode kaldu (#42, info publik): semua sudah sepakat putaran berikutnya putaran terakhir. Hanya ada kalau true. */
+  kalduDiminta?: true;
 }
 
 /** Jumlah peristiwa terakhir yang ikut dikirim di view. */
@@ -97,6 +101,7 @@ export function viewUntuk(state: GameState, saya: number | null): ViewPemain {
       deckHabis: p.deckHabis,
       selesaiSusun: p.selesaiSusun,
       mentung: p.mentung,
+      ...(p.kaldu ? { kaldu: true as const } : {}),
     }),
     konfigurasi: { ...state.konfigurasi },
     pemain: state.pemain.map((x) => ({ ...x })),
@@ -106,5 +111,7 @@ export function viewUntuk(state: GameState, saya: number | null): ViewPemain {
     log: [...state.log],
     peristiwa: state.peristiwa.slice(-BATAS_PERISTIWA_VIEW),
     alasanSelesai: state.alasanSelesai,
+    // Hanya ditulis kalau true, supaya view lama dan golden tidak berubah.
+    ...(state.kalduDiminta ? { kalduDiminta: true as const } : {}),
   };
 }
