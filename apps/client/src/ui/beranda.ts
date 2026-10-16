@@ -358,8 +358,9 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
       tempoBot: el<HTMLSelectElement>('o-tempo')!.value as PengaturanMeja['tempoBot'],
       batasPutaran: Number(el<HTMLSelectElement>('o-putaran')!.value) || null,
       modeKaldu: kaldu.checked,
-      // Mode kaldu tidak memakai batas skor (#43): disimpan dan dikirim kosong.
-      ...(kaldu.checked ? { batasSkorAtas: null, batasSkorBawah: null } : bacaIsianBatas(akar, 'o-skor')),
+      // Mode kaldu tidak memakai batas skor (#43), tapi angkanya tetap disimpan (isiannya cuma
+      // disembunyikan), sama seperti lobi; Meja.mulai() yang mengirim batas skor kosong ke engine.
+      ...bacaIsianBatas(akar, 'o-skor'),
     };
   };
   /** Baris yang ikut pilihan lain: 2 deck hanya untuk 4 pemain, batas skor disembunyikan saat mode kaldu. */

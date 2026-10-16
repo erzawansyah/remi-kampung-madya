@@ -333,7 +333,7 @@ Kartu bergambar joker tidak dipakai.
   - Di kombinasi itu, modal dari tangan ≥ jumlah kartu pungutan, dan modal memuat minimal 1 kartu biasa (bukan joker pengganti).
   - Sisa pungutan masuk tangan.
 - **Turunkan:** opsional, boleh beberapa kombinasi. Kartu tidak boleh ditempel ke kartu jadi yang sudah ada.
-- **Buang:** wajib 1 kartu. As tidak boleh dibuang sebelum punya kartu jadi.
+- **Buang:** wajib 1 kartu (kecuali nutup pakai beberapa joker, lihat Mentung). As tidak boleh dibuang sebelum punya kartu jadi.
 
 **Kartu jadi**
 - **Seri angka:** satu bunga, berurutan, 3–9 kartu, hanya dalam rentang 2–10.
@@ -378,7 +378,7 @@ Kartu bergambar joker tidak dipakai.
 **Akhir permainan** (tiap syarat bisa dinonaktifkan): sepakat berhenti, batas putaran, atau batas skor atas/bawah. Batas skor dicek di akhir putaran. Angka batas skor bebas, asal kelipatan 10 (keputusan pemilik #44): batas atas 10 sampai 100000, batas bawah −10 sampai −100000, kosong = tanpa batas.
 
 **Mode kaldu** (opsi meja, bawaan mati; keputusan pemilik #42, #43):
-- **Putaran kaldu** = putaran terakhir yang pentungannya dikali 2 (lihat Skor). Dimulai di putaran ke-N kalau ada batas putaran N, atau di putaran sesudah semua pemain sepakat "putaran berikutnya terakhir". Voting itu hanya di antara putaran (juga sebelum putaran pertama), dan tidak bisa diulang kalau putaran berikutnya memang sudah kaldu.
+- **Putaran kaldu** = putaran terakhir yang pentungannya dikali 2 (lihat Skor). Dimulai di putaran ke-N kalau ada batas putaran N, atau di putaran sesudah semua pemain sepakat "putaran berikutnya terakhir". Voting itu hanya di antara putaran, dan tidak bisa diulang kalau putaran berikutnya memang sudah kaldu.
 - Putaran kaldu yang **ditutup mentung** mengakhiri permainan.
 - Putaran kaldu yang **deck-nya habis** tanpa ada yang mentung tidak mengakhiri permainan: disusul putaran kaldu lagi, begitu seterusnya sampai ada yang mentung. Pengocoknya tetap pemain dengan skor akumulasi terendah.
 - Batas putaran di mode kaldu hanya memicu kaldu, tidak mengakhiri permainan. **Batas skor tidak dipakai** (#43). Tanpa batas putaran dan tanpa voting, permainan jalan biasa.

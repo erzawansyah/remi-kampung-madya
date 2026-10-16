@@ -373,7 +373,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
         butir: [
           'Ambil: pilih salah satu, ambil 1 kartu teratas dari deck, atau mulung dari buangan (lihat bab Mulung).',
           'Turunkan (boleh dilewati): turunkan satu atau beberapa kartu jadi dari tanganmu.',
-          'Buang: wajib buang 1 kartu ke tumpukan buangan. Setelah itu giliran pindah ke pemain berikutnya.',
+          'Buang: wajib buang 1 kartu ke tumpukan buangan (kecuali nutup pakai beberapa joker, lihat bab Mentung). Setelah itu giliran pindah ke pemain berikutnya.',
         ],
       },
       {
@@ -881,7 +881,7 @@ export const GLOSARIUM: { istilah: string; arti: string }[] = [
   { istilah: 'Mulung / mungut', arti: 'Mengambil satu atau beberapa kartu teratas dari buangan.' },
   { istilah: 'Pungutan', arti: 'Kartu-kartu yang diambil dari buangan waktu mulung.' },
   { istilah: 'Modal', arti: 'Kartu dari tanganmu yang dipakai bersama pungutan di kartu jadi.' },
-  { istilah: 'Mentung / nutup', arti: 'Membuang kartu terakhir di tangan, di giliran yang diawali mulung.' },
+  { istilah: 'Mentung / nutup', arti: 'Membuang kartu terakhir di tangan (atau semua sisa joker sekaligus), di giliran yang diawali mulung.' },
   {
     istilah: 'Pentungan',
     arti: 'Kartu terakhir yang dibuang waktu mentung. Boleh beberapa kartu sekaligus kalau semuanya joker hidup (250 per joker). Nilainya jadi bonus dan potongan.',

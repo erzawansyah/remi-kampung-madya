@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 // Mode kaldu (keputusan pemilik #42, #43) di layar persiapan: kotak centang di Atur meja offline
 // (beranda) dan lobi online (hanya host yang bisa mengubah), isian batas skor disembunyikan selama
-// mode kaldu nyala (dan batas skor dikirim/disimpan kosong), ringkasan meja, simpanan yang rusak,
-// dan latihan yang selalu tanpa mode kaldu.
+// mode kaldu nyala (angkanya tetap disimpan; Meja yang mengirim batas skor kosong ke engine),
+// ringkasan meja, simpanan yang rusak, dan latihan yang selalu tanpa mode kaldu.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -86,7 +86,7 @@ describe('beranda: Atur meja', () => {
     expect(q('#ringkas-meja')!.textContent).not.toContain('kaldu');
   });
 
-  it('dicentang: batas skor disembunyikan, disimpan kosong, ringkasan menyebut kaldu; dilepas: muncul lagi', () => {
+  it('dicentang: batas skor disembunyikan (angkanya tetap disimpan), ringkasan menyebut kaldu; dilepas: muncul lagi', () => {
     renderBeranda(akar(), aksiPalsu());
     isi(isian('o-skor-atas'), '250');
     isi(isian('o-skor-bawah'), '120');
@@ -94,7 +94,7 @@ describe('beranda: Atur meja', () => {
 
     centang(isian('o-kaldu'), true);
     expect(tersembunyi(batasSkor())).toBe(true);
-    expect(simpan.pengaturanOffline()).toMatchObject({ modeKaldu: true, batasSkorAtas: null, batasSkorBawah: null });
+    expect(simpan.pengaturanOffline()).toMatchObject({ modeKaldu: true, batasSkorAtas: 250, batasSkorBawah: -120 });
     expect(q('#ringkas-meja')!.textContent).toMatch(/ · kaldu$/);
 
     // Dilepas lagi: isiannya terlihat dengan angka yang masih ada di layar.
@@ -104,20 +104,39 @@ describe('beranda: Atur meja', () => {
     expect(q('#ringkas-meja')!.textContent).not.toContain('kaldu');
   });
 
-  it('main baru membawa mode kaldu ke meja offline, dengan batas skor kosong', async () => {
+  it('batas skor tersimpan tidak hilang karena mode kaldu: dicentang, digambar ulang, dilepas → ±500 lagi', () => {
+    localStorage.setItem('remi.pengaturanOffline', JSON.stringify({ jumlahPemain: 3, batasSkorAtas: 500, batasSkorBawah: -500 }));
+    renderBeranda(akar(), aksiPalsu());
+    centang(isian('o-kaldu'), true);
+    expect(simpan.pengaturanOffline()).toMatchObject({ modeKaldu: true, batasSkorAtas: 500, batasSkorBawah: -500 });
+
+    // Muat ulang / pulang ke beranda: isiannya tersembunyi tapi angkanya masih ada.
+    renderBeranda(akar(), aksiPalsu());
+    expect(isian('o-kaldu').checked).toBe(true);
+    expect(tersembunyi(batasSkor())).toBe(true);
+    centang(isian('o-kaldu'), false);
+    expect(tersembunyi(batasSkor())).toBe(false);
+    expect([isian('o-skor-atas').value, isian('o-skor-bawah').value]).toEqual(['500', '500']);
+    expect(simpan.pengaturanOffline()).toMatchObject({ modeKaldu: false, batasSkorAtas: 500, batasSkorBawah: -500 });
+  });
+
+  it('main baru membawa mode kaldu ke meja offline; permainannya tanpa batas skor', async () => {
     const aksi = aksiPalsu();
     renderBeranda(akar(), aksi);
     isi(isian('o-skor-atas'), '300');
     centang(isian('o-kaldu'), true);
     q<HTMLButtonElement>('#mulai-bot')!.click();
     await tunggu();
-    expect(aksi.mainOffline).toHaveBeenCalledWith(
-      'Pemain',
-      expect.objectContaining({ modeKaldu: true, batasSkorAtas: null, batasSkorBawah: null }),
-      false,
-    );
+    expect(aksi.mainOffline).toHaveBeenCalledWith('Pemain', expect.objectContaining({ modeKaldu: true, batasSkorAtas: 300 }), false);
     const pengaturan = vi.mocked(aksi.mainOffline).mock.calls[0]![1];
     expect(validasiPengaturan(pengaturan)).not.toBeNull();
+    // Meja yang membuang batas skornya (#43), sama seperti lobi online.
+    const k = KoneksiOffline.baru('Pemain', pengaturan, 0);
+    window.dispatchEvent(new Event('pagehide'));
+    const d = JSON.parse(localStorage.getItem('remi.mejaOffline')!) as DataMeja;
+    k.tutup();
+    expect(d.pengaturan.batasSkorAtas).toBe(300);
+    expect(d.game!.konfigurasi).toMatchObject({ modeKaldu: true, batasSkorAtas: null, batasSkorBawah: null });
   });
 
   it('simpanan mode kaldu nyala: tercentang, batas skor tersembunyi sejak awal', () => {
@@ -164,8 +183,8 @@ describe('meja offline dan latihan', () => {
     return d.game!.konfigurasi;
   };
 
-  it('Atur meja dengan mode kaldu: permainannya mode kaldu, tanpa batas skor', () => {
-    const k = konfigurasi({ jumlahPemain: 3, tempoBot: 'cepat', modeKaldu: true, batasPutaran: 3, batasSkorAtas: null, batasSkorBawah: null });
+  it('Atur meja dengan mode kaldu: permainannya mode kaldu, tanpa batas skor (walau isiannya terisi)', () => {
+    const k = konfigurasi({ jumlahPemain: 3, tempoBot: 'cepat', modeKaldu: true, batasPutaran: 3, batasSkorAtas: 500, batasSkorBawah: -500 });
     expect(k).toMatchObject({ modeKaldu: true, batasPutaran: 3, batasSkorAtas: null, batasSkorBawah: null });
   });
 

@@ -113,8 +113,8 @@ function htmlKomponen(r: RincianSkor, h: HasilPutaran, nama: (i: number) => stri
   // Pentungan (teks polos dulu, di-escape sekali saat dipasang). Putaran kaldu (#42): "(150 × 2)".
   if (r.nilaiPentungan !== 0 && h.pentungan) {
     const pengali = r.pengaliPentungan ?? 1;
-    const kali = pengali !== 1 ? ` (${Math.abs(r.nilaiPentungan) / pengali} × ${pengali})` : '';
-    const pentungan = `${teksPentungan(h)}${kali}`;
+    const kali = pengali !== 1 ? `${Math.abs(r.nilaiPentungan) / pengali} × ${pengali}` : '';
+    const pentungan = teksPentungan(h, kali);
     const teks = r.status === 'mentung' ? `Pentungan: ${pentungan}` : `Kena pentung ${nama(h.pementung!)}: ${pentungan}`;
     baris.push(`<div class="komp"><span>${esc(teks)}</span><b class="${kelas(r.nilaiPentungan)}">${tanda(r.nilaiPentungan)}</b></div>`);
   }
@@ -242,11 +242,15 @@ function kartuPentungan(h: HasilPutaran): Kartu[] {
   return h.pentungan ? [h.pentungan, ...(h.pentunganLain ?? [])] : [];
 }
 
-/** "7 Waru (joker)", atau "7 Waru dan 7 Love (joker semua)" kalau pentungannya beberapa joker. Teks polos. */
-function teksPentungan(h: HasilPutaran): string {
+/**
+ * "7 Waru (joker)", atau "7 Waru dan 7 Love (joker semua)" kalau pentungannya beberapa joker. `kali`
+ * (putaran kaldu, "250 × 2") masuk kurung yang sama: "7 Waru (joker, 250 × 2)". Teks polos.
+ */
+function teksPentungan(h: HasilPutaran, kali = ''): string {
   const kartu = kartuPentungan(h);
-  const joker = h.pentunganJoker ? (kartu.length > 1 ? ' (joker semua)' : ' (joker)') : '';
-  return `${daftarNama(kartu.map(namaKartu))}${joker}`;
+  const joker = h.pentunganJoker ? (kartu.length > 1 ? 'joker semua' : 'joker') : '';
+  const catatan = [joker, kali].filter(Boolean).join(', ');
+  return `${daftarNama(kartu.map(namaKartu))}${catatan ? ` (${catatan})` : ''}`;
 }
 
 /**
