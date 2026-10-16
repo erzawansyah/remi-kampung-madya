@@ -2,6 +2,7 @@
 
 import { validasiKartuJadi } from './kartuJadi.js';
 import { ctxPutaran, totalKartu } from './mesin.js';
+import { NILAI_PENTUNGAN_JOKER } from './skor.js';
 import type { GameState } from './state.js';
 
 export function periksaInvarian(state: GameState): string[] {
@@ -19,6 +20,13 @@ export function periksaInvarian(state: GameState): string[] {
     // Keputusan #40: angka joker tidak pernah sama dengan putaran tepat sebelumnya.
     state.riwayat.forEach((h, i) => {
       if (i > 0 && h.rankJoker === state.riwayat[i - 1].rankJoker) salah.push(`joker putaran ${h.nomor} sama dengan putaran sebelumnya`);
+      // Keputusan #41: pentungan beberapa kartu hanya joker hidup, 250 per kartu.
+      const lain = h.pentunganLain;
+      if (lain) {
+        if (!lain.length) salah.push(`pentunganLain putaran ${h.nomor} kosong (harusnya tidak ditulis)`);
+        if (!h.pentunganJoker || lain.some((k) => k.rank !== h.rankJoker)) salah.push(`pentungan putaran ${h.nomor} bukan joker semua`);
+        if (h.nilaiPentungan !== NILAI_PENTUNGAN_JOKER * (1 + lain.length)) salah.push(`nilai pentungan putaran ${h.nomor} salah`);
+      }
     });
   }
 
@@ -57,6 +65,15 @@ export function periksaInvarian(state: GameState): string[] {
     if (e.pemilik < 0 || e.pemilik >= n) salah.push('pemilik buangan tidak valid');
   });
   if (state.status === 'susunAkhir' && p.deck.length !== 0 && !p.mentung) salah.push('susun akhir padahal deck belum habis dan tidak ada yang mentung');
+  const m = p.mentung;
+  if (m?.pentunganLain) {
+    // Semua pentungan sudah jadi joker mati (tidak bisa dipakai lagi) dan tangan yang mentung kosong.
+    const semua = [m.pentungan, ...m.pentunganLain];
+    if (!m.pentunganLain.length || !m.pentunganJoker || semua.some((k) => k.rank !== p.rankJoker || !p.jokerMati.includes(k.id))) {
+      salah.push('pentungan beberapa kartu bukan joker semua');
+    }
+    if (p.tangan[m.pemain].length !== 0) salah.push('yang mentung masih punya kartu di tangan');
+  }
   if (state.status === 'putaranBerjalan') {
     if (p.giliran < 0 || p.giliran >= n) salah.push('giliran tidak valid');
     if (p.deck.length === 0 && !p.deckHabis) salah.push('deck kosong tapi putaran belum ditandai habis');

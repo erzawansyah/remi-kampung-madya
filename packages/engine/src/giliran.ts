@@ -130,28 +130,86 @@ export interface InputBuang {
   punyaKartuJadi: boolean;
   sumberAmbil: 'deck' | 'buangan';
   kartuId: string;
+  /** Keputusan #41: kartu lain yang ikut dibuang (nutup pakai beberapa joker). Kosong/tidak ada = satu kartu. */
+  kartuIdLain?: readonly string[];
   ctx: KonteksJoker;
   asJokerBolehDibuangTanpaJadi: boolean;
 }
 
 export interface HasilBuang {
   kartu: Kartu;
+  /** Kartu lain yang ikut dibuang (selalu array; kosong untuk buang satu kartu). */
+  kartuLain: Kartu[];
   mentung: boolean;
   /** Joker hidup yang dibuang bukan sebagai pentungan: kena penalti −25. */
   kenaPenaltiJoker: boolean;
 }
 
-export function validasiBuang(input: InputBuang): HasilBuang {
-  const kartu = input.tangan.find((k) => k.id === input.kartuId);
-  if (!kartu) langgar('KARTU_TIDAK_ADA', 'Kartu itu nggak ada di tanganmu.');
+const PESAN_KARTU_TIDAK_ADA = 'Kartu itu nggak ada di tanganmu.';
+const PESAN_NUTUP_TANPA_MULUNG = 'Nutup cuma sah kalau giliran ini kamu mulung.';
+const PESAN_AS_BELUM_BOLEH = 'As belum boleh dibuang, kamu belum punya kartu jadi.';
 
+function cekAsBolehDibuang(kartu: Kartu, input: InputBuang): void {
   const jokerHidup = isJokerHidup(kartu, input.ctx);
   if (kartu.rank === AS && !input.punyaKartuJadi && !(jokerHidup && input.asJokerBolehDibuangTanpaJadi)) {
-    langgar('AS_BELUM_BOLEH_DIBUANG', 'As belum boleh dibuang, kamu belum punya kartu jadi.');
+    langgar('AS_BELUM_BOLEH_DIBUANG', PESAN_AS_BELUM_BOLEH);
   }
+}
+
+/**
+ * Validasi buang. Satu kartu: seperti biasa (kartu terakhir = mentung, harus sesudah mulung).
+ *
+ * Beberapa kartu (keputusan #41) hanya sah untuk nutup pakai beberapa joker. Urutan pemeriksaannya
+ * sengaja struktur dulu (kartu ada, tidak dobel, semua sisa tangan ikut, giliran diawali mulung), baru
+ * status joker, jadi penolakan tidak pernah bilang apa-apa soal joker sebelum syarat lain terpenuhi.
+ */
+export function validasiBuang(input: InputBuang): HasilBuang {
+  const lain = input.kartuIdLain ?? [];
+  if (lain.length > 0) return validasiBuangBeberapa(input, lain);
+
+  const kartu = input.tangan.find((k) => k.id === input.kartuId);
+  if (!kartu) langgar('KARTU_TIDAK_ADA', PESAN_KARTU_TIDAK_ADA);
+
+  const jokerHidup = isJokerHidup(kartu, input.ctx);
+  cekAsBolehDibuang(kartu, input);
   const mentung = input.tangan.length === 1;
   if (mentung && input.sumberAmbil !== 'buangan') {
-    langgar('NUTUP_TANPA_MULUNG', 'Nutup cuma sah kalau giliran ini kamu mulung.');
+    langgar('NUTUP_TANPA_MULUNG', PESAN_NUTUP_TANPA_MULUNG);
   }
-  return { kartu, mentung, kenaPenaltiJoker: jokerHidup && !mentung };
+  return { kartu, kartuLain: [], mentung, kenaPenaltiJoker: jokerHidup && !mentung };
+}
+
+function validasiBuangBeberapa(input: InputBuang, lain: readonly string[]): HasilBuang {
+  // 1) Semua kartu ada di tangan.
+  const dipilih = [input.kartuId, ...lain].map((id) => {
+    const k = input.tangan.find((x) => x.id === id);
+    if (!k) langgar('KARTU_TIDAK_ADA', PESAN_KARTU_TIDAK_ADA);
+    return k;
+  });
+  // 2) Tidak ada yang dipilih dua kali.
+  const sudah = new Set<string>();
+  for (const k of dipilih) {
+    if (sudah.has(k.id)) langgar('KARTU_DOBEL', `${namaKartu(k)} kepilih dua kali.`);
+    sudah.add(k.id);
+  }
+  // 3) Semua sisa tangan ikut dibuang (tangan jadi kosong).
+  if (dipilih.length !== input.tangan.length) {
+    langgar(
+      'BUANG_SATU_KARTU',
+      'Buangnya satu kartu aja, Bos. Lebih dari satu cuma boleh buat nutup, dan semua sisa kartumu harus ikut dibuang.',
+    );
+  }
+  // 4) Nutup hanya sesudah mulung.
+  if (input.sumberAmbil !== 'buangan') langgar('NUTUP_TANPA_MULUNG', PESAN_NUTUP_TANPA_MULUNG);
+  // 5) Semuanya joker hidup. Joker yang sudah pernah dibuang (joker mati) dihitung kartu biasa.
+  if (!dipilih.every((k) => isJokerHidup(k, input.ctx))) {
+    langgar(
+      'PENTUNGAN_BUKAN_JOKER',
+      'Nutup pakai beberapa kartu cuma boleh kalau semuanya joker. Joker yang sudah pernah dibuang dihitung kartu biasa.',
+    );
+  }
+  // Larangan As tetap berlaku untuk tiap kartu. Di meja tidak pernah kena (giliran mulung selalu
+  // menurunkan kartu jadi), tapi validator ini juga dipakai bot dan UI dengan data apa adanya.
+  for (const k of dipilih) cekAsBolehDibuang(k, input);
+  return { kartu: dipilih[0], kartuLain: dipilih.slice(1), mentung: true, kenaPenaltiJoker: false };
 }

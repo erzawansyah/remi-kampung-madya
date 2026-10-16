@@ -11,6 +11,7 @@ import {
   maksimalMulung,
   Rng,
   NILAI_PENTUNGAN_JOKER,
+  nilaiPentunganTotal,
   PENALTI_JOKER_DIBUANG,
   validasiBuang,
   validasiKartuJadi,
@@ -22,7 +23,7 @@ import {
   type PilihanKartu,
   type Rank,
 } from '@remi/engine';
-import { BAB_BANTUAN, FAQ, type KartuContoh } from '../src/konten/bantuan';
+import { BAB_BANTUAN, FAQ, GLOSARIUM, type KartuContoh } from '../src/konten/bantuan';
 
 type Contoh = { bab: string; judul: string; kartu: KartuContoh[]; ket: string; sah: boolean };
 
@@ -205,6 +206,35 @@ describe('klaim kunci di Bantuan sama dengan engine', () => {
     // Tanpa joker sebelumnya (putaran pertama), kartu teratas langsung jadi joker.
     const deck2 = [kartu({ bunga: 'waru', rank: 3 }), kartu({ bunga: 'wajik', rank: 7 })];
     expect(bukaKartuJoker(deck2, undefined, new Rng(1)).rank).toBe(7);
+  });
+
+  it('nutup pakai beberapa joker hidup sekaligus: 250 per joker, harus semua sisa tangan, sesudah mulung (#41)', () => {
+    expect(teksBab('mentung')).toContain('Pentung beberapa joker sekaligus');
+    expect(teksBab('mentung')).toContain('**250 per joker**: dua joker 500, tiga joker 750');
+    expect(FAQ.some((f) => f.tanya === 'Bisa nutup pakai dua joker?' && f.jawab.includes('dua joker 500'))).toBe(true);
+    expect(GLOSARIUM.find((g) => g.istilah === 'Pentungan')!.arti).toContain('250 per joker');
+    const kartu = pembuatKartu();
+    const j = [kartu({ bunga: 'waru', rank: 5 }), kartu({ bunga: 'love', rank: 5 }), kartu({ bunga: 'kriting', rank: 5 })];
+    const buang = (tangan: Kartu[], ids: string[], sumberAmbil: 'deck' | 'buangan' = 'buangan', mati: string[] = []) =>
+      cek(() =>
+        validasiBuang({
+          tangan,
+          punyaKartuJadi: true,
+          sumberAmbil,
+          kartuId: ids[0],
+          kartuIdLain: ids.slice(1),
+          ctx: { rankJoker: 5 as Rank, jokerMati: mati },
+          asJokerBolehDibuangTanpaJadi: false,
+        }),
+      );
+    expect(buang(j.slice(0, 2), [j[0].id, j[1].id]).ok).toBe(true);
+    expect(buang(j, j.map((x) => x.id)).ok).toBe(true);
+    expect(nilaiPentunganTotal(j[0], true, [j[1]])).toBe(500);
+    expect(nilaiPentunganTotal(j[0], true, [j[1], j[2]])).toBe(750);
+    // Semua sisa kartu harus ikut, sesudah mulung, dan joker mati tidak bisa ikut.
+    expect(buang(j, [j[0].id, j[1].id]).kode).toBe('BUANG_SATU_KARTU');
+    expect(buang(j.slice(0, 2), [j[0].id, j[1].id], 'deck').kode).toBe('NUTUP_TANPA_MULUNG');
+    expect(buang(j.slice(0, 2), [j[0].id, j[1].id], 'buangan', [j[1].id]).kode).toBe('PENTUNGAN_BUKAN_JOKER');
   });
 
   it('buang joker hidup kena −25; pentungan joker bernilai 250 tanpa penalti', () => {

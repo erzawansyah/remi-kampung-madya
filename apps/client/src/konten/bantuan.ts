@@ -509,6 +509,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
+        teks: '**Pentung beberapa joker sekaligus.** Kalau sisa kartumu joker semua, kamu boleh nutup dengan membuang semuanya sekaligus. Syaratnya: semua sisa kartu ikut dibuang, semuanya joker hidup, dan giliran itu kamu awali dengan mulung. Nilainya **250 per joker**: dua joker 500, tiga joker 750. Tidak kena −25, dan tiap yang kepentung kena nilai totalnya. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
+      },
+      {
+        t: 'paragraf',
         teks: '**Kepentung:** setiap pemain yang kartu buangannya kamu pungut di giliran itu lalu kamu pakai di kartu jadi, kena potongan sebesar nilai pentungan.',
       },
       {
@@ -797,6 +801,10 @@ export const FAQ: { tanya: string; jawab: string }[] = [
     jawab: '−25 per joker di putaran itu, dan joker itu jadi kartu biasa. Kecuali dibuang sebagai pentungan waktu mentung: tidak kena −25, malah bernilai 250.',
   },
   {
+    tanya: 'Bisa nutup pakai dua joker?',
+    jawab: 'Bisa, asal sisa kartumu joker semua dan giliran itu kamu awali dengan mulung. Buang semuanya sekaligus. Nilainya 250 per joker (dua joker 500), tanpa −25. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
+  },
+  {
     tanya: 'Kartu buangan yang lama kok nggak kelihatan?',
     jawab: 'Yang kelihatan cuma kartu teratas sebanyak jumlah pemain dikurangi satu, karena hanya sebanyak itu yang bisa dipungut. Sisanya harus diingat sendiri.',
   },
@@ -841,7 +849,10 @@ export const GLOSARIUM: { istilah: string; arti: string }[] = [
   { istilah: 'Pungutan', arti: 'Kartu-kartu yang diambil dari buangan waktu mulung.' },
   { istilah: 'Modal', arti: 'Kartu dari tanganmu yang dipakai bersama pungutan di kartu jadi.' },
   { istilah: 'Mentung / nutup', arti: 'Membuang kartu terakhir di tangan, di giliran yang diawali mulung.' },
-  { istilah: 'Pentungan', arti: 'Kartu terakhir yang dibuang waktu mentung. Nilainya jadi bonus dan potongan.' },
+  {
+    istilah: 'Pentungan',
+    arti: 'Kartu terakhir yang dibuang waktu mentung. Boleh beberapa kartu sekaligus kalau semuanya joker hidup (250 per joker). Nilainya jadi bonus dan potongan.',
+  },
   { istilah: 'Kepentung', arti: 'Kena potongan pentungan karena kartu buanganmu dipungut lalu dipakai di kartu jadi oleh yang mentung (bukan sebagai pentungannya).' },
   { istilah: 'Balik arah', arti: 'Arah putaran berikutnya dibalik, karena pemain tepat sebelum yang mentung ikut kepentung.' },
   { istilah: 'Lompat', arti: 'Pemain tepat sebelum yang mentung tidak kepentung, jadi arah putaran tetap.' },

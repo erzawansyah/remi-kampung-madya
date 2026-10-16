@@ -2,7 +2,7 @@
 
 **Remi Kampung Madya**: game kartu remi dengan aturan yang berlaku di Kedai Madya (tempat pemilik dan teman-temannya berkumpul), yaitu **aturan tongkrongan** lokal yang **berbeda dari remi/rummy umum**. Monorepo TypeScript: rules engine murni, modul meja/room, server WebSocket, dan client Phaser 4.2.1 + HTML + PWA.
 
-Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#47 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik. #40 (joker beda dari putaran sebelumnya) sudah diterapkan. #41–#43 dan #47 (16 Okt 2026) sudah diputuskan tapi baru diterapkan di rilis berikutnya; sampai saat itu aturan dan bot untuk butir itu tetap seperti sekarang.
+Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#47 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik. #40 (joker beda dari putaran sebelumnya) dan #41 (mentung pakai beberapa joker) sudah diterapkan. #42–#43 dan #47 (16 Okt 2026) sudah diputuskan tapi baru diterapkan di rilis berikutnya; sampai saat itu aturan dan bot untuk butir itu tetap seperti sekarang.
 
 ## Aturan emas
 
@@ -237,6 +237,10 @@ Daftar lengkap ada di README. Yang paling sering terlupa:
 - Membuang joker: −25, dan kartu itu jadi kartu biasa (joker mati).
 - Pentungan joker bernilai **250**. Joker yang sudah pernah dibuang, lalu dipungut dan dipakai sebagai pentungan, dinilai sebagai kartu aslinya.
 - Habis ambil dari deck tidak bisa nutup.
+- **Nutup pakai beberapa joker** (#41): buang 2+ kartu hanya sah kalau semuanya **joker hidup**, semuanya sisa tangan, dan giliran diawali mulung. 250 per joker, tanpa −25; yang mentung dapat totalnya sekali, tiap kepentung kena totalnya.
+  - Tetap **satu** peristiwa `buang` (`kartuLain?`) dan satu peristiwa `mentung` (`pentunganLain?`, `nilai` = total). Jangan dipecah jadi beberapa peristiwa buang: golden, pemutar, dan ingatan warga kedai bergantung pada itu. Field baru hanya ditulis kalau ada.
+  - Urutan cek di `validasiBuang` (ada di tangan, tidak dobel, semua sisa tangan, sesudah mulung, baru joker hidup) jangan diubah: pesan penolakan tidak boleh menyebut joker sebelum syarat struktur terpenuhi. UI tidak boleh memeriksa seluruh tangan sebelum pemain memilih.
+  - Banyaknya kartu pentungan yang dibuang tertutup adalah info meja yang terlihat semua orang (seperti di meja asli); isinya baru terbuka saat pentungan dibuka.
 
 **Akhir putaran (deck habis atau mentung)**
 - **Deck habis:** pemain yang mengambil kartu terakhir menyelesaikan gilirannya dulu.

@@ -39,8 +39,11 @@ export function bacaIngatan(view: ViewPemain, riwayat = true): Ingatan {
   for (const e of riwayat ? view.peristiwa : []) {
     if (e.putaran !== p.nomor) continue;
     if (e.jenis === 'buang') {
-      diBuangan.set(e.kartu.id, e.kartu);
-      dipegang[e.pemain].delete(e.kartu.id);
+      // Nutup pakai beberapa joker (#41): semua kartunya ikut dibuang di satu peristiwa.
+      for (const k of [e.kartu, ...(e.kartuLain ?? [])]) {
+        diBuangan.set(k.id, k);
+        dipegang[e.pemain].delete(k.id);
+      }
     } else if (e.jenis === 'mulung') {
       for (const x of e.kartu) {
         diBuangan.delete(x.kartu.id);

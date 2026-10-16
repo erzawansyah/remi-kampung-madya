@@ -43,6 +43,11 @@ export interface InfoMentung {
   pentungan: Kartu;
   pentunganJoker: boolean;
   kepentung: number[];
+  /**
+   * Keputusan #41: pentungan lain kalau nutup pakai beberapa joker hidup sekaligus (semuanya joker
+   * hidup, 250 per kartu). Hanya ditulis kalau ada, jadi simpanan lama dan golden tidak berubah.
+   */
+  pentunganLain?: Kartu[];
 }
 
 export interface StatePutaran {
@@ -112,7 +117,9 @@ export interface HasilPutaran {
   pentungan: Kartu | null;
   /** Pentungan masih berstatus joker saat dibuang. */
   pentunganJoker: boolean;
-  /** Nilai pentungan penuh (sebelum diberi tanda). */
+  /** Keputusan #41: joker hidup lain yang ikut jadi pentungan (nutup pakai beberapa joker). Tidak ada = satu kartu. */
+  pentunganLain?: Kartu[];
+  /** Nilai pentungan penuh (sebelum diberi tanda), jumlah semua pentungan. */
   nilaiPentungan: number;
   kepentung: number[];
   rincian: RincianSkor[];
@@ -148,12 +155,23 @@ export type IsiPeristiwa =
       kembarAs: boolean;
     }
   | { jenis: 'turunkan'; pemain: number; idKartuJadi: string[]; kembarAs: boolean }
-  | { jenis: 'buang'; pemain: number; kartu: Kartu; jokerDibuang: boolean; sisaTangan: number }
+  | {
+      jenis: 'buang';
+      pemain: number;
+      kartu: Kartu;
+      /** Keputusan #41: kartu lain yang dibuang bersamaan (nutup pakai beberapa joker). Tidak ada = satu kartu. */
+      kartuLain?: Kartu[];
+      jokerDibuang: boolean;
+      sisaTangan: number;
+    }
   | {
       jenis: 'mentung';
       pemain: number;
       pentungan: Kartu;
       pentunganJoker: boolean;
+      /** Keputusan #41: joker hidup lain yang ikut jadi pentungan. */
+      pentunganLain?: Kartu[];
+      /** Jumlah nilai semua pentungan. */
       nilai: number;
       kepentung: number[];
       dibalik: boolean;
@@ -189,6 +207,15 @@ export type Aksi =
   | { jenis: 'ambilDeck'; pemain: number }
   | { jenis: 'mulung'; pemain: number; jumlah: number; kartuJadi: SpesifikasiKartuJadi[] }
   | { jenis: 'turunkan'; pemain: number; kartuJadi: SpesifikasiKartuJadi[] }
-  | { jenis: 'buang'; pemain: number; kartuId: string }
+  | {
+      jenis: 'buang';
+      pemain: number;
+      kartuId: string;
+      /**
+       * Keputusan #41: kartu lain yang dibuang bersamaan. Hanya sah untuk nutup: semua sisa tangan
+       * ikut dibuang, semuanya joker hidup, dan giliran ini diawali mulung. Kosong = buang satu kartu.
+       */
+      kartuIdLain?: string[];
+    }
   | { jenis: 'selesaiSusun'; pemain: number }
   | { jenis: 'akhiriPermainan' };

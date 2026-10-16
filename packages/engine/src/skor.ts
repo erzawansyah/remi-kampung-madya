@@ -18,12 +18,22 @@ export function nilaiPentungan(kartu: Kartu, jokerHidup: boolean): number {
   return jokerHidup ? NILAI_PENTUNGAN_JOKER : nilaiDasar(kartu.rank) * 10;
 }
 
+/**
+ * Nilai semua pentungan. Keputusan #41: nutup pakai beberapa joker hidup sekaligus bernilai 250 per
+ * joker (2 joker = 500, 3 joker = 750). `lain` hanya berisi joker hidup (dijaga validasiBuang), dan
+ * tidak ada penalti −25 untuk joker yang dipakai mentung. Yang mentung dapat totalnya sekali, tiap
+ * kepentung kena totalnya penuh.
+ */
+export function nilaiPentunganTotal(pentungan: Kartu, pentunganJoker: boolean, lain: readonly Kartu[] = []): number {
+  return nilaiPentungan(pentungan, pentunganJoker) + lain.length * NILAI_PENTUNGAN_JOKER;
+}
+
 export interface InputSkorPemain {
   pemain: number;
   status: StatusSkor;
   kartuJadi: KartuJadi[];
   tangan: Kartu[];
-  /** Nilai pentungan penuh, dipakai untuk status mentung/kepentung. */
+  /** Nilai pentungan penuh (jumlah semua pentungan), dipakai untuk status mentung/kepentung. */
   nilaiPentungan: number;
   jumlahJokerDibuang: number;
   ctx: KonteksJoker;

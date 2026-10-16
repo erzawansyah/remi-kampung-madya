@@ -5,7 +5,7 @@ import { buatDeck, namaKartu, namaRank } from './kartu.js';
 import { AturanError, langgar } from './error.js';
 import { isJokerHidup, type KartuJadi, type KonteksJoker, type SpesifikasiKartuJadi } from './kartuJadi.js';
 import { validasiBuang, validasiMulung, validasiTurunkan, type HasilTurunkan } from './giliran.js';
-import { hitungSkorPemain, nilaiPentungan } from './skor.js';
+import { hitungSkorPemain, nilaiPentunganTotal } from './skor.js';
 import { Rng, seedKeState } from './rng.js';
 import { daftarNama, deskripsiKartuJadi } from './deskripsi.js';
 import {
@@ -122,6 +122,8 @@ export function migrasiState(state: GameState): GameState {
   const s = state as GameState & Partial<Pick<GameState, 'peristiwa'>>;
   const n = s.pemain.length;
   const p = s.putaran as (StatePutaran & Partial<Pick<StatePutaran, 'selesaiSusun' | 'mulungBeruntun' | 'mentung' | 'asalKartu'>>) | null;
+  // Field opsional tanpa nilai awal (tidak ada = bawaan lama): InfoMentung.pentunganLain dan
+  // HasilPutaran.pentunganLain (#41, tidak ada = mentung satu kartu); pembacanya memakai `?? []`.
   return {
     ...s,
     peristiwa: s.peristiwa ?? [],
@@ -158,7 +160,7 @@ function jalankan(s: GameState, aksi: Aksi): void {
     case 'selesaiSusun':
       return selesaiSusun(s, aksi.pemain);
     case 'buang':
-      return buang(s, aksi.pemain, aksi.kartuId);
+      return buang(s, aksi.pemain, aksi.kartuId, aksi.kartuIdLain);
   }
 }
 
@@ -351,7 +353,7 @@ function turunkan(s: GameState, pemain: number, spesifikasi: SpesifikasiKartuJad
   terjadi(s, { jenis: 'turunkan', pemain, idKartuJadi: baru.map((kj) => kj.id), kembarAs: baru.some(isKembarAsEmpat) });
 }
 
-function buang(s: GameState, pemain: number, kartuId: string): void {
+function buang(s: GameState, pemain: number, kartuId: string, kartuIdLain: string[] | undefined): void {
   const p = putaranAktif(s, pemain, 'main');
   const ctx = ctxPutaran(p);
   const hasil = validasiBuang({
@@ -359,30 +361,45 @@ function buang(s: GameState, pemain: number, kartuId: string): void {
     punyaKartuJadi: p.kartuJadi[pemain].length > 0,
     sumberAmbil: p.sumberAmbil!,
     kartuId,
+    kartuIdLain,
     ctx,
     asJokerBolehDibuangTanpaJadi: s.konfigurasi.asJokerBolehDibuangTanpaJadi,
   });
-  const { kartu } = hasil;
+  const { kartu, kartuLain } = hasil;
+  // Status joker dibaca sebelum ada yang ditandai mati. Kartu lain (keputusan #41) pasti joker hidup.
   const jokerHidup = isJokerHidup(kartu, ctx);
-  p.tangan[pemain] = p.tangan[pemain].filter((k) => k.id !== kartuId);
+  const semua = [kartu, ...kartuLain];
+  const dibuang = new Set(semua.map((k) => k.id));
+  p.tangan[pemain] = p.tangan[pemain].filter((k) => !dibuang.has(k.id));
   // Joker yang dibuang kehilangan status jokernya.
   if (jokerHidup) p.jokerMati.push(kartu.id);
+  for (const k of kartuLain) p.jokerMati.push(k.id);
   if (hasil.kenaPenaltiJoker) p.jokerDibuang[pemain]++;
-  p.buangan.push({ kartu, pemilik: pemain });
-  terjadi(s, { jenis: 'buang', pemain, kartu, jokerDibuang: hasil.kenaPenaltiJoker, sisaTangan: p.tangan[pemain].length });
+  for (const k of semua) p.buangan.push({ kartu: k, pemilik: pemain });
+  // Tetap satu peristiwa buang; `kartuLain` hanya ditulis kalau ada (golden dan simpanan lama tidak berubah).
+  terjadi(s, {
+    jenis: 'buang',
+    pemain,
+    kartu,
+    ...(kartuLain.length ? { kartuLain } : {}),
+    jokerDibuang: hasil.kenaPenaltiJoker,
+    sisaTangan: p.tangan[pemain].length,
+  });
 
   if (hasil.mentung) {
-    catat(s, `${nama(s, pemain)} mentung pakai ${namaKartu(kartu)}!`);
+    catat(s, `${nama(s, pemain)} mentung pakai ${daftarNama(semua.map(namaKartu))}!`);
     // Kepentung dan arah ditentukan sekarang; skor dihitung setelah susun akhir.
     const kepentung = hitungKepentung(p, pemain);
-    p.mentung = { pemain, pentungan: kartu, pentunganJoker: jokerHidup, kepentung };
+    const lain = kartuLain.length ? { pentunganLain: kartuLain } : {};
+    p.mentung = { pemain, pentungan: kartu, pentunganJoker: jokerHidup, kepentung, ...lain };
     const tepatSebelum = berikutnya(pemain, (-p.arah) as Arah, s.konfigurasi.jumlahPemain);
     terjadi(s, {
       jenis: 'mentung',
       pemain,
       pentungan: kartu,
       pentunganJoker: jokerHidup,
-      nilai: nilaiPentungan(kartu, jokerHidup),
+      ...lain,
+      nilai: nilaiPentunganTotal(kartu, jokerHidup, kartuLain),
       kepentung,
       dibalik: kepentung.includes(tepatSebelum),
     });
@@ -418,8 +435,8 @@ function mulaiSusunAkhir(s: GameState, sebab: 'deckHabis' | 'mentung'): void {
 
 function selesaiSemuaSusun(s: GameState): void {
   const m = s.putaran!.mentung;
-  if (m) selesaikanPutaran(s, m.pemain, m.pentungan, m.pentunganJoker);
-  else selesaikanPutaran(s, null, null, false);
+  if (m) selesaikanPutaran(s, m.pemain, m.pentungan, m.pentunganJoker, m.pentunganLain ?? []);
+  else selesaikanPutaran(s, null, null, false, []);
 }
 
 function pemainSusunAkhir(s: GameState, pemain: number): StatePutaran {
@@ -457,12 +474,15 @@ function selesaikanPutaran(
   pementung: number | null,
   pentungan: Kartu | null,
   pentunganJoker: boolean,
+  /** Keputusan #41: joker hidup lain yang ikut jadi pentungan (kosong = satu kartu). */
+  pentunganLain: Kartu[],
 ): void {
   const p = s.putaran!;
   const n = s.konfigurasi.jumlahPemain;
   const ctx = ctxPutaran(p);
   const kepentung = pementung === null ? [] : (p.mentung?.kepentung ?? hitungKepentung(p, pementung));
-  const nilai = pentungan ? nilaiPentungan(pentungan, pentunganJoker) : 0;
+  // Satu nilai total: yang mentung dapat sekali, tiap kepentung kena penuh (hitungSkorPemain tidak berubah).
+  const nilai = pentungan ? nilaiPentunganTotal(pentungan, pentunganJoker, pentunganLain) : 0;
   const tepatSebelum = pementung === null ? null : berikutnya(pementung, (-p.arah) as Arah, n);
   const dibalik = tepatSebelum !== null && kepentung.includes(tepatSebelum);
   const arahBerikutnya = (dibalik ? -p.arah : p.arah) as Arah;
@@ -488,6 +508,8 @@ function selesaikanPutaran(
     pementung,
     pentungan,
     pentunganJoker,
+    // Hanya ditulis kalau ada, supaya riwayat lama dan golden tidak berubah.
+    ...(pentunganLain.length ? { pentunganLain } : {}),
     nilaiPentungan: nilai,
     kepentung,
     rincian,
