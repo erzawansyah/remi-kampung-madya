@@ -123,6 +123,10 @@
 .nama-skor small {
   font-size: var(--teks-xs);
 }
+/* Lencana di bawah nama (warga kedai, keluar) selebar isinya, tidak melar selebar kolom. */
+.nama-skor > .lencana {
+  align-self: flex-start;
+}
 .komponen {
   padding: 0 var(--ruang-3) var(--ruang-2);
   display: flex;
@@ -698,4 +702,53 @@ html[data-efek='hemat'] .kipas canvas {
   .stat-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+/* Leaderboard (keputusan #45): pilihan urutan + saringan. "Urutkan dari" dan "Periode" selebar
+   panel (isinya panjang), Pemain dan Deck berdampingan. auto-fit dengan lebar minimal setengah
+   panel: paling banyak dua kolom, dan turun jadi satu kolom kalau setengah panel lebih sempit dari
+   6,5rem (HP 320 dengan teks besar). Kolom Riwayat selebar 480 px, jadi di desktop tetap begini. */
+.kontrol-peringkat {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(min(100%, 6.5rem), calc((100% - var(--ruang-3)) / 2)), 1fr));
+  gap: var(--ruang-2) var(--ruang-3);
+}
+.kontrol-peringkat .k-lebar {
+  grid-column: 1 / -1;
+}
+.kontrol-peringkat .medan {
+  min-width: 0;
+  font-size: var(--teks-sm);
+}
+.kontrol-peringkat select {
+  width: 100%;
+  font-weight: 400;
+}
+.ringkasan-peringkat {
+  font-size: var(--teks-sm);
+}
+.ringkasan-peringkat:empty {
+  display: none;
+}
+/* Baris "Belum cukup main": lebih redup, tanpa medali. */
+.belum-cukup .baris-peringkat {
+  opacity: 0.85;
+}
+.belum-cukup .medali {
+  color: var(--teks-samar);
+}
+.cara-hitung ul {
+  margin: 0;
+  padding: 0 var(--ruang-3) var(--ruang-3) calc(var(--ruang-3) + 1.1em);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-1);
+  font-size: var(--teks-sm);
+}
+table.skor tr.sub-judul th {
+  text-align: left;
+  padding-top: var(--ruang-3);
+  color: var(--emas);
+}
+table.skor tr.redup td {
+  color: var(--teks-redup);
 }

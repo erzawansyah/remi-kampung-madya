@@ -32,6 +32,7 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 | [37](#k37) | Refresh di giliran sendiri langsung dimainkan bot | `packages/meja` | Diputuskan: masa tenggang |
 | [38](#k38) | Error di timer bot bisa mematikan server | `packages/meja` + `apps/server` | Diputuskan: diperbaiki |
 | [39](#k39) | Batas meja dan sambungan per jaringan terlalu kecil untuk Wi-Fi kedai | `apps/server` (deploy) | Diputuskan: bawaan dinaikkan |
+| [45](#k45) | Leaderboard terasa tidak adil | `packages/meja` + `apps/server` + client | Diputuskan: banyak urutan, bawaan rata-rata per permainan |
 
 ---
 
@@ -287,13 +288,43 @@ Sisi server sudah ditangani lebih dulu (Okt 2026, `apps/server`): callback timer
 
 **Bukti:** konstanta `BAWAAN_MAKS_MEJA_PER_IP` dan `BAWAAN_MAKS_SAMBUNGAN_PER_IP` di `apps/server/src/server.ts`; env dibaca di `apps/server/src/main.ts`. Dikunci test `apps/server/test/ketahanan.test.ts` (meja ke-61 ditolak) dan `apps/server/test/keamanan.test.ts` (sambungan ke-151 ditolak 429).
 
+<a id="k45"></a>
+
+## 45. Leaderboard terasa tidak adil
+
+**Keputusan pemilik (16 Okt 2026):** leaderboard punya banyak pilihan urutan. Bawaannya **rata-rata skor akhir per permainan** (game 1 skor 200 + game 2 skor 100 → 150), bukan per putaran. Meja 1 orang + warga kedai **tidak dihitung**. Yang keluar di tengah permainan dihitung **juru kunci**.
+
+**Default yang tidak dikomentari pemilik (dipakai):** minimal 3 kali main untuk urutan berbasis rata-rata atau persentase; periode bawaan "Sepanjang masa" dengan pilihan "Bulan ini" (WIB); yang keluar diberi skor terendah di meja itu; menutup aplikasi tanpa menekan Keluar tidak dihitung kabur.
+
+**Sebelum keputusan:** `/api/peringkat` mengurutkan jumlah juara lalu total skor, jadi yang paling sering main selalu di atas. Meja 2–6 orang, 1–2 deck, dan main sendirian lawan warga kedai dicampur. Pemain yang keluar di tengah permainan kursinya jadi warga kedai, jadi ia hilang dari statistik (celah kabur). Nama dibedakan huruf besar/kecil ("Budi" dan "budi" dua orang).
+
+**Yang dikerjakan:**
+- **Aturan hitung satu sumber** di `packages/meja/src/peringkat.ts` (diekspor `@remi/meja`), dipakai server dan tab Statistik di HP:
+  - Urutan (`DAFTAR_URUTAN`): `rata` (bawaan, Σ skor ÷ main), `terbaik` (skor tertinggi satu permainan), `persen` (persentase juara), `juara` (jumlah juara, urutan lama), `main`, `mentung`, `posisi` (poin posisi 0–100: tiap permainan (n − peringkat) ÷ (n − 1) × 100, lalu dirata-rata). Pemutus seri ada di `PEMBANDING`; pembanding memakai nilai yang belum dibulatkan.
+  - `MIN_MAIN = 3` untuk `rata`, `persen`, `posisi` (`BUTUH_MIN_MAIN`); yang kurang masuk `belumCukup` (paling sering main dulu).
+  - `nilaiEfektif()`: yang keluar mendapat skor min(skornya, skor terendah di meja) dan peringkat n; kursi lain (manusia maupun warga kedai) diurutkan di antara mereka sendiri, 1 + banyaknya kursi lain yang tidak keluar dengan skor lebih tinggi. Skor tertinggi sama = juara semua. Warga kedai tidak masuk daftar, tapi tetap dihitung sebagai lawan.
+  - Nama digabung lewat `kunciNama()` (dipindah dari `meja.ts` ke `validasi.ts`, juga dipakai client), ejaan terakhir yang tampil.
+  - Saringan `rapikanSaringan()` (jumlah pemain 2–6, deck 1/2, periode `semua`/`bulan`) dan `bulanWib()` (UTC+7 tetap). Data dari URL dirapikan longgar: yang tidak sah jatuh ke bawaan.
+- **Meja** (`packages/meja/src/meja.ts`): `Kursi.keluar` diisi `tinggalkan()` hanya saat permainan berjalan (bukan di lobi, bukan sesudah selesai) dan dihapus di `mulai()`/`mainLagi()`. Field ini hanya ada kalau true, jadi simpanan dan golden lama tidak berubah, dan tidak ikut dikirim ke client (`info()` menyalin field satu per satu). `RingkasanAkhir` (`protokol.ts`) ditambah `jumlahDeck` (`aturanPembagian`), `modeKaldu` (false sampai Mode Kaldu ada), dan `pemain[].keluar` (yang keluar ditulis `bot: false, keluar: true`). Klasemen akhir di meja tetap apa adanya; aturan juru kunci hanya berlaku di peringkat.
+- **Server** (`apps/server/src/riwayat.ts`, `server.ts`):
+  - Skema diberi versi `PRAGMA user_version`; `MIGRASI` hanya boleh ditambah di belakang. v1 menambah `permainan.jumlah_pemain`, `jumlah_deck` (NULL untuk meja 4 orang lama), `jumlah_manusia`, `mode_kaldu`, `klasemen.keluar`, `klasemen.kunci_nama`, dan dua indeks. `lengkapiBaris()` mengisi baris lama setiap database dibuka (idempoten; `kunci_nama` dihitung di JS karena `lower()` SQLite hanya ASCII).
+  - `papan()` menghitung leaderboard dengan saringan dan syarat minimal 2 orang (`jumlah_manusia >= 2`, yang keluar dihitung manusia), hasil agregat di-cache per saringan (paling banyak 50) dan dikosongkan setiap `simpan()`.
+  - `GET /api/peringkat` tanpa `v=2` tetap array bentuk lama (HP dengan aplikasi lama memanggil `.map()` langsung), dihitung dengan aturan yang sama dan urutan `juara`. `?v=2&urut=&pemain=&deck=&periode=` mengembalikan objek. `GET /api/riwayat` membawa `jumlahPemain`, `jumlahDeck`, `dihitung`, dan `klasemen[].keluar`.
+- **Client** (`apps/client/src/ui/riwayat.ts`, teks di `konten/peringkat.ts`, gaya di `gaya/layar.css`):
+  - Tab Peringkat: pilihan "Urutkan dari", Pemain, Deck, Periode (dibuat sekali; hanya `#hasil-peringkat` yang diganti, jadi fokus tidak hilang). Ganti urutan mengurutkan ulang data yang sudah ada; ganti saringan mengambil ulang (jawaban yang telat diabaikan). Angka besar di kanan = metrik terpilih. Ada penjelasan singkat per urutan, ringkasan `role="status"`, daftar "Belum cukup main", lipatan "Cara hitungnya", dan catatan deck untuk meja 4 orang lama. Server lama (jawaban array): tampil cara lama, pilihan dimatikan, ada catatan.
+  - Tab Permainan: lencana "keluar" dan "nggak masuk peringkat".
+  - Tab Statistik (HP ini): `hitungPeringkat` pada `remi.riwayat`, tanpa syarat minimal 2 orang dan tanpa urutan mentung (tidak tersimpan di HP), tabel Nama · Main · Juara (x%) · Rata-rata · Terbaik · Posisi dengan `aria-sort`.
+  - Konfirmasi keluar (`opsiKonfirmasiKeluar()`, `ui/lobi.ts`): di tengah permainan online yang punya ≥ 2 kursi manusia (`mejaMasukPeringkat()`) ditambah "Di peringkat online kamu dihitung juru kunci." Bantuan ikut diperbarui.
+
+**Test:** `packages/meja/test/peringkat.test.ts` (nilai efektif termasuk yang keluar dengan skor tertinggi, warga kedai di atas manusia, seri; semua urutan dan pemutus serinya; belum cukup main; perapian; batas bulan WIB), `packages/meja/test/meja.test.ts` ("tanda keluar untuk peringkat"), `apps/server/test/riwayat.test.ts` (migrasi dari database v0 buatan tangan termasuk main sendirian dan "budi"/"Budi", buka ulang idempoten, baris dari server lama, kolom baru di `simpan`, saringan/keluar/nama/batas WIB/cache/belum cukup, endpoint lama tetap array vs `v=2` objek, parameter salah, 405), `apps/client/test/riwayat.test.ts` (permintaan bawaan, ganti saringan mengambil ulang vs ganti urutan tidak, jawaban telat, server lama, galat, lencana, tanpa kata "bot"), `apps/client/test/kontrolMeja.test.ts` (teks konfirmasi keluar), `antislop.test.ts` (teks `konten/peringkat.ts`). Golden meja: hanya teks `ringkasanAkhir` yang bertambah `jumlahDeck`/`modeKaldu`, hash tetap ([baseline-gameplay.md](baseline-gameplay.md)).
+
 ---
 
 ## Catatan lain (belum masuk tabel)
 
 Temuan audit yang lebih kecil, dicatat supaya tidak hilang:
 
-- **Pemenang dan seri belum didefinisikan di README.** Engine tidak punya konsep pemenang. Klasemen dibuat `buatRingkasanAkhir()` (`packages/meja/src/meja.ts:615`): urut skor tertinggi, skor sama berbagi peringkat. UI mengikuti ini ("X juara (bareng)").
+- **Pemenang dan seri belum didefinisikan di README.** Engine tidak punya konsep pemenang. Klasemen dibuat `buatRingkasanAkhir()` (`packages/meja/src/meja.ts:886`, per 16 Okt 2026): urut skor tertinggi, skor sama berbagi peringkat. UI mengikuti ini ("X juara (bareng)").
 - **Prioritas batas skor vs batas putaran:** kalau keduanya tercapai di putaran yang sama, alasan selesai = batas skor (urutan `if` di `packages/engine/src/mesin.ts:489-491`). Batasnya inklusif (`>=`/`<=`). Belum tertulis di README.
 - **Urutan bagi kartu:** animasi bagi sudah disamakan dengan engine (mulai dari pengocok, nomor kursi naik, tanpa melihat arah; `apps/client/src/game/MejaScene.ts`, `bagiKartu`). Kalau di Kedai Madya urutannya lain, itu keputusan pemilik dan harus diubah di engine dulu.
 - **Simpanan offline berisi state lengkap** (deck, tangan bot) di `localStorage` (`remi.mejaOffline`). Hanya mode lawan bot, tapi bisa diintip lewat devtools.

@@ -22,7 +22,8 @@ const angkaEnv = (nama: string) => {
 };
 
 const pathDb = process.env.DB_PATH ?? resolve(di, '../data/remi.db');
-const riwayat = bukaRiwayat(pathDb);
+// Migrasi skema (PRAGMA user_version) dan pelengkapan baris lama jalan di sini, dicatat ke log.
+const riwayat = bukaRiwayat(pathDb, { log });
 
 const server = await jalankanServer({
   port,

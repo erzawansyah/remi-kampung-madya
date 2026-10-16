@@ -4,6 +4,7 @@
 
 import {
   AturanError,
+  aturanPembagian,
   buatPermainan,
   isJokerHidup,
   migrasiState,
@@ -31,7 +32,7 @@ import {
   type RingkasanMeja,
   type StatusMeja,
 } from './protokol.js';
-import { rapikanLevel, rapikanNama } from './validasi.js';
+import { kunciNama, rapikanLevel, rapikanNama } from './validasi.js';
 
 export interface Penjadwal {
   setel(ms: number, fn: () => void): unknown;
@@ -52,6 +53,13 @@ export interface Kursi {
   pemainId: string | null;
   terhubung: boolean;
   level: LevelBot;
+  /**
+   * Pemain manusia di kursi ini menekan Keluar saat permainan berjalan; kursinya diteruskan warga
+   * kedai dengan nama yang sama. Di peringkat online dihitung juru kunci (keputusan pemilik #45).
+   * Hanya ada kalau true (simpanan/golden lama tidak berubah); dihapus saat permainan baru dimulai
+   * dan saat main lagi. Tidak ikut dikirim ke client (info() menyalin field satu per satu).
+   */
+  keluar?: true;
 }
 
 /** Semua yang perlu disimpan supaya meja bisa dilanjutkan (JSON). */
@@ -322,13 +330,20 @@ export class Meja {
     this.lepasKursi(i);
   }
 
-  /** Keluar dengan sengaja. Di lobi kursinya kosong lagi; saat main, kursinya diteruskan bot. */
+  /**
+   * Keluar dengan sengaja. Di lobi kursinya kosong lagi; saat main, kursinya diteruskan bot dan
+   * ditandai `keluar` (juru kunci di peringkat online). Sesudah permainan selesai tidak ditandai:
+   * klasemen akhirnya sudah tercatat. Terputus/menutup aplikasi tanpa Keluar tidak lewat sini.
+   */
   tinggalkan(pemainId: string): void {
     const i = this.kursiDari(pemainId);
     if (i === null) return;
     const k = this.d.kursi[i];
     if (this.status === 'lobi') this.d.kursi[i] = kursiKosong(this.d.pengaturan.levelBot);
-    else this.d.kursi[i] = { jenis: 'bot', nama: k.nama, pemainId: null, terhubung: false, level: this.d.pengaturan.levelBot };
+    else {
+      this.d.kursi[i] = { jenis: 'bot', nama: k.nama, pemainId: null, terhubung: false, level: this.d.pengaturan.levelBot };
+      if (this.status === 'main') this.d.kursi[i].keluar = true;
+    }
     this.putusSejak.delete(i);
     this.lepasKursi(i);
   }
@@ -442,6 +457,7 @@ export class Meja {
     this.wajibHost(oleh);
     if (this.status !== 'lobi') galat('Permainan sudah berjalan.');
     if (this.d.kursi.some((k) => k.jenis === 'kosong')) galat('Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.');
+    hapusTandaKeluar(this.d.kursi);
     const p = this.d.pengaturan;
     const game = buatPermainan({
       pemain: this.d.kursi.map((k) => k.nama),
@@ -506,6 +522,7 @@ export class Meja {
   private mainLagi(oleh: number): void {
     this.wajibHost(oleh);
     if (this.status !== 'selesai') galat('Permainan belum selesai.');
+    hapusTandaKeluar(this.d.kursi);
     this.d.game = null;
     this.d.setujuAkhiri = [];
     this.berubah();
@@ -855,13 +872,24 @@ export class Meja {
   }
 }
 
-/** Klasemen akhir dari state permainan yang sudah selesai. */
+/** Kursi yang ditandai keluar kembali biasa (permainan baru, atau main lagi). */
+function hapusTandaKeluar(kursi: Kursi[]): void {
+  for (const k of kursi) delete k.keluar;
+}
+
+/**
+ * Klasemen akhir dari state permainan yang sudah selesai. Peringkat di sini murni dari skor akhir
+ * (skor sama = peringkat sama); aturan juru kunci untuk yang keluar diterapkan saat peringkat online
+ * dihitung (`nilaiEfektif`, peringkat.ts), jadi klasemen yang tampil di meja tetap apa adanya.
+ * Pemain yang keluar di tengah permainan ditulis `bot: false, keluar: true`.
+ */
 export function buatRingkasanAkhir(kode: string, kursi: Kursi[], game: GameState, selesaiPada: number): RingkasanAkhir {
-  const pemain = game.pemain
+  const pemain: RingkasanAkhir['pemain'] = game.pemain
     .map((p, i) => ({
       kursi: i,
       nama: p.nama,
-      bot: kursi[i]?.jenis !== 'manusia',
+      bot: kursi[i]?.jenis !== 'manusia' && !kursi[i]?.keluar,
+      ...(kursi[i]?.keluar ? { keluar: true as const } : {}),
       skor: game.skor[i],
       peringkat: 0,
       mentung: game.riwayat.filter((h) => h.pementung === i).length,
@@ -869,7 +897,16 @@ export function buatRingkasanAkhir(kode: string, kursi: Kursi[], game: GameState
     }))
     .sort((a, b) => b.skor - a.skor || a.kursi - b.kursi);
   pemain.forEach((p, j) => (p.peringkat = j > 0 && p.skor === pemain[j - 1].skor ? pemain[j - 1].peringkat : j + 1));
-  return { kode, selesaiPada, alasan: game.alasanSelesai, jumlahPutaran: game.riwayat.length, pemain };
+  return {
+    kode,
+    selesaiPada,
+    alasan: game.alasanSelesai,
+    jumlahPutaran: game.riwayat.length,
+    jumlahDeck: aturanPembagian(game.pemain.length, game.konfigurasi.duaDeckUntukEmpat).jumlahDeck,
+    // Mode Kaldu belum ada (Rilis B); kolomnya disiapkan supaya riwayat bisa disaring nanti.
+    modeKaldu: false,
+    pemain,
+  };
 }
 
 /**
@@ -959,8 +996,6 @@ export function namaLawanAcak(acak: () => number = Math.random): string[] {
   }
   return xs;
 }
-
-const kunciNama = (n: string) => n.trim().toLocaleLowerCase('id-ID');
 
 /**
  * Nama untuk warga kedai di kursi i: nama pertama dari daftar yang belum dipakai kursi lain (manusia

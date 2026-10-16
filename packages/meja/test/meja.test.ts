@@ -415,6 +415,97 @@ function mejaDuaManusia(pengaturan = {}, extra: Parameters<typeof siapkan>[0] = 
   return { ...ctx, meja };
 }
 
+describe('tanda keluar untuk peringkat (keputusan pemilik #45)', () => {
+  it('keluar saat main: kursi ditandai keluar (tidak dikirim ke client), klasemen akhir menulis bot: false, keluar: true', () => {
+    const laporan: RingkasanAkhir[] = [];
+    const ctx = mejaDuaManusia({ batasPutaran: null }, { saatSelesai: (r) => laporan.push(r) });
+    const { meja, surat } = ctx;
+    meja.terima('host', { t: 'mulai' });
+    siapSemua(meja);
+    meja.terima('p2', { t: 'keluar' });
+    expect(meja.data.kursi[1]).toMatchObject({ jenis: 'bot', nama: 'Siti', keluar: true });
+    expect(meja.data.kursi[0].keluar).toBeUndefined();
+    expect(meja.data.kursi[2].keluar).toBeUndefined();
+    expect(surat.info('host').kursi[1]).not.toHaveProperty('keluar');
+    expect(JSON.stringify(surat.semua('host'))).not.toContain('keluar":true');
+
+    mainkanSampaiPutaranSelesai(meja, ctx, ['host']);
+    meja.terima('host', { t: 'akhiri', setuju: true });
+    expect(laporan).toHaveLength(1);
+    const r = laporan[0];
+    expect(r).toMatchObject({ jumlahDeck: 1, modeKaldu: false, alasan: 'sepakat' });
+    expect(r.pemain.find((p) => p.kursi === 1)).toMatchObject({ nama: 'Siti', bot: false, keluar: true });
+    expect(r.pemain.find((p) => p.kursi === 0)).toMatchObject({ nama: 'Budi', bot: false });
+    expect(r.pemain.find((p) => p.kursi === 0)).not.toHaveProperty('keluar');
+    expect(r.pemain.find((p) => p.kursi === 2)).toMatchObject({ bot: true });
+    expect(r.pemain.find((p) => p.kursi === 2)).not.toHaveProperty('keluar');
+
+    // Main lagi: tandanya hilang, kursinya warga kedai biasa.
+    meja.terima('host', { t: 'mainLagi' });
+    expect(meja.status).toBe('lobi');
+    expect(meja.data.kursi[1]).toMatchObject({ jenis: 'bot', nama: 'Siti' });
+    expect(meja.data.kursi[1]).not.toHaveProperty('keluar');
+  });
+
+  it('keluar di lobi atau sesudah permainan selesai tidak ditandai', () => {
+    const ctx = mejaDuaManusia({ batasPutaran: 1 });
+    const { meja } = ctx;
+    meja.terima('p2', { t: 'keluar' });
+    expect(meja.data.kursi[1]).toMatchObject({ jenis: 'kosong' });
+    expect(meja.data.kursi[1]).not.toHaveProperty('keluar');
+    meja.masuk('p2', 'Siti');
+    meja.terima('host', { t: 'mulai' });
+    siapSemua(meja);
+    mainkanSampaiPutaranSelesai(meja, ctx, ['host', 'p2']);
+    expect(meja.status).toBe('selesai');
+    meja.terima('p2', { t: 'keluar' });
+    expect(meja.data.kursi[1]).toMatchObject({ jenis: 'bot', nama: 'Siti' });
+    expect(meja.data.kursi[1]).not.toHaveProperty('keluar');
+  });
+
+  it('terputus (menutup aplikasi tanpa Keluar) tidak ditandai keluar', () => {
+    const ctx = mejaDuaManusia();
+    ctx.meja.terima('host', { t: 'mulai' });
+    siapSemua(ctx.meja);
+    ctx.meja.terputus('p2');
+    expect(ctx.meja.data.kursi[1]).toMatchObject({ jenis: 'manusia', terhubung: false });
+    expect(ctx.meja.data.kursi[1]).not.toHaveProperty('keluar');
+  });
+
+  it('simpanan yang masih membawa tanda keluar dibersihkan saat permainan baru dimulai', () => {
+    const ctx = mejaDuaManusia();
+    ctx.meja.terima('host', { t: 'mulai' });
+    siapSemua(ctx.meja);
+    ctx.meja.terima('p2', { t: 'keluar' });
+    const data: DataMeja = JSON.parse(JSON.stringify(ctx.meja.data));
+    ctx.meja.hentikan();
+    data.game = null;
+    const lanjut = new Meja(ctx.opsi, data);
+    expect(lanjut.data.kursi[1].keluar).toBe(true);
+    lanjut.terima('host', { t: 'mulai' });
+    expect(lanjut.status).toBe('main');
+    expect(lanjut.data.kursi[1]).not.toHaveProperty('keluar');
+  });
+
+  it('jumlahDeck klasemen akhir ikut aturan pembagian (4 orang 2 deck, 5 orang)', () => {
+    for (const [n, duaDeck, harap] of [
+      [4, true, 2],
+      [4, false, 1],
+      [5, false, 2],
+    ] as const) {
+      const laporan: RingkasanAkhir[] = [];
+      const ctx = siapkan({ saatSelesai: (r) => laporan.push(r) });
+      const meja = Meja.buat(ctx.opsi, 'host', 'Budi', { jumlahPemain: n, duaDeckUntukEmpat: duaDeck, detikGiliran: 0, batasPutaran: 1 });
+      for (let i = 1; i < n; i++) meja.terima('host', { t: 'aturKursi', kursi: i, jenis: 'bot' });
+      meja.terima('host', { t: 'mulai' });
+      siapSemua(meja);
+      mainkanSampaiPutaranSelesai(meja, ctx, ['host']);
+      expect(laporan[0]?.jumlahDeck, `${n} orang, duaDeck ${duaDeck}`).toBe(harap);
+      meja.hentikan();
+    }
+  });
+});
+
 const jumlahAksi = (meja: Meja, pemain: number) =>
   meja.data.game!.peristiwa.filter((e) => 'pemain' in e && e.pemain === pemain).length;
 

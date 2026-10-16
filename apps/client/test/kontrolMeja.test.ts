@@ -38,7 +38,7 @@ import { geserFokus, KontrolMeja, peristiwaAwalPerluDiputar, perluKirimUlangSiap
 import { KEDAI } from '../src/konten/kedai';
 import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { _setelUlangCache, preferensi } from '../src/preferensi';
-import { opsiKonfirmasiKeluar } from '../src/ui/lobi';
+import { mejaMasukPeringkat, opsiKonfirmasiKeluar } from '../src/ui/lobi';
 import type { MejaScene, ModelMeja } from '../src/game/MejaScene';
 
 // ---------- perlengkapan ----------
@@ -1078,6 +1078,41 @@ describe('konfirmasi keluar meja', () => {
     for (const o of [main, lobi, selesai, offline]) expect(`${o.judul} ${o.pesan} ${o.ya} ${o.tidak}`).not.toMatch(/\bbot\b/i);
     // Semua jalur online memakai label batal yang sama.
     expect(new Set([main, lobi, selesai].map((o) => o.tidak))).toEqual(new Set(['Tetap di sini']));
+  });
+
+  it('meja online yang masuk peringkat (≥ 2 orang): keluar di tengah permainan disebut juru kunci (#45)', () => {
+    const KALIMAT = 'Di peringkat online kamu dihitung juru kunci.';
+    const masuk = opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true });
+    expect(masuk.pesan).toBe(`Kursimu diteruskan warga kedai sampai permainan selesai, dan kamu nggak bisa balik ke kursi ini lagi. ${KALIMAT}`);
+    expect(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: false }).pesan).not.toContain('juru kunci');
+    expect(opsiKonfirmasiKeluar({ asal: 'meja', offline: false }).pesan).not.toContain('juru kunci');
+    // Di lobi, sesudah selesai, dan offline tidak ada yang dihitung keluar.
+    for (const k of [
+      { asal: 'lobi' as const, offline: false },
+      { asal: 'meja' as const, offline: false, selesai: true },
+      { asal: 'meja' as const, offline: true },
+    ]) {
+      expect(opsiKonfirmasiKeluar({ ...k, masukPeringkat: true }).pesan).not.toContain('juru kunci');
+    }
+    // ≥ 2 kursi manusia; yang sudah keluar (jadi warga kedai) tidak dihitung.
+    const kursi = (...jenis: ('manusia' | 'bot' | 'kosong')[]) => ({ kursi: jenis.map((j) => ({ jenis: j, nama: 'x', terhubung: true, level: 'normal' as const })) });
+    expect(mejaMasukPeringkat(kursi('manusia', 'manusia', 'bot'))).toBe(true);
+    expect(mejaMasukPeringkat(kursi('manusia', 'bot', 'bot'))).toBe(false);
+    expect(mejaMasukPeringkat(null)).toBe(false);
+  });
+
+  it('menu meja online dengan 2 orang → Keluar meja: dialog menyebut juru kunci', async () => {
+    const g = permainanGiliranku();
+    const kursi = g.pemain.map((p, i) => ({ jenis: i < 2 ? ('manusia' as const) : ('bot' as const), nama: p.nama, terhubung: true, level: 'normal' as const }));
+    meja = new MejaUji(g, { kursi }, { jenis: 'online' });
+    meja.akar.querySelector<HTMLElement>('[data-a="menu"]')!.click();
+    document.querySelector<HTMLElement>('#modal [data-m="keluar"]')!.click();
+    const d = document.querySelector<HTMLElement>('.dialog.konfirmasi')!;
+    expect(d.querySelector('p')!.textContent).toBe(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true }).pesan);
+    expect(d.querySelector('p')!.textContent).toContain('juru kunci');
+    d.querySelector<HTMLElement>('[data-tidak]')!.click();
+    await tunggu();
+    expect(meja.terkirim.some((p) => p.t === 'keluar')).toBe(false);
   });
 
   it('menu meja online → Keluar meja: dialognya sama persis dengan jalur Back', async () => {

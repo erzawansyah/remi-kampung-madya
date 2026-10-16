@@ -67,7 +67,7 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
   - **Layar:** `main.ts` (kerangka, Back, PWA, latihan) dan `ui/` (beranda, lobi, riwayat, pengaturan, bantuan, tentang, tutorial, rincianSkor).
   - **Konten:** `konten/bantuan.ts` dan `konten/tutorial.ts` adalah data. Isinya **harus sesuai engine dan README**; contoh kartu yang ditandai sah/tidak sah harus memberi hasil yang sama dengan validator engine (dijaga `apps/client/test/kontenAturan.test.ts`). Aturan berubah → konten ikut diperbarui.
   - **Kedai Madya:** `konten/kedai.ts` = satu sumber info kedai (bio, alamat, tautan peta/IG/Threads/Rak Buku). Logo di `aset/logoMadya.ts` (`svgLogo()` inline SVG `fill=currentColor` untuk HTML, `pathLogo()` untuk Canvas); jangan tambah file gambar. Lihat bagian "Promosi Kedai Madya" di bawah.
-  - **Konfirmasi keluar meja:** teksnya satu sumber, `opsiKonfirmasiKeluar()` di `ui/lobi.ts`, dipakai tombol di lobi, menu ☰ meja, dan tombol Back (`main.ts`). Jangan menulis teks konfirmasi keluar sendiri di tempat lain.
+  - **Konfirmasi keluar meja:** teksnya satu sumber, `opsiKonfirmasiKeluar()` di `ui/lobi.ts`, dipakai tombol di lobi, menu ☰ meja, dan tombol Back (`main.ts`). Jangan menulis teks konfirmasi keluar sendiri di tempat lain. Jalur keluar meja online mengisi `masukPeringkat: mejaMasukPeringkat(info)` supaya kalimat juru kunci (#45) muncul di meja yang punya ≥ 2 kursi manusia.
   - **Angka negatif:** minus tipografis "−" (U+2212) lewat `tanda()`/`angkaSkor()`/`minusTipografis()` di `ui/rincianSkor.ts`, bukan tanda hubung ASCII.
   - **Gaya:** `gaya.css` hanya `@import` ke `gaya/` (token, dasar, komponen, layar, meja, gerak, responsif).
 
@@ -171,7 +171,11 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
 - Kocok & bagi diputar dari peristiwa `mulaiPutaran` (juga di view pertama putaran baru); popup joker baru dibuka setelah antrian habis.
 
 **Lain-lain**
-- **Riwayat SQLite** (`apps/server/src/riwayat.ts`, modul bawaan `node:sqlite`): hanya klasemen akhir permainan online, lewat kait `OpsiMeja.saatSelesai`. Permainan offline tetap hanya di `localStorage` HP. Peringkat menggabungkan pemain berdasarkan **nama** (belum ada akun).
+- **Riwayat SQLite** (`apps/server/src/riwayat.ts`, modul bawaan `node:sqlite`): hanya klasemen akhir permainan online, lewat kait `OpsiMeja.saatSelesai`. Permainan offline tetap hanya di `localStorage` HP. Peringkat menggabungkan pemain berdasarkan **nama** tanpa beda huruf besar/kecil (`kunciNama` di `validasi.ts`; belum ada akun).
+  - **Aturan hitung leaderboard** (keputusan #45: urutan, minimal 3 main, minimal 2 orang, yang keluar juru kunci, saringan, bulan WIB) hanya di `packages/meja/src/peringkat.ts`, dipakai server dan tab Statistik di HP. Jangan menghitung peringkat sendiri di server/UI.
+  - **Skema SQLite hanya berubah dengan menambah entri di belakang `MIGRASI`** (`PRAGMA user_version`). Entri lama jangan diubah. Kolom baru wajib boleh NULL atau punya DEFAULT (server versi sebelumnya harus tetap bisa menulis), dan baris lama dilengkapi di `lengkapiBaris()` secara idempoten.
+  - `GET /api/peringkat` tanpa `v=2` harus tetap array bentuk lama: HP dengan aplikasi lama memanggil `.map()` langsung.
+  - `Kursi.keluar` hanya ada kalau true (golden `dataMejaAkhir` tidak bergeser) dan tidak pernah dikirim ke client.
 - **Emote** hanya boleh dari `DAFTAR_EMOTE` (`packages/meja/src/protokol.ts`), supaya tidak bisa dipakai mengirim pesan bebas. Celetukan bot (`Meja.celetukBot`) hanya boleh menanggapi peristiwa publik, tidak boleh membocorkan kartu.
 - **Nama warga kedai** dari `NAMA_LAWAN_BAWAAN` (`packages/meja/src/meja.ts`, 22 nama: 10 "Warga Madya" lalu 12 tambahan pemilik, ejaan persis) lewat `OpsiMeja.namaLawan`. Urutan diacak dengan `Math.random` (bukan `opsi.acak`, supaya golden celetukan tidak bergeser); latihan memakai urutan tetap. Nama tidak boleh bergantung pada level, kartu, giliran, atau peristiwa.
   - Nama baru **hanya ditambahkan di belakang** daftar: menyisipkan di depan/tengah menggeser golden meja dan lawan latihan.

@@ -13,6 +13,17 @@ docker compose logs --tail 5 # "Remi Kampung Madya v<versi> (<sha>) jalan di por
 
 `docker compose up` mengganti container dengan rapi: `SIGTERM` → server menutup WebSocket, meja, dan database → keluar dengan kode 0 (< 1 detik). Meja online yang sedang jalan hilang (meja hanya di memori), jadi pilih waktu sepi. Permainan offline di HP tidak terpengaruh.
 
+### Rilis leaderboard (skema riwayat v1, keputusan #45)
+
+Rilis ini menambah kolom di database riwayat (`PRAGMA user_version` 0 → 1). Migrasinya otomatis saat server start, dalam satu transaksi, dan kolom barunya boleh NULL atau punya bawaan, jadi image lama tetap bisa jalan di database v1 kalau deploy harus dibatalkan. Tetap ambil cadangan dulu **sebelum** `docker compose up`:
+
+```bash
+docker compose exec remi node --disable-warning=ExperimentalWarning -e "new (require('node:sqlite').DatabaseSync)('/app/data/remi.db').exec(\"VACUUM INTO '/app/data/cadangan-sebelum-v1.db'\")"
+docker compose cp remi:/app/data/cadangan-sebelum-v1.db .
+```
+
+Sesudah start, log server memuat `skema riwayat dimigrasi v0 → v1`, biasanya disusul `riwayat dilengkapi: …` (baris lama diisi jumlah pemain, jumlah manusia, jumlah deck untuk meja 2–3 dan 5–6 orang, dan kunci nama). Start berikutnya tidak mencetak keduanya lagi. Meja 4 orang lama tetap `jumlah_deck` NULL (1 atau 2 deck tidak tercatat) dan tidak ikut saat leaderboard disaring per deck.
+
 ### Identitas build (`sha` di `/healthz`)
 
 Setiap build punya satu id pendek yang sama di client dan server. Aplikasi di HP mencocokkannya dengan `sha` di `/healthz` untuk tahu server sudah memakai build lain (lihat "Perilaku update PWA"). Id dihitung `scripts/idBuild.mjs`, dipanggil build client (`apps/client/vite.config.ts`) dan bundel server (`apps/server/scripts/bundel.mjs`), dengan urutan:
@@ -60,7 +71,9 @@ Ganti `B` dengan `http://127.0.0.1:2567` (di VPS) atau `https://remi.domainkamu.
 | Shell & SW | `curl -sI $B/` dan `curl -sI $B/sw.js` | `cache-control: no-cache` |
 | Gzip | `curl -sI -H 'Accept-Encoding: gzip' $B/` | `content-encoding: gzip` |
 | 404 | `curl -sI $B/assets/tidak-ada.js` | `404`, `cache-control: no-store` |
-| Riwayat | `curl -s $B/api/peringkat` | JSON (array, boleh kosong) |
+| Riwayat (bentuk lama) | `curl -s $B/api/peringkat` | JSON **array** (boleh kosong), dibaca aplikasi lama yang masih ter-cache di HP |
+| Leaderboard v2 | `curl -s "$B/api/peringkat?v=2&urut=rata"` | JSON **objek** `{"v":2,"urut":"rata",…,"peringkat":[…],"belumCukup":[…]}` |
+| Skema riwayat | `docker compose logs remi \| grep 'skema riwayat'` | sekali `skema riwayat dimigrasi v0 → v1` sesudah deploy rilis leaderboard |
 | WebSocket | buka aplikasi → Buat meja baru | lobi muncul dengan kode meja |
 | PWA | Chrome DevTools → Application | service worker `activated`, precache 12 entri, manifest tanpa error |
 

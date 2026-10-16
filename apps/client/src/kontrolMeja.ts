@@ -43,7 +43,7 @@ import {
   tanda,
   teksCaraSelesai,
 } from './ui/rincianSkor';
-import { opsiKonfirmasiKeluar } from './ui/lobi';
+import { mejaMasukPeringkat, opsiKonfirmasiKeluar } from './ui/lobi';
 import { ATRIBUT_LUAR, KEDAI, TAUTAN_KEDAI } from './konten/kedai';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang } from './ui/jendelaMalas';
@@ -2250,7 +2250,14 @@ export class KontrolMeja implements AksiAdegan {
                 return this.app.keluarMeja();
               }
               // Teks sama dengan jalur tombol Back (main.ts) lewat opsiKonfirmasiKeluar.
-              void konfirmasi(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, selesai: this.view?.status === 'selesai' })).then((ya) => {
+              void konfirmasi(
+                opsiKonfirmasiKeluar({
+                  asal: 'meja',
+                  offline: false,
+                  selesai: this.view?.status === 'selesai',
+                  masukPeringkat: mejaMasukPeringkat(this.info),
+                }),
+              ).then((ya) => {
                 if (!ya || this.hancur) return;
                 tutupModal();
                 this.app.kirim({ t: 'keluar' });

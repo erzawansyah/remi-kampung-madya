@@ -271,6 +271,14 @@ function potong(s: string): string {
 }
 
 /**
+ * Kunci pembanding nama tanpa beda huruf besar/kecil dan spasi tepi ("Budi", "budi " → "budi").
+ * Dipakai meja (nama warga kedai tidak boleh kembar dengan nama orang), peringkat online, dan
+ * statistik di HP. Huruf non-ASCII ikut dikecilkan (lower() SQLite hanya ASCII, jadi server
+ * menghitung kunci ini di JS, bukan di SQL).
+ */
+export const kunciNama = (n: string): string => n.trim().toLocaleLowerCase('id-ID');
+
+/**
  * Nama tampilan: dinormalisasi (NFKC), dibersihkan, maksimal 16 huruf. Kosong atau isinya tidak
  * ada yang terlihat → "Pemain".
  */

@@ -62,6 +62,8 @@
     "selesaiPada": 1007600,
     "alasan": "batasPutaran",
     "jumlahPutaran": 2,
+    "jumlahDeck": 1,
+    "modeKaldu": false,
     "pemain": [
       {
         "kursi": 2,

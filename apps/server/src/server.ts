@@ -181,8 +181,18 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       if (req.method !== 'GET') return json(405, { error: 'Hanya GET.' });
       if (!opsi.riwayat) return json(503, { error: 'Riwayat tidak aktif di server ini.' });
       try {
-        if (url.pathname === '/api/riwayat') return json(200, opsi.riwayat.daftar(Number(url.searchParams.get('batas') ?? 30) || 30));
-        return json(200, opsi.riwayat.peringkat());
+        const q = url.searchParams;
+        if (url.pathname === '/api/riwayat') return json(200, opsi.riwayat.daftar(Number(q.get('batas') ?? 30) || 30));
+        // Tanpa v=2: array bentuk lama. Aplikasi lama yang masih ter-cache di HP memanggil .map() langsung.
+        if (q.get('v') !== '2') return json(200, opsi.riwayat.peringkat());
+        // Parameter yang tidak sah jatuh ke bawaan (rapikanUrutan/rapikanSaringan), tidak pernah 400.
+        return json(
+          200,
+          opsi.riwayat.papan({
+            urut: q.get('urut'),
+            saringan: { jumlahPemain: q.get('pemain'), jumlahDeck: q.get('deck'), periode: q.get('periode') },
+          }),
+        );
       } catch (e) {
         log('galat membaca riwayat', e);
         return json(500, { error: 'Gagal membaca riwayat.' });

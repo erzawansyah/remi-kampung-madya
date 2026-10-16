@@ -11,7 +11,7 @@ import { catatanDariView, kunciPermainan, simpan } from './penyimpanan';
 import { bangunkanGame, buatGame, tidurkanGame, type PenampungGame } from './game/game';
 import { KontrolMeja, type AppUntukMeja } from './kontrolMeja';
 import { konfirmasiTimpaSimpanan, renderBeranda, renderDaftarPublik, type BerandaTerpasang, type StatusOnline } from './ui/beranda';
-import { opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
+import { mejaMasukPeringkat, opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
 import { renderRiwayat } from './ui/riwayat';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang, siapkanJendelaMalas } from './ui/jendelaMalas';
@@ -378,7 +378,14 @@ class Aplikasi implements AppUntukMeja {
   private async konfirmasiKeluar(asal: 'lobi' | 'meja') {
     const offline = this.jenis === 'offline';
     // Teks sama dengan tombol keluar di lobi dan menu meja (ui/lobi.ts).
-    const ya = await konfirmasi(opsiKonfirmasiKeluar({ asal, offline, selesai: asal === 'meja' && this.view?.status === 'selesai' }));
+    const ya = await konfirmasi(
+      opsiKonfirmasiKeluar({
+        asal,
+        offline,
+        selesai: asal === 'meja' && this.view?.status === 'selesai',
+        masukPeringkat: asal === 'meja' && !offline && mejaMasukPeringkat(this.info),
+      }),
+    );
     // Layar sudah berganti selagi dialog terbuka (mis. host memulai permainan dari lobi):
     // teks konfirmasinya sudah tidak berlaku, jadi jangan keluar.
     if (!ya || this.layar !== asal) return;

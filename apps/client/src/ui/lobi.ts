@@ -42,7 +42,16 @@ export interface KeadaanKeluar {
   offline: boolean;
   /** Permainan sudah selesai (klasemen akhir). */
   selesai?: boolean;
+  /**
+   * Meja online ini masuk peringkat (minimal 2 orang di kursi, keputusan pemilik #45): keluar di
+   * tengah permainan dihitung juru kunci, jadi pemain diberi tahu.
+   */
+  masukPeringkat?: boolean;
 }
+
+/** Ada minimal 2 kursi manusia (yang keluar sudah jadi warga kedai): permainannya masuk peringkat online. */
+export const mejaMasukPeringkat = (info: Pick<InfoMeja, 'kursi'> | null | undefined): boolean =>
+  (info?.kursi.filter((k) => k.jenis === 'manusia').length ?? 0) >= 2;
 
 /**
  * Teks konfirmasi keluar meja. Satu sumber untuk semua jalur supaya pemain selalu membaca hal
@@ -80,7 +89,9 @@ export function opsiKonfirmasiKeluar(k: KeadaanKeluar): OpsiKonfirmasi {
   }
   return {
     judul: 'Keluar dari meja?',
-    pesan: 'Kursimu diteruskan warga kedai sampai permainan selesai, dan kamu nggak bisa balik ke kursi ini lagi.',
+    pesan: `Kursimu diteruskan warga kedai sampai permainan selesai, dan kamu nggak bisa balik ke kursi ini lagi.${
+      k.masukPeringkat ? ' Di peringkat online kamu dihitung juru kunci.' : ''
+    }`,
     ya: 'Keluar',
     tidak: 'Tetap di sini',
     bahaya: true,
@@ -166,7 +177,7 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
     void navigator.share?.({ title: 'Main Remi Kampung Madya', text: `Gabung meja Remi Kampung Madya, kode ${info.kode}`, url: tautan }).catch(() => undefined);
   });
   q('#keluar')!.addEventListener('click', async () => {
-    const ya = await konfirmasi(opsiKonfirmasiKeluar({ asal: 'lobi', offline: false }));
+    const ya = await konfirmasi(opsiKonfirmasiKeluar({ asal: 'lobi', offline: false, masukPeringkat: false }));
     // Selagi dialog terbuka host bisa saja memulai permainan (layar sudah jadi meja): teks
     // "selama permainan belum mulai" tidak berlaku lagi, jadi jangan keluar diam-diam.
     if (ya && akar.querySelector('.layar-lobi')) keluar();

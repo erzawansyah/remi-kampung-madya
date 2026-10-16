@@ -129,11 +129,18 @@ export interface RingkasanAkhir {
   selesaiPada: number;
   alasan: 'sepakat' | 'batasPutaran' | 'batasSkor' | null;
   jumlahPutaran: number;
+  /** 1 atau 2 (aturanPembagian di engine). */
+  jumlahDeck: number;
+  /** Permainan memakai Mode Kaldu. Selalu false sampai mode itu ada. */
+  modeKaldu: boolean;
   /** Urut dari peringkat 1. Skor sama = peringkat sama. */
   pemain: {
     kursi: number;
     nama: string;
+    /** Kursi warga kedai di akhir permainan. Pemain yang keluar di tengah permainan tetap false. */
     bot: boolean;
+    /** Pemain manusia yang menekan Keluar saat permainan berjalan (dihitung juru kunci di peringkat). */
+    keluar?: true;
     skor: number;
     peringkat: number;
     mentung: number;
