@@ -263,6 +263,11 @@ function tinggiAtasKartuPanel(barisKepala: 1 | 2 | 3 | 'ringkas' | 'ringkas2', s
 }
 /** Jarak minimum label '+N' (di bawah tumpukan buangan) ke nama pembuang di kanannya (px CSS). */
 const JARAK_PLUS = 4;
+/**
+ * Ukuran terkecil inisial pembuang di bawah buangan (px CSS, tidak dikali skala teks): inisial yang tidak muat
+ * di ukuran biasa dikecilkan sampai sini dulu sebelum disembunyikan.
+ */
+export const UKURAN_MIN_LABEL_BUANGAN = 9;
 /** Celah nama ↔ info di kepala panel (px CSS). */
 const CELAH_KEPALA = 8;
 
@@ -843,6 +848,48 @@ export function kiraLebarTeks(isi: string, ukuranPx: number, tebal = false): num
   return em * ukuranPx * (tebal ? 1.08 : 1);
 }
 
+/**
+ * Kelas lebar huruf (em) untuk kiraLebarLabel. Diukur dengan canvas measureText di Chromium (16 Okt 2026) untuk
+ * font MejaScene (system-ui, di mesin ukur jatuh ke Inter) dan pembanding Liberation Sans (metrik Arial), DejaVu
+ * Sans, dan FreeSans. Nilai tiap kelas = huruf terlebar di kelas itu dari semua font tadi, ditambah 2 % (kerning
+ * paling banyak menambah 0,9 %). Data ukurnya disimpan sebagai data uji: apps/client/test/data/lebarHuruf.ts.
+ * Huruf beraksen dinilai dari huruf dasarnya ('É' = 'E').
+ */
+const KELAS_LEBAR_LABEL: readonly (readonly [RegExp, number])[] = [
+  [/[iljI.,:;'’|`\s]/, 0.325],
+  [/[frt()!\[\]{}\/\\]/, 0.42],
+  [/[sz\-_?"*^~+=<>]/, 0.568],
+  [/[abcdeghknopquvxy0-9FJL$%]/, 0.659],
+  [/[ABEKPSTVXYZ]/, 0.704],
+  [/[CHNRU]/, 0.769],
+  [/[DGOQ&]/, 0.803],
+  [/[Mw#]/, 0.922],
+  [/[Wm…]/, 1.02],
+];
+/** Emoji (Noto Color Emoji ±1,25 em). */
+const LEBAR_EMOJI_LABEL = 1.273;
+/** Huruf lain (aksara non-Latin, simbol jarang seperti '@'): anggap selebar huruf terlebar. */
+const LEBAR_LAIN_LABEL = 1.04;
+/** Tebal: huruf tebal paling banyak ±17,5 % lebih lebar dari nilai kelasnya. */
+const FAKTOR_TEBAL_LABEL = 1.18;
+
+/**
+ * Perkiraan lebar teks (piksel perangkat, dibulatkan ke atas seperti lebar Text Phaser) yang tidak pernah lebih
+ * sempit daripada aslinya di font yang diukur (lihat KELAS_LEBAR_LABEL), dan paling banyak ±20 % lebih lebar.
+ * Khusus label sempit (labelSempit): di sana perkiraan yang kekecilan membuat scene menyembunyikan inisial
+ * ('MM' Mbak Mata, 'MS', 'CO'), karena pasTeks tidak mau menyisakan potongan yang lebih pendek dari minHuruf.
+ * kiraLebarTeks sengaja tidak diganti supaya pembagian ruang teks lain di meja tidak bergeser.
+ */
+export function kiraLebarLabel(isi: string, ukuranPx: number, tebal = false): number {
+  let em = 0;
+  for (const c of isi) {
+    const dasar = c.normalize('NFD')[0] ?? c;
+    const kelas = KELAS_LEBAR_LABEL.find(([r]) => r.test(dasar));
+    em += kelas ? kelas[1] : /\p{Extended_Pictographic}/u.test(c) ? LEBAR_EMOJI_LABEL : LEBAR_LAIN_LABEL;
+  }
+  return Math.ceil(em * ukuranPx * (tebal ? FAKTOR_TEBAL_LABEL : 1) - 1e-9);
+}
+
 /** Lebar dasar kolom info di tengah (arah, giliran, putaran), piksel perangkat. */
 function lebarInfoTengah(u: UkuranLayar): number {
   return 104 * u.d * Math.min(u.skalaTeks, 1.25);
@@ -916,27 +963,37 @@ function hurufPembeda(nama: string, namaLain: readonly string[]): number {
 
 /**
  * Label nama di tempat sempit (mis. di bawah kartu buangan): nama lengkap kalau muat, lalu inisial,
- * lalu nama terpotong; selain itu null (label disembunyikan, bukan "B…"). `namaLain` = nama pemain lain
- * di meja, supaya label tidak tertukar: inisial hanya dipakai kalau tidak kembar dengan inisial atau nama
- * orang lain ("Pak Seng" & "Pak Sule" sama-sama "PS", "Jurik" & "Juragan" sama-sama "JU"), dan potongan
- * minimal 3 huruf, lebih panjang kalau awal namanya sama ("Juri…" & "Jura…", bukan "Jur…"). `minHuruf`
- * juga berlaku kalau nama lengkap ternyata tidak muat saat diukur scene.
+ * lalu nama terpotong, lalu inisial dengan huruf lebih kecil (sampai `ukuranMinPx`); selain itu null (label
+ * disembunyikan, bukan "B…"). `namaLain` = nama pemain lain di meja, supaya label tidak tertukar: inisial hanya
+ * dipakai kalau tidak kembar dengan inisial atau nama orang lain ("Pak Seng" & "Pak Sule" sama-sama "PS",
+ * "Jurik" & "Juragan" sama-sama "JU"), dan potongan minimal 3 huruf, lebih panjang kalau awal namanya sama
+ * ("Juri…" & "Jura…", bukan "Jur…"). `minHuruf` juga berlaku kalau nama lengkap ternyata tidak muat saat diukur
+ * scene. Lebar diperkirakan dengan kiraLebarLabel pada ukuran yang dibulatkan seperti di scene.
+ * `ukuranPx` di hasil (piksel perangkat, bulat) hanya ada kalau hurufnya dikecilkan: pemanggil wajib memakainya.
  */
 export function labelSempit(
   nama: string,
   lebar: number,
   ukuranPx: number,
   namaLain: readonly string[] = [],
-): { isi: string; minHuruf: number } | null {
+  ukuranMinPx = ukuranPx,
+): { isi: string; minHuruf: number; ukuranPx?: number } | null {
   if (!nama || lebar <= 0) return null;
+  // MejaScene membulatkan ukuran font ke piksel perangkat terdekat; perkiraannya ikut ukuran itu.
+  const px = Math.round(ukuranPx);
   const minHuruf = hurufPembeda(nama, namaLain);
-  if (kiraLebarTeks(nama, ukuranPx) <= lebar) return { isi: nama, minHuruf };
+  if (kiraLebarLabel(nama, px) <= lebar) return { isi: nama, minHuruf };
   const ini = inisialNama(nama);
   const kembar = (x: string | null) => !!x && x.toLowerCase() === ini?.toLowerCase();
-  if (ini && kiraLebarTeks(ini, ukuranPx) <= lebar && !namaLain.some((n) => kembar(n) || kembar(inisialNama(n)))) {
-    return { isi: ini, minHuruf: ini.length };
+  const iniBoleh = !!ini && !namaLain.some((n) => kembar(n) || kembar(inisialNama(n)));
+  if (ini && iniBoleh && kiraLebarLabel(ini, px) <= lebar) return { isi: ini, minHuruf: ini.length };
+  if (minHuruf <= nama.length && kiraLebarLabel(`${nama.slice(0, minHuruf).trimEnd()}…`, px) <= lebar) return { isi: nama, minHuruf };
+  // Inisial pun tidak muat: kecilkan hurufnya satu piksel demi satu piksel sampai batas bawah, daripada disembunyikan.
+  if (ini && iniBoleh) {
+    for (let k = px - 1; k >= Math.ceil(ukuranMinPx - 1e-9); k--) {
+      if (kiraLebarLabel(ini, k) <= lebar) return { isi: ini, minHuruf: ini.length, ukuranPx: k };
+    }
   }
-  if (minHuruf <= nama.length && kiraLebarTeks(`${nama.slice(0, minHuruf).trimEnd()}…`, ukuranPx) <= lebar) return { isi: nama, minHuruf };
   return null;
 }
 
@@ -1347,8 +1404,15 @@ function gambarTengah(
     const xLabel = Math.max(kx - cwT / 2 + 1 * d, i === 0 ? batasNamaPertama : -Infinity);
     const lebarLabel = (i === tampil.length - 1 ? cwT : langkah) - 2 * d - (xLabel - (kx - cwT / 2 + 1 * d));
     const namaLain = v.pemain.filter((_, j) => j !== e.pemilik).map((p) => p.nama);
-    const label = ringkas ? null : labelSempit(v.pemain[e.pemilik]?.nama ?? '', lebarLabel, 10 * s * d, namaLain);
-    if (label) t.teks.push({ kunci: `b-nama:${i}`, x: xLabel, y: yLabelBawah, isi: label.isi, ukuran: 10, warna: 'redup', maks: lebarLabel, minHuruf: label.minHuruf });
+    // Inisial yang tetap tidak muat boleh dikecilkan sampai UKURAN_MIN_LABEL_BUANGAN px CSS (tanpa skala teks besar).
+    const label = ringkas ? null : labelSempit(v.pemain[e.pemilik]?.nama ?? '', lebarLabel, 10 * s * d, namaLain, UKURAN_MIN_LABEL_BUANGAN * d);
+    if (label) {
+      // `ukuran` di TeksTata dikali skala teks dan dpr oleh scene, jadi ukuran yang dikecilkan dibagi balik.
+      const ukuran = label.ukuranPx ? label.ukuranPx / (s * d) : 10;
+      // Teks rata atas: yang dikecilkan diturunkan sedikit supaya garis dasarnya sejajar label di sebelahnya.
+      const turun = label.ukuranPx ? (Math.round(10 * s * d) - label.ukuranPx) * 0.9 : 0;
+      t.teks.push({ kunci: `b-nama:${i}`, x: xLabel, y: yLabelBawah + turun, isi: label.isi, ukuran, warna: 'redup', maks: lebarLabel, minHuruf: label.minHuruf });
+    }
   });
   // Tujuan kartu yang baru dibuang: slot berikutnya di atas tumpukan.
   const iAtas = Math.min(tampil.length, kapasitas - 1);

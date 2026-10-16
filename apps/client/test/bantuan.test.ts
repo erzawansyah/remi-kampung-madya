@@ -94,6 +94,15 @@ describe('konten: status keputusan pemilik dan isi menu', () => {
     expect(f.jawab).toContain('tidak bisa mentung');
   });
 
+  // Keputusan pemilik 16 Okt 2026 (Aturan Terbuka #20–#23): susun akhir sesuai bawaan, sudah pasti.
+  it('susun akhir: tanpa catatan menunggu konfirmasi', () => {
+    const bab = BAB_BANTUAN.find((b) => b.id === 'akhir-putaran')!;
+    const teks = JSON.stringify(bab);
+    expect(teks).toContain('Susun akhir');
+    expect(teks).not.toContain(CATATAN_MENUNGGU);
+    expect(teks).not.toMatch(/menunggu konfirmasi|perlu konfirmasi/);
+  });
+
   it('nilai joker mati di tangan dan sebagai pentungan: kartu aslinya, tanpa catatan menunggu', () => {
     const catatan = BAB_BANTUAN.flatMap((b) => b.isi).find(
       (x) => x.t === 'catatan' && x.teks.includes('pernah dibuang'),

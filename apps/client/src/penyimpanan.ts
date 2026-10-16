@@ -4,7 +4,8 @@
 // diperiksa: nilai yang tidak cocok diganti bawaan dan kuncinya dihapus supaya tidak mengganggu terus.
 
 import type { ViewPemain } from '@remi/engine';
-import { rapikanLevel, type DataMeja, type InfoKursi, type PengaturanMeja } from '@remi/meja';
+import { rapikanBatasSkor, rapikanLevel, type DataMeja, type InfoKursi, type PengaturanMeja } from '@remi/meja';
+import type { TawaranPasang } from './pasangAplikasi';
 import { aturPreferensi, preferensi } from './preferensi';
 
 const KUNCI = {
@@ -19,6 +20,8 @@ const KUNCI = {
   efek: 'remi.efek',
   /** Permainan latihan (tutorial) yang sedang tersimpan di slot offline. */
   latihan: 'remi.latihanTersimpan',
+  /** Tawaran pasang aplikasi di beranda (keputusan #46): "Nanti saja" / "Sudah kupasang". */
+  tawaranPasang: 'remi.tawaranPasang',
 } as const;
 
 /** Riwayat lokal yang disimpan (permainan terbaru di depan). */
@@ -105,16 +108,38 @@ const rapikanObjekAtauNull = <T>(x: unknown): T | null | undefined => (x === nul
 const rapikanSesi: Rapikan<SesiOnline | null> = (x) =>
   x === null ? null : objek(x) && typeof x.kode === 'string' && typeof x.token === 'string' && x.kode && x.token ? { kode: x.kode, token: x.token } : undefined;
 
+/**
+ * Tawaran pasang aplikasi: hanya waktu (ms) yang angka terhingga dan positif yang dipakai, field
+ * lain dibuang. Bukan objek sama sekali = rusak (jatuh ke {} dan kuncinya dihapus).
+ */
+export const rapikanTawaranPasang: Rapikan<TawaranPasang> = (x) => {
+  if (!objek(x)) return undefined;
+  const t: TawaranPasang = {};
+  if (angka(x.tundaSampai) && x.tundaSampai > 0) t.tundaSampai = x.tundaSampai;
+  if (angka(x.sudahPasang) && x.sudahPasang > 0) t.sudahPasang = x.sudahPasang;
+  return t;
+};
+
 const rapikanDaftarString: Rapikan<string[]> = (x) => (Array.isArray(x) ? x.filter((s): s is string => typeof s === 'string') : undefined);
 
 /**
  * Pengaturan meja offline terakhir. Level warga kedai yang tidak dikenal (rusak, atau dari versi
- * lain) jadi bawaan ('normal'); field lain dibiarkan, isiannya tetap disaring Meja.
+ * lain) jadi bawaan ('normal'). Batas skor (keputusan #44): angka dirapikan ke kelipatan 10 dengan
+ * tanda yang benar (simpanan lama ±500 tetap ±500), null tetap tanpa batas, bentuk lain dibuang
+ * supaya jatuh ke bawaan (tanpa batas). Field lain dibiarkan, isiannya tetap disaring Meja.
  */
 const rapikanPengaturanOffline: Rapikan<Partial<PengaturanMeja>> = (x) => {
   if (!objek(x)) return undefined;
   const p = { ...x } as Partial<PengaturanMeja>;
   if ('levelBot' in p) p.levelBot = rapikanLevel(p.levelBot);
+  for (const [k, arah] of [
+    ['batasSkorAtas', 'atas'],
+    ['batasSkorBawah', 'bawah'],
+  ] as const) {
+    if (!(k in p) || p[k] === null) continue;
+    if (angka(p[k])) p[k] = rapikanBatasSkor(p[k], arah);
+    else delete p[k];
+  }
   return p;
 };
 
@@ -215,6 +240,13 @@ export const simpan = {
   },
   setPengaturanEfek: (e: PengaturanEfek) => {
     aturPreferensi({ suara: e.suara, getar: e.getar });
+  },
+
+  tawaranPasang: () => baca<TawaranPasang>(KUNCI.tawaranPasang, {}, rapikanTawaranPasang),
+  /** Objek kosong menghapus kuncinya. */
+  setTawaranPasang: (t: TawaranPasang) => {
+    const rapi = rapikanTawaranPasang(t) ?? {};
+    tulis(KUNCI.tawaranPasang, Object.keys(rapi).length ? rapi : null);
   },
 
   urutanTangan: () => baca<string[]>(KUNCI.urutanTangan, [], rapikanDaftarString),

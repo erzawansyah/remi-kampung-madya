@@ -577,10 +577,6 @@ export const BAB_BANTUAN: BabBantuan[] = [
         t: 'paragraf',
         teks: 'Setelah semua selesai, skor putaran dihitung dan ditambahkan ke skor total.',
       },
-      {
-        t: 'catatan',
-        teks: 'Beberapa detail susun akhir (siapa saja yang ikut, boleh sampai tangan habis, serentak, dan batas waktunya di meja online) masih menunggu konfirmasi pemilik aturan. Yang tertulis di sini adalah cara aplikasi berjalan sekarang.',
-      },
     ],
   },
   {
@@ -648,6 +644,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Batas skor atas: ada pemain yang skor totalnya mencapai batas itu atau lebih.',
           'Batas skor bawah: ada pemain yang skor totalnya turun sampai batas itu atau lebih rendah.',
         ],
+      },
+      {
+        t: 'paragraf',
+        teks: 'Angka batas skor bebas, asal kelipatan 10, misalnya 250 untuk batas atas dan −120 untuk batas bawah. Batas bawah cukup diketik angkanya (120), minusnya dipasang otomatis. Angka yang bukan kelipatan 10 dibulatkan, dan isian yang dikosongkan berarti tanpa batas.',
       },
       {
         t: 'paragraf',
@@ -738,7 +738,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
         butir: [
           'Orang baru hanya bisa masuk selama meja masih di lobi.',
           `Sambungan putus atau halaman ke-refresh? Aplikasi menyambung ulang sendiri. Giliranmu ditunggu ${DETIK_TENGGANG} detik sejak kamu terputus (atau sampai waktu giliran habis, mana yang duluan). Lewat dari itu, warga kedai menjalankan giliranmu sampai kamu kembali.`,
-          'Keluar meja di tengah permainan: kursimu diteruskan warga kedai sampai permainan selesai, dan nggak bisa diambil lagi.',
+          'Keluar meja di tengah permainan: kursimu diteruskan warga kedai sampai permainan selesai, dan nggak bisa diambil lagi. Kalau mejanya minimal 2 orang, di peringkat online kamu dihitung juru kunci. Sinyal putus atau aplikasi ketutup nggak dihitung keluar.',
           'Waktu giliran habis: warga kedai menyelesaikan giliranmu.',
           'Kalau semua pemain manusia terputus, meja menunggu sampai ada yang kembali. Waktu giliran diberi penuh lagi begitu ia tersambung.',
           'Host pergi: tugas host pindah ke pemain manusia lain yang masih terhubung.',
@@ -749,7 +749,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: 'Hasil akhir permainan online masuk **Riwayat & peringkat**. Peringkat menggabungkan pemain berdasarkan nama, jadi pakai nama yang sama setiap main.',
+        teks: 'Hasil akhir permainan online masuk **Riwayat & peringkat**. Yang dihitung di peringkat cuma meja yang dimainkan minimal 2 orang. Urutan bawaannya rata-rata skor akhir per permainan, dan bisa diganti (skor terbaik, persen juara, jumlah juara, dan lainnya). Peringkat menggabungkan pemain berdasarkan nama tanpa beda huruf besar/kecil, jadi pakai nama yang sama setiap main. Cara hitung lengkapnya ada di tab Peringkat.',
       },
     ],
   },

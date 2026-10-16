@@ -4,6 +4,9 @@
 // lalu mainkan alur pendek di Chrome sistem untuk HP (390×844 dpr3, sentuh) dan desktop (1440×900):
 //   beranda → main bareng warga kedai (tempo cepat) → OK joker → ambil deck → pilih kartu → buang →
 //   Pengaturan (warna kartu) → Bantuan → Tentang → menu → Simpan & ke beranda → Lanjutkan.
+// Ditambah alur "pasang" (keputusan #46): tombol pasang melayang di beranda dengan user agent Chrome
+// Android, HP potret 360×780 dan lanskap 780×360 (terlihat, tidak meluber, tidak menabrak toast,
+// "Nanti saja" bertahan sesudah muat ulang, tidak ada di meja).
 //
 // Gagal (exit 1) bila: ada pageerror / console error (kecuali WebSocket & /api saat server mati),
 // ketukan pada tombol/jendela HTML tembus ke kanvas, tombol utama tidak bisa ditekan, atau
@@ -13,7 +16,7 @@
 //   npm run e2e                        build + preview + jalankan dua perangkat
 //   npm run e2e -- --tanpa-build       pakai build e2e sebelumnya (apps/client/e2e/hasil/dist)
 //   npm run e2e -- --url=http://localhost:5173   uji server yang sudah jalan (tanpa build)
-//   npm run e2e -- --perangkat=hp      hanya satu perangkat (hp | desktop)
+//   npm run e2e -- --perangkat=hp      hanya satu alur (hp | desktop | pasang)
 //   npm run e2e -- --tampil            buka jendela Chrome (bukan headless)
 // Env:
 //   CHROME_PATH=/jalan/ke/chrome       Chrome/Chromium yang dipakai (tidak ada unduhan browser)
@@ -45,7 +48,9 @@ const PERANGKAT = {
   hp: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
   desktop: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
 };
-const dipilih = (argumen.get('perangkat') ?? 'hp,desktop').split(',').filter((p) => p in PERANGKAT);
+/** User agent Chrome Android untuk alur tombol pasang (headless Chrome bawaan mengaku desktop Linux). */
+const UA_ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36';
+const dipilih = (argumen.get('perangkat') ?? 'hp,desktop,pasang').split(',').filter((p) => p in PERANGKAT || p === 'pasang');
 
 const log = (...a) => console.log('[e2e]', ...a);
 
@@ -286,6 +291,9 @@ async function jalankanPerangkat(chromium, executablePath, url, nama) {
         localStorage.clear();
         // Tutorial dianggap sudah dilihat supaya beranda langsung ke menu main.
         localStorage.setItem('remi.preferensi', JSON.stringify({ tutorialSelesai: true }));
+        // Tombol pasang melayang (keputusan #46) tidak ikut alur ini: punya alur sendiri ("pasang").
+        // tundaSampai ikut diisi untuk berjaga-jaga kalau Chrome menawarkan prompt (yang menghapus sudahPasang).
+        localStorage.setItem('remi.tawaranPasang', JSON.stringify({ sudahPasang: Date.now(), tundaSampai: Date.now() + 2 * 24 * 3600e3 }));
       });
       await page.reload({ waitUntil: 'load' });
       await page.locator('#mulai-bot').waitFor({ state: 'visible', timeout: 20_000 });
@@ -508,6 +516,200 @@ async function jalankanPerangkat(chromium, executablePath, url, nama) {
   return hasil;
 }
 
+/**
+ * Alur tombol pasang aplikasi (keputusan #46) dengan user agent Chrome Android, HP potret dan lanskap:
+ * tombol melayang terlihat utuh di layar, halaman tidak meluber, tidak menabrak tumpukan toast,
+ * "Nanti saja" menyembunyikannya dan tetap tersembunyi sesudah muat ulang (ubin menu tetap ada),
+ * dan begitu permainan dimulai tidak ada tombol pasang di meja. Ditambah HP 320 px dengan teks
+ * besar (tombol tetap satu baris) dan kunjungan pertama (tanpa tombol melayang selama kartu latihan).
+ */
+async function jalankanTawaranPasang(chromium, executablePath, url) {
+  const nama = 'pasang';
+  const dir = join(HASIL, nama);
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const masalah = [];
+  const catatan = {};
+  const langkah = [];
+  const browser = await chromium.launch({ executablePath, headless: !TAMPIL, args: ARG_CHROME });
+  let nomorFoto = 0;
+
+  const langkahKe = async (judul, page, fn) => {
+    const t0 = Date.now();
+    log(`${nama}: ${judul}`);
+    try {
+      await fn();
+      langkah.push({ judul, ms: Date.now() - t0, ok: true });
+    } catch (e) {
+      langkah.push({ judul, ms: Date.now() - t0, ok: false });
+      await page.screenshot({ path: join(dir, `${String(nomorFoto++).padStart(2, '0')}-GAGAL-${judul.replace(/[^a-z0-9]+/gi, '-')}.png`) }).catch(() => {});
+      throw new Error(`${judul}: ${e.message.split('\n')[0]}`);
+    }
+  };
+
+  /** Konteks HP Android baru dengan simpanan bersih (bawaan: tutorial dianggap sudah dilihat). */
+  const bukaBeranda = async (viewport, label, preferensi = { tutorialSelesai: true }) => {
+    const ctx = await browser.newContext({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: UA_ANDROID, locale: 'id-ID' });
+    const page = await ctx.newPage();
+    page.setDefaultTimeout(10_000);
+    page.on('pageerror', (e) => masalah.push(`${label}: pageerror: ${e.message}`));
+    page.on('console', (m) => {
+      if (m.type() !== 'error') return;
+      const teks = m.text();
+      const asal = m.location()?.url ?? '';
+      if (BOLEH.test(teks) || BOLEH.test(asal)) return;
+      masalah.push(`${label}: console.error: ${teks.slice(0, 300)}`);
+    });
+    await page.goto(url, { waitUntil: 'load' });
+    await page.evaluate((preferensi) => {
+      localStorage.clear();
+      localStorage.setItem('remi.preferensi', JSON.stringify(preferensi));
+    }, preferensi);
+    await page.reload({ waitUntil: 'load' });
+    await page.locator('#mulai-bot').waitFor({ state: 'visible', timeout: 20_000 });
+    return { ctx, page };
+  };
+  const foto = (page, n) => page.screenshot({ path: join(dir, `${String(nomorFoto++).padStart(2, '0')}-${n}.png`) }).catch(() => {});
+  /** Tunggu tombol melayang selesai muncul (animasi masuk ±1,2 detik sesudah beranda tampil). */
+  const tungguTombol = async (page) => {
+    await page.locator('.pasang-melayang').waitFor({ state: 'visible', timeout: 15_000 });
+    await page.waitForFunction(() => {
+      const el = document.querySelector('.pasang-melayang');
+      return !!el && el.getAnimations().every((a) => a.playState !== 'running' && a.playState !== 'pending');
+    }, null, { timeout: 8000 });
+  };
+  /** Ukur tombol melayang terhadap layar dan tumpukan toast (toast contoh tiga baris, CSS asli). */
+  const ukur = (page, tempat) =>
+    page.evaluate((tempat) => {
+      const m = document.querySelector('.pasang-melayang');
+      if (!m) return { tempat, galat: 'tombol melayang tidak ada' };
+      const wadah = document.getElementById('toast');
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.innerHTML = '<span>Toast contoh yang cukup panjang supaya terlipat beberapa baris di layar HP yang sempit.</span>';
+      wadah.appendChild(t);
+      const rt = wadah.getBoundingClientRect();
+      t.remove();
+      const r = m.getBoundingClientRect();
+      const layar = document.querySelector('.layar.beranda');
+      return {
+        tempat,
+        tombol: { kiri: r.left, atas: r.top, kanan: r.right, bawah: r.bottom },
+        toast: { kiri: rt.left, atas: rt.top, kanan: rt.right, bawah: rt.bottom },
+        lebar: innerWidth,
+        tinggi: innerHeight,
+        luber: document.scrollingElement.scrollWidth > innerWidth + 1 || (layar && layar.scrollWidth > layar.clientWidth + 1),
+        ubin: !!document.querySelector('.beranda-nav [data-nav=pasang]'),
+        terakhir: layar?.lastElementChild === m,
+        // Puncak tombol di bawah tumpukan toast hanya kalau tombolnya satu baris.
+        baris: new Set([...m.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().top))).size,
+      };
+    }, tempat);
+  const periksa = (u) => {
+    if (u.galat) return masalah.push(`${u.tempat}: ${u.galat}`);
+    const { tombol: b, toast: t } = u;
+    if (b.kiri < 0 || b.atas < 0 || b.kanan > u.lebar || b.bawah > u.tinggi) masalah.push(`${u.tempat}: tombol pasang keluar layar ${JSON.stringify(b)}`);
+    if (!(b.bawah <= t.atas || b.atas >= t.bawah || b.kanan <= t.kiri || b.kiri >= t.kanan)) masalah.push(`${u.tempat}: tombol pasang menabrak toast`);
+    if (u.luber) masalah.push(`${u.tempat}: halaman meluber horizontal`);
+    if (!u.ubin) masalah.push(`${u.tempat}: ubin "Pasang ke layar utama" tidak ada`);
+    if (!u.terakhir) masalah.push(`${u.tempat}: tombol melayang bukan anak terakhir .layar.beranda`);
+    if (u.baris !== 1) masalah.push(`${u.tempat}: tombol melayang terlipat ${u.baris} baris`);
+    catatan[u.tempat] = u;
+  };
+
+  try {
+    for (const [arah, viewport] of [
+      ['potret', { width: 360, height: 780 }],
+      ['lanskap', { width: 780, height: 360 }],
+    ]) {
+      const { ctx, page } = await bukaBeranda(viewport, arah);
+      try {
+        await langkahKe(`${arah}: tombol melayang terlihat`, page, async () => {
+          await tungguTombol(page);
+          periksa(await ukur(page, arah));
+          await foto(page, `${arah}-beranda`);
+        });
+        await langkahKe(`${arah}: Nanti saja bertahan sesudah muat ulang`, page, async () => {
+          await page.locator('.pasang-melayang [data-pasang-nanti]').tap();
+          await page.locator('.pasang-melayang').waitFor({ state: 'detached', timeout: 5000 });
+          const s = await page.evaluate(() => ({
+            simpan: JSON.parse(localStorage.getItem('remi.tawaranPasang') ?? '{}'),
+            fokus: document.activeElement?.getAttribute('data-nav'),
+          }));
+          if (!(s.simpan.tundaSampai > Date.now())) masalah.push(`${arah}: tunda "Nanti saja" tidak tersimpan: ${JSON.stringify(s.simpan)}`);
+          if (s.fokus !== 'pasang') masalah.push(`${arah}: fokus sesudah "Nanti saja" tidak di ubin menu (${s.fokus})`);
+          await foto(page, `${arah}-sesudah-nanti`);
+          await page.reload({ waitUntil: 'load' });
+          await page.locator('#mulai-bot').waitFor({ state: 'visible', timeout: 20_000 });
+          await page.waitForTimeout(2500);
+          const lagi = await page.evaluate(() => ({
+            melayang: !!document.querySelector('.pasang-melayang'),
+            ubin: !!document.querySelector('.beranda-nav [data-nav=pasang]'),
+          }));
+          if (lagi.melayang) masalah.push(`${arah}: tombol melayang muncul lagi sesudah muat ulang`);
+          if (!lagi.ubin) masalah.push(`${arah}: ubin "Pasang ke layar utama" hilang sesudah "Nanti saja"`);
+        });
+        await langkahKe(`${arah}: tidak ada tombol pasang di meja`, page, async () => {
+          // Tunda dihapus supaya tombolnya ada di beranda sebelum main.
+          await page.evaluate(() => localStorage.removeItem('remi.tawaranPasang'));
+          await page.reload({ waitUntil: 'load' });
+          await tungguTombol(page);
+          await page.locator('#mulai-bot').scrollIntoViewIfNeeded();
+          await page.locator('#mulai-bot').tap();
+          await page.locator('#modal [data-joker]').waitFor({ state: 'attached', timeout: 30_000 });
+          const diMeja = async () => page.evaluate(() => document.querySelectorAll('.pasang-melayang, [data-nav=pasang], [data-pasang-nanti]').length);
+          if (await diMeja()) masalah.push(`${arah}: tombol pasang ada di meja (popup joker)`);
+          await page.locator('#modal [data-ok]').tap();
+          await page.waitForFunction(() => !document.querySelector('#modal [data-joker]'), null, { timeout: 5000 });
+          await page.waitForTimeout(800);
+          if (await diMeja()) masalah.push(`${arah}: tombol pasang ada di meja`);
+          await foto(page, `${arah}-meja`);
+        });
+      } finally {
+        await ctx.close();
+      }
+    }
+    // HP sempit dengan teks besar: tombol tetap satu baris, tidak menabrak toast.
+    {
+      const { ctx, page } = await bukaBeranda({ width: 320, height: 640 }, 'sempit', { tutorialSelesai: true, ukuranTeks: 'besar' });
+      try {
+        await langkahKe('320 teks besar: tombol melayang satu baris', page, async () => {
+          await tungguTombol(page);
+          periksa(await ukur(page, 'sempit-teks-besar'));
+          await foto(page, 'sempit-teks-besar');
+        });
+      } finally {
+        await ctx.close();
+      }
+    }
+    // Kunjungan pertama (kartu "Warga baru, ya?"): ubin saja, tombol melayang belum muncul.
+    {
+      const { ctx, page } = await bukaBeranda({ width: 360, height: 780 }, 'pemain-baru', {});
+      try {
+        await langkahKe('pemain baru: tanpa tombol melayang selama kartu latihan tampil', page, async () => {
+          await page.locator('.tawaran-latihan').waitFor({ state: 'visible' });
+          await page.waitForTimeout(2500);
+          const s = await page.evaluate(() => ({
+            melayang: !!document.querySelector('.pasang-melayang'),
+            ubin: !!document.querySelector('.beranda-nav [data-nav=pasang]'),
+          }));
+          if (s.melayang) masalah.push('pemain baru: tombol melayang muncul bersama kartu latihan');
+          if (!s.ubin) masalah.push('pemain baru: ubin "Pasang ke layar utama" tidak ada');
+          await foto(page, 'pemain-baru');
+        });
+      } finally {
+        await ctx.close();
+      }
+    }
+  } catch (e) {
+    masalah.push(String(e.message ?? e));
+  }
+  const hasil = { perangkat: nama, ok: masalah.length === 0, masalah, langkah, catatan };
+  writeFileSync(join(dir, 'hasil.json'), JSON.stringify(hasil, null, 2));
+  await browser.close();
+  return hasil;
+}
+
 // ---------------------------------------------------------------------------------------------
 
 async function utama() {
@@ -529,7 +731,7 @@ async function utama() {
     return 1;
   }
   if (!dipilih.length) {
-    console.error('[e2e] --perangkat harus hp dan/atau desktop.');
+    console.error('[e2e] --perangkat harus hp, desktop, dan/atau pasang.');
     return 1;
   }
   mkdirSync(HASIL, { recursive: true });
@@ -537,7 +739,9 @@ async function utama() {
   const server = await siapkanServer();
   const semua = [];
   try {
-    for (const nama of dipilih) semua.push(await jalankanPerangkat(chromium, executablePath, server.url, nama));
+    for (const nama of dipilih) {
+      semua.push(nama === 'pasang' ? await jalankanTawaranPasang(chromium, executablePath, server.url) : await jalankanPerangkat(chromium, executablePath, server.url, nama));
+    }
   } finally {
     await server.tutup();
   }

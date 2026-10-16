@@ -231,3 +231,42 @@ describe('riwayat online: permainan yang sama hanya dicatat sekali', () => {
     expect(kunciPermainan('MADYA', v)).not.toMatch(/7/);
   });
 });
+
+describe('tawaranPasang (remi.tawaranPasang, keputusan #46)', () => {
+  it('bawaan {}; tersimpan sah tetap terbaca; objek kosong menghapus kunci', async () => {
+    const { simpan } = await muat();
+    expect(simpan.tawaranPasang()).toEqual({});
+    simpan.setTawaranPasang({ tundaSampai: 1000, sudahPasang: 2000 });
+    expect(JSON.parse(localStorage.getItem('remi.tawaranPasang')!)).toEqual({ tundaSampai: 1000, sudahPasang: 2000 });
+    expect(simpan.tawaranPasang()).toEqual({ tundaSampai: 1000, sudahPasang: 2000 });
+    simpan.setTawaranPasang({});
+    expect(localStorage.getItem('remi.tawaranPasang')).toBeNull();
+  });
+
+  it('hanya angka terhingga positif yang dipakai; field lain dibuang', async () => {
+    localStorage.setItem('remi.tawaranPasang', JSON.stringify({ tundaSampai: -5, sudahPasang: 'kemarin', lain: 1 }));
+    const { simpan } = await muat();
+    expect(simpan.tawaranPasang()).toEqual({});
+    localStorage.setItem('remi.tawaranPasang', JSON.stringify({ tundaSampai: 0, sudahPasang: 1e12 }));
+    expect(simpan.tawaranPasang()).toEqual({ sudahPasang: 1e12 });
+    // Tulis juga dirapikan (NaN/Infinity tidak pernah tersimpan).
+    simpan.setTawaranPasang({ tundaSampai: Number.POSITIVE_INFINITY, sudahPasang: Number.NaN });
+    expect(localStorage.getItem('remi.tawaranPasang')).toBeNull();
+  });
+
+  it('bukan objek atau JSON rusak → {} dan kuncinya dihapus', async () => {
+    const { simpan } = await muat();
+    for (const mentah of ['[1,2]', '"x"', '42', 'null', '{rusak']) {
+      localStorage.setItem('remi.tawaranPasang', mentah);
+      expect(simpan.tawaranPasang(), mentah).toEqual({});
+      expect(localStorage.getItem('remi.tawaranPasang'), mentah).toBeNull();
+    }
+  });
+
+  it('localStorage melempar error: baca {} dan tulis diabaikan', async () => {
+    pasangLocalStorageRusak();
+    const { simpan } = await muat();
+    expect(simpan.tawaranPasang()).toEqual({});
+    expect(() => simpan.setTawaranPasang({ tundaSampai: 1 })).not.toThrow();
+  });
+});

@@ -7,6 +7,7 @@ import { pilihAksiBot, Rng, type ViewPemain } from '@remi/engine';
 import type { PesanKlien, PesanServer } from '@remi/meja';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KoneksiOffline, KoneksiOnline, type StatusKoneksi } from '../src/koneksi';
+import { WsPalsu } from './bantu';
 
 const KUNCI_OFFLINE = 'remi.mejaOffline';
 const KUNCI_SESI = 'remi.sesiOnline';
@@ -252,54 +253,6 @@ describe('KoneksiOffline: simpanan di HP', () => {
 
 // ---------------------------------------------------------------------------------------------
 // Online
-
-class WsPalsu {
-  static readonly CONNECTING = 0;
-  static readonly OPEN = 1;
-  static readonly CLOSING = 2;
-  static readonly CLOSED = 3;
-  static semua: WsPalsu[] = [];
-  static terakhir(): WsPalsu {
-    return WsPalsu.semua[WsPalsu.semua.length - 1]!;
-  }
-
-  readyState = WsPalsu.CONNECTING;
-  terkirim: PesanKlien[] = [];
-  /** false = server diam (sambungan setengah mati): ping tidak dijawab. */
-  jawabPing = true;
-  ditutupKlien = false;
-  onopen: (() => void) | null = null;
-  onmessage: ((e: { data: string }) => void) | null = null;
-  onclose: ((e: { code: number }) => void) | null = null;
-
-  constructor(readonly url: string) {
-    WsPalsu.semua.push(this);
-  }
-  buka() {
-    this.readyState = WsPalsu.OPEN;
-    this.onopen?.();
-  }
-  send(s: string) {
-    const p = JSON.parse(s) as PesanKlien;
-    this.terkirim.push(p);
-    if (p.t === 'ping' && this.jawabPing) queueMicrotask(() => this.onmessage?.({ data: '{"t":"pong"}' }));
-  }
-  kirimDariServer(p: PesanServer) {
-    this.onmessage?.({ data: JSON.stringify(p) });
-  }
-  close() {
-    this.ditutupKlien = true;
-    this.readyState = WsPalsu.CLOSED;
-  }
-  /** Sambungan diputus dari sisi server/jaringan. */
-  putus(code = 1006) {
-    this.readyState = WsPalsu.CLOSED;
-    this.onclose?.({ code });
-  }
-  jenisTerkirim(): string[] {
-    return this.terkirim.filter((p) => p.t !== 'ping').map((p) => p.t);
-  }
-}
 
 describe('KoneksiOnline: sambung ulang, watchdog, antrian', () => {
   let k: KoneksiOnline;

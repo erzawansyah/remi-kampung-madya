@@ -27,6 +27,7 @@ import {
   geserBayangan,
   hitungTataMeja,
   inisialNama,
+  kiraLebarLabel,
   kiraLebarTeks,
   judulMulung,
   labelSempit,
@@ -46,7 +47,9 @@ import {
   type TataMeja,
   type TeksTata,
   type UkuranLayar,
+  UKURAN_MIN_LABEL_BUANGAN,
 } from '../src/game/tataMeja';
+import { LEBAR_HURUF } from './data/lebarHuruf';
 
 // ---------------------------------------------------------------------------------------------
 // Alat bantu
@@ -623,6 +626,66 @@ describe('jumlah kartu & skor lawan selalu kebagian tempat', () => {
   }
 });
 
+/**
+ * Lebar asli (em) di font terlebar yang diukur (data/lebarHuruf.ts): teks utuh kalau sudah diukur (termasuk
+ * kerning), selain itu jumlah lebar hurufnya + 1 % (kerning paling banyak menambah 0,9 %).
+ */
+function emAsli(isi: string, tebal = false): number {
+  return Math.max(
+    ...Object.entries(LEBAR_HURUF).map(([font, f]) => {
+      const utuh = tebal ? undefined : f.teks[isi];
+      if (utuh !== undefined) return utuh;
+      let em = 0;
+      for (const c of isi) {
+        const w = (tebal ? f.tebal : f.normal)[c];
+        if (w === undefined) throw new Error(`huruf '${c}' belum diukur untuk ${font} (data/lebarHuruf.ts)`);
+        em += w;
+      }
+      return em * 1.01;
+    }),
+  );
+}
+
+/** Lebar Text Phaser (measureText dibulatkan ke atas) di font terlebar yang diukur, piksel. */
+const lebarAsli = (isi: string, px: number, tebal = false): number => Math.ceil(emAsli(isi, tebal) * px - 1e-9);
+
+/** Nama, inisial, dan semua potongan ('Mba…') satu nama. */
+function teksLabel(nama: string): string[] {
+  const potong = Array.from({ length: nama.length - 1 }, (_, k) => `${nama.slice(0, k + 1).trimEnd()}…`);
+  return [nama, inisialNama(nama) ?? '', ...potong].filter(Boolean);
+}
+
+describe('kiraLebarLabel: perkiraan lebar label sempit dari hasil ukur font', () => {
+  it('tidak pernah lebih sempit dari aslinya dan paling banyak 20 % lebih lebar: nama warga kedai, inisial, potongan', () => {
+    const salah: string[] = [];
+    for (const nama of NAMA_LAWAN_BAWAAN) {
+      for (const isi of teksLabel(nama)) {
+        const asli = emAsli(isi) * 100;
+        const kira = kiraLebarLabel(isi, 100);
+        if (kira < asli || kira > 1.2 * asli) salah.push(`${isi}: kira ${kira} asli ${asli.toFixed(1)}`);
+        // Di ukuran sungguhan juga, termasuk pembulatan ke atas lebar Text Phaser.
+        for (const px of [9, 10, 11, 12, 18, 24, 27, 30, 33, 35]) {
+          if (kiraLebarLabel(isi, px) < lebarAsli(isi, px)) salah.push(`${isi} @${px}px: kira ${kiraLebarLabel(isi, px)} asli ${lebarAsli(isi, px)}`);
+        }
+        if (kiraLebarLabel(isi, 100, true) < emAsli(isi, true) * 100) salah.push(`${isi} tebal`);
+      }
+    }
+    expect(salah).toEqual([]);
+  });
+
+  it("kiraLebarTeks (pembagi ruang teks lain) meremehkan huruf kapital lebar: itulah sebab inisial 'MM' dulu disembunyikan", () => {
+    expect(kiraLebarTeks('MM', 100)).toBeLessThan(emAsli('MM') * 100 * 0.8);
+    expect(kiraLebarLabel('MM', 100)).toBeGreaterThanOrEqual(emAsli('MM') * 100);
+  });
+
+  it('huruf beraksen dinilai dari huruf dasarnya; emoji dan aksara lain dianggap lebar', () => {
+    expect(kiraLebarLabel('É', 100)).toBe(kiraLebarLabel('E', 100));
+    expect(kiraLebarLabel('ñ', 100)).toBe(kiraLebarLabel('n', 100));
+    expect(kiraLebarLabel('😀', 100)).toBeGreaterThanOrEqual(emAsli('😀') * 100);
+    expect(kiraLebarLabel('@', 100)).toBeGreaterThanOrEqual(emAsli('@') * 100);
+  });
+});
+
 describe('label nama pembuang di bawah buangan', () => {
   it('inisialNama: huruf awal tiap kata (maks 3, tanda hubung = pemisah kata), satu kata: dua huruf pertama', () => {
     expect(inisialNama('Bot 1')).toBe('B1');
@@ -645,16 +708,35 @@ describe('label nama pembuang di bawah buangan', () => {
     expect(labelSempit('Bot 1', 8, px)).toBeNull();
     expect(labelSempit('', 100, px)).toBeNull();
     // Tanpa inisial (dua karakter pertamanya bukan huruf/angka semua): dipotong asal masih ≥ 3 huruf.
-    expect(labelSempit('(Budi)', 25, px)).toEqual({ isi: '(Budi)', minHuruf: 3 });
+    // '(Bu…' ±27 px di font terlebar (elipsis Liberation/DejaVu selebar 1 em), jadi butuh ±29 px.
+    expect(labelSempit('(Budi)', 30, px)).toEqual({ isi: '(Budi)', minHuruf: 3 });
+    expect(labelSempit('(Budi)', 25, px)).toBeNull();
+  });
+
+  it('labelSempit: inisial yang tidak muat dikecilkan sampai batas bawah, baru disembunyikan', () => {
+    // 'MM' (Mbak Mata) ±18 px di 10 px: tidak muat di slot 17 px, tapi muat di 9 px.
+    expect(labelSempit('Mbak Mata', 17, 10, [], 9)).toEqual({ isi: 'MM', minHuruf: 2, ukuranPx: 9 });
+    // Tanpa batas bawah (bawaan = ukuran biasa): disembunyikan seperti dulu.
+    expect(labelSempit('Mbak Mata', 17, 10)).toBeNull();
+    // Di batas bawah pun tidak muat: disembunyikan.
+    expect(labelSempit('Mbak Mata', 16, 10, [], 9)).toBeNull();
+    // Dipilih ukuran terbesar yang muat. Piksel perangkat (dpr 3, teks besar 34,5 → 35 px): 'MM' muat di 33 px.
+    expect(labelSempit('Mbak Mata', 61, 34.5, [], 27)).toEqual({ isi: 'MM', minHuruf: 2, ukuranPx: 33 });
+    // Yang sudah muat di ukuran biasa tidak dikecilkan.
+    expect(labelSempit('Mbak Mata', 19, 10, [], 9)).toEqual({ isi: 'MM', minHuruf: 2 });
+    // Inisial yang kembar tetap tidak dipakai, dikecilkan pun tidak.
+    expect(labelSempit('Jurik', 14, 10, ['Juragan'], 9)).toBeNull();
   });
 
   it('labelSempit: tidak bisa tertukar dengan nama lain di meja', () => {
     const px = 10;
     // Inisial kembar (dengan inisial atau nama orang lain): inisial tidak dipakai, nama dipotong sampai beda.
     expect(labelSempit('Juragan', 30, px, ['Budi'])).toEqual({ isi: 'JU', minHuruf: 2 });
-    expect(labelSempit('Juragan', 30, px, ['Budi', 'Jurik'])).toEqual({ isi: 'Juragan', minHuruf: 4 }); // 'Jura…'
-    expect(labelSempit('Jurik', 28, px, ['Juragan'])).toBeNull(); // 'Juri…' tidak muat, 'Jur…' bisa dibaca Juragan
-    expect(labelSempit('Pak Seng', 40, px, ['Pak Sule'])).toEqual({ isi: 'Pak Seng', minHuruf: 6 }); // 'Pak Se…'
+    expect(labelSempit('Juragan', 35, px, ['Budi', 'Jurik'])).toEqual({ isi: 'Juragan', minHuruf: 4 }); // 'Jura…'
+    expect(labelSempit('Juragan', 30, px, ['Budi', 'Jurik'])).toBeNull(); // 'Jura…' ±30 px, perkiraannya 35 px
+    expect(labelSempit('Jurik', 28, px, ['Juragan'])).toEqual({ isi: 'Jurik', minHuruf: 4 }); // nama lengkap muat
+    expect(labelSempit('Jurik', 26, px, ['Juragan'])).toBeNull(); // 'Juri…' tidak muat, 'Jur…' bisa dibaca Juragan
+    expect(labelSempit('Pak Seng', 50, px, ['Pak Sule'])).toEqual({ isi: 'Pak Seng', minHuruf: 6 }); // 'Pak Se…'
     expect(labelSempit('Kipas Dua', 20, px, ['KD'])).toBeNull();
     // Spasi di ujung potongan dibuang scene ('Bu …' → 'Bu…'), jadi huruf sesudahnya ikut: 'Bu S…'.
     expect(labelSempit('Bu Sendok', 100, px, ['Budi'])).toEqual({ isi: 'Bu Sendok', minHuruf: 4 });
@@ -668,12 +750,41 @@ describe('label nama pembuang di bawah buangan', () => {
         const u = ukuran(layar);
         const t = hitungTataMeja(model(viewUntuk(permainan(n), 0)), u);
         for (const tk of t.teks.filter((x) => x.kunci.startsWith('b-nama:'))) {
-          const muat = kiraLebarTeks(tk.isi, tk.ukuran * u.skalaTeks * u.d) <= tk.maks!;
+          const muat = kiraLebarLabel(tk.isi, Math.round(tk.ukuran * u.skalaTeks * u.d)) <= tk.maks!;
           // Muat utuh, atau kalau dipotong scene minimal menyisakan 3 huruf (selain itu disembunyikan).
           expect(muat || (tk.minHuruf ?? 1) >= 3, `${n} pemain, ${layar.nama}: ${tk.isi} maks ${tk.maks}`).toBe(true);
         }
       }
     }
+  });
+
+  it('6 pemain bernama warga kedai: inisial yang dipilih muat di ukuran aslinya (tidak disembunyikan scene), minimal 9 px', () => {
+    const NAMA = ['Aku', 'Mbak Mata', 'Mas Sampul', 'Cak Owner', 'Om Garpu', 'Ning Kukis'];
+    const v0 = viewUntuk(permainan(6), 0);
+    const v: ViewPemain = { ...v0, pemain: v0.pemain.map((p, i) => ({ ...p, nama: NAMA[i] })) };
+    const layar: Layar[] = [
+      ...SEMUA_LAYAR,
+      { nama: 'HP 360×780 teks besar', w: 360, h: 780, d: 2, bawah: 143, teksBesar: true },
+      { nama: 'HP 360×780', w: 360, h: 780, d: 2, bawah: 139 },
+      { nama: 'HP 390×844 teks besar', w: 390, h: 844, d: 3, bawah: 143, teksBesar: true },
+    ];
+    const salah: string[] = [];
+    const tampil = new Map<string, string[]>();
+    for (const l of layar) {
+      const u = ukuran(l);
+      const t = hitungTataMeja(model(v), u);
+      const label = t.teks.filter((x) => x.kunci.startsWith('b-nama:'));
+      tampil.set(l.nama, label.map((x) => x.isi));
+      for (const tk of label) {
+        const px = Math.round(tk.ukuran * u.skalaTeks * u.d);
+        if (px < UKURAN_MIN_LABEL_BUANGAN * u.d - 1e-9) salah.push(`${l.nama}: '${tk.isi}' ${px} px < 9 px CSS`);
+        // Inisial (atau nama yang tidak boleh dipotong) harus muat utuh; nama yang boleh dipotong cukup ≥ 3 huruf.
+        if ((tk.minHuruf ?? 1) >= tk.isi.length && lebarAsli(tk.isi, px) > tk.maks!) salah.push(`${l.nama}: '${tk.isi}' ${lebarAsli(tk.isi, px)} > ${tk.maks}`);
+      }
+    }
+    expect(salah).toEqual([]);
+    // Dulu 'MM', 'MS', 'CO' dipilih (perkiraan kekecilan) lalu disembunyikan scene di HP 390 teks besar.
+    expect(tampil.get('HP 390×844 teks besar')).toEqual(['AK', 'MM', 'MS', 'CO', 'OG']);
   });
 });
 
@@ -995,13 +1106,17 @@ describe("label '+N' buangan terlihat", () => {
 // ---------------------------------------------------------------------------------------------
 
 describe('nama lawan warga kedai & penanda kursi', () => {
-  /** Tiruan pasTeks (MejaScene) dengan kiraLebarTeks: label yang benar-benar tampil, '' kalau disembunyikan. */
+  /**
+   * Tiruan pasTeks (MejaScene) dengan lebar asli hasil ukur (font terlebar): label yang benar-benar tampil, ''
+   * kalau disembunyikan. Batas bawah inisial 9 px seperti di buangan (dpr 1).
+   */
   const labelTampil = (nama: string, lebar: number, namaLain: readonly string[], px = 10): string => {
-    const l = labelSempit(nama, lebar, px, namaLain);
+    const l = labelSempit(nama, lebar, px, namaLain, UKURAN_MIN_LABEL_BUANGAN);
     if (!l) return '';
-    if (kiraLebarTeks(l.isi, px) <= lebar) return l.isi;
+    const ukuranTampil = l.ukuranPx ?? Math.round(px);
+    if (lebarAsli(l.isi, ukuranTampil) <= lebar) return l.isi;
     let muat = 0;
-    for (let k = 1; k <= l.isi.length; k++) if (kiraLebarTeks(`${l.isi.slice(0, k).trimEnd()}…`, px) <= lebar) muat = k;
+    for (let k = 1; k <= l.isi.length; k++) if (lebarAsli(`${l.isi.slice(0, k).trimEnd()}…`, ukuranTampil) <= lebar) muat = k;
     return muat >= l.minHuruf ? `${l.isi.slice(0, muat).trimEnd()}…` : '';
   };
 
@@ -1030,15 +1145,19 @@ describe('nama lawan warga kedai & penanda kursi', () => {
     }
     expect(salah).toEqual([]);
     // Contoh nama bawaan yang awalnya sama.
-    expect(labelTampil('Juragan', 30, ['Jurik'])).toBe('Jura…');
-    expect(labelTampil('Jurik', 28, ['Juragan'])).toBe('');
+    expect(labelTampil('Juragan', 35, ['Jurik'])).toBe('Jura…');
+    expect(labelTampil('Jurik', 26, ['Juragan'])).toBe('');
   });
 
-  it('nama bawaan: semuanya punya inisial 2 huruf, jadi tetap berlabel di lebar sempit (seperti HP 360 teks besar, 6 pemain)', () => {
-    for (const nama of NAMA_LAWAN_BAWAAN) {
-      expect(inisialNama(nama), nama).toMatch(/^[A-Z]{2}$/);
-      expect(labelTampil(nama, 14, ['Budi']), nama).toBe(inisialNama(nama));
-    }
+  it('nama bawaan: semuanya punya inisial 2 huruf; di slot sempit inisial dikecilkan sampai 9 px, yang tetap tidak muat disembunyikan', () => {
+    for (const nama of NAMA_LAWAN_BAWAAN) expect(inisialNama(nama), nama).toMatch(/^[A-Z]{2}$/);
+    // Slot ±2 em (HP 412 teks besar, 6 pemain): semua inisial tampil di ukuran biasa.
+    for (const nama of NAMA_LAWAN_BAWAAN) expect(labelTampil(nama, 23, ['Budi']), nama).toBe(inisialNama(nama));
+    // Slot 14 px (±1,4 em di 10 px, HP 360 teks biasa, 6 pemain): inisial selebar ≤ ±1,55 em masih muat di 9 px;
+    // yang berhuruf lebar (M, O) tetap disembunyikan. Tidak pernah tampil potongan atau label orang lain.
+    const di14 = NAMA_LAWAN_BAWAAN.map((nama) => [nama, labelTampil(nama, 14, ['Budi'])] as const);
+    for (const [nama, isi] of di14) expect(['', inisialNama(nama)], nama).toContain(isi);
+    expect(di14.filter(([, isi]) => !isi).map(([nama]) => nama)).toEqual(['Mbak Teras', 'Mas Sampul', 'Om Garpu', 'Cak Owner', 'Mbak Mata', 'Om Napi']);
     // Satu-satunya pasangan bawaan yang inisialnya kembar ('JU'); di meja yang sama keduanya dipotong sampai beda.
     const kembar = NAMA_LAWAN_BAWAAN.filter((n, i) => NAMA_LAWAN_BAWAAN.some((m, j) => j !== i && inisialNama(m) === inisialNama(n)));
     expect(kembar).toEqual(['Jurik', 'Juragan']);

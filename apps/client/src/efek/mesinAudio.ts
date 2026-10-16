@@ -13,6 +13,7 @@
 // belum bisa berbunyi), lalu sentuhan pertama cukup me-resume-nya. Tanpa pemanasan (iPhone/iPad, tab
 // tersembunyi, suara & musik mati, atau pemain sudah keburu menyentuh) perilakunya tetap seperti dulu.
 
+import { perangkatApel } from '../pasangAplikasi';
 import { preferensi, saatPreferensiBerubah, type Preferensi } from '../preferensi';
 import { bufferDerau, buatGema, type Keluaran } from './sintesis';
 
@@ -134,9 +135,8 @@ function bukaJalurIos(a: AudioContext): void {
 }
 
 /** iPhone/iPad (juga iPadOS yang mengaku Mac): jalur buka audio di sana rewel, jadi tetap dibuat di dalam gestur. */
-function perangkatApel(): boolean {
-  const ua = navigator.userAgent;
-  return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+function perangkatApelIni(): boolean {
+  return perangkatApel(navigator.userAgent, navigator.maxTouchPoints);
 }
 
 /**
@@ -144,7 +144,7 @@ function perangkatApel(): boolean {
  * tidur; baru dipakai & di-resume oleh mesinAudio() setelah pemain menyentuh layar.
  */
 export function panaskanAudio(): void {
-  if (rantai || rantaiPanas || sudahDisentuh || !terlihat() || typeof AudioContext === 'undefined' || perangkatApel()) return;
+  if (rantai || rantaiPanas || sudahDisentuh || !terlihat() || typeof AudioContext === 'undefined' || perangkatApelIni()) return;
   const p = preferensi();
   if (!p.suara && !p.musik) return;
   try {

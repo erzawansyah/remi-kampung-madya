@@ -13,6 +13,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  adaIsianAktif,
   bacaPercobaan,
   bolehCek,
   CADANGAN_MUAT_ULANG_MS,
@@ -118,6 +119,34 @@ describe('momenPembaruan', () => {
   it('meja yang masih dimuat (pemuat/galat) atau tanpa view = tidak', () => {
     expect(momenPembaruan(meja('offline', 'selesai', { selesaiTercatat: true, mejaSiap: false }))).toBe('tidak');
     expect(momenPembaruan(beranda({ layar: 'meja', jenis: 'online', mejaSiap: true }))).toBe('tidak');
+  });
+});
+
+describe('adaIsianAktif (sedang mengetik = jangan muat ulang)', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('isian teks dan isian angka batas skor (#44) yang difokus dihitung sedang mengetik', () => {
+    document.body.innerHTML =
+      '<input type="text" id="nama" /><input type="number" id="o-skor-atas" inputmode="numeric" /><input type="checkbox" id="c" /><select id="s"><option>1</option></select>';
+    expect(adaIsianAktif()).toBe(false);
+    for (const id of ['nama', 'o-skor-atas']) {
+      document.getElementById(id)!.focus();
+      expect(adaIsianAktif(), id).toBe(true);
+    }
+    for (const id of ['c', 's']) {
+      document.getElementById(id)!.focus();
+      expect(adaIsianAktif(), id).toBe(false);
+    }
+  });
+
+  it('kode meja yang sudah diketik tapi belum dipakai tetap menahan, walau tidak difokus', () => {
+    document.body.innerHTML = '<input type="text" id="kode" value="" />';
+    const kode = document.getElementById('kode') as HTMLInputElement;
+    expect(adaIsianAktif()).toBe(false);
+    kode.value = 'ABCDE';
+    expect(adaIsianAktif()).toBe(true);
   });
 });
 

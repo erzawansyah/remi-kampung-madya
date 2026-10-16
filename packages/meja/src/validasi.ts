@@ -29,6 +29,52 @@ export function rapikanLevel(x: unknown): LevelBot {
   return isLevel(x) ? x : PENGATURAN_BAWAAN.levelBot;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Batas skor (keputusan pemilik #44): angka bebas kelipatan 10, untuk batas atas dan batas bawah.
+
+/** Batas skor harus kelipatan ini. */
+export const KELIPATAN_BATAS_SKOR = 10;
+/** Nilai mutlak batas skor terkecil yang bisa dipilih. */
+export const BATAS_SKOR_MIN = 10;
+/** Nilai mutlak batas skor terbesar (sama dengan batas lama validasi). */
+export const BATAS_SKOR_MAKS = 100000;
+
+/** Batas atas disimpan positif, batas bawah disimpan negatif. */
+export type ArahBatasSkor = 'atas' | 'bawah';
+
+/**
+ * Batas skor yang sah untuk meja: null (tanpa batas), atau bilangan bulat kelipatan 10 bertanda
+ * sesuai arah (atas positif, bawah negatif) dengan nilai mutlak 10..100000. Nilai dari pilihan
+ * lama di lobi (300/500/1000 dan negatifnya) tetap sah.
+ */
+export function batasSkorSah(v: unknown, arah: ArahBatasSkor): v is number | null {
+  if (v === null) return true;
+  if (!isInt(v)) return false;
+  const mutlak = arah === 'atas' ? v : -v;
+  return mutlak >= BATAS_SKOR_MIN && mutlak <= BATAS_SKOR_MAKS && mutlak % KELIPATAN_BATAS_SKOR === 0;
+}
+
+/**
+ * Rapikan isian batas skor dari UI (isi `<input>`) atau simpanan di HP jadi nilai yang sah untuk
+ * meja. Yang diketik cukup angkanya: batas bawah juga diketik positif (keyboard angka iPhone nggak
+ * punya tanda minus), tandanya dipasang di sini. Kosong, 0, atau bukan angka = tanpa batas (null).
+ * Titik/koma di antara kelompok 3 angka dianggap pemisah ribuan, cara orang sini menulis seribu
+ * ("1.000", "1,500", "10.000"), bukan pecahan. Selain itu nilai mutlaknya dibulatkan ke kelipatan
+ * 10 terdekat lalu dijepit ke 10..100000.
+ */
+export function rapikanBatasSkor(x: unknown, arah: ArahBatasSkor): number | null {
+  let n: number;
+  if (typeof x === 'number') n = x;
+  else if (typeof x === 'string' && x.trim() !== '') {
+    const teks = x.trim().replace(/^−/, '-');
+    n = Number(/^-?\d{1,3}([.,]\d{3})+$/.test(teks) ? teks.replace(/[.,]/g, '') : teks);
+  } else return null;
+  if (!Number.isFinite(n) || n === 0) return null;
+  const bulat = Math.round(Math.abs(n) / KELIPATAN_BATAS_SKOR) * KELIPATAN_BATAS_SKOR;
+  const mutlak = Math.min(BATAS_SKOR_MAKS, Math.max(BATAS_SKOR_MIN, bulat));
+  return arah === 'atas' ? mutlak : -mutlak;
+}
+
 function spesifikasi(x: unknown): SpesifikasiKartuJadi[] | null {
   if (!Array.isArray(x) || x.length < 1 || x.length > 8) return null;
   const hasil: SpesifikasiKartuJadi[] = [];
@@ -76,7 +122,6 @@ export function validasiAksi(x: unknown): AksiKlien | null {
 export function validasiPengaturan(x: unknown): Partial<PengaturanMeja> | null {
   if (!isObj(x)) return null;
   const hasil: Partial<PengaturanMeja> = {};
-  const batas = (v: unknown) => v === null || (isInt(v) && Math.abs(v) <= 100000);
   if (x.jumlahPemain !== undefined) {
     if (!isInt(x.jumlahPemain) || x.jumlahPemain < 2 || x.jumlahPemain > 6) return null;
     hasil.jumlahPemain = x.jumlahPemain;
@@ -85,12 +130,20 @@ export function validasiPengaturan(x: unknown): Partial<PengaturanMeja> | null {
     if (typeof x.duaDeckUntukEmpat !== 'boolean') return null;
     hasil.duaDeckUntukEmpat = x.duaDeckUntukEmpat;
   }
-  for (const k of ['batasPutaran', 'batasSkorAtas', 'batasSkorBawah'] as const) {
-    if (x[k] === undefined) continue;
-    if (!batas(x[k])) return null;
-    hasil[k] = x[k] as number | null;
+  if (x.batasPutaran !== undefined) {
+    const v = x.batasPutaran;
+    if (v !== null && (!isInt(v) || v < 1 || v > 100000)) return null;
+    hasil.batasPutaran = v as number | null;
   }
-  if (hasil.batasPutaran !== undefined && hasil.batasPutaran !== null && hasil.batasPutaran < 1) return null;
+  // Batas skor (#44): atas positif, bawah negatif, kelipatan 10. Tanda terbalik atau 0 ditolak.
+  if (x.batasSkorAtas !== undefined) {
+    if (!batasSkorSah(x.batasSkorAtas, 'atas')) return null;
+    hasil.batasSkorAtas = x.batasSkorAtas;
+  }
+  if (x.batasSkorBawah !== undefined) {
+    if (!batasSkorSah(x.batasSkorBawah, 'bawah')) return null;
+    hasil.batasSkorBawah = x.batasSkorBawah;
+  }
   if (x.publik !== undefined) {
     if (typeof x.publik !== 'boolean') return null;
     hasil.publik = x.publik;
@@ -269,6 +322,14 @@ function potong(s: string): string {
   }
   return hasil;
 }
+
+/**
+ * Kunci pembanding nama tanpa beda huruf besar/kecil dan spasi tepi ("Budi", "budi " → "budi").
+ * Dipakai meja (nama warga kedai tidak boleh kembar dengan nama orang), peringkat online, dan
+ * statistik di HP. Huruf non-ASCII ikut dikecilkan (lower() SQLite hanya ASCII, jadi server
+ * menghitung kunci ini di JS, bukan di SQL).
+ */
+export const kunciNama = (n: string): string => n.trim().toLocaleLowerCase('id-ID');
 
 /**
  * Nama tampilan: dinormalisasi (NFKC), dibersihkan, maksimal 16 huruf. Kosong atau isinya tidak

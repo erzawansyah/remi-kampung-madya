@@ -2,7 +2,7 @@
 
 **Remi Kampung Madya**: game kartu remi dengan aturan yang berlaku di Kedai Madya (tempat pemilik dan teman-temannya berkumpul), yaitu **aturan tongkrongan** lokal yang **berbeda dari remi/rummy umum**. Monorepo TypeScript: rules engine murni, modul meja/room, server WebSocket, dan client Phaser 4.2.1 + HTML + PWA.
 
-Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#39 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik.
+Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#47 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik. #40–#43 dan #47 (16 Okt 2026) sudah diputuskan tapi baru diterapkan di rilis berikutnya; sampai saat itu aturan dan bot tetap seperti sekarang.
 
 ## Aturan emas
 
@@ -30,12 +30,12 @@ npm run typecheck    # engine, meja, server, client (termasuk apps/client/test)
 npm run dev:server   # server WebSocket :2567 (tsx watch)
 npm run dev:client   # Vite :5173 (strictPort), /ws dan /api diteruskan ke :2567
 npm run build        # build client (PWA + .br/.gz) + bundel server
-npm run e2e          # E2E smoke di Chrome sistem (build + vite preview, HP & desktop)
+npm run e2e          # E2E smoke di Chrome sistem (build + vite preview, HP & desktop, tombol pasang di Chrome Android)
 docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + test + build
 npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --lawan, --susunan, --meja, --seed, --putaran, --waktu)
 ```
 
-- `npm run e2e` tidak mengunduh browser. Kalau Chrome tidak ketemu otomatis, set `CHROME_PATH`. Opsi: `-- --url=http://localhost:5173` (uji dev server), `-- --perangkat=hp`, `-- --tanpa-build`, `-- --tampil`.
+- `npm run e2e` tidak mengunduh browser. Kalau Chrome tidak ketemu otomatis, set `CHROME_PATH`. Opsi: `-- --url=http://localhost:5173` (uji dev server), `-- --perangkat=hp` (`hp`, `desktop`, `pasang`, dipisah koma), `-- --tanpa-build`, `-- --tampil`.
 - Pekerjaan dianggap selesai kalau `npm test` dan `npm run typecheck` lolos. Perubahan client juga dicek di browser sungguhan (Vite dev atau `npm run e2e`); jangan klaim uji yang tidak dijalankan.
 
 ## Struktur dan batas lapisan
@@ -67,7 +67,11 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
   - **Layar:** `main.ts` (kerangka, Back, PWA, latihan) dan `ui/` (beranda, lobi, riwayat, pengaturan, bantuan, tentang, tutorial, rincianSkor).
   - **Konten:** `konten/bantuan.ts` dan `konten/tutorial.ts` adalah data. Isinya **harus sesuai engine dan README**; contoh kartu yang ditandai sah/tidak sah harus memberi hasil yang sama dengan validator engine (dijaga `apps/client/test/kontenAturan.test.ts`). Aturan berubah → konten ikut diperbarui.
   - **Kedai Madya:** `konten/kedai.ts` = satu sumber info kedai (bio, alamat, tautan peta/IG/Threads/Rak Buku). Logo di `aset/logoMadya.ts` (`svgLogo()` inline SVG `fill=currentColor` untuk HTML, `pathLogo()` untuk Canvas); jangan tambah file gambar. Lihat bagian "Promosi Kedai Madya" di bawah.
-  - **Konfirmasi keluar meja:** teksnya satu sumber, `opsiKonfirmasiKeluar()` di `ui/lobi.ts`, dipakai tombol di lobi, menu ☰ meja, dan tombol Back (`main.ts`). Jangan menulis teks konfirmasi keluar sendiri di tempat lain.
+  - **Batas skor** (keputusan #44): isiannya hanya lewat `ui/batasSkor.ts` (Atur meja dan lobi), pembulatan kelipatan 10 dan validasinya hanya `rapikanBatasSkor()`/`batasSkorSah()` dari `@remi/meja`. Batas bawah diketik positif dan disimpan negatif. Kalau ada pilihan yang tidak memakai batas skor, sembunyikan bungkus `.isian-batas-skor` utuh.
+  - **Konfirmasi keluar meja:** teksnya satu sumber, `opsiKonfirmasiKeluar()` di `ui/lobi.ts`, dipakai tombol di lobi, menu ☰ meja, dan tombol Back (`main.ts`). Jangan menulis teks konfirmasi keluar sendiri di tempat lain. Jalur keluar meja online mengisi `masukPeringkat: mejaMasukPeringkat(info)` supaya kalimat juru kunci (#45) muncul di meja yang punya ≥ 2 kursi manusia.
+  - **Tombol pasang aplikasi (keputusan #46):** deteksi murni di `pasangAplikasi.ts` (`caraPasang`, `keadaanPasang`, `perangkatApel` yang juga dipakai `mesinAudio.ts`), simpanan `remi.tawaranPasang` di `penyimpanan.ts`, rangkaian di `main.ts` (`tawaranPasang()`, `jalankanPasang()`, `segarkanPasang()`), tampilan `aturPasang()` di `ui/beranda.ts`, dialog petunjuk `ui/pasang.ts` (teks `konten/pasang.ts`, lewat `bukaDialog`). Manifest memakai `display: fullscreen`, jadi "terpasang" dinilai lewat `nilaiTerpasang()` dengan nilai yang dibaca saat aplikasi mulai (layar penuh dari menu meja juga mencocokkan `display-mode: fullscreen`); jangan membaca `display-mode` sendiri di tempat lain.
+    - Tombol melayang **hanya di beranda** dan wajib tetap anak terakhir `.layar.beranda` (ikut `inert` saat ada jendela, ikut hilang saat `#ui` diganti). Jangan pernah memunculkannya di lobi, meja, susun akhir, atau selama permainan, dan jangan menambah toast/pop-up yang menawarkan pemasangan sendiri.
+    - "Nanti saja" hanya menyembunyikan tombol melayang (3 hari, `TUNDA_PASANG_MS`); ubin menu "Pasang ke layar utama" tetap ada selama `keadaanPasang()` tidak null.
   - **Angka negatif:** minus tipografis "−" (U+2212) lewat `tanda()`/`angkaSkor()`/`minusTipografis()` di `ui/rincianSkor.ts`, bukan tanda hubung ASCII.
   - **Gaya:** `gaya.css` hanya `@import` ke `gaya/` (token, dasar, komponen, layar, meja, gerak, responsif).
 
@@ -103,7 +107,7 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
 - Bot hanya melihat `ViewPemain` dan memvalidasi aksinya dengan fungsi aturan yang sama. Simulasi gagal kalau ada aksi bot yang ditolak. `pilihAksiBot` tetap fungsi murni.
 - Ingatan jago/suhu hanya dari `ViewPemain` dan peristiwa di view (yang juga terlihat pemain di meja asli). Jangan menambah info tersembunyi ke view demi bot.
 - Golden master hanya memainkan level mudah dan normal: strategi keduanya tidak boleh berubah tanpa peninjauan golden. Jago/suhu dijaga `bot-kuat.test.ts`, `bot-susun.test.ts`, simulasi, dan arena.
-- Jago/suhu sengaja **menahan kartu jadi di tangan** (sah: semua pemain boleh menurunkannya di susun akhir, #19 dan #24). Pemilik belum menanggapi gaya ini (lihat `docs/keputusan-pemilik.md`, Catatan lain).
+- Jago/suhu sengaja **menahan kartu jadi di tangan** (sah: semua pemain boleh menurunkannya di susun akhir, #19 dan #24). Gaya ini disetujui pemilik (16 Okt 2026) dan tetap dipakai (lihat `docs/keputusan-pemilik.md`, Catatan lain).
 
 **Client**
 - **Tween kartu hanya menyentuh `ObjKartu`** (atau `ObjKartu.efek`), tidak pernah Image-nya langsung. `update()` yang menyalin data ke Image.
@@ -151,7 +155,7 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
   - CHANGELOG ditampilkan di layar Tentang lewat renderer markdown mini dan diuji `apps/client/test/tentang.test.ts`: pertahankan heading `## [Belum dirilis]`, pakai hanya tautan `https://` (bukan tautan relatif), dan jangan pakai HTML.
 - **PWA `registerType: 'prompt'` + pembaruan otomatis di momen aman** (`apps/client/src/pembaruan.ts`, diuji `apps/client/test/pembaruan.test.ts`): service worker baru menunggu, lalu aplikasi sendiri yang memasangnya (`updateSW(true)`) tanpa pemain harus menekan apa pun.
   - Cek versi baru saat start, saat tab terlihat lagi, saat sinyal kembali, dan tiap 30 menit. Build client juga dicocokkan dengan `/healthz` server (sha); kalau beda, SW dicek saat itu juga.
-  - Cek `/healthz` tanpa jeda minimum saat tersambung lagi sesudah putus (`PemicuCekServer` di `pembaruan.ts`) dan saat meja terakhir sudah tidak ada di server. Diuji `cekVersiServer.test.ts`. Jangan menebak "sempat putus" dari status tepat sebelum `tersambung`, karena itu selalu `menyambung`.
+  - Cek `/healthz` tanpa jeda minimum di setiap sambungan online yang berhasil, termasuk yang pertama (`PemicuCekServer` di `pembaruan.ts`), dan saat meja terakhir sudah tidak ada di server. Diuji `cekVersiServer.test.ts`. Jangan menebak "sempat putus" dari status tepat sebelum `tersambung`, karena itu selalu `menyambung`; kabar koneksi ke pemain (toast, pembaca layar) memakai `KabarKoneksi` (`koneksi.ts`) karena sebab yang sama.
   - Kapan dipasang diputuskan `momenPembaruan()`/`putuskanPembaruan()` (fungsi murni): beranda = toast singkat lalu muat ulang (atau diam-diam saat tab tersembunyi); lobi online, daftar meja, riwayat, klasemen akhir, dan jeda antarputaran online = hanya saat tab tersembunyi; putaran berjalan, susun akhir, popup joker, panel mentung, meja offline yang belum selesai, dialog terbuka, atau isian yang sedang diketik = **ditunda**. Tombol manual "Muat ulang" tetap ada.
   - Anti-loop: muat ulang otomatis dicatat di `sessionStorage` per build, paling banyak 2 kali.
   - Jangan kembali ke `autoUpdate` (bisa memuat ulang di tengah permainan), dan jangan longgarkan momen "tidak" tanpa izin pemilik.
@@ -171,11 +175,15 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
 - Kocok & bagi diputar dari peristiwa `mulaiPutaran` (juga di view pertama putaran baru); popup joker baru dibuka setelah antrian habis.
 
 **Lain-lain**
-- **Riwayat SQLite** (`apps/server/src/riwayat.ts`, modul bawaan `node:sqlite`): hanya klasemen akhir permainan online, lewat kait `OpsiMeja.saatSelesai`. Permainan offline tetap hanya di `localStorage` HP. Peringkat menggabungkan pemain berdasarkan **nama** (belum ada akun).
+- **Riwayat SQLite** (`apps/server/src/riwayat.ts`, modul bawaan `node:sqlite`): hanya klasemen akhir permainan online, lewat kait `OpsiMeja.saatSelesai`. Permainan offline tetap hanya di `localStorage` HP. Peringkat menggabungkan pemain berdasarkan **nama** tanpa beda huruf besar/kecil (`kunciNama` di `validasi.ts`; belum ada akun).
+  - **Aturan hitung leaderboard** (keputusan #45: urutan, minimal 3 main, minimal 2 orang, yang keluar juru kunci, saringan, bulan WIB) hanya di `packages/meja/src/peringkat.ts`, dipakai server dan tab Statistik di HP. Jangan menghitung peringkat sendiri di server/UI.
+  - **Skema SQLite hanya berubah dengan menambah entri di belakang `MIGRASI`** (`PRAGMA user_version`). Entri lama jangan diubah. Kolom baru wajib boleh NULL atau punya DEFAULT (server versi sebelumnya harus tetap bisa menulis), dan baris lama dilengkapi di `lengkapiBaris()` secara idempoten.
+  - `GET /api/peringkat` tanpa `v=2` harus tetap array bentuk lama: HP dengan aplikasi lama memanggil `.map()` langsung.
+  - `Kursi.keluar` hanya ada kalau true (golden `dataMejaAkhir` tidak bergeser) dan tidak pernah dikirim ke client. Pasangannya `Kursi.keluarSesudahPutaran` (diisi bersamaan, dihapus bersamaan): mentung/kepentung kursi yang keluar di klasemen akhir hanya dihitung dari putaran sebelum ia keluar, bukan hasil warga kedai penerusnya.
 - **Emote** hanya boleh dari `DAFTAR_EMOTE` (`packages/meja/src/protokol.ts`), supaya tidak bisa dipakai mengirim pesan bebas. Celetukan bot (`Meja.celetukBot`) hanya boleh menanggapi peristiwa publik, tidak boleh membocorkan kartu.
 - **Nama warga kedai** dari `NAMA_LAWAN_BAWAAN` (`packages/meja/src/meja.ts`, 22 nama: 10 "Warga Madya" lalu 12 tambahan pemilik, ejaan persis) lewat `OpsiMeja.namaLawan`. Urutan diacak dengan `Math.random` (bukan `opsi.acak`, supaya golden celetukan tidak bergeser); latihan memakai urutan tetap. Nama tidak boleh bergantung pada level, kartu, giliran, atau peristiwa.
   - Nama baru **hanya ditambahkan di belakang** daftar: menyisipkan di depan/tengah menggeser golden meja dan lawan latihan.
-  - Label nama pembuang di bawah buangan: `labelSempit()` (`game/tataMeja.ts`) wajib menerima `namaLain` (nama pemain lain di meja) supaya singkatan tidak pernah kembar (misalnya Jurik dan Juragan sama-sama "JU").
+  - Label nama pembuang di bawah buangan: `labelSempit()` (`game/tataMeja.ts`) wajib menerima `namaLain` (nama pemain lain di meja) supaya singkatan tidak pernah kembar (misalnya Jurik dan Juragan sama-sama "JU"). Lebarnya diperkirakan `kiraLebarLabel()` (bukan `kiraLebarTeks()`), yang tidak boleh lebih sempit dari hasil ukur di `apps/client/test/data/lebarHuruf.ts`; inisial yang tidak muat dikecilkan sampai 9 px CSS (`ukuranPx` di hasilnya wajib dipakai pemanggil). Kalau font kanvas (`FONT` di `MejaScene.ts`) diganti, ukur ulang lalu perbarui kelas lebar hurufnya.
 
 **Promosi Kedai Madya (soft selling, keputusan pemilik)**
 - Hanya di tiga tempat: kartu "Main bareng di Kedai Madya" di beranda (sesudah menu, sebelum kaki), bagian Kedai Madya di Tentang, dan **satu** baris ajakan + tautan peta di klasemen akhir (bukan di hasil per putaran, bukan di latihan).
@@ -205,7 +213,7 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
 - Utamakan tool Edit/Write. Untuk perubahan besar lewat skrip, tulis skripnya ke file dulu, jangan lewat heredoc panjang di shell.
 
 **Simpanan dan sesi di browser**
-- Simpanan offline (`remi.mejaOffline`), sesi online (`remi.sesiOnline`), dan preferensi (`remi.preferensi`) ada di `localStorage` per origin. `localhost:5173` dan `127.0.0.1:5173` adalah origin berbeda, dan berguna untuk menguji dua pemain di satu mesin.
+- Simpanan offline (`remi.mejaOffline`), sesi online (`remi.sesiOnline`), preferensi (`remi.preferensi`), dan tawaran pasang aplikasi (`remi.tawaranPasang`; hapus kuncinya untuk memunculkan lagi tombol pasang yang ditunda) ada di `localStorage` per origin. `localhost:5173` dan `127.0.0.1:5173` adalah origin berbeda, dan berguna untuk menguji dua pemain di satu mesin.
 - Service worker tidak bisa didaftarkan di browser pane alat pengembang. Uji PWA di Chrome atau HP sungguhan lewat HTTPS.
 
 ## Keputusan pemilik yang sering terlupa

@@ -13,6 +13,17 @@ docker compose logs --tail 5 # "Remi Kampung Madya v<versi> (<sha>) jalan di por
 
 `docker compose up` mengganti container dengan rapi: `SIGTERM` → server menutup WebSocket, meja, dan database → keluar dengan kode 0 (< 1 detik). Meja online yang sedang jalan hilang (meja hanya di memori), jadi pilih waktu sepi. Permainan offline di HP tidak terpengaruh.
 
+### Rilis leaderboard (skema riwayat v1, keputusan #45)
+
+Rilis ini menambah kolom di database riwayat (`PRAGMA user_version` 0 → 1). Migrasinya otomatis saat server start, dalam satu transaksi, dan kolom barunya boleh NULL atau punya bawaan, jadi image lama tetap bisa jalan di database v1 kalau deploy harus dibatalkan. Tetap ambil cadangan dulu **sebelum** `docker compose up`:
+
+```bash
+docker compose exec remi node --disable-warning=ExperimentalWarning -e "new (require('node:sqlite').DatabaseSync)('/app/data/remi.db').exec(\"VACUUM INTO '/app/data/cadangan-sebelum-v1.db'\")"
+docker compose cp remi:/app/data/cadangan-sebelum-v1.db .
+```
+
+Sesudah start, log server memuat `skema riwayat dimigrasi v0 → v1`, biasanya disusul `riwayat dilengkapi: …` (baris lama diisi jumlah pemain, jumlah manusia, jumlah deck untuk meja 2–3 dan 5–6 orang, dan kunci nama). Start berikutnya tidak mencetak keduanya lagi. Meja 4 orang lama tetap `jumlah_deck` NULL (1 atau 2 deck tidak tercatat) dan tidak ikut saat leaderboard disaring per deck.
+
 ### Identitas build (`sha` di `/healthz`)
 
 Setiap build punya satu id pendek yang sama di client dan server. Aplikasi di HP mencocokkannya dengan `sha` di `/healthz` untuk tahu server sudah memakai build lain (lihat "Perilaku update PWA"). Id dihitung `scripts/idBuild.mjs`, dipanggil build client (`apps/client/vite.config.ts`) dan bundel server (`apps/server/scripts/bundel.mjs`), dengan urutan:
@@ -60,9 +71,13 @@ Ganti `B` dengan `http://127.0.0.1:2567` (di VPS) atau `https://remi.domainkamu.
 | Shell & SW | `curl -sI $B/` dan `curl -sI $B/sw.js` | `cache-control: no-cache` |
 | Gzip | `curl -sI -H 'Accept-Encoding: gzip' $B/` | `content-encoding: gzip` |
 | 404 | `curl -sI $B/assets/tidak-ada.js` | `404`, `cache-control: no-store` |
-| Riwayat | `curl -s $B/api/peringkat` | JSON (array, boleh kosong) |
+| Riwayat (bentuk lama) | `curl -s $B/api/peringkat` | JSON **array** (boleh kosong), dibaca aplikasi lama yang masih ter-cache di HP |
+| Leaderboard v2 | `curl -s "$B/api/peringkat?v=2&urut=rata"` | JSON **objek** `{"v":2,"urut":"rata",…,"peringkat":[…],"belumCukup":[…]}` |
+| Skema riwayat | `docker compose logs remi \| grep 'skema riwayat'` | sekali `skema riwayat dimigrasi v0 → v1` sesudah deploy rilis leaderboard |
 | WebSocket | buka aplikasi → Buat meja baru | lobi muncul dengan kode meja |
 | PWA | Chrome DevTools → Application | service worker `activated`, precache 12 entri, manifest tanpa error |
+| Tombol pasang (Android) | buka situs di Chrome Android (bukan dari aplikasi yang sudah terpasang) | tombol **Pasang aplikasi** melayang di kanan bawah beranda; diketuk = jendela pasang Chrome (atau dialog petunjuk menu ⋮ kalau Chrome belum menawarkannya); **Nanti saja** menyembunyikannya dan tetap tersembunyi sesudah muat ulang; tidak ada di lobi maupun meja |
+| Tombol pasang (iPhone) | buka situs di Safari iPhone | tombol **Pasang aplikasi** melayang; diketuk = dialog Bagikan → Tambah ke Layar Utama; sesudah dipasang, aplikasi dari layar utama tidak menampilkan tombol maupun ubin pasang. Dari browser bawaan Instagram/WhatsApp muncul dialog **Buka di browser dulu** dengan **Salin link** |
 
 Lewat proxy, cek juga bahwa `sw.js` tetap `no-cache` (proxy tidak boleh menimpa header cache) dan `/ws` tersambung (Caddy meneruskan WebSocket otomatis).
 
@@ -71,7 +86,7 @@ Lewat proxy, cek juga bahwa `sw.js` tetap `no-cache` (proxy tidak boleh menimpa 
 Versi baru dipasang **otomatis di momen aman**, jadi pemain yang cuma membuka lewat browser HP (tidak memasang ke layar utama) juga ikut terbarui tanpa menekan apa pun. Logikanya di `apps/client/src/pembaruan.ts` (fungsi keputusan murni, diuji `apps/client/test/pembaruan.test.ts`), dirangkai di `apps/client/src/main.ts`.
 
 - `registerType: 'prompt'` tetap: service worker baru diunduh di latar belakang lalu **menunggu** sampai aplikasi menyuruhnya aktif. Jangan diganti `autoUpdate` (bisa memuat ulang di tengah permainan).
-- **Cek versi baru:** saat aplikasi dibuka, saat kembali dari latar belakang atau sinyal kembali (jeda minimal 1 menit), dan berkala tiap 30 menit selama terbuka. Aplikasi juga membandingkan id build-nya dengan `sha` di `/healthz`; kalau server sudah memakai build lain, cek dipaksa. Pencocokan ini jalan dengan atau tanpa `GIT_SHA` (lihat "Identitas build"); hanya `dev` yang dilewati. Sesudah server di-deploy ulang, HP yang sedang tersambung mengecek begitu sambungannya pulih, tanpa jeda minimum (`PemicuCekServer`), dan juga saat meja terakhirnya sudah tidak ada di server ("Meja X nggak ketemu."). Sambungan pertama kali tetap kena jeda 1 menit.
+- **Cek versi baru:** saat aplikasi dibuka, saat kembali dari latar belakang atau sinyal kembali (jeda minimal 1 menit), dan berkala tiap 30 menit selama terbuka. Aplikasi juga membandingkan id build-nya dengan `sha` di `/healthz`; kalau server sudah memakai build lain, cek dipaksa. Pencocokan ini jalan dengan atau tanpa `GIT_SHA` (lihat "Identitas build"); hanya `dev` yang dilewati. Setiap sambungan online yang berhasil dicek tanpa jeda minimum (`PemicuCekServer`), termasuk sambungan pertama: jadi HP yang membuka aplikasi beberapa detik sebelum deploy selesai lalu langsung masuk meja tetap tahu server sudah baru. Sesudah server di-deploy ulang, HP yang sedang tersambung mengecek begitu sambungannya pulih, dan juga saat meja terakhirnya sudah tidak ada di server ("Meja X nggak ketemu.").
 - **Momen aman, dipasang sendiri:** di beranda saat pemain diam ±5 detik (toast "Pakai versi terbaru, sebentar ya…" ±2 detik, lalu muat ulang; disentuh = batal), atau kapan pun aplikasi sedang di latar belakang.
 - **Momen senyap, hanya ditawarkan selama terlihat:** lobi online, daftar meja, riwayat, klasemen akhir yang sudah tercatat, jeda antarputaran online. Toast "Ada versi baru, Bos." dengan tombol **Muat ulang**, dan tombol menetap di kaki beranda. Begitu aplikasi ke latar belakang, versi baru dipasang.
 - **Tidak pernah:** putaran berjalan, susun akhir, popup joker, panel mentung, meja offline yang belum selesai, dialog terbuka, sedang mengetik, atau menunggu jawaban server.

@@ -74,6 +74,21 @@ export function momenPembaruan(k: KeadaanPembaruan): MomenPembaruan {
   }
 }
 
+/** Jenis <input> yang bukan isian ketik (diketuk saja), jadi fokus di situ bukan "sedang mengetik". */
+const INPUT_BUKAN_KETIK = ['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'color', 'file'];
+
+/**
+ * Isian teks sedang difokus, atau kode meja sudah diketik tapi belum dipakai: jangan muat ulang.
+ * Isian angka (batas skor di Atur meja dan lobi, `type="number"`) ikut dihitung isian ketik.
+ */
+export function adaIsianAktif(doc: Document = document): boolean {
+  const a = doc.activeElement;
+  if (a instanceof HTMLTextAreaElement || (a instanceof HTMLElement && a.isContentEditable)) return true;
+  if (a instanceof HTMLInputElement && !INPUT_BUKAN_KETIK.includes(a.type)) return true;
+  const kode = doc.getElementById('kode');
+  return kode instanceof HTMLInputElement && kode.value.trim() !== '' && kode.value !== kode.defaultValue;
+}
+
 /** Pemain dianggap diam (tidak sedang mengetuk apa pun) setelah sekian ms tanpa input. */
 export const DIAM_MS = 5000;
 /** Batas muat ulang otomatis per build yang sedang jalan (anti-loop). */
@@ -389,21 +404,25 @@ export function bolehCek(terakhir: number | null, sekarang: number, paksa = fals
 }
 
 /**
- * Cek /healthz yang dipicu status koneksi online (satu objek per koneksi). Tersambung pertama kali =
- * cek biasa (kena JEDA_CEK_MIN_MS; start aplikasi biasanya baru saja mengecek). Tersambung LAGI sesudah
- * sempat putus/gagal = cek paksa: server bisa saja baru di-deploy ulang.
- * KoneksiOnline selalu melapor 'menyambung' tepat sebelum 'tersambung', juga saat sambung ulang, jadi
- * status persis sebelumnya tidak bisa dipakai. Yang diingat: ada putus sejak tersambung terakhir.
+ * Cek /healthz yang dipicu status koneksi online (satu objek per koneksi). Setiap sambungan yang
+ * berhasil = cek paksa (tanpa JEDA_CEK_MIN_MS), termasuk sambungan pertama: deploy bisa selesai
+ * kurang dari semenit sesudah cek saat start, dan tanpa paksa client lama bisa main di server baru
+ * sampai mejanya selesai. KoneksiOnline hanya melapor 'tersambung' dari onopen, jadi yang dipaksa
+ * memang hanya sambungan yang benar-benar terbuka.
+ * 'tersambung' berulang tanpa putus di antaranya (tidak terjadi di KoneksiOnline, tapi aman kalau
+ * pemanggil melapor ulang) = cek biasa. Status persis sebelumnya tidak bisa dipakai penanda putus,
+ * karena KoneksiOnline selalu melapor 'menyambung' tepat sebelum 'tersambung', juga saat sambung ulang.
  */
 export class PemicuCekServer {
-  private sempatPutus = false;
+  /** Belum ada cek paksa sejak sambungan terakhir terbuka (awal koneksi, atau sesudah putus/gagal). */
+  private perluPaksa = true;
 
   /** Status koneksi berubah. Null = tidak perlu cek; false = cek biasa; true = cek paksa. */
   status(s: StatusKoneksi): boolean | null {
-    if (s === 'terputus' || s === 'gagal') this.sempatPutus = true;
+    if (s === 'terputus' || s === 'gagal') this.perluPaksa = true;
     if (s !== 'tersambung') return null;
-    const paksa = this.sempatPutus;
-    this.sempatPutus = false;
+    const paksa = this.perluPaksa;
+    this.perluPaksa = false;
     return paksa;
   }
 }

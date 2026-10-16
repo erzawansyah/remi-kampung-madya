@@ -6,8 +6,8 @@
 import type { LevelBot } from '@remi/engine';
 import type { InfoKursi, InfoMeja, PengaturanMeja, PesanKlien } from '@remi/meja';
 import { DAFTAR_LEVEL_WARGA, infoLevel, labelLevelKecil } from '../konten/levelWarga';
+import { htmlIsianBatas, lepasIsianBatas, pasangIsianBatas } from './batasSkor';
 import { esc, konfirmasi, toast, type OpsiKonfirmasi } from './dom';
-import { angkaSkor } from './rincianSkor';
 
 /** Nilai <select> kursi untuk warga kedai level tertentu, mis. "bot-jago". */
 const nilaiBot = (level: string) => `bot-${level}`;
@@ -42,7 +42,16 @@ export interface KeadaanKeluar {
   offline: boolean;
   /** Permainan sudah selesai (klasemen akhir). */
   selesai?: boolean;
+  /**
+   * Meja online ini masuk peringkat (minimal 2 orang di kursi, keputusan pemilik #45): keluar di
+   * tengah permainan dihitung juru kunci, jadi pemain diberi tahu.
+   */
+  masukPeringkat?: boolean;
 }
+
+/** Ada minimal 2 kursi manusia (yang keluar sudah jadi warga kedai): permainannya masuk peringkat online. */
+export const mejaMasukPeringkat = (info: Pick<InfoMeja, 'kursi'> | null | undefined): boolean =>
+  (info?.kursi.filter((k) => k.jenis === 'manusia').length ?? 0) >= 2;
 
 /**
  * Teks konfirmasi keluar meja. Satu sumber untuk semua jalur supaya pemain selalu membaca hal
@@ -80,7 +89,9 @@ export function opsiKonfirmasiKeluar(k: KeadaanKeluar): OpsiKonfirmasi {
   }
   return {
     judul: 'Keluar dari meja?',
-    pesan: 'Kursimu diteruskan warga kedai sampai permainan selesai, dan kamu nggak bisa balik ke kursi ini lagi.',
+    pesan: `Kursimu diteruskan warga kedai sampai permainan selesai, dan kamu nggak bisa balik ke kursi ini lagi.${
+      k.masukPeringkat ? ' Di peringkat online kamu dihitung juru kunci.' : ''
+    }`,
     ya: 'Keluar',
     tidak: 'Tetap di sini',
     bahaya: true,
@@ -89,6 +100,12 @@ export function opsiKonfirmasiKeluar(k: KeadaanKeluar): OpsiKonfirmasi {
 
 export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKlien) => void, keluar: () => void): void {
   const host = info.kursiSaya === info.host;
+  // Lobi digambar ulang setiap info meja berubah (ada yang masuk, kursi diatur). Angka batas skor
+  // yang sedang diketik host jangan sampai hilang: dicatat di sini, dipulihkan sesudah digambar.
+  const aktif = document.activeElement;
+  const sedangDiisi =
+    aktif instanceof HTMLInputElement && aktif.dataset.batasSkor && akar.contains(aktif) ? { id: aktif.id, nilai: aktif.value } : null;
+  lepasIsianBatas(akar);
   const p = info.pengaturan;
   const tautan = `${location.origin}/?meja=${info.kode}`;
   const kosong = info.kursi.filter((k) => k.jenis === 'kosong').length;
@@ -128,8 +145,7 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
         <select id="jumlah" ${dis}>${[2, 3, 4, 5, 6].map((n) => `<option ${n === p.jumlahPemain ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       ${p.jumlahPemain === 4 ? `<label class="baris">Pakai 2 deck (12 kartu)<input type="checkbox" id="dua" ${p.duaDeckUntukEmpat ? 'checked' : ''} ${dis} /></label>` : ''}
       <label class="baris">Batas putaran ${pilihanBatas('putaran', p.batasPutaran, [3, 5, 10, 15, 20, 0], (n) => (n ? String(n) : 'Tanpa batas'))}</label>
-      <label class="baris">Batas skor atas ${pilihanBatas('atas', p.batasSkorAtas, [300, 500, 1000, 0], (n) => (n ? String(n) : 'Tidak ada'))}</label>
-      <label class="baris">Batas skor bawah ${pilihanBatas('bawah', p.batasSkorBawah, [-300, -500, -1000, 0], (n) => (n ? angkaSkor(n) : 'Tidak ada'))}</label>
+      ${htmlIsianBatas({ id: 'skor', nilai: p, bisaUbah: host })}
       <label class="baris">Waktu per giliran ${pilihanBatas('detik', p.detikGiliran, [30, 60, 90, 120, 0], (n) => (n ? `${n} detik` : 'Tanpa batas'))}</label>
       <label class="baris">Tempo warga kedai
         <select id="tempo" ${dis}>${(['santai', 'normal', 'cepat'] as const)
@@ -166,7 +182,7 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
     void navigator.share?.({ title: 'Main Remi Kampung Madya', text: `Gabung meja Remi Kampung Madya, kode ${info.kode}`, url: tautan }).catch(() => undefined);
   });
   q('#keluar')!.addEventListener('click', async () => {
-    const ya = await konfirmasi(opsiKonfirmasiKeluar({ asal: 'lobi', offline: false }));
+    const ya = await konfirmasi(opsiKonfirmasiKeluar({ asal: 'lobi', offline: false, masukPeringkat: false }));
     // Selagi dialog terbuka host bisa saja memulai permainan (layar sudah jadi meja): teks
     // "selama permainan belum mulai" tidak berlaku lagi, jadi jangan keluar diam-diam.
     if (ya && akar.querySelector('.layar-lobi')) keluar();
@@ -192,8 +208,15 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   q('#jumlah')!.addEventListener('change', () => ubah({ jumlahPemain: Number(q<HTMLSelectElement>('#jumlah')!.value) }));
   q('#dua')?.addEventListener('change', () => ubah({ duaDeckUntukEmpat: q<HTMLInputElement>('#dua')!.checked }));
   q('#putaran')!.addEventListener('change', () => ubah({ batasPutaran: angka('#putaran') }));
-  q('#atas')!.addEventListener('change', () => ubah({ batasSkorAtas: angka('#atas') }));
-  q('#bawah')!.addEventListener('change', () => ubah({ batasSkorBawah: angka('#bawah') }));
+  // Batas skor dikirim sesudah isian ditinggalkan (change/blur/Enter), bukan di setiap ketikan.
+  pasangIsianBatas(akar, 'skor', p, ubah);
+  if (sedangDiisi) {
+    const el = q<HTMLInputElement>(`#${sedangDiisi.id}`);
+    if (el) {
+      el.value = sedangDiisi.nilai;
+      el.focus();
+    }
+  }
   q('#detik')!.addEventListener('change', () => ubah({ detikGiliran: Number(q<HTMLSelectElement>('#detik')!.value) }));
   q('#tempo')!.addEventListener('change', () => ubah({ tempoBot: q<HTMLSelectElement>('#tempo')!.value as PengaturanMeja['tempoBot'] }));
   q('#publik')!.addEventListener('change', () => ubah({ publik: q<HTMLInputElement>('#publik')!.checked }));

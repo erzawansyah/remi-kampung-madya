@@ -25,7 +25,7 @@ import {
   berikutnya,
 } from '@remi/engine';
 import { DAFTAR_EMOTE, type Emote, type InfoMeja, type PesanKlien, type TempoBot } from '@remi/meja';
-import type { StatusKoneksi } from './koneksi';
+import { KabarKoneksi, type Kabar, type StatusKoneksi } from './koneksi';
 import type { AksiAdegan, KotakLayar, MejaScene, ModelMeja } from './game/MejaScene';
 import { gambarKartuKeKanvas } from './game/kartuGrafisGambar';
 import { PENANDA_WARGA_KEDAI } from './game/tataMeja';
@@ -43,7 +43,7 @@ import {
   tanda,
   teksCaraSelesai,
 } from './ui/rincianSkor';
-import { opsiKonfirmasiKeluar } from './ui/lobi';
+import { mejaMasukPeringkat, opsiKonfirmasiKeluar } from './ui/lobi';
 import { ATRIBUT_LUAR, KEDAI, TAUTAN_KEDAI } from './konten/kedai';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang } from './ui/jendelaMalas';
@@ -237,6 +237,13 @@ const LABEL_KONEKSI: Record<StatusKoneksi, string> = {
   gagal: 'Gagal nyambung',
 };
 
+/** Pengumuman pembaca layar untuk kabar koneksi (sekali per putus, lihat KabarKoneksi). */
+const PENGUMUMAN_KONEKSI: Record<Kabar, string> = {
+  putus: 'Koneksi putus, lagi nyambung ulang.',
+  gagal: 'Server nggak bisa dihubungi, Bos. Masih dicoba terus.',
+  pulih: 'Tersambung lagi.',
+};
+
 const LABEL_TEMPO: Record<TempoBot, string> = { santai: 'santai', normal: 'normal', cepat: 'cepat' };
 
 /** Batas waktu tombol "Mengirim…" sebelum bisa ditekan lagi (kalau server tidak menjawab). */
@@ -378,6 +385,8 @@ export class KontrolMeja implements AksiAdegan {
   /** Sorotan baru digambar setelah pemain memakai panah; sentuhan/klik menyembunyikannya lagi. */
   private modusKeyboard = false;
   private statusKoneksi: StatusKoneksi | null = null;
+  /** Menyaring pengumuman koneksi: putus berulang tiap percobaan sambung ulang tidak diumumkan ulang. */
+  private readonly kabarKoneksi = new KabarKoneksi();
   private peringatanWaktu = '';
   private readonly tutorial: Tutorial | null;
   private readonly pengamatUkuran: ResizeObserver | null;
@@ -1393,9 +1402,9 @@ export class KontrolMeja implements AksiAdegan {
     el.className = `status-koneksi ${s}${s === 'tersambung' ? ' tersembunyi' : ''}`;
     el.innerHTML = `<span class="titik" aria-hidden="true"></span><span class="teks">${LABEL_KONEKSI[s]}</span>`;
     el.setAttribute('aria-label', `Koneksi: ${LABEL_KONEKSI[s].replace('…', '')}`);
-    if (lama === null) return;
-    if (s === 'tersambung') umumkan('Tersambung lagi.');
-    else if (s === 'terputus' || s === 'gagal') umumkan(s === 'gagal' ? 'Server nggak bisa dihubungi, Bos. Masih dicoba terus.' : 'Koneksi putus, lagi nyambung ulang.');
+    // Status pertama juga dimasukkan (diam-diam): kalau meja dibuka saat putus, "Tersambung lagi." tetap muncul.
+    const kabar = this.kabarKoneksi.status(s);
+    if (lama !== null && kabar) umumkan(PENGUMUMAN_KONEKSI[kabar]);
   }
 
   /** Ukur tinggi bar HTML sebenarnya lalu beri tahu scene supaya kartu tidak tertutup bar. */
@@ -2250,7 +2259,14 @@ export class KontrolMeja implements AksiAdegan {
                 return this.app.keluarMeja();
               }
               // Teks sama dengan jalur tombol Back (main.ts) lewat opsiKonfirmasiKeluar.
-              void konfirmasi(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, selesai: this.view?.status === 'selesai' })).then((ya) => {
+              void konfirmasi(
+                opsiKonfirmasiKeluar({
+                  asal: 'meja',
+                  offline: false,
+                  selesai: this.view?.status === 'selesai',
+                  masukPeringkat: mejaMasukPeringkat(this.info),
+                }),
+              ).then((ya) => {
                 if (!ya || this.hancur) return;
                 tutupModal();
                 this.app.kirim({ t: 'keluar' });

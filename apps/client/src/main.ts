@@ -6,12 +6,33 @@ import { registerSW } from 'virtual:pwa-register';
 import type { ViewPemain } from '@remi/engine';
 import type { InfoMeja, PengaturanMeja, PesanKlien, PesanServer } from '@remi/meja';
 import { pasangPreferensi } from './preferensi';
-import { KoneksiOffline, KoneksiOnline, urlServer, type Koneksi, type StatusKoneksi } from './koneksi';
+import { KabarKoneksi, KoneksiOffline, KoneksiOnline, urlServer, type Kabar, type Koneksi, type StatusKoneksi } from './koneksi';
 import { catatanDariView, kunciPermainan, simpan } from './penyimpanan';
 import { bangunkanGame, buatGame, tidurkanGame, type PenampungGame } from './game/game';
 import { KontrolMeja, type AppUntukMeja } from './kontrolMeja';
-import { konfirmasiTimpaSimpanan, renderBeranda, renderDaftarPublik, type BerandaTerpasang, type StatusOnline } from './ui/beranda';
-import { opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
+import {
+  konfirmasiTimpaSimpanan,
+  renderBeranda,
+  renderDaftarPublik,
+  type BerandaTerpasang,
+  type StatusOnline,
+  type TawaranPasangBeranda,
+} from './ui/beranda';
+import { bukaPetunjukPasang } from './ui/pasang';
+import { TEKS_TAWARAN } from './konten/pasang';
+import {
+  bacaLingkunganPasang,
+  caraPasang,
+  keadaanPasang,
+  lupakanSudahPasang,
+  QUERY_TERPASANG,
+  sedangTerpasang,
+  sesudahPrompt,
+  tandaiSudahPasang,
+  tundaPasang,
+  type CaraPasang,
+} from './pasangAplikasi';
+import { mejaMasukPeringkat, opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
 import { renderRiwayat } from './ui/riwayat';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang, siapkanJendelaMalas } from './ui/jendelaMalas';
@@ -30,6 +51,7 @@ import { siapkanAudio, suasanaMusik } from './efek/suara';
 import { adaJaringan } from './jaringan';
 import { PESAN_MEJA_MASIH_PUTUS, renderGalatMeja, renderPemuatMeja } from './ui/pemuatMeja';
 import {
+  adaIsianAktif,
   bolehCek,
   CEK_BERKALA_MS,
   JEDA_TOAST_MS,
@@ -81,8 +103,10 @@ const PESAN_KELUAR_TAK_SAMPAI: Record<'lobi' | 'meja', string> = {
   meja: 'Sinyalnya lagi putus, jadi server belum tahu kamu keluar. Selama itu kursimu tercatat terputus dan dimainkan warga kedai.',
 };
 
+/** Event beforeinstallprompt (Chrome/Edge/Samsung Internet). Sekali pakai: prompt() hanya bisa sekali. */
 interface PromptPasang extends Event {
   prompt(): Promise<void>;
+  readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform?: string }>;
 }
 
 type Layar = 'beranda' | 'publik' | 'riwayat' | 'lobi' | 'meja';
@@ -163,16 +187,31 @@ class Aplikasi implements AppUntukMeja {
   }
 
   mulai() {
+    // Tawaran pasang aplikasi (keputusan #46), hanya di beranda: lihat pasangAplikasi.ts.
+    // Dinilai sekali sekarang, sebelum menu meja sempat meminta layar penuh (display-mode
+    // fullscreen aplikasi terpasang tidak bisa dibedakan dari layar penuh API sesudahnya).
+    sedangTerpasang();
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       this.promptPasang = e as PromptPasang;
-      // Cukup sisipkan ubin "Pasang": beranda tidak digambar ulang, isian yang sedang diketik aman.
-      if (this.layar === 'beranda') this.beranda?.aturPasang(this.aksiPasang());
+      // Browser menawarkan pemasangan = belum terpasang di browser ini: lupakan "Sudah kupasang".
+      const s = simpan.tawaranPasang();
+      if (s.sudahPasang !== undefined) simpan.setTawaranPasang(lupakanSudahPasang(s));
+      this.segarkanPasang();
     });
     window.addEventListener('appinstalled', () => {
       this.promptPasang = null;
-      if (this.layar === 'beranda') this.beranda?.aturPasang(null);
+      simpan.setTawaranPasang(tandaiSudahPasang(simpan.tawaranPasang(), Date.now()));
+      this.segarkanPasang();
     });
+    // Dibuka atau ditutup sebagai aplikasi terpasang: nilai ulang tawarannya.
+    for (const q of QUERY_TERPASANG) {
+      try {
+        window.matchMedia?.(q).addEventListener?.('change', () => this.segarkanPasang());
+      } catch {
+        // matchMedia tidak tersedia: cukup dinilai saat beranda digambar.
+      }
+    }
     // Escape di layar penuh (Riwayat, daftar meja publik) = kembali ke beranda, sama seperti Back.
     // dom.ts menangkap Escape lebih dulu (fase capture) untuk menutup dialog yang terbuka.
     document.addEventListener('keydown', (e) => {
@@ -378,7 +417,14 @@ class Aplikasi implements AppUntukMeja {
   private async konfirmasiKeluar(asal: 'lobi' | 'meja') {
     const offline = this.jenis === 'offline';
     // Teks sama dengan tombol keluar di lobi dan menu meja (ui/lobi.ts).
-    const ya = await konfirmasi(opsiKonfirmasiKeluar({ asal, offline, selesai: asal === 'meja' && this.view?.status === 'selesai' }));
+    const ya = await konfirmasi(
+      opsiKonfirmasiKeluar({
+        asal,
+        offline,
+        selesai: asal === 'meja' && this.view?.status === 'selesai',
+        masukPeringkat: asal === 'meja' && !offline && mejaMasukPeringkat(this.info),
+      }),
+    );
     // Layar sudah berganti selagi dialog terbuka (mis. host memulai permainan dari lobi):
     // teks konfirmasinya sudah tidak berlaku, jadi jangan keluar.
     if (!ya || this.layar !== asal) return;
@@ -398,27 +444,32 @@ class Aplikasi implements AppUntukMeja {
       if (this.koneksi === k) this.terimaPesan(p);
     });
     const pemicuCek = new PemicuCekServer();
+    // Dihitung di setiap status, layar apa pun, supaya "putus" yang terjadi di meja tidak dikabarkan
+    // ulang di lobi dan "Tersambung lagi." hanya muncul sesudah ada kabar putus.
+    const kabarKoneksi = new KabarKoneksi();
     k.saatStatus((s) => {
       if (this.koneksi !== k || k.jenis === 'offline') return;
       const sebelum = this.statusKini;
       this.statusKini = s;
       if (s === 'tersambung' && sebelum !== 'tersambung') this.sambunganKe++;
-      this.saatStatusBerubah(s, sebelum);
-      // Baru tersambung ke server: pastikan client ini build yang sama dengan server. Sambung LAGI
-      // sesudah putus (server bisa saja baru di-deploy ulang) dicek tanpa jeda minimum.
+      this.saatStatusBerubah(s, kabarKoneksi.status(s));
+      // Setiap sambungan yang berhasil: pastikan client ini build yang sama dengan server, tanpa jeda
+      // minimum (server bisa saja baru di-deploy ulang, juga sebelum sambungan pertama).
       const paksa = pemicuCek.status(s);
       if (paksa !== null && sebelum !== 'tersambung') void this.cekServer(paksa);
     });
   }
 
-  private saatStatusBerubah(s: StatusKoneksi, sebelum: StatusKoneksi) {
+  /** `kabar` dari KabarKoneksi koneksi ini: null = tidak ada yang perlu dikabarkan. */
+  private saatStatusBerubah(s: StatusKoneksi, kabar: Kabar | null) {
     if (this.layar === 'beranda' || this.layar === 'publik') {
       if (s !== 'gagal') {
         this.beranda?.aturStatusOnline(s === 'terputus' ? 'menyambung' : s);
         return;
       }
       // Jangan coba terus di belakang layar dari beranda: niat yang tertahan bisa tiba-tiba
-      // terkirim lama kemudian. Pemain bisa menekan "Coba lagi" kapan saja.
+      // terkirim lama kemudian. Pemain bisa menekan "Coba lagi" kapan saja. Koneksinya ditutup di
+      // sini, jadi 'gagal' hanya ditangani sekali per koneksi.
       this.koneksi?.tutup();
       this.koneksi = null;
       const cobaLagi = this.niatOnline ? () => this.cobaLagiOnline() : null;
@@ -434,8 +485,8 @@ class Aplikasi implements AppUntukMeja {
     }
     // Di meja, indikator koneksi di bar atas (KontrolMeja membaca statusKoneksi()) sudah memberi tahu.
     if (this.layar === 'meja') return;
-    if (s === 'terputus' && sebelum !== 'terputus') toast('Koneksi putus, mencoba menyambung lagi…', true);
-    if (s === 'tersambung' && (sebelum === 'terputus' || sebelum === 'gagal')) toast('Tersambung lagi.');
+    if (kabar === 'putus') toast('Koneksi putus, mencoba menyambung lagi…', true);
+    if (kabar === 'pulih') toast('Tersambung lagi.');
   }
 
   private cobaLagiOnline() {
@@ -608,7 +659,7 @@ class Aplikasi implements AppUntukMeja {
             bolehLatihan: () => konfirmasiTimpaSimpanan('Latihan pakai slot simpanan yang sama.'),
           }),
         tentang: () => bukaTentang(),
-        pasangAplikasi: this.aksiPasang(),
+        pasangAplikasi: this.tawaranPasang(),
         muatUlang: this.pembaruan.tombol(),
       },
       { kodeAwal: this.kodeAwal, statusOnline: online },
@@ -617,14 +668,60 @@ class Aplikasi implements AppUntukMeja {
     this.nilaiPembaruan();
   }
 
-  /** Aksi tombol "Pasang ke layar utama", atau null kalau browser belum menawarkan pemasangan. */
-  private aksiPasang(): (() => void) | null {
-    if (!this.promptPasang) return null;
-    return () => {
-      void this.promptPasang?.prompt();
-      this.promptPasang = null;
-      this.beranda?.aturPasang(null);
-    };
+  // ---------- pasang aplikasi (keputusan #46, hanya beranda) ----------
+
+  /** Tawaran pasang untuk beranda sekarang, atau null kalau tidak ada yang bisa ditawarkan. */
+  private tawaranPasang(): TawaranPasangBeranda | null {
+    const k = keadaanPasang(caraPasang(bacaLingkunganPasang(!!this.promptPasang)), simpan.tawaranPasang(), Date.now());
+    if (!k) return null;
+    return { melayang: k.melayang, pasang: () => this.jalankanPasang(k.cara), nanti: () => this.nantiPasang() };
+  }
+
+  /** Perbarui ubin dan tombol melayang tanpa menggambar ulang beranda. Di layar lain: tidak ada apa-apa. */
+  private segarkanPasang() {
+    if (this.layar === 'beranda') this.beranda?.aturPasang(this.tawaranPasang());
+  }
+
+  /** "Nanti saja": tombol melayang disembunyikan 3 hari, ubin menu tetap ada. */
+  private nantiPasang() {
+    simpan.setTawaranPasang(tundaPasang(simpan.tawaranPasang(), Date.now()));
+    toast(TEKS_TAWARAN.toastNanti, false, 4500);
+  }
+
+  /** Ubin menu atau tombol melayang ditekan: prompt browser, atau dialog petunjuk sesuai browser. */
+  private jalankanPasang(cara: CaraPasang) {
+    const e = this.promptPasang;
+    if (cara === 'prompt' && e) return void this.jalankanPrompt(e);
+    // Tawaran basi (prompt sudah terpakai): petunjuk sesuai browser ini.
+    const petunjuk = cara === 'prompt' ? caraPasang(bacaLingkunganPasang(false)) : cara;
+    if (!petunjuk || petunjuk === 'prompt') return this.segarkanPasang();
+    bukaPetunjukPasang({
+      cara: petunjuk,
+      nanti: () => {
+        this.nantiPasang();
+        this.segarkanPasang();
+      },
+      sudah: () => {
+        // iOS tidak punya event appinstalled: pemain sendiri yang bilang sudah.
+        simpan.setTawaranPasang(tandaiSudahPasang(simpan.tawaranPasang(), Date.now()));
+        toast(TEKS_TAWARAN.toastSudah);
+        this.segarkanPasang();
+      },
+    });
+  }
+
+  private async jalankanPrompt(e: PromptPasang) {
+    // Sekali pakai: event yang sama tidak bisa memanggil prompt() lagi.
+    this.promptPasang = null;
+    let hasil: 'accepted' | 'dismissed' | null = null;
+    try {
+      await e.prompt();
+      hasil = (await e.userChoice).outcome;
+    } catch {
+      // Browser menolak prompt (mis. sudah dipakai): tawaran dinilai ulang di bawah.
+    }
+    if (hasil) simpan.setTawaranPasang(sesudahPrompt(simpan.tawaranPasang(), hasil, Date.now()));
+    this.segarkanPasang();
   }
 
   private gabung(nama: string, kodeMentah: string) {
@@ -831,15 +928,6 @@ function penyimpananSesi(): PenyimpananSesi | null {
 /** Hapus toast dengan teks tertentu (mis. "Pakai versi terbaru…" yang dibatalkan karena pemain menyentuh layar). */
 function hapusToast(pesan: string): void {
   for (const el of document.querySelectorAll<HTMLElement>('#toast .toast')) if (el.dataset.pesan === pesan) el.remove();
-}
-
-/** Isian teks sedang difokus, atau kode meja sudah diketik tapi belum dipakai: jangan muat ulang. */
-function adaIsianAktif(): boolean {
-  const a = document.activeElement;
-  if (a instanceof HTMLTextAreaElement || (a instanceof HTMLElement && a.isContentEditable)) return true;
-  if (a instanceof HTMLInputElement && !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'color', 'file'].includes(a.type)) return true;
-  const kode = document.getElementById('kode');
-  return kode instanceof HTMLInputElement && kode.value.trim() !== '' && kode.value !== kode.defaultValue;
 }
 
 siapkanJendelaMalas();
