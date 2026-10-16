@@ -32,6 +32,7 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 | [37](#k37) | Refresh di giliran sendiri langsung dimainkan bot | `packages/meja` | Diputuskan: masa tenggang |
 | [38](#k38) | Error di timer bot bisa mematikan server | `packages/meja` + `apps/server` | Diputuskan: diperbaiki |
 | [39](#k39) | Batas meja dan sambungan per jaringan terlalu kecil untuk Wi-Fi kedai | `apps/server` (deploy) | Diputuskan: bawaan dinaikkan |
+| [44](#k44) | Batas skor kaku ±500 | `packages/meja` (validasi) + client | Diputuskan: angka bebas kelipatan 10 |
 | [45](#k45) | Leaderboard terasa tidak adil | `packages/meja` + `apps/server` + client | Diputuskan: banyak urutan, bawaan rata-rata per permainan |
 
 ---
@@ -287,6 +288,29 @@ Sisi server sudah ditangani lebih dulu (Okt 2026, `apps/server`): callback timer
 **Alasan angka:** 60 meja cukup untuk satu kedai yang ramai (puluhan meja aktif plus meja lama yang belum terhapus), dan masih jauh di bawah batas total `MAKS_MEJA` (500), jadi satu jaringan tetap tidak bisa memenuhi server. 150 sambungan cukup untuk 60 meja yang rata-rata berisi 2–3 HP, sekaligus menampung CGNAT operator seluler. Batas pesan per sambungan (banjir pesan) tidak berubah.
 
 **Bukti:** konstanta `BAWAAN_MAKS_MEJA_PER_IP` dan `BAWAAN_MAKS_SAMBUNGAN_PER_IP` di `apps/server/src/server.ts`; env dibaca di `apps/server/src/main.ts`. Dikunci test `apps/server/test/ketahanan.test.ts` (meja ke-61 ditolak) dan `apps/server/test/keamanan.test.ts` (sambungan ke-151 ditolak 429).
+
+<a id="k44"></a>
+
+## 44. Batas skor kaku ±500
+
+**Keputusan pemilik (16 Okt 2026):** "opsi batas skor juga jangan saklek 500. Buat angka dinamis aja (kelipatan 10)." Batas atas dan batas bawah diisi angka bebas, kelipatan 10.
+
+**Sebelum keputusan:** Atur meja offline hanya punya kotak centang "Batas skor ±500". Lobi online punya pilihan 300/500/1000 (dan negatifnya) atau tanpa batas. Validasi meja menerima bilangan bulat apa saja dengan nilai mutlak ≤ 100000, termasuk 0 dan tanda yang terbalik.
+
+**Default yang tidak dikomentari pemilik (dipakai):** rentang 10–100000 (nilai mutlak, sama dengan batas validasi lama); kosong atau 0 = tanpa batas; angka yang bukan kelipatan 10 dibulatkan ke kelipatan 10 terdekat (255 → 260, 3 → 10); batas bawah diketik positif lalu disimpan negatif, karena keyboard angka iPhone tidak punya tanda minus; pengaturan offline lama ±500 tetap ±500; bawaan tetap tanpa batas skor. Engine tidak berubah: batas dicek di akhir putaran, inklusif (`>=`/`<=`).
+
+**Yang dikerjakan:**
+- **Satu sumber aturan isian** di `packages/meja/src/validasi.ts` (diekspor `@remi/meja`): `batasSkorSah(v, arah)` (null, atau kelipatan `KELIPATAN_BATAS_SKOR` bertanda sesuai arah dengan nilai mutlak `BATAS_SKOR_MIN`..`BATAS_SKOR_MAKS`) dan `rapikanBatasSkor(x, arah)` (isian UI atau simpanan → nilai sah atau null).
+- **Validasi pesan** (`validasiPengaturan`): `batasSkorAtas` harus null atau kelipatan 10 positif ≤ 100000, `batasSkorBawah` null atau kelipatan 10 negatif ≥ −100000. Pesan yang melanggar ditolak utuh. Nilai dari pilihan lama lobi (300/500/1000 dan negatifnya) tetap sah, jadi client lama tidak terganggu. `batasPutaran` tetap null atau 1..100000.
+- **Client**, modul `apps/client/src/ui/batasSkor.ts`:
+  - `htmlIsianBatas()` membuat dua `<input type="number" inputmode="numeric" step="10" min="10" max="100000">`, label "Batas skor atas" dan "Batas skor bawah (minus)" dengan tanda − di depan isian, dan petunjuk "Kelipatan 10. Kosongkan kalau tanpa batas." Semuanya dibungkus `.isian-batas-skor` supaya bisa disembunyikan utuh. Yang bukan host melihat teks ("250", "−120", "Tanpa batas").
+  - `pasangIsianBatas()` merapikan angka saat isian ditinggalkan (`change`/`blur`/Enter) dan memanggil `saatBerubah` sekali per nilai baru. `lepasIsianBatas()` menandai isian lama sebelum layar digambar ulang, supaya blur dari elemen yang dibuang tidak ikut terkirim.
+  - Atur meja (`ui/beranda.ts`): kotak centang `#o-skor` diganti isian `#o-skor-atas`/`#o-skor-bawah`; `bacaPengaturan()` memakai `bacaIsianBatas()`, jadi angka yang belum ditinggalkan pun ikut saat Main ditekan.
+  - Lobi (`ui/lobi.ts`): isian `#skor-atas`/`#skor-bawah` hanya untuk host; pesan `pengaturan` dikirim sesudah isian ditinggalkan, bukan di setiap ketikan. Angka yang sedang diketik host dicatat sebelum lobi digambar ulang (ada yang masuk, kursi diatur) lalu dipulihkan bersama fokusnya.
+  - Simpanan (`penyimpanan.ts`, `rapikanPengaturanOffline`): angka dirapikan dengan `rapikanBatasSkor` (±500 lama tetap ±500), null tetap null, bentuk lain dibuang sehingga jatuh ke bawaan.
+  - `adaIsianAktif()` pindah dari `main.ts` ke `pembaruan.ts` dan diuji: isian angka yang difokus dihitung "sedang mengetik", jadi pembaruan otomatis tetap ditunda.
+
+**Test:** `packages/meja/test/batas-skor.test.ts` (diterima/ditolak termasuk 505, 0, −500 untuk batas atas dan 500 untuk batas bawah, pesan dari pilihan lama, perapian isian, dan dua permainan penuh yang selesai karena batas skor pilihan host: 250/−120 dan 600/−400, tanpa ada putaran sebelumnya yang sudah menyentuh batas), `apps/client/test/batasSkor.test.ts` (markup dan atribut isian, pembulatan dan simpanan di Atur meja, Enter, angka yang belum ditinggalkan saat Main, simpanan lama dan rusak, host vs bukan host di lobi, pesan dikirim saat ditinggalkan dan tidak dobel, angka yang sedang diketik selamat saat lobi digambar ulang), `apps/client/test/pembaruan.test.ts` (`adaIsianAktif`).
 
 <a id="k45"></a>
 

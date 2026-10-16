@@ -651,6 +651,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
+        teks: 'Angka batas skor bebas, asal kelipatan 10, misalnya 250 untuk batas atas dan −120 untuk batas bawah. Batas bawah cukup diketik angkanya (120), minusnya dipasang otomatis. Angka yang bukan kelipatan 10 dibulatkan, dan isian yang dikosongkan berarti tanpa batas.',
+      },
+      {
+        t: 'paragraf',
         teks: 'Batas skor dan batas putaran dicek di **akhir setiap putaran**. Permainan tidak bisa diakhiri di tengah putaran.',
       },
       {

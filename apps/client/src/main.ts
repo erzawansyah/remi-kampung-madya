@@ -30,6 +30,7 @@ import { siapkanAudio, suasanaMusik } from './efek/suara';
 import { adaJaringan } from './jaringan';
 import { PESAN_MEJA_MASIH_PUTUS, renderGalatMeja, renderPemuatMeja } from './ui/pemuatMeja';
 import {
+  adaIsianAktif,
   bolehCek,
   CEK_BERKALA_MS,
   JEDA_TOAST_MS,
@@ -838,15 +839,6 @@ function penyimpananSesi(): PenyimpananSesi | null {
 /** Hapus toast dengan teks tertentu (mis. "Pakai versi terbaru…" yang dibatalkan karena pemain menyentuh layar). */
 function hapusToast(pesan: string): void {
   for (const el of document.querySelectorAll<HTMLElement>('#toast .toast')) if (el.dataset.pesan === pesan) el.remove();
-}
-
-/** Isian teks sedang difokus, atau kode meja sudah diketik tapi belum dipakai: jangan muat ulang. */
-function adaIsianAktif(): boolean {
-  const a = document.activeElement;
-  if (a instanceof HTMLTextAreaElement || (a instanceof HTMLElement && a.isContentEditable)) return true;
-  if (a instanceof HTMLInputElement && !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'color', 'file'].includes(a.type)) return true;
-  const kode = document.getElementById('kode');
-  return kode instanceof HTMLInputElement && kode.value.trim() !== '' && kode.value !== kode.defaultValue;
 }
 
 siapkanJendelaMalas();

@@ -4,7 +4,7 @@
 // diperiksa: nilai yang tidak cocok diganti bawaan dan kuncinya dihapus supaya tidak mengganggu terus.
 
 import type { ViewPemain } from '@remi/engine';
-import { rapikanLevel, type DataMeja, type InfoKursi, type PengaturanMeja } from '@remi/meja';
+import { rapikanBatasSkor, rapikanLevel, type DataMeja, type InfoKursi, type PengaturanMeja } from '@remi/meja';
 import { aturPreferensi, preferensi } from './preferensi';
 
 const KUNCI = {
@@ -109,12 +109,22 @@ const rapikanDaftarString: Rapikan<string[]> = (x) => (Array.isArray(x) ? x.filt
 
 /**
  * Pengaturan meja offline terakhir. Level warga kedai yang tidak dikenal (rusak, atau dari versi
- * lain) jadi bawaan ('normal'); field lain dibiarkan, isiannya tetap disaring Meja.
+ * lain) jadi bawaan ('normal'). Batas skor (keputusan #44): angka dirapikan ke kelipatan 10 dengan
+ * tanda yang benar (simpanan lama ±500 tetap ±500), null tetap tanpa batas, bentuk lain dibuang
+ * supaya jatuh ke bawaan (tanpa batas). Field lain dibiarkan, isiannya tetap disaring Meja.
  */
 const rapikanPengaturanOffline: Rapikan<Partial<PengaturanMeja>> = (x) => {
   if (!objek(x)) return undefined;
   const p = { ...x } as Partial<PengaturanMeja>;
   if ('levelBot' in p) p.levelBot = rapikanLevel(p.levelBot);
+  for (const [k, arah] of [
+    ['batasSkorAtas', 'atas'],
+    ['batasSkorBawah', 'bawah'],
+  ] as const) {
+    if (!(k in p) || p[k] === null) continue;
+    if (angka(p[k])) p[k] = rapikanBatasSkor(p[k], arah);
+    else delete p[k];
+  }
   return p;
 };
 

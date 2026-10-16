@@ -74,6 +74,21 @@ export function momenPembaruan(k: KeadaanPembaruan): MomenPembaruan {
   }
 }
 
+/** Jenis <input> yang bukan isian ketik (diketuk saja), jadi fokus di situ bukan "sedang mengetik". */
+const INPUT_BUKAN_KETIK = ['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'color', 'file'];
+
+/**
+ * Isian teks sedang difokus, atau kode meja sudah diketik tapi belum dipakai: jangan muat ulang.
+ * Isian angka (batas skor di Atur meja dan lobi, `type="number"`) ikut dihitung isian ketik.
+ */
+export function adaIsianAktif(doc: Document = document): boolean {
+  const a = doc.activeElement;
+  if (a instanceof HTMLTextAreaElement || (a instanceof HTMLElement && a.isContentEditable)) return true;
+  if (a instanceof HTMLInputElement && !INPUT_BUKAN_KETIK.includes(a.type)) return true;
+  const kode = doc.getElementById('kode');
+  return kode instanceof HTMLInputElement && kode.value.trim() !== '' && kode.value !== kode.defaultValue;
+}
+
 /** Pemain dianggap diam (tidak sedang mengetuk apa pun) setelah sekian ms tanpa input. */
 export const DIAM_MS = 5000;
 /** Batas muat ulang otomatis per build yang sedang jalan (anti-loop). */

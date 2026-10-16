@@ -14,6 +14,7 @@ import { DAFTAR_LEVEL_WARGA, LEVEL_WARGA, labelLevelKecil } from '../konten/leve
 import { aturPreferensi, preferensi, saatPreferensiBerubah } from '../preferensi';
 import { simpan } from '../penyimpanan';
 import { labelVersi } from '../versi';
+import { bacaIsianBatas, htmlIsianBatas, pasangIsianBatas } from './batasSkor';
 import { esc, konfirmasi } from './dom';
 
 /** Keadaan main online yang ditampilkan di beranda. */
@@ -219,7 +220,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
                 ])}</select></label>
               <label class="baris">Batas putaran
                 <select id="o-putaran">${pilihan(p.batasPutaran ?? 0, [3, 5, 10, 15, 20, 0].map((n) => [n, n ? String(n) : 'Tanpa batas']))}</select></label>
-              <label class="baris">Batas skor ±500<input type="checkbox" id="o-skor" ${p.batasSkorAtas === null ? '' : 'checked'} /></label>
+              ${htmlIsianBatas({ id: 'o-skor', nilai: p, bisaUbah: true })}
               <label class="baris">Pengocok pertama
                 <select id="o-kocok"><option value="acak">Acak</option><option value="saya">Saya</option></select></label>
             </div>
@@ -320,15 +321,13 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   const jumlah = el<HTMLSelectElement>('o-jumlah')!;
   const bacaPengaturan = (): Partial<PengaturanMeja> => {
     const n = Number(jumlah.value);
-    const skor = el<HTMLInputElement>('o-skor')!.checked;
     return {
       jumlahPemain: n,
       duaDeckUntukEmpat: n === 4 && el<HTMLInputElement>('o-dua')!.checked,
       levelBot: rapikanLevel(el<HTMLSelectElement>('o-level')!.value),
       tempoBot: el<HTMLSelectElement>('o-tempo')!.value as PengaturanMeja['tempoBot'],
       batasPutaran: Number(el<HTMLSelectElement>('o-putaran')!.value) || null,
-      batasSkorAtas: skor ? 500 : null,
-      batasSkorBawah: skor ? -500 : null,
+      ...bacaIsianBatas(akar, 'o-skor'),
     };
   };
   const perbaruiAtur = () => {
@@ -341,6 +340,8 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
     el('ket-level')!.hidden = !ket;
   };
   akar.querySelector('.isi-atur')!.addEventListener('change', perbaruiAtur);
+  // Batas skor dirapikan (kelipatan 10) saat isian ditinggalkan atau Enter, lalu disimpan.
+  pasangIsianBatas(akar, 'o-skor', p, perbaruiAtur);
   el('o-dua-baris')!.classList.toggle('tersembunyi', jumlah.value !== '4');
 
   /** Permainan baru menimpa simpanan offline: minta konfirmasi dulu kalau ada. */
