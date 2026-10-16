@@ -4,6 +4,25 @@
 // jangan menunjuk kartu tertentu sebagai joker, jangan menyebut angka joker, dan jangan menilai
 // kartu mana yang "aman" dibuang. Tiap teks maksimal dua kalimat supaya tidak menutupi meja.
 
+import type { PengaturanMeja } from '@remi/meja';
+
+/**
+ * Pengaturan permainan latihan (dipakai main.ts): tiga pemain (kamu + 2 warga kedai mudah), satu
+ * putaran, kamu ngocok & jalan duluan. Teks tutorial di bawah mengikuti meja ini. Selalu tanpa
+ * batas skor dan tanpa mode kaldu (#42), walau Atur meja offline menyalakannya: tutorialnya
+ * menjelaskan skor biasa.
+ */
+export const PENGATURAN_LATIHAN: Readonly<Partial<PengaturanMeja>> = {
+  jumlahPemain: 3,
+  duaDeckUntukEmpat: false,
+  levelBot: 'mudah',
+  tempoBot: 'santai',
+  batasPutaran: 1,
+  batasSkorAtas: null,
+  batasSkorBawah: null,
+  modeKaldu: false,
+};
+
 export type IdLangkahTutorial =
   | 'sambutan'
   | 'joker'

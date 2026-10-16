@@ -6,6 +6,7 @@ import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { KEDAI, TAUTAN_KEDAI } from '../src/konten/kedai';
 import * as PERINGKAT from '../src/konten/peringkat';
 import * as PASANG from '../src/konten/pasang';
+import { TEKS_KALDU } from '../src/konten/kaldu';
 
 // Penjaga gaya teks (antislop) untuk konten yang dibaca pemain: Bantuan, tutorial, info kedai,
 // dan emote/celetukan. Yang dijaga hanya pola formulaik yang jelas (negasi kontras, klise promosi,
@@ -36,6 +37,8 @@ const sumber: [string, string[]][] = [
   ['Peringkat', [...semuaTeks(PERINGKAT), PERINGKAT.labelBulan('2026-10')]],
   // Tawaran pasang aplikasi (keputusan #46): tombol melayang, toast, dialog petunjuk.
   ['Pasang aplikasi', semuaTeks(PASANG)],
+  // Mode kaldu (keputusan #42, #43): kotak centang di layar persiapan dan teks pendek di meja.
+  ['Mode kaldu', semuaTeks(TEKS_KALDU)],
 ];
 
 describe('antislop: teks pemain', () => {

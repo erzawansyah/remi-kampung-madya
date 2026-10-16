@@ -11,7 +11,10 @@
 // - popup joker (autofocus OK, tidak dibuka ulang sambil menunggu server, siapJoker yang hilang
 //   karena sinyal putus dikirim ulang sekali per sambungan baru);
 // - setelah hancurkan(): tidak ada render/kirim lagi;
-// - pengumuman pembaca layar tidak menyebut angka joker maupun kartu yang dibuang lawan.
+// - pengumuman pembaca layar tidak menyebut angka joker maupun kartu yang dibuang lawan;
+// - mode kaldu (#42): bar atas dan judul popup joker "Putaran N · Kaldu", tombol voting "Putaran
+//   terakhir" di modal hasil (online n/m, offline langsung berlaku), baris pendek "Putaran berikutnya
+//   kaldu." / "Belum ada yang mentung, kaldu lagi.", lencana ×2 di panel mentung, alasan di klasemen.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -25,7 +28,7 @@ import {
   type ViewPemain,
 } from '@remi/engine';
 import { PENGATURAN_BAWAAN, type InfoMeja, type PesanKlien } from '@remi/meja';
-import { id, semuaSelesaiSusun, skenario, spek } from '../../../packages/engine/test/bantu';
+import { id, semuaSelesaiSusun, skenario, spek, type Skenario } from '../../../packages/engine/test/bantu';
 
 vi.mock('../src/efek/suara', () => ({ bunyi: vi.fn(), getar: vi.fn() }));
 vi.mock('../src/efek/sorak', () => ({ sorak: vi.fn(async () => {}), bersihkanSorak: vi.fn() }));
@@ -37,7 +40,17 @@ vi.mock('../src/ui/dom', async (asli) => ({ ...(await asli<typeof import('../src
 
 import { bunyi, getar } from '../src/efek/suara';
 import { tutupDialogTeratas, tutupModal, umumkan } from '../src/ui/dom';
-import { geserFokus, KontrolMeja, peristiwaAwalPerluDiputar, perluKirimUlangSiapJoker, PINTASAN_HURUF, teksBarAtas, type AppUntukMeja } from '../src/kontrolMeja';
+import {
+  geserFokus,
+  KontrolMeja,
+  peristiwaAwalPerluDiputar,
+  perluKirimUlangSiapJoker,
+  PINTASAN_HURUF,
+  teksBarAtas,
+  teksInfoKaldu,
+  type AppUntukMeja,
+} from '../src/kontrolMeja';
+import { TEKS_KALDU } from '../src/konten/kaldu';
 import { KEDAI } from '../src/konten/kedai';
 import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { _setelUlangCache, preferensi } from '../src/preferensi';
@@ -146,6 +159,14 @@ class MejaUji {
           this.g = h.state;
           this.kontrol.perbarui(null, this.view());
         }
+        if (p.t === 'putaranTerakhir' && p.setuju) {
+          // Meja dengan satu manusia (offline): voting kaldu langsung berlaku.
+          const h = terapkanAksi(this.g, { jenis: 'putaranTerakhir' });
+          if (!h.ok) throw new Error(`putaran terakhir ditolak mesin: ${h.error.pesan}`);
+          this.g = h.state;
+          this.info = { ...this.info, setujuKaldu: [] };
+          this.kontrol.perbarui(this.info, this.view());
+        }
       },
       keluarMeja: vi.fn(),
       mainLagiOffline: vi.fn(),
@@ -193,9 +214,9 @@ const tekan = (key: string, target: EventTarget = document.body, repeat = false)
 const tunggu = () => new Promise((r) => setTimeout(r, 0));
 
 /** Permainan 4 pemain baru dengan giliran pertama di kursi 0 (aku). */
-function permainanGiliranku(): GameState {
+function permainanGiliranku(konfigurasi?: Parameters<typeof buatPermainan>[0]['konfigurasi']): GameState {
   for (let pengocok = 0; pengocok < 4; pengocok++) {
-    const g0 = buatPermainan({ pemain: ['Aku', 'Bot 1', 'Bot 2', 'Bot 3'], seed: 7 });
+    const g0 = buatPermainan({ pemain: ['Aku', 'Bot 1', 'Bot 2', 'Bot 3'], seed: 7, konfigurasi });
     const h = terapkanAksi(g0, { jenis: 'mulaiPutaran', pengocok });
     if (h.ok && h.state.putaran!.giliran === 0) return h.state;
   }
@@ -1609,6 +1630,10 @@ describe('petunjuk & bar atas', () => {
     expect(teksBarAtas('Offline', 1, 3)).toEqual({ jenis: 'Offline', putaran: 'Putaran 1/3' });
     expect(teksBarAtas('Meja AB12C', 2, null)).toEqual({ jenis: 'Meja AB12C', putaran: 'Putaran 2' });
     expect(teksBarAtas('Offline', null, 3).putaran).toBe('');
+    // Putaran kaldu (#42): penandanya menggantikan batas putaran (kaldu bisa berulang sesudah batas).
+    expect(teksBarAtas('Offline', 6, 6, true)).toEqual({ jenis: 'Offline', putaran: 'Putaran 6 · Kaldu' });
+    expect(teksBarAtas('Meja AB12C', 7, null, true).putaran).toBe('Putaran 7 · Kaldu');
+    expect(teksBarAtas('Offline', null, 6, true).putaran).toBe('');
     meja = new MejaUji(permainanGiliranku());
     expect(meja.akar.querySelector('.info .info-putaran')!.textContent).toMatch(/^Putaran 1/);
     expect(meja.akar.querySelector('.info .info-jenis')!.textContent).toBe('Offline');
@@ -1653,3 +1678,220 @@ describe('tombol urut: nama aksesibel diawali teks yang terlihat (WCAG 2.5.3)', 
     expect(dilihat).toEqual(new Set(['urut', 'bunga', 'angka']));
   });
 });
+
+// ---------- mode kaldu (#42, #43) ----------
+
+describe('mode kaldu (#42): teks pendek di meja', () => {
+  /** Kursi: aku + `manusia - 1` orang lain, sisanya warga kedai. */
+  const kursi = (g: GameState, manusia: number): Partial<InfoMeja> => ({
+    kursi: g.pemain.map((p, i) => ({ jenis: i < manusia ? 'manusia' : 'bot', nama: p.nama, terhubung: true, level: 'normal' })),
+    setujuKaldu: [],
+  });
+
+  /**
+   * Meja mode kaldu: aku tinggal membuang 9 Waru (nilai pentungan 50) untuk mentung, habis mulung
+   * 7 Love, seperti mejaSiapMentung. `s` mengatur putaran kaldu, voting, dan batas putaran.
+   */
+  async function mejaKalduSiapMentung(s: Partial<Skenario>, manusia = 2, appUbah: Partial<AppUntukMeja> = {}): Promise<MejaUji> {
+    const g = skenario({
+      modeKaldu: true,
+      rankJoker: 2,
+      tangan: [['5 love', '6 love', '9 waru'], ['3 waru', '4 waru', '5 waru'], ['3 love', '4 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+      buangan: [['7 love', 1]],
+      giliran: 0,
+      ...s,
+    });
+    const m = new MejaUji(g, kursi(g, manusia), appUbah);
+    m.app.kirim({ t: 'aksi', aksi: { jenis: 'mulung', jumlah: 1, kartuJadi: [spek('5 love', '6 love', '7 love')] } });
+    await sampai(() => m.g.putaran!.tahap === 'main' && !!m.tombol('buang'));
+    return m;
+  }
+
+  const tombolKaldu = () => document.querySelector<HTMLButtonElement>('#modal [data-kaldu]');
+  const infoKaldu = () => document.querySelector<HTMLElement>('#modal [data-info-kaldu]')!;
+  const infoTerlihat = () => (infoKaldu().classList.contains('tersembunyi') ? '' : infoKaldu().textContent);
+
+  it('bar atas di putaran kaldu: "Putaran 1 · Kaldu" (tanpa batas putaran); meja biasa tetap "Putaran 1/3"', () => {
+    meja = new MejaUji(permainanGiliranku({ modeKaldu: true, batasPutaran: 1 }));
+    expect(meja.g.putaran!.kaldu).toBe(true);
+    expect(meja.akar.querySelector('.info .info-putaran')!.textContent).toBe('Putaran 1 · Kaldu');
+    meja.hancurkan();
+    // Meja mode kaldu, putaran yang belum kaldu: tampil biasa.
+    meja = new MejaUji(permainanGiliranku({ modeKaldu: true, batasPutaran: 3 }));
+    expect(meja.g.putaran!.kaldu).toBeUndefined();
+    expect(meja.akar.querySelector('.info .info-putaran')!.textContent).toBe('Putaran 1/3');
+  });
+
+  it('popup joker di putaran kaldu: judulnya "Putaran 1 · Kaldu", isi lainnya sama persis dengan popup biasa', async () => {
+    const isiPopup = async (g: GameState) => {
+      meja = new MejaUji(g, { menungguJoker: [0] });
+      await sampai(() => !!document.querySelector('#modal [data-joker]'));
+      const dlg = document.querySelector('#modal [data-joker]')!.closest('.dialog')!;
+      const hasil = { judul: dlg.querySelector('h2')!.textContent, sisa: [...dlg.querySelectorAll('p, button')].map((e) => e.textContent) };
+      meja.hancurkan();
+      meja = null;
+      tutupModal();
+      return hasil;
+    };
+    const biasa = await isiPopup(permainanGiliranku({ batasPutaran: 3 }));
+    const kaldu = await isiPopup(permainanGiliranku({ modeKaldu: true, batasPutaran: 1 }));
+    expect(biasa.judul).toBe('Putaran 1 · Joker');
+    expect(kaldu.judul).toBe('Putaran 1 · Kaldu');
+    // Popup joker tidak bertambah penjelasan apa pun (keputusan pemilik: teks di meja sesingkat mungkin).
+    expect(kaldu.sisa).toEqual(biasa.sisa);
+  });
+
+  it('panel mentung putaran kaldu: lencana "×2 KALDU" dan nilai yang sudah dikali; klasemen menyebut alasannya', async () => {
+    const m = (meja = await mejaKalduSiapMentung({ kaldu: true, konfigurasi: { batasPutaran: 1 } }));
+    tekan('ArrowRight');
+    tekan(' ');
+    tekan('b');
+    await sampai(() => !!document.querySelector('#modal [data-mentung]'));
+    const dlg = document.querySelector('#modal [data-mentung]')!.closest('.dialog')!;
+    const lencana = [...dlg.querySelectorAll('.lencana-deret .lencana')].map((e) => e.textContent);
+    expect(lencana).toContain(TEKS_KALDU.lencana);
+    expect(TEKS_KALDU.lencana).toBe('×2 KALDU');
+    expect(dlg.querySelector('p.rata-tengah')!.textContent).toBe('Kamu nutup pakai 9 Waru · nilai 100');
+    expect(dlg.querySelector('.kotak-status')!.textContent).toContain('Kamu MENTUNG! +100');
+
+    document.querySelector<HTMLButtonElement>('#modal [data-lanjut]')!.click();
+    await sampai(() => m.g.status === 'susunAkhir' && !document.querySelector('#modal [data-mentung]'));
+    m.g = semuaSelesaiSusun(m.g);
+    expect(m.g.alasanSelesai).toBe('kaldu');
+    m.kontrol.perbarui(m.info, m.view());
+    await sampai(() => !!document.querySelector('#modal [data-selesai]'));
+    const klasemen = document.querySelector('#modal [data-selesai]')!.closest('.dialog')!;
+    expect(klasemen.textContent).toContain('Putaran kaldu ditutup mentung. 1 putaran.');
+    expect(klasemen.querySelector('details.putaran-terakhir summary')!.textContent).toContain('(50 × 2 = 100)');
+  });
+
+  it('panel mentung meja biasa: tanpa lencana kaldu', async () => {
+    meja = await mejaSiapMentung();
+    tekan('ArrowRight');
+    tekan(' ');
+    tekan('b');
+    await sampai(() => !!document.querySelector('#modal [data-mentung]'));
+    expect(document.querySelector('#modal .dialog')!.textContent).not.toContain('KALDU');
+  });
+
+  it('modal hasil online: "Putaran terakhir (n/m)" meniru voting akhiri, lalu hilang begitu disepakati', async () => {
+    const m = (meja = await mejaKalduSiapMentung({}, 2, { jenis: 'online' }));
+    const dlg = await sampaiHasil(m);
+    expect(m.g.status).toBe('putaranSelesai');
+    const b = tombolKaldu()!;
+    expect(b.textContent).toBe('Putaran terakhir (0/2)');
+    // Urutan di kaki: Lihat meja · Putaran terakhir · Akhiri permainan.
+    expect([...dlg.querySelectorAll('[data-deret-voting] button')].map((x) => x.textContent)).toEqual([
+      'Lihat meja',
+      'Putaran terakhir (0/2)',
+      'Akhiri permainan (0/2)',
+    ]);
+    expect(infoTerlihat()).toBe('');
+
+    m.diam = true;
+    b.click();
+    expect(m.terkirim.at(-1)).toEqual({ t: 'putaranTerakhir', setuju: true });
+    expect(b.textContent).toBe('Mengirim…');
+    expect(terkunci(b)).toBe(true);
+    b.click(); // selagi menunggu: diabaikan
+    expect(m.terkirim.filter((p) => p.t === 'putaranTerakhir')).toHaveLength(1);
+
+    // Info meja datang: aku sudah setuju, tinggal satu orang lagi. Diperbarui di tempat.
+    m.info = { ...m.info, setujuKaldu: [0] };
+    m.kontrol.perbarui(m.info, null);
+    expect(document.querySelector('#modal [data-hasil]')!.closest('.dialog')).toBe(dlg);
+    expect(tombolKaldu()).toBe(b);
+    expect(b.textContent).toBe('Batal putaran terakhir (1/2)');
+    expect(terkunci(b)).toBe(false);
+    b.click();
+    expect(m.terkirim.at(-1)).toEqual({ t: 'putaranTerakhir', setuju: false });
+    m.info = { ...m.info, setujuKaldu: [] };
+    m.kontrol.perbarui(m.info, null);
+    expect(b.textContent).toBe('Putaran terakhir (0/2)');
+
+    // Semua setuju: meja menerapkan putaranTerakhir, suara dikosongkan.
+    b.focus();
+    const h = terapkanAksi(m.g, { jenis: 'putaranTerakhir' });
+    if (!h.ok) throw new Error(h.error.pesan);
+    m.g = h.state;
+    m.info = { ...m.info, setujuKaldu: [] };
+    m.kontrol.perbarui(m.info, m.view());
+    await sampai(() => !tombolKaldu());
+    expect(document.querySelector('#modal [data-hasil]')!.closest('.dialog')).toBe(dlg);
+    expect(infoTerlihat()).toBe(TEKS_KALDU.berikutnya);
+    // Fokus tidak lepas ke <body>.
+    expect(document.activeElement).toBe(dlg.querySelector('[data-kocok]'));
+    expect(dlg.querySelector('[data-akhiri]')!.textContent).toBe('Akhiri permainan (0/2)');
+  });
+
+  it('modal hasil offline (satu orang): "Putaran terakhir" tanpa hitungan, langsung berlaku', async () => {
+    const m = (meja = await mejaKalduSiapMentung({}, 1));
+    await sampaiHasil(m);
+    const b = tombolKaldu()!;
+    expect(b.textContent).toBe(TEKS_KALDU.tombol);
+    b.click();
+    expect(m.terkirim.at(-1)).toEqual({ t: 'putaranTerakhir', setuju: true });
+    await sampai(() => !tombolKaldu());
+    expect(m.g.kalduDiminta).toBe(true);
+    expect(infoTerlihat()).toBe(TEKS_KALDU.berikutnya);
+    // Putaran berikutnya benar-benar kaldu.
+    document.querySelector<HTMLButtonElement>('#modal [data-kocok="acak"]')!.click();
+    await sampai(() => !!document.querySelector('#modal [data-joker]'));
+    expect(m.g.putaran!.kaldu).toBe(true);
+    expect(document.querySelector('#modal [data-joker] ~ h2')!.textContent).toBe('Putaran 2 · Kaldu');
+  });
+
+  it('putaran berikutnya sudah pasti kaldu (batas putaran): tanpa tombol, satu baris saja', async () => {
+    meja = await mejaKalduSiapMentung({ konfigurasi: { batasPutaran: 2 } }, 2, { jenis: 'online' });
+    await sampaiHasil(meja);
+    expect(tombolKaldu()).toBeNull();
+    expect(infoTerlihat()).toBe('Putaran berikutnya kaldu.');
+  });
+
+  it('putaran kaldu habis tanpa mentung: "Belum ada yang mentung, kaldu lagi.", tanpa tombol', async () => {
+    // Deck tinggal satu kartu: aku ambil, buang, deck habis, susun akhir, putaran selesai.
+    let g = skenario({
+      modeKaldu: true,
+      kaldu: true,
+      konfigurasi: { batasPutaran: 1 },
+      rankJoker: 2,
+      tangan: [['5 love', '6 love', '9 waru'], ['3 waru', '4 waru', '5 waru'], ['3 love', '4 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+      deck: ['K waru'],
+      giliran: 0,
+    });
+    for (const a of [{ jenis: 'ambilDeck', pemain: 0 }, { jenis: 'buang', pemain: 0, kartuId: id('K waru') }] as Aksi[]) {
+      const h = terapkanAksi(g, a);
+      if (!h.ok) throw new Error(h.error.pesan);
+      g = h.state;
+    }
+    g = semuaSelesaiSusun(g);
+    expect([g.status, g.riwayat.at(-1)!.cara, g.riwayat.at(-1)!.kaldu]).toEqual(['putaranSelesai', 'deckHabis', true]);
+    meja = new MejaUji(g, kursi(g, 2), { jenis: 'online' });
+    await sampai(() => !!document.querySelector('#modal [data-hasil]'));
+    expect(tombolKaldu()).toBeNull();
+    expect(infoTerlihat()).toBe(TEKS_KALDU.lagi);
+  });
+
+  it('meja biasa: tanpa tombol dan tanpa baris kaldu', async () => {
+    meja = await mejaSiapMentung();
+    await sampaiHasil(meja);
+    expect(tombolKaldu()).toBeNull();
+    expect(infoTerlihat()).toBe('');
+  });
+
+  it('teksInfoKaldu: hanya kalau putaran berikutnya pasti kaldu', () => {
+    const v = (konfigurasi: object, riwayat: number, kalduDiminta?: true) =>
+      ({ konfigurasi: { batasPutaran: null, ...konfigurasi }, riwayat: Array(riwayat).fill({}), ...(kalduDiminta ? { kalduDiminta } : {}) }) as unknown as ViewPemain;
+    const mentung = { cara: 'mentung' } as HasilPutaranUji;
+    const habisKaldu = { cara: 'deckHabis', kaldu: true } as HasilPutaranUji;
+    expect(teksInfoKaldu(v({}, 1), mentung)).toBe('');
+    expect(teksInfoKaldu(v({ modeKaldu: true }, 1), mentung)).toBe('');
+    expect(teksInfoKaldu(v({ modeKaldu: true }, 1, true), mentung)).toBe(TEKS_KALDU.berikutnya);
+    expect(teksInfoKaldu(v({ modeKaldu: true, batasPutaran: 3 }, 2), mentung)).toBe(TEKS_KALDU.berikutnya);
+    expect(teksInfoKaldu(v({ modeKaldu: true, batasPutaran: 3 }, 3), habisKaldu)).toBe(TEKS_KALDU.lagi);
+    // Meja biasa dengan batas putaran: tidak ada kaldu.
+    expect(teksInfoKaldu(v({ batasPutaran: 3 }, 2), mentung)).toBe('');
+  });
+});
+
+type HasilPutaranUji = Parameters<typeof teksInfoKaldu>[1];

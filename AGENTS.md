@@ -255,6 +255,7 @@ Daftar lengkap ada di README. Yang paling sering terlupa:
 - Mode kaldu **tidak memakai batas skor** (meja mengirim `null`, engine juga mengabaikannya), dan batas putaran hanya memicu kaldu. "Akhiri permainan" tetap jalan sebagai jalan keluar.
 - Voting kaldu di meja meniru voting akhiri persis, termasuk hitung ulang saat pemilih berkurang (#36): `lepasKursi` → `cekVotingAkhiri() || cekVotingKaldu()`.
 - Semua field kaldu opsional dan hanya ditulis kalau aktif (`modeKaldu`, `kalduDiminta`, `kaldu`, `pengaliPentungan`, `setujuKaldu`); meja tanpa kaldu harus tetap byte-identik (golden).
+- Client: teks di meja **sesingkat mungkin** (keputusan pemilik), satu sumber di `konten/kaldu.ts`: bar atas dan judul popup joker "Putaran N · Kaldu", tombol "Putaran terakhir" di modal hasil (meniru tombol Akhiri), satu baris "Putaran berikutnya kaldu."/"Belum ada yang mentung, kaldu lagi.", lencana "×2 KALDU", "150 × 2" di rincian skor. **Popup joker tidak diberi penjelasan apa pun** selain judulnya. Isian batas skor disembunyikan selama Mode kaldu dicentang (Atur meja menyimpan batas skor `null`); latihan selalu `modeKaldu: false` (`PENGATURAN_LATIHAN` di `konten/tutorial.ts`).
 
 **Bot**
 - Tempo bawaan "santai": bot mikir 3–10 detik acak sebelum aksi pertama di gilirannya, lalu 1,5–3 detik untuk aksi lanjutan.

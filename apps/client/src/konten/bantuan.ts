@@ -9,6 +9,7 @@
 
 import type { Bunga, Rank } from '@remi/engine';
 import { TENGGANG_SAMBUNG_MS } from '@remi/meja';
+import { TEKS_KALDU } from './kaldu';
 import { DAFTAR_LEVEL_WARGA } from './levelWarga';
 
 /** Masa tenggang sambung ulang dalam detik (sama dengan yang dipakai meja). */
@@ -761,7 +762,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
         butir: [
           'Isi nama, lalu tekan Buat meja baru. Kamu jadi host.',
           'Bagikan kode meja (5 karakter, huruf dan angka), atau salin dan bagikan link undangannya.',
-          'Atur kursi: tunggu teman masuk, atau ajak warga kedai (pemain komputer) lalu pilih levelnya. Host juga mengatur jumlah pemain, batas putaran, batas skor, waktu per giliran, tempo warga kedai, dan apakah meja muncul di daftar meja publik.',
+          'Atur kursi: tunggu teman masuk, atau ajak warga kedai (pemain komputer) lalu pilih levelnya. Host juga mengatur jumlah pemain, batas putaran, mode kaldu, batas skor, waktu per giliran, tempo warga kedai, dan apakah meja muncul di daftar meja publik.',
           'Kalau semua kursi sudah terisi, host menekan Mulai main.',
         ],
       },
@@ -782,6 +783,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Pengumuman joker menunggu semua pemain menekan OK. Pemain yang terputus tidak ditunggu. Kalau ia kembali sebelum sempat menekan OK, popup joker muncul lagi untuknya.',
           'Meja tanpa pemain yang terhubung dihapus otomatis setelah 10 menit.',
         ],
+      },
+      {
+        t: 'paragraf',
+        teks: `**${TEKS_KALDU.label}** (lihat bab Akhir permainan) dicentang di Atur meja (offline) atau di lobi oleh host (online). Selama dicentang, isian batas skor disembunyikan. Di hasil putaran ada tombol **${TEKS_KALDU.tombol}**: kalau semua pemain menekannya, putaran berikutnya jadi putaran kaldu (main offline langsung berlaku). Di putaran kaldu bar atas menulis "Putaran 6 · ${TEKS_KALDU.putaran}".`,
       },
       {
         t: 'paragraf',

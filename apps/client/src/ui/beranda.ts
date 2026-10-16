@@ -16,6 +16,7 @@ import { svgLogo } from '../aset/logoMadya';
 import { gambarKartuKeKanvas, type KartuGambar } from '../game/kartuGrafisGambar';
 import { htmlTautanKedai, KEDAI } from '../konten/kedai';
 import { TEKS_TAWARAN } from '../konten/pasang';
+import { TEKS_KALDU } from '../konten/kaldu';
 import { DAFTAR_LEVEL_WARGA, LEVEL_WARGA, labelLevelKecil } from '../konten/levelWarga';
 import { aturPreferensi, preferensi, saatPreferensiBerubah } from '../preferensi';
 import { simpan } from '../penyimpanan';
@@ -113,6 +114,7 @@ function pengaturanTersimpan(): PengaturanMeja {
     batasSkorBawah: null,
     publik: false,
     detikGiliran: 0,
+    modeKaldu: false,
     ...simpan.pengaturanOffline(),
   };
   // Level yang tidak dikenal (simpanan rusak/versi lain) jadi 'normal', supaya pilihan dan ringkasan cocok.
@@ -158,13 +160,16 @@ export async function konfirmasiTimpaSimpanan(alasan: string): Promise<boolean> 
   });
 }
 
-function ringkasMeja(p: Pick<PengaturanMeja, 'jumlahPemain' | 'levelBot' | 'tempoBot' | 'batasPutaran'>): string {
+function ringkasMeja(p: Pick<PengaturanMeja, 'jumlahPemain' | 'levelBot' | 'tempoBot' | 'batasPutaran' | 'modeKaldu'>): string {
   return [
     `${p.jumlahPemain} pemain`,
     `lawan ${labelLevelKecil(rapikanLevel(p.levelBot))}`,
     LABEL_TEMPO[p.tempoBot] ?? p.tempoBot,
     p.batasPutaran ? `${p.batasPutaran} putaran` : 'tanpa batas putaran',
-  ].join(' · ');
+    p.modeKaldu === true ? TEKS_KALDU.ringkas : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBeranda = {}): BerandaTerpasang {
@@ -240,6 +245,8 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
                 ])}</select></label>
               <label class="baris">Batas putaran
                 <select id="o-putaran">${pilihan(p.batasPutaran ?? 0, [3, 5, 10, 15, 20, 0].map((n) => [n, n ? String(n) : 'Tanpa batas']))}</select></label>
+              <label class="baris">${esc(TEKS_KALDU.label)}<input type="checkbox" id="o-kaldu" aria-describedby="ket-kaldu" ${p.modeKaldu === true ? 'checked' : ''} /></label>
+              <p class="bantuan rapat" id="ket-kaldu">${esc(TEKS_KALDU.ket)}</p>
               ${htmlIsianBatas({ id: 'o-skor', nilai: p, bisaUbah: true })}
               <label class="baris">Pengocok pertama
                 <select id="o-kocok"><option value="acak">Acak</option><option value="saya">Saya</option></select></label>
@@ -340,6 +347,8 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
 
   // ---------- main offline ----------
   const jumlah = el<HTMLSelectElement>('o-jumlah')!;
+  const kaldu = el<HTMLInputElement>('o-kaldu')!;
+  const isianBatas = akar.querySelector<HTMLElement>('.isi-atur .isian-batas-skor')!;
   const bacaPengaturan = (): Partial<PengaturanMeja> => {
     const n = Number(jumlah.value);
     return {
@@ -348,11 +357,18 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
       levelBot: rapikanLevel(el<HTMLSelectElement>('o-level')!.value),
       tempoBot: el<HTMLSelectElement>('o-tempo')!.value as PengaturanMeja['tempoBot'],
       batasPutaran: Number(el<HTMLSelectElement>('o-putaran')!.value) || null,
-      ...bacaIsianBatas(akar, 'o-skor'),
+      modeKaldu: kaldu.checked,
+      // Mode kaldu tidak memakai batas skor (#43): disimpan dan dikirim kosong.
+      ...(kaldu.checked ? { batasSkorAtas: null, batasSkorBawah: null } : bacaIsianBatas(akar, 'o-skor')),
     };
   };
-  const perbaruiAtur = () => {
+  /** Baris yang ikut pilihan lain: 2 deck hanya untuk 4 pemain, batas skor disembunyikan saat mode kaldu. */
+  const aturTampilAtur = () => {
     el('o-dua-baris')!.classList.toggle('tersembunyi', jumlah.value !== '4');
+    isianBatas.classList.toggle('tersembunyi', kaldu.checked);
+  };
+  const perbaruiAtur = () => {
+    aturTampilAtur();
     const baru = bacaPengaturan();
     simpan.setPengaturanOffline(baru);
     el('ringkas-meja')!.textContent = ringkasMeja({ ...p, ...baru });
@@ -363,7 +379,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   akar.querySelector('.isi-atur')!.addEventListener('change', perbaruiAtur);
   // Batas skor dirapikan (kelipatan 10) saat isian ditinggalkan atau Enter, lalu disimpan.
   pasangIsianBatas(akar, 'o-skor', p, perbaruiAtur);
-  el('o-dua-baris')!.classList.toggle('tersembunyi', jumlah.value !== '4');
+  aturTampilAtur();
 
   /** Permainan baru menimpa simpanan offline: minta konfirmasi dulu kalau ada. */
   const bolehTimpa = konfirmasiTimpaSimpanan;

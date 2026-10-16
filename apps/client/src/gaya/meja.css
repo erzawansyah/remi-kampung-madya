@@ -627,6 +627,13 @@ details.akordion.saya > summary .nama-skor b {
 .aksi-hasil-lanjut > button {
   width: 100%;
 }
+/* Mode kaldu (#42): satu baris pendek di atas tombol lanjut ("Putaran berikutnya kaldu."). */
+.info-kaldu {
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--emas);
+}
 .juara-teks {
   margin: 0;
   text-align: center;

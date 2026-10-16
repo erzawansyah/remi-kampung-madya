@@ -137,6 +137,8 @@ describe('htmlLog', () => {
 
   it('jenis ditebak dari teks hanya untuk ikon', () => {
     expect(jenisLog('Putaran 2 dimulai. Budi ngocok.')).toBe('mulai');
+    // Mode kaldu (#42): kalimat tambahan mesin aturan di awal putaran kaldu.
+    expect(jenisLog('Putaran 6 dimulai. Budi ngocok. Putaran kaldu: pentungan dikali dua.')).toBe('mulai');
     expect(jenisLog('Budi ambil kartu dari deck.')).toBe('ambil');
     expect(jenisLog('Budi buang kartu.')).toBe('buang');
     expect(jenisLog('Budi mulung 2 kartu dari buangan, menjadikan 4-5-6 Love.')).toBe('mulung');

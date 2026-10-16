@@ -126,12 +126,15 @@ const rapikanDaftarString: Rapikan<string[]> = (x) => (Array.isArray(x) ? x.filt
  * Pengaturan meja offline terakhir. Level warga kedai yang tidak dikenal (rusak, atau dari versi
  * lain) jadi bawaan ('normal'). Batas skor (keputusan #44): angka dirapikan ke kelipatan 10 dengan
  * tanda yang benar (simpanan lama ±500 tetap ±500), null tetap tanpa batas, bentuk lain dibuang
- * supaya jatuh ke bawaan (tanpa batas). Field lain dibiarkan, isiannya tetap disaring Meja.
+ * supaya jatuh ke bawaan (tanpa batas). Mode kaldu (#42) hanya boolean, selain itu dibuang (mati).
+ * Field lain dibiarkan, isiannya tetap disaring Meja.
  */
 const rapikanPengaturanOffline: Rapikan<Partial<PengaturanMeja>> = (x) => {
   if (!objek(x)) return undefined;
   const p = { ...x } as Partial<PengaturanMeja>;
   if ('levelBot' in p) p.levelBot = rapikanLevel(p.levelBot);
+  // Mode kaldu (#42): hanya boolean yang dipakai; bentuk lain dibuang (jatuh ke bawaan: mati).
+  if ('modeKaldu' in p && typeof p.modeKaldu !== 'boolean') delete p.modeKaldu;
   for (const [k, arah] of [
     ['batasSkorAtas', 'atas'],
     ['batasSkorBawah', 'bawah'],

@@ -249,6 +249,66 @@ describe('htmlRiwayat', () => {
   });
 });
 
+describe('mode kaldu (#42): pentungan dikali dua', () => {
+  /** Putaran kaldu: Pemain 1 mulung 7 Love punya Pemain 2, lalu nutup pakai As Waru (150 × 2). */
+  function putaranKaldu(): HasilPutaran {
+    let g = skenario({
+      modeKaldu: true,
+      kaldu: true,
+      konfigurasi: { batasPutaran: 1 },
+      rankJoker: 2,
+      tangan: [['5 love', '6 love', 'As waru'], ['3 waru', '4 waru', '5 waru'], ['3 love', '4 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+      buangan: [['7 love', 1]],
+      giliran: 0,
+    });
+    const aksi: Aksi[] = [
+      { jenis: 'mulung', pemain: 0, jumlah: 1, kartuJadi: [spek('5 love', '6 love', '7 love')] },
+      { jenis: 'buang', pemain: 0, kartuId: id('As waru') },
+    ];
+    for (const a of aksi) {
+      const h = terapkanAksi(g, a);
+      if (!h.ok) throw new Error(h.error.pesan);
+      g = h.state;
+    }
+    return semuaSelesaiSusun(g).riwayat[0];
+  }
+
+  it('baris pentungan dan perhitungan menulis "150 × 2"; nilainya sudah dikali (mesin aturan)', () => {
+    const h = putaranKaldu();
+    expect([h.kaldu, h.nilaiPentungan, h.kepentung]).toEqual([true, 300, [1]]);
+    const el = parse(htmlRincianPutaran(h, namaBiasa, 0));
+    const komponen = (i: number) => el.querySelector(`details[data-pemain="${i}"] .komponen`)!;
+    expect(komponen(0).textContent).toContain('Pentungan: As Waru (150 × 2)');
+    expect(komponen(0).textContent).toContain(tanda(300));
+    expect(komponen(0).querySelector('.hitung')!.textContent).toContain('+ 150 × 2 =');
+    expect(komponen(1).textContent).toContain('Kena pentung Pemain 0: As Waru (150 × 2)');
+    expect(komponen(1).textContent).toContain(tanda(-300));
+    expect(komponen(1).querySelector('.hitung')!.textContent).toContain('− 150 × 2 =');
+    // Yang aman: tanpa baris pentungan.
+    expect(komponen(2).textContent).not.toMatch(/\d × \d/);
+    expect(teksCaraSelesai(h, namaBiasa)).toBe('Pemain 0 mentung pakai As Waru (150 × 2 = 300).');
+  });
+
+  it('riwayat menandai putaran kaldu: "<nama> mentung · kaldu"; putaran biasa tanpa tanda', () => {
+    const h = putaranKaldu();
+    const el = parse(htmlRiwayat(namaBiasa, [...riwayat, { ...h, nomor: riwayat.length + 1 }], null));
+    const judul = [...el.querySelectorAll(':scope > details > summary .nama-skor > b')].map((b) => b.textContent);
+    expect(judul[0]).toBe('Pemain 0 mentung · kaldu');
+    expect(judul.slice(1).some((t) => t!.includes('kaldu'))).toBe(false);
+    // Putaran kaldu yang deck-nya habis juga ditandai.
+    const habis = parse(htmlRiwayat(namaBiasa, [{ ...riwayat.find((x) => x.cara === 'deckHabis')!, kaldu: true }], null));
+    expect(habis.querySelector('summary .nama-skor > b')!.textContent).toBe('deck habis · kaldu');
+  });
+
+  it('putaran biasa: tidak ada "× 2" di mana pun', () => {
+    for (const h of riwayat) {
+      // Pengali pentungan ("150 × 2"); penalti joker "(1× −25)" tidak ikut tertangkap.
+      expect(parse(htmlRincianPutaran(h, namaBiasa, 0)).textContent).not.toMatch(/\d × \d/);
+      expect(teksCaraSelesai(h, namaBiasa)).not.toMatch(/\d × \d/);
+    }
+  });
+});
+
 describe('htmlKartuJadiAsal', () => {
   const kartuJadi = (): KartuJadi[] => [
     {

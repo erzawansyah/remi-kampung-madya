@@ -3,7 +3,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { urutkanPeringkat, type BarisPeringkat } from '@remi/meja';
-import { alamatPapan, hitungStatistik, pasangIsyaratGulir, renderRiwayat } from '../src/ui/riwayat';
+import { ALASAN_SELESAI, alamatPapan, hitungStatistik, pasangIsyaratGulir, renderRiwayat } from '../src/ui/riwayat';
 import type { CatatanPermainan } from '../src/penyimpanan';
 
 const main = (waktu: number, mode: 'online' | 'offline', putaran: number, klasemen: [string, number][]): CatatanPermainan => ({
@@ -475,6 +475,29 @@ describe('renderRiwayat tab Permainan: lencana', () => {
     expect(keluar).toEqual(['keluar']);
     expect(g[2]!.querySelectorAll('.lencana')).toHaveLength(0);
     expect(akar.querySelector('#isi-riwayat')!.textContent).not.toMatch(/\bbot\b/i);
+  });
+});
+
+describe('renderRiwayat tab Permainan: alasan selesai', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="ui"></div>';
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('semua alasan dari server punya label, termasuk mode kaldu (#42) "putaran kaldu"', async () => {
+    // Alasan yang mungkin dikirim server (RingkasanAkhir.alasan selain null).
+    expect(Object.keys(ALASAN_SELESAI).sort()).toEqual(['batasPutaran', 'batasSkor', 'kaldu', 'sepakat']);
+    const k = (kursi: number, nama: string, skor: number) => ({ kursi, peringkat: kursi + 1, nama, bot: false, skor, mentung: 0, kepentung: 0 });
+    stubFetch(() => [
+      { id: 2, kodeMeja: 'KALDU', selesaiPada: '2026-10-16T05:00:00.000Z', alasan: 'kaldu', jumlahPutaran: 7, dihitung: true, klasemen: [k(0, 'Siti', 500), k(1, 'Budi', -200)] },
+      { id: 1, kodeMeja: 'BIASA', selesaiPada: '2026-10-15T05:00:00.000Z', alasan: 'batasSkor', jumlahPutaran: 4, dihitung: true, klasemen: [k(0, 'Siti', 500), k(1, 'Budi', 0)] },
+    ]);
+    const akar = document.getElementById('ui')!;
+    renderRiwayat(akar, () => {}, 'permainan');
+    await tunggu();
+    const ringkas = [...akar.querySelectorAll('#isi-riwayat details > summary small')].map((e) => e.textContent);
+    expect(ringkas[0]).toContain('7 putaran · putaran kaldu · juara Siti');
+    expect(ringkas[1]).toContain('4 putaran · batas skor · juara Siti');
   });
 });
 

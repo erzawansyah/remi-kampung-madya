@@ -92,7 +92,13 @@ const TAB: [TabRiwayat, string][] = [
 ];
 
 const MEDALI = ['🥇', '🥈', '🥉'];
-const ALASAN: Record<string, string> = { sepakat: 'sepakat berhenti', batasPutaran: 'batas putaran', batasSkor: 'batas skor' };
+/** Alasan permainan selesai di daftar permainan online. 'kaldu': putaran kaldu ditutup mentung (#42). */
+export const ALASAN_SELESAI: Record<string, string> = {
+  sepakat: 'sepakat berhenti',
+  batasPutaran: 'batas putaran',
+  batasSkor: 'batas skor',
+  kaldu: 'putaran kaldu',
+};
 const tanggal = (iso: string | number) =>
   new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const kelasSkor = (x: number) => (x > 0 ? 'positif' : x < 0 ? 'negatif' : '');
@@ -316,7 +322,7 @@ function htmlPermainan(daftar: PermainanTersimpan[]): string {
         <summary>
           <span class="peringkat">#${g.id}</span>
           <span class="nama-skor"><b>${esc(tanggal(g.selesaiPada))}</b>
-            <small class="redup">meja ${esc(g.kodeMeja)} · ${g.jumlahPutaran} putaran · ${esc(ALASAN[g.alasan ?? ''] ?? '')} · juara ${esc(g.klasemen[0]?.nama ?? '-')}${
+            <small class="redup">meja ${esc(g.kodeMeja)} · ${g.jumlahPutaran} putaran · ${esc(ALASAN_SELESAI[g.alasan ?? ''] ?? '')} · juara ${esc(g.klasemen[0]?.nama ?? '-')}${
               g.dihitung === false ? ` · <span class="lencana">${esc(LENCANA_TIDAK_DIHITUNG)}</span>` : ''
             }</small></span>
         </summary>

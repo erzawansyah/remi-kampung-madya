@@ -11,6 +11,7 @@ import {
   namaKartu,
   namaRank,
   opsiPeranJoker,
+  putaranBerikutKaldu,
   validasiBuang,
   validasiKartuJadi,
   validasiMulung,
@@ -50,6 +51,7 @@ import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang } from './ui/jendelaMalas';
 import { teksPengumuman, Tutorial, type KeadaanTutorial } from './ui/tutorial';
 import { TEKS_TUTORIAL } from './konten/tutorial';
+import { TEKS_KALDU } from './konten/kaldu';
 import { simpan } from './penyimpanan';
 import { gerakDikurangi } from './preferensi';
 import { durasi } from './gerak';
@@ -311,10 +313,30 @@ export function perluKirimUlangSiapJoker(k: {
 
 /**
  * Teks bar atas: nomor (dan batas) putaran dipisah dari jenis meja supaya di layar sempit nomor
- * putaran tetap terbaca (jenis meja yang mengalah: dipotong/ditumpuk lewat CSS).
+ * putaran tetap terbaca (jenis meja yang mengalah: dipotong/ditumpuk lewat CSS). Putaran kaldu
+ * (#42): "Putaran 6 · Kaldu", tanpa batas putaran (putaran kaldu bisa berulang sesudah batasnya).
  */
-export function teksBarAtas(jenis: string, nomor: number | null, batas: number | null): { jenis: string; putaran: string } {
-  return { jenis, putaran: nomor === null ? '' : `Putaran ${nomor}${batas ? `/${batas}` : ''}` };
+export function teksBarAtas(jenis: string, nomor: number | null, batas: number | null, kaldu = false): { jenis: string; putaran: string } {
+  if (nomor === null) return { jenis, putaran: '' };
+  return { jenis, putaran: kaldu ? `Putaran ${nomor} · ${TEKS_KALDU.putaran}` : `Putaran ${nomor}${batas ? `/${batas}` : ''}` };
+}
+
+/** Keadaan tombol voting di modal hasil putaran ("Akhiri permainan", "Putaran terakhir"). */
+interface KeadaanVoting {
+  teks: string;
+  /** Aku sudah setuju (tombolnya jadi "Batal …"). */
+  setuju: boolean;
+  sibuk: boolean;
+}
+
+/**
+ * Mode kaldu (#42): satu baris di modal hasil putaran, atau '' kalau tidak ada. Putaran kaldu yang
+ * deck-nya habis disusul kaldu lagi; selain itu cukup "Putaran berikutnya kaldu." begitu sudah pasti.
+ * Hanya info publik (konfigurasi, riwayat, hasil voting).
+ */
+export function teksInfoKaldu(v: Pick<ViewPemain, 'konfigurasi' | 'riwayat' | 'kalduDiminta'>, h: HasilPutaran): string {
+  if (!putaranBerikutKaldu(v)) return '';
+  return h.kaldu && h.cara === 'deckHabis' ? TEKS_KALDU.lagi : TEKS_KALDU.berikutnya;
 }
 
 export class KontrolMeja implements AksiAdegan {
@@ -379,6 +401,8 @@ export class KontrolMeja implements AksiAdegan {
   /** Pesan dari tombol jendela yang baru dikirim (cegah kirim ganda): kunci → waktu kirim. */
   private tertunda = new Map<string, number>();
   private akhiriDiminta: boolean | null = null;
+  /** Suara "Putaran terakhir" (mode kaldu) yang baru dikirim dan belum terlihat di info meja. */
+  private kalduDipilih: boolean | null = null;
   /** Isi wadah tombol lanjut di modal hasil yang sedang terpasang (ganti hanya kalau berubah). */
   private htmlLanjutTerpasang = '';
   private timerTertunda: ReturnType<typeof setTimeout>[] = [];
@@ -675,6 +699,8 @@ export class KontrolMeja implements AksiAdegan {
 
       const sebutan = { 2: 'DOUBLE PENTUNG!', 3: 'TRIPLE PENTUNG!', 4: 'QUADRA PENTUNG!', 5: 'PENTUNG MASSAL!' }[Math.min(e.kepentung.length, 5)];
       const lencana = [
+        // Putaran kaldu (#42): nilainya sudah dikali (e.nilai), lencana cukup penanda kecil.
+        e.kaldu ? `<span class="lencana emas">${esc(TEKS_KALDU.lencana)}</span>` : '',
         sebutan ? `<span class="lencana merah">${sebutan}</span>` : '',
         e.dibalik ? '<span class="lencana">↺ BALIK ARAH</span>' : e.kepentung.length ? '<span class="lencana">LOMPAT · arah tetap</span>' : '',
       ].join('');
@@ -1401,6 +1427,7 @@ export class KontrolMeja implements AksiAdegan {
       this.app.jenis === 'offline' ? (this.app.tutorial ? 'Latihan' : 'Offline') : `Meja ${info.kode}`,
       p ? p.nomor : null,
       v.konfigurasi.batasPutaran,
+      p?.kaldu === true,
     );
     const [elJenis, elPutaran] = [...this.elInfo.children] as HTMLElement[];
     if (elJenis.textContent !== t.jenis) elJenis.textContent = t.jenis;
@@ -1887,7 +1914,7 @@ export class KontrolMeja implements AksiAdegan {
   }
 
   /** Tandai tombol sedang diproses, kunci tombol sekelompoknya, lalu segarkan modal hasil kalau server diam. */
-  private tandaiKirim(kunci: 'kocok' | 'akhiri', tombol: HTMLButtonElement, kelompok: Iterable<HTMLButtonElement>) {
+  private tandaiKirim(kunci: 'kocok' | 'akhiri' | 'kaldu', tombol: HTMLButtonElement, kelompok: Iterable<HTMLButtonElement>) {
     this.tertunda.set(kunci, Date.now());
     // aria-disabled, bukan disabled: tombol yang dimatikan dengan `disabled` melepas fokus keyboard
     // ke <body> (Chrome), jadi pemain keyboard kehilangan posisinya di modal selagi menunggu.
@@ -1912,7 +1939,7 @@ export class KontrolMeja implements AksiAdegan {
   }
 
   /** Label tombol yang sedang menunggu. Offline langsung diproses di HP ini, jadi bukan "Mengirim…". */
-  private labelSibuk(kunci: 'kocok' | 'akhiri'): string {
+  private labelSibuk(kunci: 'kocok' | 'akhiri' | 'kaldu'): string {
     if (this.app.jenis === 'offline') return kunci === 'kocok' ? 'Mengocok…' : 'Sebentar…';
     return 'Mengirim…';
   }
@@ -1935,11 +1962,16 @@ export class KontrolMeja implements AksiAdegan {
     }</button>`;
   }
 
+  /** Pemilih voting di modal hasil: manusia yang masih terhubung (sama dengan hitungan meja). */
+  private jumlahPemilih(): number {
+    return this.info!.kursi.filter((k) => k.jenis === 'manusia' && k.terhubung).length;
+  }
+
   /** Keadaan tombol "Akhiri permainan" (voting) di modal hasil. */
-  private keadaanAkhiri(): { teks: string; bahaya: boolean; sibuk: boolean } {
+  private keadaanAkhiri(): KeadaanVoting {
     const info = this.info!;
     const setuju = info.setujuAkhiri.length;
-    const manusia = info.kursi.filter((k) => k.jenis === 'manusia' && k.terhubung).length;
+    const manusia = this.jumlahPemilih();
     const sayaSetuju = info.setujuAkhiri.includes(this.saya);
     if (this.akhiriDiminta !== null && (sayaSetuju === this.akhiriDiminta || !this.sedangDikirim('akhiri'))) {
       this.akhiriDiminta = null;
@@ -1948,9 +1980,44 @@ export class KontrolMeja implements AksiAdegan {
     const sibuk = this.sedangDikirim('akhiri');
     return {
       teks: sibuk ? this.labelSibuk('akhiri') : `${sayaSetuju ? 'Batal akhiri' : 'Akhiri permainan'}${manusia > 1 ? ` (${setuju}/${manusia})` : ''}`,
-      bahaya: sayaSetuju,
+      setuju: sayaSetuju,
       sibuk,
     };
+  }
+
+  /**
+   * Mode kaldu (#42): tombol voting "Putaran terakhir" di modal hasil, meniru "Akhiri permainan"
+   * (hitungan n/m kalau ada lebih dari satu orang; offline dan meja satu orang langsung berlaku).
+   * Null kalau mejanya tidak memakai mode kaldu atau putaran berikutnya sudah pasti kaldu.
+   */
+  private keadaanKaldu(): KeadaanVoting | null {
+    const v = this.view!;
+    const info = this.info!;
+    if (v.konfigurasi.modeKaldu !== true || putaranBerikutKaldu(v)) {
+      this.kalduDipilih = null;
+      this.tertunda.delete('kaldu');
+      return null;
+    }
+    const daftar = info.setujuKaldu ?? [];
+    const manusia = this.jumlahPemilih();
+    const sayaSetuju = daftar.includes(this.saya);
+    if (this.kalduDipilih !== null && (sayaSetuju === this.kalduDipilih || !this.sedangDikirim('kaldu'))) {
+      this.kalduDipilih = null;
+      this.tertunda.delete('kaldu');
+    }
+    const sibuk = this.sedangDikirim('kaldu');
+    return {
+      teks: sibuk
+        ? this.labelSibuk('kaldu')
+        : `${sayaSetuju ? TEKS_KALDU.batal : TEKS_KALDU.tombol}${manusia > 1 ? ` (${daftar.length}/${manusia})` : ''}`,
+      setuju: sayaSetuju,
+      sibuk,
+    };
+  }
+
+  /** Tombol voting di kaki modal hasil (atribut sibuk ikut dipasang). */
+  private htmlTombolVoting(data: 'akhiri' | 'kaldu', k: KeadaanVoting, bahaya: boolean): string {
+    return `<button type="button" data-${data} class="${bahaya ? 'bahaya' : ''}"${k.sibuk ? ' aria-disabled="true" aria-busy="true"' : ''}>${esc(k.teks)}</button>`;
   }
 
   /**
@@ -1962,8 +2029,10 @@ export class KontrolMeja implements AksiAdegan {
     if (this.hancur || !h) return;
     const lanjut = this.htmlLanjutHasil();
     const akhiri = this.keadaanAkhiri();
+    const kaldu = this.keadaanKaldu();
+    const infoKaldu = teksInfoKaldu(this.view!, h);
     const ada = document.querySelector<HTMLElement>(`#modal [data-hasil="${h.nomor}"]`)?.closest<HTMLElement>('.dialog');
-    if (ada) return this.perbaruiModalHasil(ada, lanjut, akhiri);
+    if (ada) return this.perbaruiModalHasil(ada, lanjut, akhiri, kaldu, infoKaldu);
 
     const v = this.view!;
     // Pertahankan akordion yang sedang terbuka (modal dibuka lagi dari tombol "Hasil putaran").
@@ -1985,10 +2054,12 @@ export class KontrolMeja implements AksiAdegan {
        ${baris}
        <p class="redup rapat">${arah} Pengocok berikutnya: skor terendah (${kandidat.map((i) => esc(v.pemain[i].nama)).join(', ')}).</p>
        <div class="kaki-dialog aksi-hasil">
+         <p class="info-kaldu${infoKaldu ? '' : ' tersembunyi'}" data-info-kaldu>${esc(infoKaldu)}</p>
          <div class="aksi-hasil-lanjut" data-lanjut-wadah>${lanjut}</div>
-         <div class="deret">
+         <div class="deret" data-deret-voting>
            <button type="button" data-tutup>Lihat meja</button>
-           <button type="button" data-akhiri class="${akhiri.bahaya ? 'bahaya' : ''}"${akhiri.sibuk ? ' aria-disabled="true" aria-busy="true"' : ''}>${esc(akhiri.teks)}</button>
+           ${kaldu ? this.htmlTombolVoting('kaldu', kaldu, false) : ''}
+           ${this.htmlTombolVoting('akhiri', akhiri, akhiri.setuju)}
          </div>
        </div>`,
       (dlg) => {
@@ -2013,6 +2084,14 @@ export class KontrolMeja implements AksiAdegan {
             this.akhiriDiminta = setuju;
             this.tandaiKirim('akhiri', b, [b]);
             this.app.kirim({ t: 'akhiri', setuju });
+          } else if (b.hasAttribute('data-kaldu')) {
+            // Mode kaldu (#42): setuju/batal "putaran berikutnya terakhir". Offline langsung berlaku.
+            if (this.sedangDikirim('kaldu')) return;
+            bunyi('klik');
+            const setuju = !(this.info?.setujuKaldu?.includes(this.saya) ?? false);
+            this.kalduDipilih = setuju;
+            this.tandaiKirim('kaldu', b, [b]);
+            this.app.kirim({ t: 'putaranTerakhir', setuju });
           }
         });
       },
@@ -2041,7 +2120,7 @@ export class KontrolMeja implements AksiAdegan {
   }
 
   /** Perbarui tombol modal hasil yang sudah terbuka tanpa menggambar ulang dialognya. */
-  private perbaruiModalHasil(dlg: HTMLElement, lanjut: string, akhiri: { teks: string; bahaya: boolean; sibuk: boolean }) {
+  private perbaruiModalHasil(dlg: HTMLElement, lanjut: string, akhiri: KeadaanVoting, kaldu: KeadaanVoting | null, infoKaldu: string) {
     const wadah = dlg.querySelector<HTMLElement>('[data-lanjut-wadah]');
     if (wadah && lanjut !== this.htmlLanjutTerpasang) {
       const aktif = document.activeElement;
@@ -2053,11 +2132,30 @@ export class KontrolMeja implements AksiAdegan {
         ganti?.focus({ preventScroll: true });
       }
     }
+    const info = dlg.querySelector<HTMLElement>('[data-info-kaldu]');
+    if (info) {
+      if (info.textContent !== infoKaldu) info.textContent = infoKaldu;
+      info.classList.toggle('tersembunyi', !infoKaldu);
+    }
     const b = dlg.querySelector<HTMLButtonElement>('[data-akhiri]');
     if (!b) return;
-    if (b.textContent !== akhiri.teks) b.textContent = akhiri.teks;
-    b.classList.toggle('bahaya', akhiri.bahaya);
-    if (akhiri.sibuk) {
+    this.perbaruiTombolVoting(b, akhiri, akhiri.setuju);
+    // Tombol "Putaran terakhir" (mode kaldu) hilang begitu putaran berikutnya pasti kaldu.
+    const bk = dlg.querySelector<HTMLButtonElement>('[data-kaldu]');
+    if (bk && !kaldu) {
+      // Fokus jangan lepas ke <body>: pindah ke tombol lanjut (atau "Lihat meja").
+      const berfokus = bk === document.activeElement;
+      bk.remove();
+      if (berfokus) (dlg.querySelector<HTMLElement>('[data-lanjut-wadah] button') ?? dlg.querySelector<HTMLElement>('[data-tutup]'))?.focus({ preventScroll: true });
+    } else if (bk && kaldu) this.perbaruiTombolVoting(bk, kaldu, false);
+    else if (!bk && kaldu) b.insertAdjacentHTML('beforebegin', this.htmlTombolVoting('kaldu', kaldu, false));
+  }
+
+  /** Teks dan atribut sibuk satu tombol voting di modal hasil yang sudah terbuka. */
+  private perbaruiTombolVoting(b: HTMLButtonElement, k: KeadaanVoting, bahaya: boolean) {
+    if (b.textContent !== k.teks) b.textContent = k.teks;
+    b.classList.toggle('bahaya', bahaya);
+    if (k.sibuk) {
       b.setAttribute('aria-disabled', 'true');
       b.setAttribute('aria-busy', 'true');
     } else {
@@ -2077,7 +2175,7 @@ export class KontrolMeja implements AksiAdegan {
     bunyi('balik');
     bukaModal(
       `<div data-joker></div>
-       <h2 class="rata-tengah">Putaran ${nomor} · Joker</h2>
+       <h2 class="rata-tengah">Putaran ${nomor} · ${p.kaldu ? TEKS_KALDU.putaran : 'Joker'}</h2>
        <p class="redup rata-tengah rapat">${esc(v.pemain[p.pengocok].nama)} ngocok dan membuka kartu:</p>
        <div class="kartu-pamer" data-kartu></div>
        <p class="rata-tengah rapat">Semua kartu <b>${esc(namaRank(k.rank))}</b> jadi joker putaran ini.</p>
