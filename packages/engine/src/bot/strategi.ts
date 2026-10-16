@@ -16,6 +16,8 @@
 // suhu +92,2 → +95,9 di 4 pemain 2 deck), dan p99 lama mikir praktis sama (jago 7,25 → 7,40 ms,
 // suhu 14,6 → 15,3 ms, diukur bersamaan di mesin yang sama).
 // Semua aksi divalidasi dengan fungsi di giliran.ts; bot hanya melihat ViewPemain.
+// Gaya main (#47, gaya.ts) masuk lewat KonteksGaya: tanpa gaya (null) semua jalur di sini persis sama
+// dengan sebelum gaya ada, dan rng tidak dipakai.
 
 import { AS, type Kartu } from '../kartu.js';
 import { AturanError } from '../error.js';
@@ -24,6 +26,7 @@ import { maksimalMulung, validasiBuang, validasiMulung, validasiTurunkan } from 
 import { NILAI_PENTUNGAN_JOKER, nilaiPentungan, PENALTI_JOKER_DIBUANG, PENGALI_KALDU } from '../skor.js';
 import type { Aksi, EntriBuangan } from '../state.js';
 import type { ViewPemain, ViewPutaran } from '../view.js';
+import { biasBuang, perkiraanPesimis, pilihDekat, tundaMentung, type KonteksGaya } from './gaya.js';
 import { bacaIngatan, type Ingatan } from './ingatan.js';
 import {
   isiDari,
@@ -68,6 +71,10 @@ export interface ParamStrategi {
   calonMulung: number;
   /** Turunkan kartu jadi yang dipegang bila ada lawan yang kartunya paling banyak segini; −1 = abaikan. */
   turunTanganLawan: number;
+  /** Pengali bahaya dan suap untuk pemain berikutnya (jarak 1). Bawaan 1 = hasil sama persis dengan tanpa bobot. */
+  bobotBerikut: number;
+  /** Pengali bahaya dan suap untuk pemain lain (jarak ≥ 2); 0 = tidak dihitung. Bawaan 1. */
+  bobotLainnya: number;
 }
 
 const SIAP_LAWAN = [0, 0, 0.5, 1, 0.35, 0.3, 0.2, 0.15];
@@ -93,6 +100,8 @@ export const PARAM_SUHU: ParamStrategi = {
   ingatRiwayat: true,
   calonMulung: 6,
   turunTanganLawan: -1,
+  bobotBerikut: 1,
+  bobotLainnya: 1,
 };
 
 /**
@@ -156,6 +165,8 @@ export class Penilai {
     readonly p: ViewPutaran,
     readonly saya: number,
     readonly par: ParamStrategi,
+    /** Gaya main (#47); null = standar. Hanya menggeser pilihan buangan, nilai tetap tanpa bias. */
+    readonly gaya: KonteksGaya | null = null,
   ) {
     this.ctx = { rankJoker: p.rankJoker, jokerMati: p.jokerMati };
     this.ingat = bacaIngatan(view, par.ingatRiwayat);
@@ -276,13 +287,16 @@ export class Penilai {
     if (skala === 0 || (par.bahaya === 0 && par.suap === 0)) return 0;
     let total = 0;
     for (let jarak = 1; jarak < n; jarak++) {
+      // Bobot per jarak (gaya penahan); bawaan 1, dan w × x dengan w = 1 tepat sama dengan x.
+      const w = jarak === 1 ? par.bobotBerikut : par.bobotLainnya;
+      if (w === 0) continue;
       const j = (((saya + jarak * p.arah) % n) + n) % n;
       const h = p.jumlahKartuTangan[j];
       const pasangan = this.peluangPasangan(d, j);
       if (pasangan === 0) continue;
       // Tangan 2 kartu baru bisa mentung bila kartu ini bukan yang teratas saat gilirannya.
       const siap = h === 2 && jarak === 1 ? 0 : par.siapLawan[Math.min(h, par.siapLawan.length - 1)];
-      total += pasangan * (par.bahaya * siap * this.pengali + par.suap);
+      total += w * (pasangan * (par.bahaya * siap * this.pengali + par.suap));
     }
     return total * skala;
   }
@@ -455,15 +469,18 @@ function saringMulung(nl: Penilai, opsi: OpsiMulungKuat[]): OpsiMulungKuat[] {
     .map((x) => x.o);
 }
 
-/** Pilih kartu buangan terbaik dari tangan; null bila tidak ada yang sah. */
-export function pilihBuang(
-  nl: Penilai,
-  tangan: readonly Kartu[],
-  punyaJadi: boolean,
-  sumberAmbil: 'deck' | 'buangan',
-): { kartu: Kartu; nilai: number } | null {
+interface CalonBuang {
+  kartu: Kartu;
+  /** Nilai tangan sesudah kartu ini dibuang (tanpa bias gaya). */
+  nilai: number;
+  /** Nilai untuk memilih: nilai + bias gaya (tanpa gaya: sama dengan nilai). */
+  pilih: number;
+}
+
+/** Semua kartu yang sah dibuang (satu per tipe) beserta nilainya. */
+function calonBuang(nl: Penilai, tangan: readonly Kartu[], punyaJadi: boolean, sumberAmbil: 'deck' | 'buangan'): CalonBuang[] {
   const isi = isiDari(tangan, nl.ctx);
-  let terbaik: { kartu: Kartu; nilai: number } | null = null;
+  const hasil: CalonBuang[] = [];
   const sudah = new Set<string>();
   for (const k of buangSah(nl, tangan, punyaJadi, sumberAmbil)) {
     const hidup = isJokerHidup(k, nl.ctx);
@@ -472,9 +489,30 @@ export function pilihBuang(
     sudah.add(kunci);
     let v = nl.nilai(tanpa(isi, k, nl.ctx), punyaJadi) - nl.bahaya(k);
     if (hidup) v -= PENALTI_JOKER_DIBUANG;
-    if (!terbaik || v > terbaik.nilai) terbaik = { kartu: k, nilai: v };
+    hasil.push({ kartu: k, nilai: v, pilih: nl.gaya ? v + biasBuang(nl.gaya, k, tangan) : v });
   }
-  return terbaik;
+  return hasil;
+}
+
+/** Calon dengan nilai pilih terbesar (yang pertama bila seri), tanpa bias di nilainya; null bila kosong. */
+function terbaikDari(calon: readonly CalonBuang[]): { kartu: Kartu; nilai: number } | null {
+  let terbaik: CalonBuang | null = null;
+  for (const c of calon) if (!terbaik || c.pilih > terbaik.pilih) terbaik = c;
+  return terbaik && { kartu: terbaik.kartu, nilai: terbaik.nilai };
+}
+
+/**
+ * Pilih kartu buangan terbaik dari tangan; null bila tidak ada yang sah. Dengan gaya, pilihannya
+ * digeser bias gaya, tapi nilai yang dikembalikan tetap nilai tanpa bias (dipakai membandingkan
+ * mulung, turunkan, dan ambil deck).
+ */
+export function pilihBuang(
+  nl: Penilai,
+  tangan: readonly Kartu[],
+  punyaJadi: boolean,
+  sumberAmbil: 'deck' | 'buangan',
+): { kartu: Kartu; nilai: number } | null {
+  return terbaikDari(calonBuang(nl, tangan, punyaJadi, sumberAmbil));
 }
 
 /** Apakah kartu jadi yang dipegang diturunkan sekarang: ada lawan yang kartunya tinggal sedikit (jago gugup). */
@@ -641,31 +679,42 @@ export const BATAS_TANGAN_KUAT = 14;
 
 /**
  * Aksi jago/suhu di giliran sendiri; null bila tidak menemukan aksi sah atau tangannya lebih dari
- * BATAS_TANGAN_KUAT kartu (pemanggil memakai strategi normal).
+ * BATAS_TANGAN_KUAT kartu (pemanggil memakai strategi normal). `gaya` = konteks gaya main (#47);
+ * null = standar (persis perilaku lama, tanpa rng). Parameter gaya sudah dipasang pemanggil
+ * (paramDenganGaya).
  */
-export function aksiKuat(view: ViewPemain, par: ParamStrategi): Aksi | null {
+export function aksiKuat(view: ViewPemain, par: ParamStrategi, gaya: KonteksGaya | null = null): Aksi | null {
   const p = view.putaran!;
   const saya = view.saya!;
   const tangan = p.tangan[saya]!;
   if (tangan.length > BATAS_TANGAN_KUAT) return null;
-  const nl = new Penilai(view, p, saya, par);
+  const nl = new Penilai(view, p, saya, par, gaya);
 
   if (p.tahap === 'ambil') {
-    const opsi = p.buangan.length ? semuaMulung(nl) : [];
+    let opsi = p.buangan.length ? semuaMulung(nl) : [];
     // 1) Mentung kalau bisa: pilih pentungan dan korban kepentung terbesar.
-    let mentung: { o: OpsiMulungKuat; skor: number } | null = null;
+    let mentung: { o: OpsiMulungKuat; skor: number; r: RencanaMentung } | null = null;
+    const bisaMentung = new Set<OpsiMulungKuat>();
     for (const o of opsi) {
       const r = rencanaMentung(nl, o.tangan);
       if (!r) continue;
+      bisaMentung.add(o);
       const idPentungan = new Set(r.sisa.map((k) => k.id));
       const korban = new Set(
         o.diambil.filter((e) => e.pemilik !== saya && !idPentungan.has(e.kartu.id)).map((e) => e.pemilik),
       ).size;
       // Putaran kaldu: yang mentung dapat pentungan × 2 dan tiap korban kena × 2.
       const skor = r.pentungan * nl.pengali * (1 + par.korban * korban) + o.nilaiJadi;
-      if (!mentung || skor > mentung.skor) mentung = { o, skor };
+      if (!mentung || skor > mentung.skor) mentung = { o, skor, r };
     }
-    if (mentung) return { jenis: 'mulung', pemain: saya, jumlah: mentung.o.jumlah, kartuJadi: mentung.o.spek };
+    if (mentung) {
+      // Gaya dengan tundaMentung > 0 kadang menunda pentungan angka kecil demi yang lebih besar.
+      if (!gaya || !tundaMentung(gaya, p, mentung.r.sisa, tangan)) {
+        return { jenis: 'mulung', pemain: saya, jumlah: mentung.o.jumlah, kartuJadi: mentung.o.spek };
+      }
+      // Ditunda: cara mulung yang langsung bisa mentung tidak dipakai giliran ini.
+      opsi = opsi.filter((o) => !bisaMentung.has(o));
+    }
 
     // 2) Mulung biasa kalau hasilnya lebih baik daripada ambil deck.
     if (opsi.length) {
@@ -700,7 +749,13 @@ export function aksiKuat(view: ViewPemain, par: ParamStrategi): Aksi | null {
       return { jenis: 'turunkan', pemain: saya, kartuJadi: r.spek };
     }
   }
-  const b = pilihBuang(nl, tangan, nl.punyaJadi, p.sumberAmbil!);
+  // Ngurutin: pesimis atau tidak dinilai dari kartu sisa susunan terbaik (hanya kalau bisa menyambung).
+  if (gaya && gaya.def.nyambung && gaya.kali > 0 && gaya.n >= 3 && gaya.atasPrev) {
+    const r = nl.susun.cari(isiDari(tangan, nl.ctx), nl.punyaJadi, { catat: true });
+    gaya.pesimis = perkiraanPesimis(gaya, r ? r.sisa.length : tangan.length);
+  }
+  const calon = calonBuang(nl, tangan, nl.punyaJadi, p.sumberAmbil!);
+  const b = terbaikDari(calon);
   // As baru boleh dibuang setelah punya kartu jadi di meja. Kalau membuang As (atau joker As)
   // lebih menguntungkan, turunkan dulu satu kartu jadi yang dipegang.
   if (nl.sisaGiliran <= par.turunDemiAs && !nl.punyaJadi && tangan.some((k) => k.rank === AS)) {
@@ -713,7 +768,11 @@ export function aksiKuat(view: ViewPemain, par: ParamStrategi): Aksi | null {
     const turun = turunkanSekarang(nl, tangan, p.sumberAmbil!);
     if (turun) return { jenis: 'turunkan', pemain: saya, kartuJadi: turun };
   }
-  if (b) return { jenis: 'buang', pemain: saya, kartuId: b.kartu.id };
+  if (b) {
+    // Dengan gaya: calon yang hampir seri dipilih acak (pilihDekat), supaya tidak gampang dibaca.
+    const kartu = gaya ? pilihDekat(calon.map((c) => ({ isi: c.kartu, skor: c.pilih })), gaya) : b.kartu;
+    return { jenis: 'buang', pemain: saya, kartuId: kartu.id };
+  }
   // Tidak ada kartu yang sah dibuang (misalnya tangan As semua sebelum punya kartu jadi): turunkan dulu.
   const r = nl.susun.cari(isiDari(tangan, nl.ctx), nl.punyaJadi, { catat: true });
   const spek = r && keSpesifikasi(r.susunan, tangan, nl.ctx);

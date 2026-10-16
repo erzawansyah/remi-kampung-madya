@@ -3,7 +3,7 @@
 // (pilihAksiBot/viewUntuk) dan penjadwal yang tersendat; semua digerakkan JamPalsu.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Rng, type GameState, type LevelBot, type ViewPemain } from '@remi/engine';
+import { Rng, type GameState, type GayaBot, type LevelBot, type ViewPemain } from '@remi/engine';
 import { JEDA_ULANG_GALAT_MAKS_MS, JEDA_ULANG_GALAT_MS, Meja, type OpsiMeja } from '../src/index.js';
 import { JamPalsu, KotakSurat, siapkan, siapSemua } from './bantu.js';
 
@@ -23,10 +23,11 @@ vi.mock('@remi/engine', async (importOriginal) => {
   const asli = await importOriginal<typeof import('@remi/engine')>();
   return {
     ...asli,
-    pilihAksiBot: (view: ViewPemain, level: LevelBot, rng: Rng) => {
+    // Argumen ke-4 (gaya main, #47) ikut diteruskan supaya mock tidak diam-diam membuang gaya.
+    pilihAksiBot: (view: ViewPemain, level: LevelBot, rng: Rng, gaya?: GayaBot) => {
       if (kendali.levelRusak.has(level)) throw new Error(`strategi ${level} tersandung (uji)`);
       if (kendali.levelNgawur.has(level)) return { jenis: 'selesaiSusun', pemain: view.saya! };
-      return asli.pilihAksiBot(view, level, rng);
+      return asli.pilihAksiBot(view, level, rng, gaya);
     },
     viewUntuk: (state: GameState, saya: number | null) => {
       if (saya !== null && kendali.viewRusak.has(saya)) {

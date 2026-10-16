@@ -157,6 +157,7 @@ packages/engine/          Mesin aturan murni (TypeScript, tanpa UI, tanpa depend
   src/bot/bot.ts          Level bot (mudah, normal, jago, suhu) dan strategi mudah/normal; pilihAksiBot
   src/bot/strategi.ts     Strategi jago/suhu (PARAM_JAGO, PARAM_SUHU); susun.ts = pencari susunan kartu jadi,
                           ingatan.ts = ingatan dari ViewPemain
+  src/bot/gaya.ts         Gaya main warga kedai (#47; tidak ditampilkan ke pemain). 'standar' = perilaku lama
   scripts/arena.ts        Arena pengukur kekuatan dan keterbacaan level bot (npx tsx packages/engine/scripts/arena.ts);
                           peserta.ts = peserta level:gaya, keterbacaan.ts = metrik baris "baca:"
   test/                   Test aturan, simulasi bot-vs-bot, fuzz, golden master (__golden__/)

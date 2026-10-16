@@ -22,7 +22,20 @@ import { nilaiPentungan } from '../skor.js';
 import type { Rng } from '../rng.js';
 import type { Aksi } from '../state.js';
 import type { ViewPemain, ViewPutaran } from '../view.js';
+import {
+  biasBuang,
+  buatKonteksGaya,
+  isGaya,
+  paramDenganGaya,
+  pilihDekat,
+  type GayaBot,
+  type KonteksGaya,
+} from './gaya.js';
 import { aksiKuat, PARAM_JAGO, PARAM_SUHU, susunAkhirKuat } from './strategi.js';
+
+// Gaya main warga kedai (#47): definisinya di gaya.ts. Diekspor ulang di sini supaya meja dan arena
+// cukup mengimpor dari engine.
+export { DAFTAR_GAYA_BOT, GAYA_TETAP, isGaya, type GayaBot, type GayaTetap } from './gaya.js';
 
 /** Level warga kedai, dari yang paling gampang dikalahkan. Label UI: Mudah, Normal, Jago (susah), Suhu (sangat susah). */
 export type LevelBot = 'mudah' | 'normal' | 'jago' | 'suhu';
@@ -142,7 +155,12 @@ function buangSah(view: ViewPemain): Kartu[] {
   );
 }
 
-export function pilihAksiBot(view: ViewPemain, level: LevelBot, rng: Rng): Aksi {
+/**
+ * Aksi warga kedai. Fungsi murni dari argumennya: view, level, rng (state-nya ikut berubah), dan gaya
+ * main (#47, bawaan 'standar' = perilaku lama, tanpa memakai rng). Mudah mengabaikan gaya, susun akhir
+ * tanpa gaya, dan gaya yang tidak dikenal dimainkan sebagai standar.
+ */
+export function pilihAksiBot(view: ViewPemain, level: LevelBot, rng: Rng, gaya: GayaBot = 'standar'): Aksi {
   const p = view.putaran;
   const saya = view.saya;
   const kuat = level === 'jago' || level === 'suhu';
@@ -153,8 +171,12 @@ export function pilihAksiBot(view: ViewPemain, level: LevelBot, rng: Rng): Aksi 
     throw new Error('Bukan giliran bot ini.');
   }
   if (level === 'mudah') return aksiMudah(view, p, saya, rng);
-  if (kuat) return aksiKuat(view, level === 'suhu' ? PARAM_SUHU : PARAM_JAGO) ?? aksiNormal(view, p, saya);
-  return aksiNormal(view, p, saya);
+  const kg = gaya === 'standar' || !isGaya(gaya) ? null : buatKonteksGaya(view, level, gaya, rng);
+  if (kuat) {
+    const par = paramDenganGaya(level === 'suhu' ? PARAM_SUHU : PARAM_JAGO, level, kg);
+    return aksiKuat(view, par, kg) ?? aksiNormal(view, p, saya, kg);
+  }
+  return aksiNormal(view, p, saya, kg);
 }
 
 /** Susun akhir: turunkan semua kartu jadi yang ditemukan, lalu selesai. */
@@ -184,7 +206,8 @@ function aksiMudah(view: ViewPemain, p: ViewPutaran, saya: number, rng: Rng): Ak
   return { jenis: 'buang', pemain: saya, kartuId: rng.pick(buangSah(view)).id };
 }
 
-function aksiNormal(view: ViewPemain, p: ViewPutaran, saya: number): Aksi {
+/** Strategi normal. `kg` = konteks gaya main; null = standar (persis perilaku lama, tanpa rng). */
+function aksiNormal(view: ViewPemain, p: ViewPutaran, saya: number, kg: KonteksGaya | null): Aksi {
   const ctx = ctxDari(p);
   if (p.tahap === 'ambil') {
     let terbaik: { skor: number; o: OpsiMulung } | null = null;
@@ -205,7 +228,9 @@ function aksiNormal(view: ViewPemain, p: ViewPutaran, saya: number): Aksi {
       }
       if (idPungutan.size && (!terbaik || skor > terbaik.skor)) terbaik = { skor, o };
     }
-    if (terbaik && terbaik.skor > 0) {
+    // Gaya kilat: ambang mulung lebih rendah (kalau gayanya tidak libur). Standar: 0.
+    const ambang = kg && kg.kali > 0 && kg.def.ambangMulungNormal !== undefined ? kg.def.ambangMulungNormal : 0;
+    if (terbaik && terbaik.skor > ambang) {
       return { jenis: 'mulung', pemain: saya, jumlah: terbaik.o.jumlah, kartuJadi: terbaik.o.kartuJadi };
     }
     return { jenis: 'ambilDeck', pemain: saya };
@@ -249,6 +274,14 @@ function aksiNormal(view: ViewPemain, p: ViewPutaran, saya: number): Aksi {
     return nilaiKartuTangan(k, ctx) - guna * 6 - risiko * 0.5;
   };
 
-  const pilihan = [...sah].sort((a, b) => skorBuang(b) - skorBuang(a))[0];
+  if (!kg) {
+    const pilihan = [...sah].sort((a, b) => skorBuang(b) - skorBuang(a))[0];
+    return { jenis: 'buang', pemain: saya, kartuId: pilihan.id };
+  }
+  // Dengan gaya: bias gaya hanya untuk calon yang sah, lalu yang hampir seri dipilih acak.
+  const pilihan = pilihDekat(
+    sah.map((k) => ({ isi: k, skor: skorBuang(k) + biasBuang(kg, k, tangan) })),
+    kg,
+  );
   return { jenis: 'buang', pemain: saya, kartuId: pilihan.id };
 }

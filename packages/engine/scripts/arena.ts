@@ -14,11 +14,11 @@
 // ERR_MODULE_NOT_FOUND), jadi tiap pekerja dibuka lewat kode pembuka kecil yang mendaftarkan tsx
 // (`tsx/esm/api`) dulu, baru mengimpor berkas ini. Lihat buatPekerja().
 //
-// Peserta ditulis "level" atau "level:gaya" (contoh "jago", "suhu:standar", "normal:acak"). Gaya
-// standar = perilaku yang sudah ada, dan labelnya level saja, jadi keluaran lama tidak berubah.
-// "acak" memberi tiap kursi gaya non-standar dari seed dan urutan kursinya di susunan (kursi ikut
-// berputar bersama pesertanya): DAFTAR_GAYA[1 + ((seed·7 + kursi·3) mod (panjang − 1))]. Selama
-// belum ada gaya selain standar, "acak" dimainkan sebagai standar (dicetak catatannya).
+// Peserta ditulis "level" atau "level:gaya" (contoh "jago", "suhu:standar", "normal:acak", "suhu:kilat").
+// Gaya = DAFTAR_GAYA_BOT dari engine (gaya.ts, keputusan #47). Gaya standar = perilaku yang sudah ada,
+// dan labelnya level saja, jadi keluaran lama tidak berubah. "acak" memberi tiap kursi salah satu
+// GAYA_TETAP dari seed dan urutan kursinya di susunan (kursi ikut berputar bersama pesertanya):
+// GAYA_ACAK_DARI[1 + ((seed·7 + kursi·3) mod 5)], dengan GAYA_ACAK_DARI = [standar, ...GAYA_TETAP].
 //
 // Opsi: --uji=a,b (peserta yang diuji, satu kursi), --lawan=normal (peserta kursi lain),
 // --gaya=a,b|semua (dikalikan dengan --uji; --uji harus level polos), --susunan=... (isi meja
@@ -42,18 +42,20 @@ import { isMainThread, parentPort, Worker, workerData } from 'node:worker_thread
 import { performance } from 'node:perf_hooks';
 import {
   buatPermainan,
+  DAFTAR_GAYA_BOT,
+  GAYA_TETAP,
   pilihAksiBot,
   Rng,
   terapkanAksi,
   viewUntuk,
   type Aksi,
   type GameState,
+  type GayaBot,
   type LevelBot,
   type ViewPemain,
 } from '../src/index.js';
 import { barisBaca, PencatatBaca, ringkas, statBacaKosong, type StatBaca } from './keterbacaan.js';
 import {
-  GAYA_ACAK,
   GAYA_STANDAR,
   gayaUntukKursi,
   silangGaya,
@@ -62,13 +64,15 @@ import {
   type Peserta,
 } from './peserta.js';
 
-/** Gaya yang dikenal arena, 'standar' wajib di indeks 0. C2: isi dengan DAFTAR_GAYA_BOT dari engine. */
-const DAFTAR_GAYA: readonly string[] = [GAYA_STANDAR];
+/** Gaya yang dikenal arena, 'standar' wajib di indeks 0. */
+const DAFTAR_GAYA: readonly string[] = DAFTAR_GAYA_BOT;
 
-/** Adaptor: pilihAksiBot belum menerima gaya. C2 cukup mengganti baris return di bawah. */
+/** Gaya yang bisa didapat peserta "acak": GAYA_TETAP ('berubah' tidak ikut), diawali standar untuk gayaUntukKursi. */
+const GAYA_ACAK_DARI: readonly string[] = [GAYA_STANDAR, ...GAYA_TETAP];
+
+/** Adaptor: nama gaya dari peserta (sudah dicek uraiPeserta) ke pilihAksiBot. */
 function pilihAksi(view: ViewPemain, level: LevelBot, rng: Rng, gaya: string): Aksi {
-  void gaya; // C2: return pilihAksiBot(view, level, rng, gaya as GayaBot);
-  return pilihAksiBot(view, level, rng);
+  return pilihAksiBot(view, level, rng, gaya as GayaBot);
 }
 
 interface Meja {
@@ -128,7 +132,7 @@ function mainkanSatu(t: Tugas, rotasi: number, hasil: HasilTugas): void {
   const peserta = urutan.map((j) => t.susunan[j]);
   const level = peserta.map((x) => x.level);
   const label = peserta.map((x) => x.label);
-  const gaya = peserta.map((x, i) => gayaUntukKursi(x.gaya, t.seed, urutan[i], DAFTAR_GAYA));
+  const gaya = peserta.map((x, i) => gayaUntukKursi(x.gaya, t.seed, urutan[i], GAYA_ACAK_DARI));
   const pencatat = new PencatatBaca((kursi) => hasil.baca[label[kursi]]);
   let g: GameState = buatPermainan({
     pemain: level.map((l, i) => `${l} ${i + 1}`),
@@ -305,9 +309,6 @@ async function utama(): Promise<void> {
   const jenisPermainan = kaldu ? `mode kaldu mulai putaran ${putaran}` : `${putaran} putaran per permainan`;
   console.log(`Arena: ${jumlahSeed} seed × rotasi kursi × ${jenisPermainan}, ${k} pekerja, ${detik.toFixed(1)} dtk.`);
   console.log('Selisih = skor per putaran level uji − rata-rata level pembanding di meja yang sama (CI 95%).');
-  if (DAFTAR_GAYA.length < 2 && percobaan.some((c) => c.susunan.some((x) => x.gaya === GAYA_ACAK))) {
-    console.log('Catatan: belum ada gaya selain standar, jadi peserta "acak" dimainkan dengan gaya standar.');
-  }
   console.log('');
   const bacaGabung: Record<string, StatBaca[]> = {};
   const waktuGabung: Record<string, { ember: number[]; maks: number; jumlah: number }> = {};
