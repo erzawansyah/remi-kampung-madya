@@ -5,6 +5,7 @@
 
 import {
   AturanError,
+  daftarNama,
   deskripsiKartuJadi,
   maksimalMulung,
   namaKartu,
@@ -225,9 +226,11 @@ function hitungNaik(akar: ParentNode, ms: number): void {
   }, ms + 300);
 }
 
-/** Lebar kartu besar di popup (px CSS), menyesuaikan layar. */
-function lebarKartuPamer(): number {
-  return Math.round(Math.max(72, Math.min(150, window.innerWidth * 0.36, window.innerHeight * 0.2)));
+/** Lebar kartu besar di popup (px CSS), menyesuaikan layar. Beberapa kartu berjajar (pentung beberapa joker) dikecilkan supaya muat. */
+function lebarKartuPamer(jumlah = 1): number {
+  const satu = Math.round(Math.max(72, Math.min(150, window.innerWidth * 0.36, window.innerHeight * 0.2)));
+  if (jumlah <= 1) return satu;
+  return Math.round(Math.max(48, Math.min(satu, (Math.min(window.innerWidth, 480) * 0.7) / jumlah)));
 }
 
 const LABEL_KONEKSI: Record<StatusKoneksi, string> = {
@@ -678,11 +681,16 @@ export class KontrolMeja implements AksiAdegan {
       const daftarKepentung = e.kepentung.length
         ? e.kepentung.map((k) => `<b>${esc(namaAtauKamu(k))}</b> (${esc(kartuDari(k).join(', '))})`).join(' · ')
         : 'nggak ada';
+      // Keputusan #41: pentungannya bisa beberapa joker sekaligus (semuanya sudah terbuka di meja).
+      const pentungan = [e.pentungan, ...(e.pentunganLain ?? [])];
+      const judul = pentungan.length > 1 ? `PENTUNG ${pentungan.length} JOKER!` : e.pentunganJoker ? 'PENTUNG JOKER!' : 'MENTUNG!';
+      const namaPentungan = daftarNama(pentungan.map(namaKartu));
+      const lebarPamer = lebarKartuPamer(pentungan.length);
 
       bukaModal(
         `<div data-mentung></div>
-         <h2 class="rata-tengah">${e.pentunganJoker ? 'PENTUNG JOKER!' : 'MENTUNG!'}</h2>
-         <p class="rata-tengah rapat">${esc(namaAtauKamu(e.pemain))} nutup pakai <b>${esc(namaKartu(e.pentungan))}</b> · nilai <b>${e.nilai}</b></p>
+         <h2 class="rata-tengah">${judul}</h2>
+         <p class="rata-tengah rapat">${esc(namaAtauKamu(e.pemain))} nutup pakai <b>${esc(namaPentungan)}</b> · nilai <b>${e.nilai}</b></p>
          <div class="kartu-pamer" data-kartu></div>
          ${status}
          ${lencana ? `<div class="lencana-deret">${lencana}</div>` : ''}
@@ -691,12 +699,13 @@ export class KontrolMeja implements AksiAdegan {
            <summary tabindex="0"><span class="nama-skor"><b>Lihat kartu yang dipungut &amp; dipasangkan</b></span></summary>
            <div class="komponen">
              ${htmlKartuJadiAsal(kjGiliran, nama, saya)}
-             <div class="komp"><span>Pentungan: ${esc(namaKartu(e.pentungan))}${e.pentunganJoker ? ' (joker)' : ''}, dari ${e.pemain === saya ? 'tanganmu' : `tangan ${esc(nama(e.pemain))}`}. Pemilik kartu pentungan tidak kena karena kartu itu.</span></div>
+             <div class="komp"><span>Pentungan: ${esc(namaPentungan)}${e.pentunganJoker ? (pentungan.length > 1 ? ' (joker semua)' : ' (joker)') : ''}, dari ${e.pemain === saya ? 'tanganmu' : `tangan ${esc(nama(e.pemain))}`}. Pemilik kartu pentungan tidak kena karena kartu itu.</span></div>
            </div>
          </details>
          <button type="button" class="utama" data-lanjut>Lanjut</button>`,
         (dlg) => {
-          dlg.querySelector('[data-kartu]')!.appendChild(gambarKartuKeKanvas(e.pentungan, lebarKartuPamer()));
+          const wadah = dlg.querySelector('[data-kartu]')!;
+          for (const k of pentungan) wadah.appendChild(gambarKartuKeKanvas(k, lebarPamer));
           dlg.querySelector('[data-lanjut]')!.addEventListener('click', () => {
             tutupModal();
             selesai();
@@ -963,14 +972,32 @@ export class KontrolMeja implements AksiAdegan {
     this.render();
   }
 
-  /** Kartu diseret ke tumpukan buangan = buang kartu itu. */
-  lepasKeBuangan(id: string): 'abaikan' | void {
+  /**
+   * Kartu diseret ke tumpukan buangan = buang kartu itu. Kalau kartu yang diseret ikut pilihan yang
+   * mencakup seluruh tangan (2+ kartu), artinya nutup pakai semuanya (keputusan #41); kalau itu tidak
+   * sah, ditolak dan kartunya kembali (tidak diam-diam jadi buang satu kartu). Selain itu, buang satu
+   * kartu yang diseret seperti biasa.
+   */
+  lepasKeBuangan(id: string): 'abaikan' | false | void {
     // Aksi sebelumnya masih menunggu jawaban: kartu kembali ke tangan tanpa dianggap salah
     // ('abaikan' = scene mengembalikan kartunya tanpa goyang/kilat merah).
     if (this.menungguJawaban) return 'abaikan';
     const p = this.view?.putaran;
     if (!p || this.view?.status !== 'putaranBerjalan' || p.giliran !== this.saya || p.tahap !== 'main') {
       this.tolak(p?.tahap === 'ambil' && p.giliran === this.saya ? 'Ambil kartu dulu (dari deck atau mulung).' : 'Belum waktunya buang.', id);
+      return this.render();
+    }
+    const tangan = this.tanganServer();
+    const nutupSemua = tangan.length >= 2 && this.dipilih.has(id) && tangan.every((k) => this.dipilih.has(k.id));
+    if (nutupSemua) {
+      const s = this.statusTombol().buang;
+      if (!s.aktif) {
+        // Pilihan dibiarkan; false = scene mengembalikan kartu yang diseret dengan goyang.
+        this.tolak(s.alasan, 'tangan');
+        this.render();
+        return false;
+      }
+      this.buang(id);
       return this.render();
     }
     this.dipilih = new Set([id]);
@@ -1138,10 +1165,24 @@ export class KontrolMeja implements AksiAdegan {
     });
   }
 
-  private buang() {
+  /**
+   * Kartu tangan yang dipilih untuk dibuang, urut seperti di layar. `utama` (kartu yang diseret) ditaruh
+   * paling depan, jadi kartu itulah `kartuId` dan sisanya `kartuIdLain`.
+   */
+  private idBuangDipilih(utama?: string): string[] {
+    const ids = this.tanganUrut()
+      .filter((k) => this.dipilih.has(k.id))
+      .map((k) => k.id);
+    return utama && ids.includes(utama) ? [utama, ...ids.filter((id) => id !== utama)] : ids;
+  }
+
+  /** Buang kartu yang dipilih: satu kartu seperti biasa, beberapa kartu = nutup pakai semuanya (#41). */
+  private buang(utama?: string) {
     const s = this.statusTombol().buang;
     if (!s.aktif) return this.tolak(s.alasan, this.sasaranTombol('buang'));
-    this.kirimAksi({ jenis: 'buang', kartuId: [...this.dipilih][0] });
+    const [kartuId, ...kartuIdLain] = this.idBuangDipilih(utama);
+    // Buang satu kartu tetap dikirim persis seperti dulu (tanpa kartuIdLain).
+    this.kirimAksi(kartuIdLain.length ? { jenis: 'buang', kartuId, kartuIdLain } : { jenis: 'buang', kartuId });
   }
 
   private batalMulung() {
@@ -1200,32 +1241,37 @@ export class KontrolMeja implements AksiAdegan {
     const mainAlasan = pp.tahap !== 'main' ? 'Ambil kartu dulu (dari deck atau mulung).' : '';
     const tangan = this.tanganServer();
     const terpilih = tangan.filter((k) => this.dipilih.has(k.id));
-    const cekBuang = (kartuId: string) =>
+    // Satu kartu = buang biasa. Beberapa kartu (keputusan #41) hanya sah untuk nutup pakai beberapa joker;
+    // sah tidaknya, dan pesan penolakannya, sepenuhnya dari validasiBuang mesin aturan.
+    const cekBuang = ([kartuId, ...kartuIdLain]: readonly string[]) =>
       coba(() =>
         validasiBuang({
           tangan,
           punyaKartuJadi: pp.kartuJadi[this.saya].length > 0,
           sumberAmbil: pp.sumberAmbil!,
           kartuId,
+          ...(kartuIdLain.length ? { kartuIdLain } : {}),
           ctx: this.ctx(),
           asJokerBolehDibuangTanpaJadi: v!.konfigurasi.asJokerBolehDibuangTanpaJadi,
         }),
       );
     let turunkanAlasan = mainAlasan || (terpilih.length < 3 ? 'Pilih minimal 3 kartu untuk diturunkan.' : '');
-    let buangAlasan = mainAlasan || (terpilih.length !== 1 ? 'Pilih tepat satu kartu untuk dibuang.' : '');
+    let buangAlasan = mainAlasan || (terpilih.length === 0 ? 'Pilih kartu yang mau dibuang.' : '');
     if (!buangAlasan) {
-      const h = cekBuang(terpilih[0].id);
+      const h = cekBuang(terpilih.map((k) => k.id));
       if (!h.ok) buangAlasan = h.pesan;
     }
     if (!turunkanAlasan && opsiPeranJoker(terpilih, this.ctx()).length === 0) {
       const h = coba(() => validasiKartuJadi(terpilih.map((k) => ({ kartu: k })), this.ctx()));
       turunkanAlasan = h.ok ? '' : h.pesan;
     }
-    // Mentung atau bukan: ditentukan validasiBuang (bukan hitungan sendiri di UI).
+    // Penanda "tinggal satu kartu: buang untuk mentung" hanya dari buang SATU kartu (validasiBuang, bukan
+    // hitungan sendiri). Seluruh tangan sengaja tidak pernah dicoba sebagai nutup beberapa kartu sebelum
+    // pemain sendiri memilihnya: hasilnya akan membocorkan apakah sisa kartunya joker semua.
     const mentung =
       !mainAlasan &&
       tangan.some((k) => {
-        const h = cekBuang(k.id);
+        const h = cekBuang([k.id]);
         return h.ok && h.nilai.mentung;
       });
     return {
@@ -1502,14 +1548,20 @@ export class KontrolMeja implements AksiAdegan {
     if (p.tahap === 'ambil') {
       return { langkah, isi: `${urut}${tombol('mulung', 'Mulung', st.mulung, 'kedua')}${tombol('ambil', 'Ambil deck', st.ambil, 'utama')}` };
     }
+    // Beberapa kartu dipilih (keputusan #41): sah = pasti nutup. Tidak pernah menyebut joker; alasan
+    // penolakannya dari validasiBuang.
     const labelBuang =
       terpilih.length === 1
         ? st.mentung && st.buang.aktif
           ? `Mentung pakai ${labelKartu(terpilih[0])}!`
           : `Buang ${labelKartu(terpilih[0])}`
-        : st.mentung
-          ? 'Pilih kartu buat mentung'
-          : 'Pilih kartu';
+        : terpilih.length > 1
+          ? st.buang.aktif
+            ? `Mentung pakai ${terpilih.length} kartu!`
+            : `Buang ${terpilih.length} kartu`
+          : st.mentung
+            ? 'Pilih kartu buat mentung'
+            : 'Pilih kartu';
     return { langkah, isi: `${urut}${tombol('turunkan', labelTurunkan, st.turunkan, 'kedua')}${tombol('buang', labelBuang, st.buang, 'utama')}` };
   }
 

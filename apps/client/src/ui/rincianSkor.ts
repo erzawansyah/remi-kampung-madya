@@ -3,6 +3,7 @@
 // ditampilkan apa adanya, tidak ada yang dihitung ulang.
 
 import {
+  daftarNama,
   namaKartu,
   namaRank,
   nilaiKartuDiMeja,
@@ -109,7 +110,7 @@ function htmlKomponen(r: RincianSkor, h: HasilPutaran, nama: (i: number) => stri
   );
   // Pentungan (teks polos dulu, di-escape sekali saat dipasang)
   if (r.nilaiPentungan !== 0 && h.pentungan) {
-    const pentungan = `${namaKartu(h.pentungan)}${h.pentunganJoker ? ' (joker)' : ''}`;
+    const pentungan = teksPentungan(h);
     const teks = r.status === 'mentung' ? `Pentungan: ${pentungan}` : `Kena pentung ${nama(h.pementung!)}: ${pentungan}`;
     baris.push(`<div class="komp"><span>${esc(teks)}</span><b class="${kelas(r.nilaiPentungan)}">${tanda(r.nilaiPentungan)}</b></div>`);
   }
@@ -227,7 +228,19 @@ export function htmlKlasemen(nama: string[], skor: number[], saya: number | null
  */
 export function teksCaraSelesai(h: HasilPutaran, nama: (i: number) => string): string {
   if (h.cara === 'deckHabis') return 'Deck habis. Semua dihitung skor dasar.';
-  return `${nama(h.pementung!)} mentung pakai ${h.pentungan ? namaKartu(h.pentungan) : ''} (${angkaSkor(h.nilaiPentungan)}).`;
+  return `${nama(h.pementung!)} mentung pakai ${daftarNama(kartuPentungan(h).map(namaKartu))} (${angkaSkor(h.nilaiPentungan)}).`;
+}
+
+/** Semua kartu pentungan putaran ini: biasanya satu, beberapa kalau nutup pakai beberapa joker (#41). */
+function kartuPentungan(h: HasilPutaran): Kartu[] {
+  return h.pentungan ? [h.pentungan, ...(h.pentunganLain ?? [])] : [];
+}
+
+/** "7 Waru (joker)", atau "7 Waru dan 7 Love (joker semua)" kalau pentungannya beberapa joker. Teks polos. */
+function teksPentungan(h: HasilPutaran): string {
+  const kartu = kartuPentungan(h);
+  const joker = h.pentunganJoker ? (kartu.length > 1 ? ' (joker semua)' : ' (joker)') : '';
+  return `${daftarNama(kartu.map(namaKartu))}${joker}`;
 }
 
 /**

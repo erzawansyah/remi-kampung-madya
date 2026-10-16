@@ -4,7 +4,8 @@
 // perubahan tampilan tidak bikin test rapuh.
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { buatKartu, type HasilPutaran, type KartuJadi } from '@remi/engine';
+import { buatKartu, terapkanAksi, type Aksi, type HasilPutaran, type KartuJadi } from '@remi/engine';
+import { id, semuaSelesaiSusun, skenario, spek } from '../../../packages/engine/test/bantu';
 import {
   angkaSkor,
   htmlKartuJadiAsal,
@@ -113,6 +114,38 @@ describe('htmlRincianPutaran', () => {
       expect(d.querySelector('.lencana')!.textContent).toBe('kepentung');
       expect(d.querySelector('.komponen')!.textContent).toContain(`Kena pentung ${namaBiasa(h.pementung!)}`);
     }
+  });
+
+  it('#41 pentung beberapa joker: semua kartu pentungan disebut, nilai total untuk yang mentung dan kepentung', () => {
+    // Joker 7: Pemain 0 mulung 4 Love punya Pemain 1, lalu nutup pakai 7 Waru + 7 Kriting.
+    let g = skenario({
+      rankJoker: 7,
+      tangan: [['5 love', '6 love', '7 waru', '7 kriting'], ['3 waru', '4 waru', '5 waru'], ['3 love', '8 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+      buangan: [['4 love', 1]],
+      giliran: 0,
+    });
+    const aksi: Aksi[] = [
+      { jenis: 'mulung', pemain: 0, jumlah: 1, kartuJadi: [spek('4 love', '5 love', '6 love')] },
+      { jenis: 'buang', pemain: 0, kartuId: id('7 waru'), kartuIdLain: [id('7 kriting')] },
+    ];
+    for (const a of aksi) {
+      const h = terapkanAksi(g, a);
+      if (!h.ok) throw new Error(h.error.pesan);
+      g = h.state;
+    }
+    const h = semuaSelesaiSusun(g).riwayat[0];
+    expect(h.nilaiPentungan).toBe(500);
+    const el = parse(htmlRincianPutaran(h, namaBiasa, null));
+    const komponen = (i: number) => el.querySelector(`details[data-pemain="${i}"] .komponen`)!;
+    expect(komponen(0).textContent).toContain('Pentungan: 7 Waru dan 7 Kriting (joker semua)');
+    expect(komponen(0).textContent).toContain(tanda(500));
+    expect(komponen(1).textContent).toContain('Kena pentung Pemain 0: 7 Waru dan 7 Kriting (joker semua)');
+    expect(komponen(1).textContent).toContain(tanda(-500));
+    expect(teksCaraSelesai(h, namaBiasa)).toBe('Pemain 0 mentung pakai 7 Waru dan 7 Kriting (500).');
+    // Satu kartu: teks lama tidak berubah.
+    const satu = riwayat.find((x) => x.cara === 'mentung')!;
+    expect(teksCaraSelesai(satu, namaBiasa)).not.toContain(' dan ');
+    expect(parse(htmlRincianPutaran(satu, namaBiasa, null)).textContent).not.toContain('joker semua');
   });
 
   it('penalti buang joker tampil sebagai baris tersendiri', () => {

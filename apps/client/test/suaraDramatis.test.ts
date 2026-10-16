@@ -60,7 +60,7 @@ function pemutar(saya: number, view: { sebelum: ViewPemain | null; sesudah: View
 
 const kartu = (rank: Rank): Kartu => ({ id: `waru-${rank}-0`, bunga: 'waru', rank, deck: 0 });
 
-const mentung = (pemain: number, joker: boolean): Peristiwa => ({
+const mentung = (pemain: number, joker: boolean): Extract<Peristiwa, { jenis: 'mentung' }> => ({
   id: 10,
   putaran: 1,
   jenis: 'mentung',
@@ -107,6 +107,19 @@ describe('pentungan dibuka', () => {
     expect(sebelumDibuka(joker)).toEqual(sebelumDibuka(biasa));
     expect(biasa.slice(biasa.indexOf('|dibuka|'))).toEqual(['|dibuka|', 'bunyi:mentung']);
     expect(joker.slice(joker.indexOf('|dibuka|'))).toEqual(['|dibuka|', 'bunyi:mentungJoker']);
+  });
+
+  it("pentung beberapa joker (#41): sebelum dibuka tetap cuma 'tegang' (sama dengan satu kartu), 'mentungJoker' sesudahnya", async () => {
+    const satu = await putar(pemutar(0), mentung(2, false));
+    const dua: Peristiwa = { ...mentung(2, true), pentunganLain: [{ id: 'kriting-5-0', bunga: 'kriting', rank: 5, deck: 0 }], nilai: 500 };
+    const c = await putar(pemutar(0), dua);
+    // Satu kali dibuka untuk semua kartunya.
+    expect(c.filter((x) => x === '|dibuka|')).toHaveLength(1);
+    expect(c.slice(0, c.indexOf('|dibuka|'))).toEqual(satu.slice(0, satu.indexOf('|dibuka|')));
+    expect(c.slice(c.indexOf('|dibuka|'))).toEqual(['|dibuka|', 'bunyi:mentungJoker']);
+    // Yang mentung: getar versi joker sesudah dibuka.
+    const sendiri = await putar(pemutar(2), dua);
+    expect(sendiri.slice(sendiri.indexOf('|dibuka|'))).toEqual(['|dibuka|', 'bunyi:mentungJoker', 'getar:mentungJoker']);
   });
 
   it('yang mentung ikut bergetar saat dibuka (versi joker lebih kuat), yang lain tidak', async () => {

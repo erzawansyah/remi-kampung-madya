@@ -4,6 +4,9 @@
 //   alasan penolakan, Escape;
 // - umpan balik tolak (scene.tolak + bunyi/getar 'tolak');
 // - label mentung dari validasiBuang mesin aturan (bukan hitungan sendiri);
+// - nutup pakai beberapa joker (#41): tombol, kirim, pintasan B, seret, alasan penolakan dari
+//   validasiBuang, panel "PENTUNG 2 JOKER!", dan pagar kebocoran (sebelum memilih, tangan dua joker
+//   hidup dan tangan dua kartu biasa tampil sama persis);
 // - fokus tombol bertahan saat render ulang dengan isi sama;
 // - popup joker (autofocus OK, tidak dibuka ulang sambil menunggu server, siapJoker yang hilang
 //   karena sinyal putus dikirim ulang sekali per sambungan baru);
@@ -22,7 +25,7 @@ import {
   type ViewPemain,
 } from '@remi/engine';
 import { PENGATURAN_BAWAAN, type InfoMeja, type PesanKlien } from '@remi/meja';
-import { semuaSelesaiSusun, skenario, spek } from '../../../packages/engine/test/bantu';
+import { id, semuaSelesaiSusun, skenario, spek } from '../../../packages/engine/test/bantu';
 
 vi.mock('../src/efek/suara', () => ({ bunyi: vi.fn(), getar: vi.fn() }));
 vi.mock('../src/efek/sorak', () => ({ sorak: vi.fn(async () => {}), bersihkanSorak: vi.fn() }));
@@ -340,7 +343,7 @@ describe('main dengan keyboard saja', () => {
     await tunggu();
     meja.tombol('buang')!.click();
     expect(meja.aksi).toEqual([{ jenis: 'ambilDeck' }]);
-    expect(meja.petunjuk()).toBe('Pilih tepat satu kartu untuk dibuang.');
+    expect(meja.petunjuk()).toBe('Pilih kartu yang mau dibuang.');
     expect(meja.sp.tolak.at(-1)).toBe('tangan');
   });
 
@@ -534,6 +537,213 @@ describe('mentung', () => {
     await tunggu();
     expect(meja.tombol('buang')!.textContent).toContain('Pilih kartu');
     expect(meja.tombol('buang')!.textContent).not.toContain('mentung');
+  });
+});
+
+// ---------- keputusan #41: nutup pakai beberapa joker ----------
+
+describe('#41: nutup pakai beberapa joker', () => {
+  const PESAN_SATU_KARTU = 'Buangnya satu kartu aja, Bos. Lebih dari satu cuma boleh buat nutup, dan semua sisa kartumu harus ikut dibuang.';
+  const PESAN_TANPA_MULUNG = 'Nutup cuma sah kalau giliran ini kamu mulung.';
+  const PESAN_BUKAN_JOKER = 'Nutup pakai beberapa kartu cuma boleh kalau semuanya joker. Joker yang sudah pernah dibuang dihitung kartu biasa.';
+
+  /**
+   * Joker 7. Aku mulung 4 Love (punya kursi 1) dengan 5-6 Love; sisa tanganku `sisa`
+   * (mis. 7 Waru + 7 Kriting = dua joker hidup, atau dua kartu biasa).
+   */
+  async function mejaSesudahMulung(sisa: string[], infoUbah: Partial<InfoMeja> = {}): Promise<MejaUji> {
+    const g = skenario({
+      rankJoker: 7,
+      tangan: [['5 love', '6 love', ...sisa], ['3 waru', '4 waru', '5 waru'], ['3 love', '8 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+      buangan: [['4 love', 1]],
+      giliran: 0,
+    });
+    const m = new MejaUji(g, infoUbah);
+    m.app.kirim({ t: 'aksi', aksi: { jenis: 'mulung', jumlah: 1, kartuJadi: [spek('4 love', '5 love', '6 love')] } });
+    await sampai(() => m.g.putaran!.tahap === 'main' && !!m.tombol('buang'));
+    return m;
+  }
+
+  /** Id kartu tanganku sesuai urutan di layar. */
+  const tanganLayar = (m: MejaUji) => m.sp.model()!.tangan.map((k) => k.id);
+  const pilih = (m: MejaUji, ...teks: string[]) => teks.forEach((t) => m.kontrol.ketukKartu(id(t)));
+  const buang = (m: MejaUji) => m.tombol('buang')!;
+
+  it('dua joker hidup dipilih: tombol "Mentung pakai 2 kartu!", ditekan = satu aksi buang dengan kartuIdLain', async () => {
+    const m = (meja = await mejaSesudahMulung(['7 waru', '7 kriting']));
+    pilih(m, '7 waru', '7 kriting');
+    expect(buang(m).textContent).toContain('Mentung pakai 2 kartu!');
+    expect(buang(m).getAttribute('aria-disabled')).toBe('false');
+    expect(buang(m).textContent).not.toMatch(/joker/i);
+    const [a, b] = tanganLayar(m);
+    buang(m).click();
+    await tunggu();
+    expect(meja.aksi.at(-1)).toEqual({ jenis: 'buang', kartuId: a, kartuIdLain: [b] });
+    expect(meja.g.status).toBe('susunAkhir');
+    expect(meja.g.putaran!.mentung!.pentunganLain).toHaveLength(1);
+  });
+
+  it('pintasan B lewat jalur yang sama', async () => {
+    const m = (meja = await mejaSesudahMulung(['7 waru', '7 kriting']));
+    // Urutan memilih tidak penting: yang dikirim urut seperti di layar.
+    pilih(m, '7 kriting', '7 waru');
+    const [a, b] = tanganLayar(m);
+    tekan('b');
+    await tunggu();
+    expect(meja.aksi.at(-1)).toEqual({ jenis: 'buang', kartuId: a, kartuIdLain: [b] });
+    expect(meja.g.putaran!.mentung).toMatchObject({ pemain: 0, pentunganJoker: true });
+  });
+
+  it('tiga alasan penolakan (dari validasiBuang): bukan semua sisa kartu, tanpa mulung, bukan joker semua', async () => {
+    // 1) Dua dari tiga sisa kartu.
+    let m = (meja = await mejaSesudahMulung(['7 waru', '7 kriting', '9 waru']));
+    pilih(m, '7 waru', '7 kriting');
+    expect(buang(m).textContent).toContain('Buang 2 kartu');
+    expect(buang(m).getAttribute('aria-disabled')).toBe('true');
+    expect(buang(m).dataset.alasan).toBe(PESAN_SATU_KARTU);
+    buang(m).click();
+    expect(m.petunjuk()).toBe(PESAN_SATU_KARTU);
+    expect(m.sp.tolak.at(-1)).toBe('tangan');
+    expect(m.aksi.filter((a) => a.jenis === 'buang')).toEqual([]);
+    m.hancurkan();
+
+    // 2) Sesudah ambil deck (bukan mulung): semua kartu dipilih tetap ditolak.
+    const g = skenario({
+      rankJoker: 7,
+      tangan: [['7 waru'], ['3 waru', '4 waru', '5 waru'], ['3 love', '8 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+      giliran: 0,
+    });
+    m = meja = new MejaUji(g);
+    tekan('d');
+    await tunggu();
+    for (const k of meja.g.putaran!.tangan[0]) m.kontrol.ketukKartu(k.id);
+    expect(buang(m).textContent).toContain('Buang 2 kartu');
+    expect(buang(m).dataset.alasan).toBe(PESAN_TANPA_MULUNG);
+    tekan('b');
+    expect(m.petunjuk()).toBe(PESAN_TANPA_MULUNG);
+    expect(m.aksi.filter((a) => a.jenis === 'buang')).toEqual([]);
+    m.hancurkan();
+
+    // 3) Joker + kartu biasa.
+    m = meja = await mejaSesudahMulung(['7 waru', '9 waru']);
+    pilih(m, '7 waru', '9 waru');
+    expect(buang(m).textContent).toContain('Buang 2 kartu');
+    expect(buang(m).dataset.alasan).toBe(PESAN_BUKAN_JOKER);
+    expect(buang(m).textContent).not.toMatch(/joker/i);
+  });
+
+  it('belum ada kartu dipilih: "Pilih kartu yang mau dibuang."', async () => {
+    const m = (meja = await mejaSesudahMulung(['7 waru', '7 kriting']));
+    expect(buang(m).textContent).toContain('Pilih kartu');
+    expect(buang(m).dataset.alasan).toBe('Pilih kartu yang mau dibuang.');
+  });
+
+  it('kebocoran: sebelum memilih, bar, petunjuk, dan pembaca layar sama persis untuk dua joker hidup vs dua kartu biasa', async () => {
+    const rekam = async (sisa: string[]) => {
+      vi.mocked(umumkan).mockClear();
+      const m = await mejaSesudahMulung(sisa);
+      try {
+        await tunggu();
+        const hasil = {
+          atas: m.akar.querySelector('.bar-atas')!.innerHTML,
+          aksi: m.akar.querySelector('.bar-aksi')!.innerHTML,
+          tombol: m.akar.querySelector('.tombol-aksi')!.innerHTML,
+          petunjuk: m.petunjuk(),
+          umumkan: vi.mocked(umumkan).mock.calls.map(([t]) => t),
+        };
+        // Pilih satu kartu: tetap buang biasa di keduanya (bukan mentung), tanpa alasan.
+        m.kontrol.ketukKartu(id(sisa[0]));
+        const satu = { label: buang(m).textContent!.replace(/\S+[♥♦♠♣]/, 'X'), mati: buang(m).getAttribute('aria-disabled') };
+        return { ...hasil, satu };
+      } finally {
+        m.hancurkan();
+      }
+    };
+    const joker = await rekam(['7 waru', '7 kriting']);
+    const biasa = await rekam(['9 waru', 'K kriting']);
+    expect(joker.tombol).toContain('Pilih kartu');
+    expect(joker.tombol).not.toContain('mentung');
+    expect(joker).toEqual(biasa);
+    expect(joker.satu).toEqual({ label: expect.stringContaining('Buang X'), mati: 'false' });
+    for (const t of [...joker.umumkan, joker.petunjuk]) expect(t).not.toMatch(/joker|mentung/i);
+  });
+
+  describe('seret ke buangan', () => {
+    it('kartu yang diseret ikut pilihan seluruh tangan: nutup pakai semuanya, kartu yang diseret jadi kartuId', async () => {
+      const m = (meja = await mejaSesudahMulung(['7 waru', '7 kriting']));
+      pilih(m, '7 waru', '7 kriting');
+      expect(m.kontrol.lepasKeBuangan(id('7 kriting'))).toBeUndefined();
+      await tunggu();
+      expect(m.aksi.at(-1)).toEqual({ jenis: 'buang', kartuId: id('7 kriting'), kartuIdLain: [id('7 waru')] });
+    });
+
+    it('kartu yang diseret tidak dipilih, atau pilihan tidak mencakup seluruh tangan: buang satu kartu seperti biasa', async () => {
+      let m = (meja = await mejaSesudahMulung(['7 waru', '7 kriting']));
+      pilih(m, '7 waru');
+      m.kontrol.lepasKeBuangan(id('7 kriting'));
+      await tunggu();
+      expect(m.aksi.at(-1)).toEqual({ jenis: 'buang', kartuId: id('7 kriting') });
+      m.hancurkan();
+
+      m = meja = await mejaSesudahMulung(['7 waru', '7 kriting', '9 waru']);
+      pilih(m, '7 waru', '7 kriting');
+      m.kontrol.lepasKeBuangan(id('7 waru'));
+      await tunggu();
+      expect(m.aksi.at(-1)).toEqual({ jenis: 'buang', kartuId: id('7 waru') });
+    });
+
+    it('nutup beberapa kartu yang tidak sah ditolak (kartu kembali), tidak diam-diam jadi buang satu kartu', async () => {
+      const m = (meja = await mejaSesudahMulung(['7 waru', '9 waru']));
+      pilih(m, '7 waru', '9 waru');
+      expect(m.kontrol.lepasKeBuangan(id('9 waru'))).toBe(false);
+      await tunggu();
+      expect(m.aksi.filter((a) => a.jenis === 'buang')).toEqual([]);
+      expect(m.petunjuk()).toBe(PESAN_BUKAN_JOKER);
+      expect(m.sp.tolak.at(-1)).toBe('tangan');
+      expect(bunyi).toHaveBeenCalledWith('tolak');
+      // Pilihan dibiarkan: pemain tinggal melepas salah satunya.
+      expect([...m.sp.model()!.dipilih].sort()).toEqual([id('7 waru'), id('9 waru')].sort());
+    });
+  });
+
+  it('panel mentung: "PENTUNG 2 JOKER!", kedua kartu, nilai 500; yang mentung +500', async () => {
+    const m = (meja = await mejaSesudahMulung(['7 waru', '7 kriting'], {
+      kursi: ['Aku', 'Bot 1', 'Bot 2', 'Bot 3'].map((nama, i) => ({ jenis: i < 2 ? 'manusia' : 'bot', nama, terhubung: true, level: 'normal' })),
+    }));
+    pilih(m, '7 waru', '7 kriting');
+    const urut = tanganLayar(m).map((x) => (x === id('7 waru') ? '7 Waru' : '7 Kriting'));
+    tekan('b');
+    await sampai(() => !!document.querySelector('#modal [data-mentung]'));
+    const dlg = document.querySelector('#modal .dialog')!;
+    expect(dlg.querySelector('h2')!.textContent).toBe('PENTUNG 2 JOKER!');
+    expect(dlg.querySelector('p.rata-tengah')!.textContent).toBe(`Kamu nutup pakai ${urut.join(' dan ')} · nilai 500`);
+    expect(dlg.querySelectorAll('[data-kartu] canvas')).toHaveLength(2);
+    expect(dlg.querySelector('.kotak-status')!.textContent).toContain('Kamu MENTUNG! +500');
+    expect(m.sp.panggil).toContain('pentung');
+  });
+
+  it('panel mentung dari sisi yang kepentung: −500', async () => {
+    const g = skenario({
+      rankJoker: 7,
+      tangan: [['3 waru', '4 waru', '8 waru'], ['5 love', '6 love', '7 waru', '7 kriting'], ['3 love', '8 love', '9 waru'], ['J love', 'Q love', '10 waru']],
+      buangan: [['4 love', 0]],
+      giliran: 1,
+    });
+    const m = (meja = new MejaUji(g, { kursi: g.pemain.map((p, i) => ({ jenis: i < 2 ? 'manusia' : 'bot', nama: p.nama, terhubung: true, level: 'normal' })) }));
+    const terapkan = (aksi: Aksi) => {
+      const h = terapkanAksi(m.g, aksi);
+      if (!h.ok) throw new Error(h.error.pesan);
+      m.g = h.state;
+      m.kontrol.perbarui(null, m.view());
+    };
+    terapkan({ jenis: 'mulung', pemain: 1, jumlah: 1, kartuJadi: [spek('4 love', '5 love', '6 love')] });
+    terapkan({ jenis: 'buang', pemain: 1, kartuId: id('7 waru'), kartuIdLain: [id('7 kriting')] });
+    await sampai(() => !!document.querySelector('#modal [data-mentung]'));
+    const dlg = document.querySelector('#modal .dialog')!;
+    expect(dlg.querySelector('h2')!.textContent).toBe('PENTUNG 2 JOKER!');
+    expect(dlg.querySelector('p.rata-tengah')!.textContent).toBe(`${g.pemain[1].nama} nutup pakai 7 Waru dan 7 Kriting · nilai 500`);
+    expect(dlg.querySelector('.kotak-status')!.textContent).toContain('Kamu KEPENTUNG −500');
+    expect(bunyi).toHaveBeenCalledWith('kepentung');
   });
 });
 
@@ -1345,7 +1555,7 @@ describe('pilihan kartu & anti-dobel', () => {
     meja.kontrol.perbarui(null, meja.view());
     await tunggu();
     expect(meja.tombol('buang')!.getAttribute('aria-disabled')).toBe('true'); // mati karena belum pilih, bukan karena kunci
-    expect(meja.tombol('buang')!.dataset.alasan).toBe('Pilih tepat satu kartu untuk dibuang.');
+    expect(meja.tombol('buang')!.dataset.alasan).toBe('Pilih kartu yang mau dibuang.');
   });
 
   it('kunci kirim lepas sendiri setelah batas waktu kalau server tidak menjawab', async () => {

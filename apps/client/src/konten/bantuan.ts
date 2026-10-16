@@ -691,6 +691,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
           ['Pilih kartu', 'Ketuk kartu di tanganmu. Ketuk lagi untuk batal.'],
           ['Turunkan kartu jadi', 'Pilih minimal 3 kartu, lalu tekan Turunkan.'],
           ['Buang', 'Pilih 1 kartu lalu tekan tombol Buang, atau seret kartunya ke tumpukan buangan.'],
+          ['Nutup pakai beberapa joker', 'Pilih semua sisa kartumu, lalu tekan Mentung, atau seret salah satunya ke tumpukan buangan.'],
           ['Atur urutan tangan', 'Seret kartu ke posisi baru, atau tekan ⇅ untuk mengurutkan per bunga atau per angka.'],
           ['Selesai menyusun', 'Di susun akhir, tekan Selesai kalau sudah tidak ada yang mau diturunkan.'],
         ],
@@ -802,7 +803,7 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   },
   {
     tanya: 'Bisa nutup pakai dua joker?',
-    jawab: 'Bisa, asal sisa kartumu joker semua dan giliran itu kamu awali dengan mulung. Buang semuanya sekaligus. Nilainya 250 per joker (dua joker 500), tanpa −25. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
+    jawab: 'Bisa, asal sisa kartumu joker semua dan giliran itu kamu awali dengan mulung. Pilih semuanya, lalu tekan Mentung. Nilainya 250 per joker (dua joker 500), tanpa −25. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
   },
   {
     tanya: 'Kartu buangan yang lama kok nggak kelihatan?',

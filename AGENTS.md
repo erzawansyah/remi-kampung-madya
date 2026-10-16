@@ -239,7 +239,8 @@ Daftar lengkap ada di README. Yang paling sering terlupa:
 - Habis ambil dari deck tidak bisa nutup.
 - **Nutup pakai beberapa joker** (#41): buang 2+ kartu hanya sah kalau semuanya **joker hidup**, semuanya sisa tangan, dan giliran diawali mulung. 250 per joker, tanpa −25; yang mentung dapat totalnya sekali, tiap kepentung kena totalnya.
   - Tetap **satu** peristiwa `buang` (`kartuLain?`) dan satu peristiwa `mentung` (`pentunganLain?`, `nilai` = total). Jangan dipecah jadi beberapa peristiwa buang: golden, pemutar, dan ingatan warga kedai bergantung pada itu. Field baru hanya ditulis kalau ada.
-  - Urutan cek di `validasiBuang` (ada di tangan, tidak dobel, semua sisa tangan, sesudah mulung, baru joker hidup) jangan diubah: pesan penolakan tidak boleh menyebut joker sebelum syarat struktur terpenuhi. UI tidak boleh memeriksa seluruh tangan sebelum pemain memilih.
+  - Urutan cek di `validasiBuang` (ada di tangan, tidak dobel, semua sisa tangan, sesudah mulung, baru joker hidup) jangan diubah: pesan penolakan tidak boleh menyebut joker sebelum syarat struktur terpenuhi. UI tidak boleh memeriksa seluruh tangan sebelum pemain memilih: `KontrolMeja.statusTombol()` hanya memvalidasi kartu yang dipilih, dan penanda mentung tetap dari buang satu kartu (dijaga test kebocoran di `apps/client/test/kontrolMeja.test.ts`).
+  - Client: 2+ kartu dipilih = tombol "Mentung pakai N kartu!" atau "Buang N kartu" (alasan dari engine), tidak pernah menyebut joker. Seret = nutup pakai semuanya hanya kalau kartu yang diseret ikut pilihan seluruh tangan; yang tidak sah ditolak, bukan jadi buang satu kartu. `MejaScene.pentung` menerima daftar semua kartu pentungan; `bunyi('tegang')` sebelum dibuka sama untuk berapa pun kartunya.
   - Banyaknya kartu pentungan yang dibuang tertutup adalah info meja yang terlihat semua orang (seperti di meja asli); isinya baru terbuka saat pentungan dibuka.
 
 **Akhir putaran (deck habis atau mentung)**

@@ -188,15 +188,20 @@ export class PemutarPeristiwa {
         // Keputusan pemilik (#6): teks aksi singkat tidak menyebut kartu yang dibuang. Kartunya tetap
         // terlihat di tumpukan buangan; mengingatnya urusan pemain (mode ingatan).
         this.k.catatAksi(e.pemain, 'buang kartu');
-        const id = e.kartu.id;
+        // Biasanya satu kartu. `kartuLain` (#41) selalu disusul peristiwa mentung di atas; kalau suatu saat
+        // tidak, semua kartunya tetap diterbangkan supaya tidak muncul tiba-tiba di buangan.
+        const kartu = [e.kartu, ...(e.kartuLain ?? [])];
+        const ids = kartu.map((k) => k.id);
         // Asal: titik lepas (kartu diseret ke buangan), kartu di tanganku, atau panel lawan.
-        const dari = (e.pemain === saya ? (scene.posisiLepas(id) ?? scene.posisiKartu(id)) : undefined) ?? scene.posisiPemain(e.pemain);
-        this.k.sembunyikan([id]);
+        const dari = kartu.map((k) => this.asalBuang(e.pemain, k.id));
+        this.k.sembunyikan(ids);
         // Tujuan tepat: tempat kartu itu di tumpukan buangan sesudah kejadian.
-        this.k.terapkanViewBerikut([id]);
-        await scene.terbang(e.kartu, dari, scene.posisiKartu(id) ?? scene.posisiBuangan, { durasi, besar: !cepat });
+        this.k.terapkanViewBerikut(ids);
+        await Promise.all(
+          kartu.map((k, i) => scene.terbang(k, dari[i], scene.posisiKartu(k.id) ?? scene.posisiBuangan, { durasi, besar: !cepat, ...(i ? { jeda: i * 120 } : {}) })),
+        );
         if (this.berhenti) return;
-        this.k.tampakkan([id]);
+        this.k.tampakkan(ids);
         if (e.jokerDibuang) {
           // Peristiwa publik: jokernya sudah terbuka di buangan (bukan joker di tangan).
           bunyi('jokerDibuang');
@@ -213,13 +218,16 @@ export class PemutarPeristiwa {
 
       case 'mentung': {
         this.k.catatAksi(e.pemain, 'MENTUNG!');
-        const id = e.pentungan.id;
-        const dari = (e.pemain === saya ? (scene.posisiLepas(id) ?? scene.posisiKartu(id)) : undefined) ?? scene.posisiPemain(e.pemain);
-        this.k.sembunyikan([id]);
+        // Keputusan #41: pentungannya bisa beberapa kartu (nutup pakai beberapa joker). Semuanya dibuang
+        // tertutup dan dibuka bersamaan; banyaknya kartu memang terlihat semua orang, seperti di meja asli.
+        const pentungan = [e.pentungan, ...(e.pentunganLain ?? [])];
+        const daftar = pentungan.map((kartu) => ({ kartu, dari: this.asalBuang(e.pemain, kartu.id) }));
+        this.k.sembunyikan(pentungan.map((k) => k.id));
         // Pentungan dibuang tertutup, tegang sebentar, lalu dibuka: baru ketahuan nilainya.
-        // 'tegang' sama untuk pentungan apa pun; bunyi joker baru diputar saat kartunya sudah terbuka.
+        // 'tegang' sama untuk pentungan apa pun (juga berapa pun kartunya); bunyi joker baru diputar saat
+        // kartunya sudah terbuka.
         bunyi('tegang');
-        await scene.pentung(e.pentungan, dari, e.nilai, e.pentunganJoker, () => {
+        await scene.pentung(daftar, e.nilai, e.pentunganJoker, () => {
           if (this.berhenti) return;
           bunyi(e.pentunganJoker ? 'mentungJoker' : 'mentung');
           document.body.classList.add('goyang');
@@ -267,6 +275,12 @@ export class PemutarPeristiwa {
   private kartuJadiBaru(pemain: number, idKartuJadi: string[]) {
     const v = this.k.viewBerikut() ?? this.k.viewSekarang();
     return (v?.putaran?.kartuJadi[pemain] ?? []).filter((kj) => idKartuJadi.includes(kj.id)).flatMap((kj) => kj.kartu);
+  }
+
+  /** Asal kartu yang dibuang: titik lepas (diseret ke buangan) atau kartunya di tanganku, atau panel lawan. */
+  private asalBuang(pemain: number, id: string): Titik | undefined {
+    const { scene } = this.k;
+    return (pemain === this.k.saya() ? (scene.posisiLepas(id) ?? scene.posisiKartu(id)) : undefined) ?? scene.posisiPemain(pemain);
   }
 
   /** Asal kartu dari tangan: posisi kartunya di tanganku, atau panel lawan (tangannya tertutup). */

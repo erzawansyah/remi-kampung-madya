@@ -509,10 +509,13 @@ body.goyang #game {
 
 /* ---------- Kartu pamer (popup joker, panel mentung) ----------
    Wadah kanvas dari gambarKartuKeKanvas(): kartu digambar sama persis dengan kartu di meja
-   (termasuk mode empat warna). Ukuran kanvas diatur JS sesuai layar. */
+   (termasuk mode empat warna). Ukuran kanvas diatur JS sesuai layar; pentung beberapa joker
+   (keputusan #41) = beberapa kanvas berjajar. */
 .kartu-pamer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  gap: var(--ruang-2);
   margin: var(--ruang-1) auto;
   perspective: 600px;
 }
