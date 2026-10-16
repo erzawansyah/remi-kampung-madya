@@ -40,6 +40,9 @@ describe('bukaPetunjukPasang', () => {
     expect(svg.getAttribute('stroke')).toBe('currentColor');
     expect(svg.getAttribute('aria-hidden')).toBe('true');
     expect(d.querySelector('.langkah-pasang b')!.textContent).toBe('Bagikan');
+    // Chrome/Firefox iOS juga dapat petunjuk ini: langkahnya tidak menyebut "bilah Safari".
+    expect(langkah[0]).not.toContain('Safari');
+    expect(langkah[0]).toContain('bilah alamat');
     expect(d.textContent).toContain('Pilihan itu nggak ada? Buka halaman ini di Safari dulu.');
     expect([...d.querySelectorAll('.kaki-dialog button')].map((b) => b.textContent)).toEqual(['Nanti saja', 'Sudah kupasang']);
     expect(d.querySelector('[data-salin]')).toBeNull();

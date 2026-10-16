@@ -42,7 +42,8 @@ export const PETUNJUK_PASANG: Record<'ios' | 'android' | 'inapp', PetunjukPasang
     langkah: [
       {
         ikon: 'bagikan',
-        teks: 'Ketuk tombol *Bagikan* (kotak dengan panah ke atas) di bilah Safari. Di iOS terbaru, ketuk *⋯* dulu kalau tombolnya belum kelihatan.',
+        // Netral browser: Chrome/Firefox iOS juga dikenali 'ios' (UA-nya memuat "Safari/").
+        teks: 'Ketuk tombol *Bagikan* (kotak dengan panah ke atas) di bilah browser. Di Chrome, tombolnya ada di bilah alamat. Di iOS terbaru, ketuk *⋯* dulu kalau tombolnya belum kelihatan.',
       },
       { ikon: 'tambah', teks: 'Pilih *Tambah ke Layar Utama*. Kalau belum kelihatan, gulir daftar pilihannya ke bawah.' },
       { teks: 'Ketuk *Tambah* di pojok kanan atas. Ikon Remi Madya muncul di layar utama.' },

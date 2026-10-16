@@ -577,10 +577,6 @@ export const BAB_BANTUAN: BabBantuan[] = [
         t: 'paragraf',
         teks: 'Setelah semua selesai, skor putaran dihitung dan ditambahkan ke skor total.',
       },
-      {
-        t: 'catatan',
-        teks: 'Beberapa detail susun akhir (siapa saja yang ikut, boleh sampai tangan habis, serentak, dan batas waktunya di meja online) masih menunggu konfirmasi pemilik aturan. Yang tertulis di sini adalah cara aplikasi berjalan sekarang.',
-      },
     ],
   },
   {

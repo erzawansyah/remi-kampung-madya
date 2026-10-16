@@ -26,6 +26,8 @@ import {
   keadaanPasang,
   lupakanSudahPasang,
   QUERY_TERPASANG,
+  sedangTerpasang,
+  sesudahPrompt,
   tandaiSudahPasang,
   tundaPasang,
   type CaraPasang,
@@ -186,6 +188,9 @@ class Aplikasi implements AppUntukMeja {
 
   mulai() {
     // Tawaran pasang aplikasi (keputusan #46), hanya di beranda: lihat pasangAplikasi.ts.
+    // Dinilai sekali sekarang, sebelum menu meja sempat meminta layar penuh (display-mode
+    // fullscreen aplikasi terpasang tidak bisa dibedakan dari layar penuh API sesudahnya).
+    sedangTerpasang();
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       this.promptPasang = e as PromptPasang;
@@ -715,9 +720,7 @@ class Aplikasi implements AppUntukMeja {
     } catch {
       // Browser menolak prompt (mis. sudah dipakai): tawaran dinilai ulang di bawah.
     }
-    const s = simpan.tawaranPasang();
-    if (hasil === 'accepted') simpan.setTawaranPasang(tandaiSudahPasang(s, Date.now()));
-    else if (hasil === 'dismissed') simpan.setTawaranPasang(tundaPasang(s, Date.now()));
+    if (hasil) simpan.setTawaranPasang(sesudahPrompt(simpan.tawaranPasang(), hasil, Date.now()));
     this.segarkanPasang();
   }
 

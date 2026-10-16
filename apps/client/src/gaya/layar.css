@@ -655,8 +655,11 @@ html[data-efek='hemat'] .kipas canvas {
    di dalam #ui (z-ui 1), jadi tetap di bawah modal (10), dialog (18), dan toast (20), dan ikut
    inert saat ada jendela. Pil gelap bergaris emas, tanpa isi kuningan: tidak menyaingi kartu kedai
    yang krem maupun tombol utama. Puncaknya ±70 px dari bawah layar, di bawah tumpukan toast
-   (118 px, tablet 132 px, lanskap 100 px), jadi keduanya tidak bertabrakan. Muncul ±1,2 detik
-   sesudah beranda tampil (gerak dikurangi: pudar saja, gerak.css). */
+   (118 px, tablet 132 px, lanskap 100 px), jadi keduanya tidak bertabrakan. Puncak itu hanya
+   berlaku kalau tombolnya satu baris: di layar < 360 px (320 px dengan teks besar) bantalannya
+   dirapatkan supaya tetap satu baris. flex-wrap tetap wrap sebagai jalan terakhir (skala teks
+   sistem yang sangat besar), supaya tombol tidak meluber keluar layar. Muncul ±1,2 detik sesudah
+   beranda tampil (gerak dikurangi: pudar saja, gerak.css). */
 .pasang-melayang {
   position: fixed;
   right: calc(var(--ruang-4) + var(--aman-kanan));
@@ -680,8 +683,14 @@ html[data-efek='hemat'] .kipas canvas {
   min-height: var(--sentuh);
   padding: 0 var(--ruang-4);
   font-size: var(--teks-sm);
+  white-space: nowrap;
   border-radius: var(--radius-pil);
   box-shadow: none;
+}
+@media (max-width: 359px) {
+  .pasang-melayang button {
+    padding: 0 var(--ruang-2);
+  }
 }
 .pasang-melayang button.hantu {
   color: var(--teks-redup);

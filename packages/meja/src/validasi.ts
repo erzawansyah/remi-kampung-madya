@@ -58,13 +58,17 @@ export function batasSkorSah(v: unknown, arah: ArahBatasSkor): v is number | nul
  * Rapikan isian batas skor dari UI (isi `<input>`) atau simpanan di HP jadi nilai yang sah untuk
  * meja. Yang diketik cukup angkanya: batas bawah juga diketik positif (keyboard angka iPhone nggak
  * punya tanda minus), tandanya dipasang di sini. Kosong, 0, atau bukan angka = tanpa batas (null).
- * Selain itu nilai mutlaknya dibulatkan ke kelipatan 10 terdekat lalu dijepit ke 10..100000.
+ * Titik/koma di antara kelompok 3 angka dianggap pemisah ribuan, cara orang sini menulis seribu
+ * ("1.000", "1,500", "10.000"), bukan pecahan. Selain itu nilai mutlaknya dibulatkan ke kelipatan
+ * 10 terdekat lalu dijepit ke 10..100000.
  */
 export function rapikanBatasSkor(x: unknown, arah: ArahBatasSkor): number | null {
   let n: number;
   if (typeof x === 'number') n = x;
-  else if (typeof x === 'string' && x.trim() !== '') n = Number(x.trim().replace(/^−/, '-'));
-  else return null;
+  else if (typeof x === 'string' && x.trim() !== '') {
+    const teks = x.trim().replace(/^−/, '-');
+    n = Number(/^-?\d{1,3}([.,]\d{3})+$/.test(teks) ? teks.replace(/[.,]/g, '') : teks);
+  } else return null;
   if (!Number.isFinite(n) || n === 0) return null;
   const bulat = Math.round(Math.abs(n) / KELIPATAN_BATAS_SKOR) * KELIPATAN_BATAS_SKOR;
   const mutlak = Math.min(BATAS_SKOR_MAKS, Math.max(BATAS_SKOR_MIN, bulat));

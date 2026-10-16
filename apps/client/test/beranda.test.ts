@@ -158,6 +158,27 @@ describe('renderBeranda', () => {
     expect([ubin().length, melayang().length]).toEqual([0, 0]);
   });
 
+  it('kunjungan pertama (kartu "Warga baru, ya?"): ubin saja, tanpa tombol melayang; beranda berikutnya baru ada', () => {
+    localStorage.setItem('remi.preferensi', JSON.stringify({}));
+    _setelUlangCache();
+    const ui = document.getElementById('ui')!;
+    const b = renderBeranda(ui, { ...aksiPalsu(), pasangAplikasi: tawaranPalsu(true) });
+    expect(document.querySelector('.tawaran-latihan')).not.toBeNull();
+    expect([ubin().length, melayang().length]).toEqual([1, 0]);
+    expect(document.querySelector('.layar.beranda')!.classList.contains('ada-pasang')).toBe(false);
+    // Prompt browser datang belakangan (main.ts memanggil aturPasang): tetap tanpa tombol melayang.
+    b.aturPasang(tawaranPalsu(true));
+    expect(melayang()).toHaveLength(0);
+    // Kartu latihan ditutup "Nanti saja": tombol pasang tidak langsung menyusul di layar yang sama.
+    document.querySelector<HTMLElement>('#tawaran-nanti')!.click();
+    b.aturPasang(tawaranPalsu(true));
+    expect(melayang()).toHaveLength(0);
+    // Beranda berikutnya (tutorial sudah ditandai selesai): tombol melayang muncul.
+    renderBeranda(ui, { ...aksiPalsu(), pasangAplikasi: tawaranPalsu(true) });
+    expect(document.querySelector('.tawaran-latihan')).toBeNull();
+    expect([ubin().length, melayang().length]).toEqual([1, 1]);
+  });
+
   it('"Nanti saja" memanggil nanti(), menyembunyikan tombol melayang, fokus pindah ke ubin menu', () => {
     const t = tawaranPalsu();
     renderBeranda(document.getElementById('ui')!, { ...aksiPalsu(), pasangAplikasi: t });

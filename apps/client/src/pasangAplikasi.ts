@@ -112,6 +112,16 @@ export function tandaiSudahPasang(s: TawaranPasang, sekarang: number): TawaranPa
   return { ...s, sudahPasang: sekarang };
 }
 
+/**
+ * Sesudah prompt pasang browser ditutup: diterima = sudah pasang, ditolak = sama dengan "Nanti
+ * saja" (tombol melayang hilang 3 hari), prompt gagal (null) = simpanan tidak berubah.
+ */
+export function sesudahPrompt(s: TawaranPasang, hasil: 'accepted' | 'dismissed' | null, sekarang: number): TawaranPasang {
+  if (hasil === 'accepted') return tandaiSudahPasang(s, sekarang);
+  if (hasil === 'dismissed') return tundaPasang(s, sekarang);
+  return s;
+}
+
 /** beforeinstallprompt datang lagi: browser ini belum memasangnya, tanda "sudah" dilupakan. */
 export function lupakanSudahPasang(s: TawaranPasang): TawaranPasang {
   return s.tundaSampai !== undefined ? { tundaSampai: s.tundaSampai } : {};
@@ -123,6 +133,33 @@ export function lupakanSudahPasang(s: TawaranPasang): TawaranPasang {
 /** Media query display-mode yang berarti sudah dibuka sebagai aplikasi terpasang. */
 export const QUERY_TERPASANG = ['(display-mode: standalone)', '(display-mode: minimal-ui)', '(display-mode: fullscreen)'] as const;
 
+/** Yang dibaca dari browser untuk menilai "dibuka sebagai aplikasi". */
+export interface TampilanBrowser {
+  /** display-mode standalone atau minimal-ui cocok. */
+  mandiri: boolean;
+  /** display-mode fullscreen cocok. */
+  layarPenuhMode: boolean;
+  /** document.fullscreenElement terisi (layar penuh lewat requestFullscreen, mis. menu meja). */
+  layarPenuhApi: boolean;
+  /** navigator.standalone (Safari iOS dari layar utama). */
+  standaloneIos: boolean;
+}
+
+/**
+ * Dibuka sebagai aplikasi terpasang? Manifest memakai display fullscreen, jadi aplikasi terpasang
+ * di Android cocok dengan display-mode fullscreen. Masalahnya, layar penuh lewat requestFullscreen
+ * (menu ☰ meja) dan F11 di desktop juga membuat display-mode fullscreen cocok:
+ * - Selama layar penuh API terisi, display-mode tidak bisa dipercaya: pakai nilai terakhir yang
+ *   diketahui sebelum layar penuh (`sebelumnya`, dibaca saat aplikasi mulai). Belum ada = belum terpasang.
+ * - Browser masih menawarkan prompt pasang = jelas belum terpasang di browser ini, walau
+ *   display-mode fullscreen cocok (F11 di desktop).
+ */
+export function nilaiTerpasang(t: TampilanBrowser, sebelumnya: boolean | null, adaPrompt = false): boolean {
+  if (t.mandiri || t.standaloneIos) return true;
+  if (!t.layarPenuhMode || adaPrompt) return false;
+  return t.layarPenuhApi ? (sebelumnya ?? false) : true;
+}
+
 function cocok(query: string): boolean {
   try {
     return !!window.matchMedia?.(query).matches;
@@ -131,19 +168,30 @@ function cocok(query: string): boolean {
   }
 }
 
+/** Nilai terpasang terakhir yang dibaca saat layar penuh API tidak aktif (lihat nilaiTerpasang). */
+let terakhirTerpasang: boolean | null = null;
+
+/** Untuk test: lupakan nilai terakhir. */
+export function _setelUlangTerpasang(): void {
+  terakhirTerpasang = null;
+}
+
 /**
- * Sudah dibuka sebagai aplikasi terpasang: display-mode standalone/minimal-ui/fullscreen, atau
- * navigator.standalone di iOS. Layar penuh dari menu meja (requestFullscreen di kontrolMeja.ts,
- * document.fullscreenElement terisi) tidak dihitung terpasang.
+ * Sudah dibuka sebagai aplikasi terpasang (display-mode standalone/minimal-ui/fullscreen, atau
+ * navigator.standalone di iOS). main.ts memanggilnya sekali saat aplikasi mulai, sebelum menu meja
+ * sempat meminta layar penuh, supaya nilainya tetap benar sesudah layar penuh dari menu meja.
  */
-export function sedangTerpasang(): boolean {
+export function sedangTerpasang(adaPrompt = false): boolean {
   const nav = navigator as Navigator & { standalone?: boolean };
-  return (
-    cocok(QUERY_TERPASANG[0]) ||
-    cocok(QUERY_TERPASANG[1]) ||
-    (cocok(QUERY_TERPASANG[2]) && !document.fullscreenElement) ||
-    nav.standalone === true
-  );
+  const t: TampilanBrowser = {
+    mandiri: cocok(QUERY_TERPASANG[0]) || cocok(QUERY_TERPASANG[1]),
+    layarPenuhMode: cocok(QUERY_TERPASANG[2]),
+    layarPenuhApi: !!document.fullscreenElement,
+    standaloneIos: nav.standalone === true,
+  };
+  const hasil = nilaiTerpasang(t, terakhirTerpasang, adaPrompt);
+  if (!t.layarPenuhApi) terakhirTerpasang = hasil;
+  return hasil;
 }
 
 export function bacaLingkunganPasang(adaPrompt: boolean): LingkunganPasang {
@@ -151,7 +199,7 @@ export function bacaLingkunganPasang(adaPrompt: boolean): LingkunganPasang {
     ua: navigator.userAgent ?? '',
     maxTouchPoints: navigator.maxTouchPoints ?? 0,
     aman: typeof isSecureContext === 'boolean' ? isSecureContext : location.protocol === 'https:',
-    terpasang: sedangTerpasang(),
+    terpasang: sedangTerpasang(adaPrompt),
     adaPrompt,
   };
 }

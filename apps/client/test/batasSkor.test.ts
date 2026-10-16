@@ -123,6 +123,15 @@ describe('beranda: Atur meja', () => {
     expect(simpan.pengaturanOffline()).toMatchObject({ batasSkorAtas: null, batasSkorBawah: null });
   });
 
+  it('titik ribuan ("1.000", cara orang sini menulis seribu) dibaca seribu, bukan 1 → 10', () => {
+    renderBeranda(akar(), aksiPalsu());
+    isi(isian('o-skor-atas'), '1.000');
+    expect(isian('o-skor-atas').value).toBe('1000');
+    isi(isian('o-skor-bawah'), '1.500');
+    expect(isian('o-skor-bawah').value).toBe('1500');
+    expect(simpan.pengaturanOffline()).toMatchObject({ batasSkorAtas: 1000, batasSkorBawah: -1500 });
+  });
+
   it('Enter merapikan dan menyimpan tanpa harus pindah isian', () => {
     renderBeranda(akar(), aksiPalsu());
     const el = isian('o-skor-atas');

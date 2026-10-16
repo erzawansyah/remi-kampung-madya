@@ -67,7 +67,7 @@ export const CARA_HITUNG: readonly string[] = [
 export const JUDUL_CARA_HITUNG = 'Cara hitungnya';
 export const JUDUL_BELUM_CUKUP = `Belum cukup main (kurang dari ${MIN_MAIN} kali)`;
 export const CATATAN_DECK =
-  'Permainan 4 orang yang selesai sebelum 16 Okt 2026 nggak tercatat pakai 1 atau 2 deck, jadi nggak ikut kalau deck dipilih.';
+  'Permainan 4 orang dari sebelum pembaruan ini nggak tercatat pakai 1 atau 2 deck, jadi nggak ikut kalau deck dipilih.';
 export const CATATAN_SERVER_LAMA =
   'Server belum diperbarui, jadi urutan dan saringan belum bisa dipilih. Untuk sementara urut dari jumlah juara, lalu total skor.';
 export const KOSONG_PERINGKAT = 'Belum ada permainan online bareng teman yang selesai.';

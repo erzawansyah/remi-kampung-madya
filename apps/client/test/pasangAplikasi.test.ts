@@ -7,7 +7,9 @@ import {
   dalamAplikasi,
   keadaanPasang,
   lupakanSudahPasang,
+  nilaiTerpasang,
   perangkatApel,
+  sesudahPrompt,
   tandaiSudahPasang,
   TUNDA_PASANG_MS,
   tundaPasang,
@@ -157,5 +159,59 @@ describe('keadaanPasang', () => {
     tundaPasang(awal, T0);
     tandaiSudahPasang(awal, T0);
     expect(awal).toEqual({ tundaSampai: 5, sudahPasang: 7 });
+  });
+});
+
+describe('nilaiTerpasang: dibuka sebagai aplikasi terpasang?', () => {
+  const tampilan = (lain: Partial<{ mandiri: boolean; layarPenuhMode: boolean; layarPenuhApi: boolean; standaloneIos: boolean }> = {}) => ({
+    mandiri: false,
+    layarPenuhMode: false,
+    layarPenuhApi: false,
+    standaloneIos: false,
+    ...lain,
+  });
+
+  it('standalone/minimal-ui dan navigator.standalone iOS selalu terpasang', () => {
+    for (const sebelumnya of [null, false, true]) {
+      expect(nilaiTerpasang(tampilan({ mandiri: true }), sebelumnya)).toBe(true);
+      expect(nilaiTerpasang(tampilan({ standaloneIos: true, layarPenuhApi: true }), sebelumnya)).toBe(true);
+    }
+    expect(nilaiTerpasang(tampilan(), null)).toBe(false);
+  });
+
+  it('manifest display fullscreen: display-mode fullscreen tanpa layar penuh API = terpasang', () => {
+    expect(nilaiTerpasang(tampilan({ layarPenuhMode: true }), null)).toBe(true);
+  });
+
+  it('layar penuh dari menu meja: pakai nilai sebelum layar penuh, jangan langsung "belum terpasang"', () => {
+    const lp = tampilan({ layarPenuhMode: true, layarPenuhApi: true });
+    // Aplikasi terpasang → ☰ Layar penuh → kembali ke beranda: tetap terpasang (tombol pasang tidak muncul).
+    expect(nilaiTerpasang(lp, true)).toBe(true);
+    // Tab browser biasa → Layar penuh: tetap belum terpasang (tawaran tetap ada).
+    expect(nilaiTerpasang(lp, false)).toBe(false);
+    expect(nilaiTerpasang(lp, null)).toBe(false);
+  });
+
+  it('browser masih menawarkan prompt (mis. F11 di desktop) = belum terpasang walau display-mode fullscreen', () => {
+    expect(nilaiTerpasang(tampilan({ layarPenuhMode: true }), null, true)).toBe(false);
+    expect(nilaiTerpasang(tampilan({ layarPenuhMode: true, layarPenuhApi: true }), true, true)).toBe(false);
+    // standalone tetap terpasang (prompt tidak muncul di jendela aplikasi terpasang).
+    expect(nilaiTerpasang(tampilan({ mandiri: true }), null, true)).toBe(true);
+  });
+});
+
+describe('sesudahPrompt: hasil userChoice prompt pasang browser', () => {
+  const T0 = Date.UTC(2026, 9, 16, 5, 0, 0);
+
+  it('diterima = sudah pasang, ditolak = tunda 3 hari, gagal = simpanan tetap', () => {
+    expect(sesudahPrompt({}, 'accepted', T0)).toEqual({ sudahPasang: T0 });
+    expect(sesudahPrompt({}, 'dismissed', T0)).toEqual({ tundaSampai: T0 + TUNDA_PASANG_MS });
+    const awal = { tundaSampai: 5 };
+    expect(sesudahPrompt(awal, null, T0)).toBe(awal);
+    expect(sesudahPrompt(awal, 'accepted', T0)).toEqual({ tundaSampai: 5, sudahPasang: T0 });
+    expect(awal).toEqual({ tundaSampai: 5 });
+    // Ditolak: tombol melayang hilang, ubin tetap. Diterima: tawaran tutup kecuali prompt datang lagi.
+    expect(keadaanPasang('android', sesudahPrompt({}, 'dismissed', T0), T0 + 1)).toEqual({ cara: 'android', melayang: false });
+    expect(keadaanPasang('android', sesudahPrompt({}, 'accepted', T0), T0 + 1)).toBeNull();
   });
 });

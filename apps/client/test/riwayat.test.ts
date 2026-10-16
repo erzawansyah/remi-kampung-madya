@@ -421,9 +421,14 @@ describe('renderRiwayat tab Peringkat (leaderboard v2)', () => {
     expect(akar.querySelector('#hasil-peringkat [data-coba]')).not.toBeNull();
     expect(akar.querySelector('#urut-peringkat')).not.toBeNull();
     gagal = false;
-    akar.querySelector<HTMLElement>('#hasil-peringkat [data-coba]')!.click();
+    const coba = akar.querySelector<HTMLElement>('#hasil-peringkat [data-coba]')!;
+    coba.focus();
+    coba.click();
+    // Tombolnya hilang, fokus pindah ke wadah hasil, bukan jatuh ke <body>.
+    expect(document.activeElement).toBe(akar.querySelector('#hasil-peringkat'));
     await tunggu();
     expect(namaBaris(akar)).toEqual(['Siti', 'Budi']);
+    expect(document.activeElement).toBe(akar.querySelector('#hasil-peringkat'));
   });
 
   it('pilihan bertahan saat pindah tab lalu kembali', async () => {

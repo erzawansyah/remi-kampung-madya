@@ -60,6 +60,12 @@ export interface Kursi {
    * dan saat main lagi. Tidak ikut dikirim ke client (info() menyalin field satu per satu).
    */
   keluar?: true;
+  /**
+   * Hanya bersama `keluar`: banyaknya putaran yang hasilnya (siapa mentung, siapa kepentung)
+   * sudah jatuh saat pemainnya keluar. Mentung/kepentung di klasemen akhir hanya dihitung dari
+   * putaran itu; sisanya hasil main warga kedai yang meneruskan kursinya.
+   */
+  keluarSesudahPutaran?: number;
 }
 
 /** Semua yang perlu disimpan supaya meja bisa dilanjutkan (JSON). */
@@ -342,7 +348,12 @@ export class Meja {
     if (this.status === 'lobi') this.d.kursi[i] = kursiKosong(this.d.pengaturan.levelBot);
     else {
       this.d.kursi[i] = { jenis: 'bot', nama: k.nama, pemainId: null, terhubung: false, level: this.d.pengaturan.levelBot };
-      if (this.status === 'main') this.d.kursi[i].keluar = true;
+      const g = this.d.game;
+      if (this.status === 'main' && g) {
+        this.d.kursi[i].keluar = true;
+        // Di susun akhir yang mentung dan kepentung putaran ini sudah ketahuan, jadi ikut dihitung.
+        this.d.kursi[i].keluarSesudahPutaran = g.riwayat.length + (g.status === 'susunAkhir' ? 1 : 0);
+      }
     }
     this.putusSejak.delete(i);
     this.lepasKursi(i);
@@ -874,27 +885,35 @@ export class Meja {
 
 /** Kursi yang ditandai keluar kembali biasa (permainan baru, atau main lagi). */
 function hapusTandaKeluar(kursi: Kursi[]): void {
-  for (const k of kursi) delete k.keluar;
+  for (const k of kursi) {
+    delete k.keluar;
+    delete k.keluarSesudahPutaran;
+  }
 }
 
 /**
  * Klasemen akhir dari state permainan yang sudah selesai. Peringkat di sini murni dari skor akhir
  * (skor sama = peringkat sama); aturan juru kunci untuk yang keluar diterapkan saat peringkat online
  * dihitung (`nilaiEfektif`, peringkat.ts), jadi klasemen yang tampil di meja tetap apa adanya.
- * Pemain yang keluar di tengah permainan ditulis `bot: false, keluar: true`.
+ * Pemain yang keluar di tengah permainan ditulis `bot: false, keluar: true`, dan mentung/kepentung-nya
+ * hanya dari putaran sebelum ia keluar (sesudahnya yang main warga kedai). Skornya tetap skor kursi.
  */
 export function buatRingkasanAkhir(kode: string, kursi: Kursi[], game: GameState, selesaiPada: number): RingkasanAkhir {
   const pemain: RingkasanAkhir['pemain'] = game.pemain
-    .map((p, i) => ({
-      kursi: i,
-      nama: p.nama,
-      bot: kursi[i]?.jenis !== 'manusia' && !kursi[i]?.keluar,
-      ...(kursi[i]?.keluar ? { keluar: true as const } : {}),
-      skor: game.skor[i],
-      peringkat: 0,
-      mentung: game.riwayat.filter((h) => h.pementung === i).length,
-      kepentung: game.riwayat.filter((h) => h.kepentung.includes(i)).length,
-    }))
+    .map((p, i) => {
+      const keluar = !!kursi[i]?.keluar;
+      const dimainkan = keluar ? game.riwayat.slice(0, kursi[i].keluarSesudahPutaran ?? game.riwayat.length) : game.riwayat;
+      return {
+        kursi: i,
+        nama: p.nama,
+        bot: kursi[i]?.jenis !== 'manusia' && !keluar,
+        ...(keluar ? { keluar: true as const } : {}),
+        skor: game.skor[i],
+        peringkat: 0,
+        mentung: dimainkan.filter((h) => h.pementung === i).length,
+        kepentung: dimainkan.filter((h) => h.kepentung.includes(i)).length,
+      };
+    })
     .sort((a, b) => b.skor - a.skor || a.kursi - b.kursi);
   pemain.forEach((p, j) => (p.peringkat = j > 0 && p.skor === pemain[j - 1].skor ? pemain[j - 1].peringkat : j + 1));
   return {

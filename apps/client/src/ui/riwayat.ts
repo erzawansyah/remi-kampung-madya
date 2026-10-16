@@ -459,7 +459,13 @@ export function renderRiwayat(akar: HTMLElement, kembali: () => void, tabAwal: T
         <button type="button" data-coba>Coba lagi</button>
         <button type="button" class="utama" data-lokal>Lihat yang di HP ini</button>
       </div>`;
-    wadah.querySelector('[data-coba]')!.addEventListener('click', cobaLagi);
+    wadah.querySelector('[data-coba]')!.addEventListener('click', () => {
+      // Tombolnya hilang saat isi wadah diganti: fokus dipindah ke wadahnya dulu supaya tidak jatuh
+      // ke <body> (pembaca layar tetap di tempat, tidak perlu Tab dari atas lagi).
+      wadah.tabIndex = -1;
+      wadah.focus();
+      cobaLagi();
+    });
     wadah.querySelector('[data-lokal]')!.addEventListener('click', () => {
       pilih('lokal');
       akar.querySelector<HTMLElement>('#tab-lokal')?.focus();

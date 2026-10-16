@@ -122,7 +122,7 @@ Semua di `engine/kartuJadi.ts: validasiKartuJadi` (dipakai mesin, bot, dan UI). 
 - Status `susunAkhir`. Semua pemain (tidak urut giliran) boleh `turunkan` kartu jadi dari tangan dengan validasi mode `'akhir'`: tanpa mulung, tanpa ambil, tanpa buang, tangan boleh habis (tidak dihitung mentung). Aturan kartu jadi tetap berlaku (termasuk 3 As).
 - Pemain dengan tangan kosong (yang mentung) otomatis dianggap selesai. Yang lain menekan `selesaiSusun`; setelah itu tidak bisa menurunkan lagi.
 - Setelah semua selesai, `selesaikanPutaran` dijalankan.
-- Di meja: susun akhir berjalan serentak; bot (dan manusia yang terputus lewat masa tenggang atau kehabisan waktu) dijalankan satu per satu (`meja/meja.ts: jadwalkan`). Aturan Terbuka 20–23 masih **perlu konfirmasi** pemilik.
+- Di meja: susun akhir berjalan serentak; bot (dan manusia yang terputus lewat masa tenggang atau kehabisan waktu) dijalankan satu per satu (`meja/meja.ts: jadwalkan`). Aturan Terbuka 20–23 diputuskan pemilik 16 Okt 2026: sesuai bawaan (perilaku di atas).
 
 **Sambung ulang dan room (keputusan pemilik 13 Okt 2026, `meja/meja.ts`; test `packages/meja/test/meja.test.ts`):**
 - **Masa tenggang** (#11): giliran manusia yang terputus baru dijalankan warga kedai setelah `OpsiMeja.tenggangSambungMs` (bawaan `TENGGANG_SAMBUNG_MS` = 20 detik) **sejak ia terputus**, lalu jeda mikir biasa. Kembali dalam tenggang = giliran tetap miliknya. Batas waktu giliran (kalau `detikGiliran` > 0) tetap berlaku, mana yang lebih dulu habis. Tenggang tidak diulang tiap giliran: kalau sudah lewat dan ia belum kembali, giliran berikutnya langsung dijalankan. Waktu terputus hanya di memori (`putusSejak`); meja yang dilanjutkan dari simpanan memulai tenggang saat dibuat.

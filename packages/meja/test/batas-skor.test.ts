@@ -79,6 +79,21 @@ describe('rapikanBatasSkor: isian UI dan simpanan', () => {
     [500, 'bawah', -500],
     // Minus nyasar di batas atas: angkanya yang dipakai.
     ['-250', 'atas', 250],
+    // Titik/koma ribuan (cara orang sini menulis seribu), bukan pecahan. Isian type=number di
+    // Chrome menyerahkan "1.000" apa adanya; tanpa ini jadi 1 → 10 dan permainan tamat di putaran 1.
+    ['1.000', 'atas', 1000],
+    ['1.500', 'atas', 1500],
+    ['1,500', 'atas', 1500],
+    ['10.000', 'atas', 10000],
+    ['100.000', 'atas', BATAS_SKOR_MAKS],
+    ['1.000.000', 'atas', BATAS_SKOR_MAKS],
+    ['1.000', 'bawah', -1000],
+    ['-1.500', 'bawah', -1500],
+    ['−2.000', 'bawah', -2000],
+    // Bukan kelompok ribuan: tetap angka biasa (pecahan dibulatkan ke kelipatan 10).
+    ['2.5', 'atas', 10],
+    ['254.9', 'atas', 250],
+    ['1.0000', 'atas', 10],
   ] as const)('%j (%s) → %j', (x, arah, hasil) => {
     expect(rapikanBatasSkor(x, arah)).toBe(hasil);
     expect(batasSkorSah(hasil, arah)).toBe(true);

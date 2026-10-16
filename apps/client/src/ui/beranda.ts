@@ -497,8 +497,10 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
       );
     }
     // Tombol melayang: anak terakhir .layar.beranda (di luar grid, ikut inert dan ikut hilang
-    // bersama #ui), hanya kalau tidak sedang ditunda.
-    const melayang = !!t?.melayang;
+    // bersama #ui), hanya kalau tidak sedang ditunda. Kunjungan pertama (kartu "Warga baru, ya?"
+    // tampil) tanpa tombol melayang: layar pertama cukup satu tawaran dan tombol Main tidak
+    // tertutup. Ubin menu tetap ada; tombolnya baru muncul di beranda berikutnya.
+    const melayang = !!t?.melayang && !pemainBaru;
     const ada = layarEl.querySelector<HTMLElement>('.pasang-melayang');
     if (!melayang && ada) {
       const berfokus = ada.contains(document.activeElement);
