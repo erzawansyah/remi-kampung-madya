@@ -34,6 +34,7 @@ import {
   type RingkasanMeja,
   type StatusMeja,
 } from './protokol.js';
+import { gayaKursi } from './gayaWarga.js';
 import { kunciNama, rapikanLevel, rapikanNama } from './validasi.js';
 
 export interface Penjadwal {
@@ -866,18 +867,23 @@ export class Meja {
     if (!g || !g.putaran) return;
     if (g.status === 'putaranBerjalan' ? g.putaran.giliran !== giliran : g.status !== 'susunAkhir') return;
     const k = this.d.kursi[giliran];
+    // Manusia yang terputus atau kehabisan waktu dimainkan level normal tanpa gaya.
     const level: LevelBot = k.jenis === 'bot' ? k.level : 'normal';
+    // Gaya persona (keputusan #47) hanya untuk strategi level kursi; cadangan mudah/aman tanpa gaya.
+    const gaya = gayaKursi(k);
     // Dikosongkan dulu supaya jadwal sesudah aksi yang berhasil kembali ke jeda biasa.
     const gagalSebelumnya = this.galatBot?.kunci === kunci ? this.galatBot.kali : 0;
     this.galatBot = null;
-    // Jalur normal memakai rng persis seperti sebelumnya (golden master meja tidak bergeser).
+    // Satu rng bersama untuk semua kursi warga kedai di meja ini (rngBot). Gaya standar memakai rng
+    // persis seperti sebelum ada gaya; gaya lain bisa memakai rng lebih banyak (pilihDekat, tunda
+    // mentung), jadi urutan acak kursi lain di meja yang sama ikut bergeser.
     const rng = new Rng(this.d.rngBot);
     let view: ViewPemain | null = null;
     for (const cara of [level, 'mudah', 'aman'] as const) {
       let aksi: Aksi | null = null;
       try {
         view ??= viewUntuk(g, giliran);
-        aksi = cara === 'aman' ? aksiAman(view) : pilihAksiBot(view, cara, rng);
+        aksi = cara === 'aman' ? aksiAman(view) : pilihAksiBot(view, cara, rng, cara === level ? gaya : 'standar');
         this.d.rngBot = rng.state;
         this.terapkan(g, aksi);
         return;

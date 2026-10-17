@@ -4,6 +4,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   buatPermainan,
+  DAFTAR_GAYA_BOT,
   DAFTAR_LEVEL_BOT,
   periksaInvarian,
   pilihAksiBot,
@@ -12,8 +13,21 @@ import {
   viewUntuk,
   type Aksi,
   type GameState,
+  type GayaBot,
   type LevelBot,
 } from '../src/index.js';
+
+/**
+ * Level dan gaya main (#47) kursi i untuk seed tertentu. Level berganti tiap seed, gaya tiap empat
+ * seed, jadi di 60 seed setiap pasangan level × gaya (termasuk standar) muncul di semua ukuran meja.
+ * Mudah mengabaikan gaya, dan susun akhir tanpa gaya (diatur di engine).
+ */
+export function levelSimulasi(seed: number, i: number): LevelBot {
+  return DAFTAR_LEVEL_BOT[(seed + i) % DAFTAR_LEVEL_BOT.length];
+}
+export function gayaSimulasi(seed: number, i: number): GayaBot {
+  return DAFTAR_GAYA_BOT[(Math.floor(seed / DAFTAR_LEVEL_BOT.length) + i) % DAFTAR_GAYA_BOT.length];
+}
 
 interface Statistik {
   putaran: number;
@@ -28,7 +42,14 @@ interface Statistik {
   mentungBeberapaJoker: number;
 }
 
-export function mainkan(jumlahPemain: number, duaDeck: boolean, seed: number, level: LevelBot[], stat: Statistik) {
+export function mainkan(
+  jumlahPemain: number,
+  duaDeck: boolean,
+  seed: number,
+  level: LevelBot[],
+  stat: Statistik,
+  gaya: readonly GayaBot[] = [],
+) {
   let g: GameState = buatPermainan({
     pemain: Array.from({ length: jumlahPemain }, (_, i) => `Bot ${i + 1}`),
     seed,
@@ -41,12 +62,12 @@ export function mainkan(jumlahPemain: number, duaDeck: boolean, seed: number, le
     if (g.status === 'putaranBerjalan') {
       const giliran = g.putaran!.giliran;
       const view = viewUntuk(g, giliran);
-      aksi = pilihAksiBot(view, level[giliran], rng);
+      aksi = pilihAksiBot(view, level[giliran], rng, gaya[giliran]);
     } else if (g.status === 'susunAkhir') {
       // Urutan acak: fase ini tidak bergantung urutan.
       const belum = g.putaran!.selesaiSusun.map((x, i) => (x ? -1 : i)).filter((i) => i >= 0);
       const siapa = rng.pick(belum);
-      aksi = pilihAksiBot(viewUntuk(g, siapa), level[siapa], rng);
+      aksi = pilihAksiBot(viewUntuk(g, siapa), level[siapa], rng, gaya[siapa]);
       if (aksi.jenis === 'turunkan') stat.susunAkhir++;
     } else {
       aksi = { jenis: 'mulaiPutaran' };
@@ -96,9 +117,10 @@ export function ujiSimulasi(judul: string, n: number, duaDeck: boolean): void {
     for (let awal = 1; awal <= 60; awal += 10) {
       it(`seed ${awal}–${awal + 9}: tanpa state ilegal maupun aksi ditolak`, async () => {
         for (let seed = awal; seed < awal + 10; seed++) {
-          // Semua level ikut: mudah, normal, jago, dan suhu bergantian kursi.
-          const level: LevelBot[] = Array.from({ length: n }, (_, i) => DAFTAR_LEVEL_BOT[(seed + i) % DAFTAR_LEVEL_BOT.length]);
-          mainkan(n, duaDeck, seed, level, stat);
+          // Semua level (mudah, normal, jago, suhu) dan semua gaya bergantian kursi.
+          const level = Array.from({ length: n }, (_, i) => levelSimulasi(seed, i));
+          const gaya = Array.from({ length: n }, (_, i) => gayaSimulasi(seed, i));
+          mainkan(n, duaDeck, seed, level, stat, gaya);
           // Beri kesempatan worker memproses pesan dari Vitest.
           await new Promise((r) => setTimeout(r, 0));
         }

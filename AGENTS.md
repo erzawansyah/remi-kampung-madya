@@ -2,7 +2,7 @@
 
 **Remi Kampung Madya**: game kartu remi dengan aturan yang berlaku di Kedai Madya (tempat pemilik dan teman-temannya berkumpul), yaitu **aturan tongkrongan** lokal yang **berbeda dari remi/rummy umum**. Monorepo TypeScript: rules engine murni, modul meja/room, server WebSocket, dan client Phaser 4.2.1 + HTML + PWA.
 
-Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#47 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik. #40 (joker beda dari putaran sebelumnya), #41 (mentung pakai beberapa joker), dan #42–#43 (mode kaldu; engine, meja, server, warga kedai, dan aplikasi) sudah diterapkan. #47 (16 Okt 2026) sudah diputuskan tapi baru diterapkan di rilis berikutnya; sampai saat itu bot untuk butir itu tetap seperti sekarang.
+Baca [README.md](README.md) dulu, terutama bagian **Ringkasan aturan** dan **Aturan Terbuka dan keputusan**. Keduanya sumber kebenaran soal aturan main. Keputusan pemilik #25–#47 dan hal yang masih menunggu tanggapannya dirinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): **jangan diubah** tanpa izin pemilik. #40 (joker beda dari putaran sebelumnya), #41 (mentung pakai beberapa joker), dan #42–#43 (mode kaldu; engine, meja, server, warga kedai, dan aplikasi) sudah diterapkan. #47 (gaya main warga kedai per persona; engine dan meja) juga sudah diterapkan.
 
 ## Aturan emas
 
@@ -32,7 +32,7 @@ npm run dev:client   # Vite :5173 (strictPort), /ws dan /api diteruskan ke :2567
 npm run build        # build client (PWA + .br/.gz) + bundel server
 npm run e2e          # E2E smoke di Chrome sistem (build + vite preview, HP & desktop, tombol pasang di Chrome Android)
 docker compose up -d --build   # produksi; Dockerfile menjalankan typecheck + test + build
-npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --lawan, --susunan, --meja, --seed, --putaran, --waktu)
+npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan dan keterbacaan level bot (--uji, --lawan, --susunan, --gaya, --meja, --seed, --putaran, --waktu, --baca, --kaldu)
 ```
 
 - `npm run e2e` tidak mengunduh browser. Kalau Chrome tidak ketemu otomatis, set `CHROME_PATH`. Opsi: `-- --url=http://localhost:5173` (uji dev server), `-- --perangkat=hp` (`hp`, `desktop`, `pasang`, dipisah koma), `-- --tanpa-build`, `-- --tampil`.
@@ -51,7 +51,11 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
 - **Aturan main:** `packages/engine/src/kartuJadi.ts` (seri/kembar/joker), `giliran.ts` (validasi mulung/turunkan/buang), `mesin.ts` (alur, mentung, skor putaran), `skor.ts`.
   - Fungsi di `giliran.ts` dipakai bersama oleh mesin, bot, dan UI. Ubah aturan di sana, **jangan** menduplikasi logika aturan di UI.
 - **Bot (warga kedai):** `packages/engine/src/bot/`. `bot.ts` = `LevelBot`/`DAFTAR_LEVEL_BOT` (mudah, normal, jago, suhu) dan strategi mudah/normal; `strategi.ts` = jago/suhu (`PARAM_JAGO`, `PARAM_SUHU`); `susun.ts` = pencari susunan kartu jadi; `ingatan.ts` = ingatan dari `ViewPemain`.
+  - **Gaya main** (keputusan #47, `gaya.ts`): `GayaBot`, `DEFINISI_GAYA`, `buatKonteksGaya()`, dipasang lewat argumen ke-4 `pilihAksiBot(view, level, rng, gaya = 'standar')`. `standar` wajib sama persis dengan perilaku lama dan tidak memakai rng (setiap kait diperiksa `if (!kg)`; dijaga hash rekaman di `test/bot-gaya.test.ts`). Mudah dan susun akhir tanpa gaya. Kait gaya hanya membaca info publik di view; gaya tidak pernah ditampilkan ke pemain (view, protokol, UI, Bantuan, CHANGELOG pemain).
+    - **Gaya per persona di meja:** `packages/meja/src/gayaWarga.ts` (`GAYA_WARGA` untuk ke-22 nama `NAMA_LAWAN_BAWAAN`, `gayaUntukNama()` tanpa beda huruf besar/kecil, `gayaKursi()`). `Meja.langkahBot` hanya mengirim gaya ke strategi level kursi; cadangan #38 (`mudah`, `aman`) tanpa gaya. Nama di luar daftar, kursi `keluar`, dan giliran orang yang diambil alih (level normal) = `standar`. Gaya tidak masuk `InfoMeja` (`info()` menyalin field kursi satu per satu), `DataMeja`, maupun pesan apa pun; dijaga `packages/meja/test/gaya.test.ts`. Tabelnya ikut bundel offline, jadi "tersembunyi" artinya tidak pernah ditampilkan.
   - Perubahan strategi **diukur di arena** (`packages/engine/scripts/arena.ts`), jangan diasumsikan lebih kuat.
+    - Peserta arena ditulis `level` atau `level:gaya` (`scripts/peserta.ts`). Baris `baca:` mengukur seberapa gampang buangan warga kedai dibaca (Londo/As dibuang di awal, buangan menyambung, disuap ke pemain berikutnya, entropi buangan awal); definisinya di `scripts/keterbacaan.ts`, diuji `test/arena-alat.test.ts`.
+    - Pekerja arena mendaftarkan tsx sendiri (`buatPekerja()`), karena loader tsx tidak selalu ikut ke worker thread (di Node 22.22 impor `.js` → `.ts` gagal). Jangan kembali ke `new Worker(new URL(import.meta.url))`.
   - Level baru: tambah di `DAFTAR_LEVEL_BOT` dan `LEVEL_WARGA` (`apps/client/src/konten/levelWarga.ts`, satu sumber label untuk beranda, lobi, Bantuan); validasi meja ikut otomatis. Level dari data tak dipercaya (simpanan, isian UI) dirapikan dengan `rapikanLevel()` dari `@remi/meja`.
 - **Perilaku room/online:** `packages/meja/src/meja.ts` dan `protokol.ts`.
   - Pesan dari jaringan divalidasi di `validasi.ts`. Tambah case di sana setiap ada pesan baru.
@@ -106,7 +110,7 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
 **Bot**
 - Bot hanya melihat `ViewPemain` dan memvalidasi aksinya dengan fungsi aturan yang sama. Simulasi gagal kalau ada aksi bot yang ditolak. `pilihAksiBot` tetap fungsi murni.
 - Ingatan jago/suhu hanya dari `ViewPemain` dan peristiwa di view (yang juga terlihat pemain di meja asli). Jangan menambah info tersembunyi ke view demi bot.
-- Golden master hanya memainkan level mudah dan normal: strategi keduanya tidak boleh berubah tanpa peninjauan golden. Jago/suhu dijaga `bot-kuat.test.ts`, `bot-susun.test.ts`, simulasi, dan arena.
+- Golden master hanya memainkan level mudah dan normal: strategi keduanya tidak boleh berubah tanpa peninjauan golden. Jago/suhu dijaga `bot-kuat.test.ts`, `bot-susun.test.ts`, simulasi, dan arena. Golden engine selalu tanpa gaya; golden meja memakai gaya persona kursinya (Kipas Dua = kilat, Cak Kopag = sabarLondo, keduanya Normal), jadi mengubah gaya Normal di `DEFINISI_GAYA` atau gaya nama terdepan di `GAYA_WARGA` menggeser golden meja.
 - Jago/suhu sengaja **menahan kartu jadi di tangan** (sah: semua pemain boleh menurunkannya di susun akhir, #19 dan #24). Gaya ini disetujui pemilik (16 Okt 2026) dan tetap dipakai (lihat `docs/keputusan-pemilik.md`, Catatan lain).
 
 **Client**
@@ -135,6 +139,7 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
 - **Meja:** `JamPalsu` (waktu manual) dan `KotakSurat` (pesan keluar) ada di `packages/meja/test/bantu.ts`.
   - Setelah `mulai`/`putaranBerikut`, panggil `siapSemua(meja)`, karena permainan menunggu semua manusia menekan OK di pengumuman joker.
   - `jedaBotMs` di opsi test menimpa jeda acak bot.
+  - `siapkan()` tanpa `namaLawan` memberi warga kedai nama persona terdepan (Kipas Dua, Cak Kopag, ...), jadi mereka main dengan gaya (#47). Test yang memainkan permainan penuh tapi tidak menguji gaya memakai nama di luar daftar, misalnya `namaLawan: ['Warga A', 'Warga B']` (contoh: `batas-skor.test.ts`), supaya panjang permainannya tidak ikut bergeser kalau gaya disetel ulang.
   - Meja menangkap galatnya sendiri: pasang `saatGalat` di opsi supaya galat tidak hilang diam-diam di test. Pola menyuntik galat ke langkah warga kedai (`vi.mock('@remi/engine')`, penjadwal yang tersendat) ada di `packages/meja/test/galat-bot.test.ts`.
 - **Simulasi** dipecah per jumlah pemain (`sim-*.test.ts`) supaya paralel. Test yang memblok lama tanpa `await` membuat worker Vitest timeout.
 - **Golden master** (`packages/engine/test/golden.test.ts`, `packages/meja/test/golden-meja.test.ts`, snapshot di `__golden__/`) mengunci aksi, view, peristiwa, log, dan riwayat permainan ber-seed. Perubahan presentasi **tidak boleh** menggeser hash. Kalau hash berubah karena perubahan aturan/bot yang disengaja dan disetujui: tinjau diff ringkasan di snapshot, baru perbarui dengan `npx vitest run <file golden> -u`. Cara lengkapnya di [docs/baseline-gameplay.md](docs/baseline-gameplay.md).
@@ -182,7 +187,8 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan level bot (--uji, --l
   - `Kursi.keluar` hanya ada kalau true (golden `dataMejaAkhir` tidak bergeser) dan tidak pernah dikirim ke client. Pasangannya `Kursi.keluarSesudahPutaran` (diisi bersamaan, dihapus bersamaan): mentung/kepentung kursi yang keluar di klasemen akhir hanya dihitung dari putaran sebelum ia keluar, bukan hasil warga kedai penerusnya.
 - **Emote** hanya boleh dari `DAFTAR_EMOTE` (`packages/meja/src/protokol.ts`), supaya tidak bisa dipakai mengirim pesan bebas. Celetukan bot (`Meja.celetukBot`) hanya boleh menanggapi peristiwa publik, tidak boleh membocorkan kartu.
 - **Nama warga kedai** dari `NAMA_LAWAN_BAWAAN` (`packages/meja/src/meja.ts`, 22 nama: 10 "Warga Madya" lalu 12 tambahan pemilik, ejaan persis) lewat `OpsiMeja.namaLawan`. Urutan diacak dengan `Math.random` (bukan `opsi.acak`, supaya golden celetukan tidak bergeser); latihan memakai urutan tetap. Nama tidak boleh bergantung pada level, kartu, giliran, atau peristiwa.
-  - Nama baru **hanya ditambahkan di belakang** daftar: menyisipkan di depan/tengah menggeser golden meja dan lawan latihan.
+  - Gaya mengikuti nama (keputusan pemilik #47), satu arah; nama tetap tidak dipilih berdasarkan level/gaya.
+  - Nama baru **hanya ditambahkan di belakang** daftar (menyisipkan di depan/tengah menggeser golden meja dan lawan latihan) **dan** diberi gaya di `GAYA_WARGA` (`gaya.test.ts` gagal kalau lupa).
   - Label nama pembuang di bawah buangan: `labelSempit()` (`game/tataMeja.ts`) wajib menerima `namaLain` (nama pemain lain di meja) supaya singkatan tidak pernah kembar (misalnya Jurik dan Juragan sama-sama "JU"). Lebarnya diperkirakan `kiraLebarLabel()` (bukan `kiraLebarTeks()`), yang tidak boleh lebih sempit dari hasil ukur di `apps/client/test/data/lebarHuruf.ts`; inisial yang tidak muat dikecilkan sampai 9 px CSS (`ukuranPx` di hasilnya wajib dipakai pemanggil). Kalau font kanvas (`FONT` di `MejaScene.ts`) diganti, ukur ulang lalu perbarui kelas lebar hurufnya.
 
 **Promosi Kedai Madya (soft selling, keputusan pemilik)**
