@@ -125,6 +125,31 @@ function mainkan(level: LevelBot[], gaya: (GayaBot | undefined)[], duaDeck: bool
   return g;
 }
 
+/** View giliran (putaran berjalan) dari satu permainan ber-seed Normal standar: lebih cepat dari viewDariPermainan. */
+function viewDariPermainanNormal(n: number, duaDeck: boolean, seed: number): ViewPemain[] {
+  let g: GameState = buatPermainan({ pemain: Array.from({ length: n }, (_, i) => `W ${i}`), seed, konfigurasi: { duaDeckUntukEmpat: duaDeck, batasPutaran: 2 } });
+  const rng = new Rng(seed);
+  const hasil: ViewPemain[] = [];
+  while (g.status !== 'selesai') {
+    if (g.status === 'putaranBerjalan') {
+      const v = viewUntuk(g, g.putaran!.giliran);
+      hasil.push(v);
+      g = terapkan(g, pilihAksiBot(v, 'normal', rng));
+    } else if (g.status === 'susunAkhir') g = terapkan(g, pilihAksiBot(viewUntuk(g, g.putaran!.selesaiSusun.indexOf(false)), 'normal', rng));
+    else g = terapkan(g, { jenis: 'mulaiPutaran' });
+  }
+  return hasil;
+}
+
+/** Konteks gaya yang aktif (tidak libur) dari view sembarang permainan, untuk menguji parameter gaya. */
+function denganKonteks(level: LevelBot, gaya: GayaBot, syarat: (kg: KonteksGaya) => boolean = aktif): KonteksGaya {
+  for (const v of viewDariPermainanNormal(3, false, 2)) {
+    const kg = buatKonteksGaya(v, level, gaya, new Rng(1));
+    if (kg && syarat(kg)) return kg;
+  }
+  throw new Error(`konteks ${level}:${gaya} yang dicari tidak ketemu`);
+}
+
 /** Semua view giliran (putaran berjalan) dari satu permainan ber-seed yang dimainkan suhu standar. */
 function viewDariPermainan(n: number, duaDeck: boolean, seed: number, batas = 60): ViewPemain[] {
   let g: GameState = buatPermainan({ pemain: Array.from({ length: n }, (_, i) => `W ${i}`), seed, konfigurasi: { duaDeckUntukEmpat: duaDeck, batasPutaran: 2 } });
@@ -426,6 +451,30 @@ describe('alat gaya', () => {
     const bawaan = { ...kg.def, tahanTinggi: { ...t, sampai: undefined, bobotAs: undefined } };
     expect(biasBuang(dgn({ fase: 0.29, def: bawaan }), kartu('As love'), tangan)).toBe(-t.bobot);
     expect(biasBuang(dgn({ fase: 0.31, def: bawaan }), kartu('As love'), tangan)).toBe(0);
+  });
+
+  it('Jago bergaya (selain Kilat) menggeser batas gugup −1/0/+1 per putaran; Suhu dan Kilat tidak', () => {
+    // Lawan tinggal 3 kartu: Jago standar (batas 2) membuang, batas 3 menurunkan 5-6-7 Love.
+    const s: Skenario = {
+      rankJoker: 4,
+      giliran: 0,
+      tangan: [['5 love', '6 love', '7 love', '9 kriting', 'K waru', '2 wajik'], ['J love', '2 waru', 'As kriting'], ['8 wajik', 'Q wajik', '3 waru']],
+      buangan: [['6 waru', 2]],
+    };
+    const v = (syarat: (kg: KonteksGaya) => boolean, gaya: GayaBot = 'sabarLondo') => viewUntuk(denganMood(s, 'jago', gaya, syarat, sesudahDeck), 0);
+    const turun = (x: ViewPemain, par: typeof PARAM_JAGO) => aksiKuat(x, par, null)?.jenis;
+    expect(PARAM_JAGO.turunTanganLawan).toBe(2);
+    expect(turun(v(() => true), PARAM_JAGO)).toBe('buang');
+    for (const j of [-1, 0, 1] as const) {
+      const x = v((kg) => kg.jitterTurun === j);
+      const par = paramDenganGaya(PARAM_JAGO, 'jago', buatKonteksGaya(x, 'jago', 'sabarLondo', new Rng(1)));
+      expect(par.turunTanganLawan).toBe(2 + j);
+      expect(turun(x, par)).toBe(j === 1 ? 'turunkan' : 'buang');
+    }
+    // Kilat tidak memakai geseran, Suhu tidak punya jitter sama sekali.
+    const kilat = v((kg) => kg.jitterTurun === 1 && kg.kali === 0, 'kilat');
+    expect(paramDenganGaya(PARAM_JAGO, 'jago', buatKonteksGaya(kilat, 'jago', 'kilat', new Rng(1)))).toBe(PARAM_JAGO);
+    for (const gaya of GAYA_TETAP) expect(buatKonteksGaya(v(() => true), 'suhu', gaya, new Rng(1))!.jitterTurun).toBe(0);
   });
 
   it('pilihDekat: tanpa seri tidak memakai rng; seri dalam toleransi dipilih acak', () => {
@@ -834,6 +883,43 @@ describe('penahan', () => {
     expect(nl.bahaya(kartu('9 kriting'))).toBeGreaterThan(10);
     expect(new Penilai(v, v.putaran!, 0, PARAM_JAGO).bahaya(kartu('9 kriting'))).toBe(0);
   });
+
+  it('suhu penahan: bahaya dan suap pemain berikutnya lebih berat, pemain lain lebih ringan; libur = parameter asli', () => {
+    const g = denganMood(dasar, 'suhu', 'penahan', aktif, mungut);
+    const v = viewUntuk(g, 0);
+    const par = paramDenganGaya(PARAM_SUHU, 'suhu', buatKonteksGaya(v, 'suhu', 'penahan', new Rng(1)));
+    expect(par).toMatchObject({ bobotBerikut: 5, suap: 4, bobotLainnya: 0.7 });
+    // Selain tiga angka itu sama dengan Suhu (tanpa geseran gugup: itu hanya untuk Jago).
+    expect({ ...par, bobotBerikut: 1, suap: 3, bobotLainnya: 1 }).toEqual(PARAM_SUHU);
+    expect(new Penilai(v, v.putaran!, 0, par).bahaya(kartu('9 kriting'))).toBeGreaterThan(
+      4 * new Penilai(v, v.putaran!, 0, PARAM_SUHU).bahaya(kartu('9 kriting')),
+    );
+    const libur = denganMood(dasar, 'suhu', 'penahan', (kg) => kg.kali === 0, mungut);
+    expect(paramDenganGaya(PARAM_SUHU, 'suhu', buatKonteksGaya(viewUntuk(libur, 0), 'suhu', 'penahan', new Rng(1)))).toBe(PARAM_SUHU);
+  });
+
+  it('suhu penahan (parameternya saja): kalau buangannya beda dari Suhu standar, buangan standar lebih menyuapi pemain berikutnya', () => {
+    const par = paramDenganGaya(PARAM_SUHU, 'suhu', denganKonteks('suhu', 'penahan'));
+    // View dari permainan Normal (cepat); yang dibandingkan keputusan buang Suhu di view itu.
+    let dicek = 0;
+    let beda = 0;
+    for (const [n, dua] of [[3, false], [4, true], [4, false]] as const) {
+      for (const v of viewDariPermainanNormal(n, dua, 1)) {
+        if (v.putaran!.tahap !== 'main' || beda >= 5) continue;
+        const a = aksiKuat(v, PARAM_SUHU, null);
+        const b = aksiKuat(v, par, null);
+        if (a?.jenis !== 'buang' || b?.jenis !== 'buang') continue;
+        dicek++;
+        if (a.kartuId === b.kartuId) continue;
+        beda++;
+        const tangan = v.putaran!.tangan[v.saya!]!;
+        const hanyaBerikut = new Penilai(v, v.putaran!, v.saya!, { ...PARAM_SUHU, bobotLainnya: 0 });
+        const bahaya = (kartuId: string) => hanyaBerikut.bahaya(tangan.find((k) => k.id === kartuId)!);
+        expect(bahaya(a.kartuId), `view ke-${dicek}`).toBeGreaterThan(bahaya(b.kartuId));
+      }
+    }
+    expect(beda).toBe(5);
+  });
 });
 
 describe('kilat', () => {
@@ -852,6 +938,22 @@ describe('kilat', () => {
     );
     expect(aksi0(g, 'normal')).toEqual({ jenis: 'ambilDeck', pemain: 0 });
     expect(aksi0(g, 'normal', 'kilat')).toMatchObject({ jenis: 'mulung', jumlah: 2 });
+  });
+
+  it('normal: mulung di bawah ambang (−4) tetap ambil deck, dan putaran libur memakai ambang standar', () => {
+    const s: Skenario = {
+      rankJoker: 4,
+      giliran: 0,
+      tangan: [['6 love', '7 love', '2 waru', '9 kriting', 'J wajik'], ['J love', '6 kriting', '3 waru', 'As kriting'], ['8 wajik', 'Q wajik', '3 wajik', 'K love', '10 waru']],
+      buangan: [['5 love', 1], ['K waru', 2]],
+    };
+    expect(DEFINISI_GAYA.kilat!.ambangMulungNormal).toBe(-3);
+    // Mungut 5 Love (bawah) + 2 Kriting + K Waru untuk 5-6-7 Love: +5 − 2 − 10 + 3 kartu = −4.
+    const g = denganMood({ ...s, buangan: [['5 love', 1], ['2 kriting', 2], ['K waru', 1]] }, 'normal', 'kilat', aktif);
+    expect(aksi0(g, 'normal', 'kilat')).toEqual({ jenis: 'ambilDeck', pemain: 0 });
+    // Skor −2 (skenario di atas) di putaran yang gayanya libur: ambang 0, jadi ambil deck seperti standar.
+    const libur = denganMood(s, 'normal', 'kilat', (kg) => kg.kali === 0);
+    expect(aksi0(libur, 'normal', 'kilat')).toEqual({ jenis: 'ambilDeck', pemain: 0 });
   });
 
   it('jago dan suhu kadang mulung di view yang membuat level yang sama tanpa gaya ambil deck', () => {

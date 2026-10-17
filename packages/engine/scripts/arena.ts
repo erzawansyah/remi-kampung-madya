@@ -36,8 +36,8 @@
 // "deck habis" (per meja) dan "mulung" (per peserta: bagian keputusan di tahap ambil yang mulung,
 // bukan ambil deck) adalah rasio dengan CI 95% per seed (ringkasRasio di keterbacaan.ts).
 //
-// Baris "baca:" di bawah tiap peserta: metrik keterbacaan (L|iso, As|boleh, londoDini,
-// giliranLondo1, nyambung, disuap, entropiAwal; definisinya di keterbacaan.ts), angka dalam kurung
+// Baris "baca:" di bawah tiap peserta: metrik keterbacaan (L|iso, As|boleh, L|iso4-6, As|boleh4-6,
+// londoDini, giliranLondo1, nyambung, disuap, entropiAwal; definisinya di keterbacaan.ts), angka dalam kurung
 // = jumlah kejadian penyebutnya. Di akhir dicetak lagi gabungan semua meja per peserta: baris "baca:" dan
 // baris "main:" (laju mentung, pentungan rata-rata, laju mulung, deck habis, semuanya dengan CI 95%), dan
 // kalau satu level diuji dengan ≥ 2 gaya selain standar (--gaya), gabungan gaya-gaya itu ("suhu:*",

@@ -25,13 +25,19 @@
 // - Kekuatan: Suhu bergaya apa pun signifikan di atas Normal di keenam meja (rata-rata meja +55,6 sampai
 //   +59,9 per putaran, standar +58,4). Jago bergaya signifikan di atas Normal di 6/6 meja (+31,8 sampai
 //   +37,1, standar +41,6) dan di bawah Suhu standar. Normal bergaya −5,6 sampai +2,6 (batas ±13,9 = ⅓
-//   selisih Jago − Normal); per meja hanya Pemburu Normal di 4 pemain yang lewat (−8,1, batas ±5,3).
+//   selisih Jago − Normal); per meja Pemburu Normal di 4 pemain lewat (−8,1, batas ±5,3), Sabar Londo
+//   3 pemain (−10,1) dan Ngurutin 4 pemain (−5,2) tepat di batas. Normal bernama persona di meja 4
+//   pemain rata-rata sekitar −3,8 per putaran; di 2 pemain Sabar Londo −17,8 sampai Penahan +15,0.
 // - Kepala ke kepala [gaya, suhu, suhu, suhu]: suhu:gaya − suhu −2,7 sampai +3,6 (4 pemain) dan −3,5
 //   sampai +2,3 (4 pemain 2 deck); pembanding jago − suhu −6,9 dan −15,9. Pemburu −2,7 sedikit lewat
 //   batas −2,3 (⅓ dari −6,9).
 // - Keterbacaan di meja persona (--lawan=normal:acak), standar → gabungan gaya: Suhu L|iso 93,1 → 56,6%,
 //   As|boleh 63,7 → 31,2%, entropi buangan awal 1,41 → 1,65 bit; Jago 89,9 → 47,5% dan 72,4 → 32,7%;
-//   Normal 88,4 → 61,6% dan 82,4 → 50,0%.
+//   Normal 88,4 → 61,6% dan 82,4 → 50,0% (L|iso −30,3%, pas di batas 30%; lawan Normal standar −28,9%).
+//   Itu buangan ke-1..3. Buangan ke-4..6 gabungan semua meja juga turun 31–49%, TAPI di meja 4 pemain
+//   (1 deck) tahanTinggi sudah lewat (fase 0,45 ≈ 3 giliran), jadi di sana efeknya terutama penundaan:
+//   L|iso4-6 turun 9–19% dan As|boleh4-6 7–26% (Suhu 85,0 → 77,0% dan 45,5 → 42,2%). Penahan Normal
+//   malah membuang As lebih sering dari standar (As|boleh 82,4 → 93,3%).
 // - Metrik khas (Suhu, standar → gaya): londoDini 6,8 → 1,2%, nyambung 7,0 → 14,1%, disuap 6,18 → 5,98%,
 //   pentungan rata² 108 → 129 (laju mentung 0,87×), laju mulung Kilat 11,4 → 14,1%.
 // - Tidak tercapai: deck habis Kilat tidak turun di level mana pun (standar sudah nutup di setiap
@@ -107,7 +113,9 @@ export interface DefinisiGaya {
 
 /**
  * Menahan As (bobot 16) dan Londo (bobot 10) selama 45% awal deck di sebagian putaran: sumber utama
- * "tidak terbaca" (Londo/As tidak lagi selalu dibuang di awal). Dengan bobot 10 untuk As juga, As
+ * "tidak terbaca" (Londo/As tidak lagi selalu dibuang di awal). Batas 45% tetap (tidak diacak), jadi di
+ * meja 4 pemain 1 deck ini terutama menunda buangan As/Londo 1–3 giliran (lihat kepala berkas dan
+ * docs/keputusan-pemilik.md #47, "Buangan ke-4..6"). Dengan bobot 10 untuk As juga, As
  * masih sering dibuang (As|boleh hanya turun ±25% di meja persona). Penahan tidak memakainya, karena
  * menahan kartu tinggi berarti membuang kartu angka yang gampang dipungut pemain berikutnya.
  */

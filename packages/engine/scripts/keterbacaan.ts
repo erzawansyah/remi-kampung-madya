@@ -8,6 +8,9 @@
 //   L|iso         P(membuang Londo terpencil | memegangnya, buangan ke-1..3). Terpencil = tidak ada
 //                 Londo lain sebunga (beda angka) di tangan. Joker hidup bukan Londo dan bukan pasangan.
 //   As|boleh      P(membuang As | memegang As yang sah dibuang, buangan ke-1..3). As joker hidup tidak dihitung.
+//   L|iso4-6, As|boleh4-6
+//                 Sama, untuk buangan ke-4..6. Pembanding supaya ketahuan apakah Londo/As cuma ditunda
+//                 beberapa giliran (gaya menahan kartu tinggi hanya di awal deck, lihat tahanTinggi di gaya.ts).
 //   londoDini     Bagian buangan Londo yang terjadi sebelum ada pemain LAIN membuang Londo di putaran itu.
 //   giliranLondo1 Rata-rata nomor buangan sendiri saat Londo pertama dibuang (putaran tanpa buang Londo dilewati).
 //   nyambung      P(buangan menyambung buangan pemain sebelumnya yang masih di atas | ambil dari deck, meja ≥ 3):
@@ -119,6 +122,11 @@ export interface StatBaca {
   lIsoB: number;
   asA: number;
   asB: number;
+  /** L|iso dan As|boleh untuk buangan ke-4..6. */
+  lIso2A: number;
+  lIso2B: number;
+  as2A: number;
+  as2B: number;
   diniA: number;
   diniB: number;
   londo1Jumlah: number;
@@ -141,6 +149,10 @@ export function statBacaKosong(): StatBaca {
     lIsoB: 0,
     asA: 0,
     asB: 0,
+    lIso2A: 0,
+    lIso2B: 0,
+    as2A: 0,
+    as2B: 0,
     diniA: 0,
     diniB: 0,
     londo1Jumlah: 0,
@@ -207,15 +219,29 @@ export class PencatatBaca {
     const ke = ++this.keBuang[x];
     const kelas = kelasBuang(kartu, ctx);
 
-    if (ke <= 3) {
-      s.kelasAwal[KELAS_BUANG.indexOf(kelas)]++;
+    if (ke <= 6) {
+      // Buangan ke-1..3 masuk lIso/as (dan kelasAwal), ke-4..6 masuk lIso2/as2.
+      const awal = ke <= 3;
+      if (awal) s.kelasAwal[KELAS_BUANG.indexOf(kelas)]++;
       if (tangan.some((k) => isLondoTerpencil(k, tangan, ctx))) {
-        s.lIsoB++;
-        if (isLondoTerpencil(kartu, tangan, ctx)) s.lIsoA++;
+        const kena = isLondoTerpencil(kartu, tangan, ctx) ? 1 : 0;
+        if (awal) {
+          s.lIsoB++;
+          s.lIsoA += kena;
+        } else {
+          s.lIso2B++;
+          s.lIso2A += kena;
+        }
       }
       if (tangan.some((k) => k.rank === AS && !isJokerHidup(k, ctx) && sahDibuang(g, x, k, ctx))) {
-        s.asB++;
-        if (kelas === 'as') s.asA++;
+        const kena = kelas === 'as' ? 1 : 0;
+        if (awal) {
+          s.asB++;
+          s.asA += kena;
+        } else {
+          s.as2B++;
+          s.as2A += kena;
+        }
       }
     }
 
@@ -304,6 +330,8 @@ export function barisBaca(sampel: readonly StatBaca[], baca: boolean): string {
     );
   const lIso = rasio('lIsoA', 'lIsoB');
   const as = rasio('asA', 'asB');
+  const lIso2 = rasio('lIso2A', 'lIso2B');
+  const as2 = rasio('as2A', 'as2B');
   const dini = rasio('diniA', 'diniB');
   const londo1 = rasio('londo1Jumlah', 'londo1N');
   const sambung = rasio('sambungA', 'sambungB');
@@ -312,6 +340,8 @@ export function barisBaca(sampel: readonly StatBaca[], baca: boolean): string {
   const bagian = [
     `L|iso ${persen(lIso)} (${lIso.n})`,
     `As|boleh ${persen(as)} (${as.n})`,
+    `L|iso4-6 ${persen(lIso2)} (${lIso2.n})`,
+    `As|boleh4-6 ${persen(as2)} (${as2.n})`,
     `londoDini ${persen(dini)} (${dini.n})`,
     `giliranLondo1 ${angka(londo1, 2)} (${londo1.n})`,
     `nyambung ${persen(sambung)} (${sambung.n})`,

@@ -108,13 +108,16 @@ describe('rapikanBatasSkor: isian UI dan simpanan', () => {
 describe('permainan penuh dengan batas skor pilihan host', () => {
   // Seed tetap: 250/−120 selesai di putaran pertama (pentungan joker 250), 600/−400 butuh banyak putaran
   // (seed meja 5: 9 putaran; seed bawaan jadi 34 putaran sejak joker beda dari putaran sebelumnya, #40).
+  // Warga kedainya sengaja bernama di luar daftar persona, jadi main dengan gaya standar: test ini
+  // menguji batas skor, bukan gaya (#47). Dengan nama persona seed meja 5 jadi ±28 putaran (±3,5 dtk).
   it.each([
     [250, -120, 1, undefined],
     [600, -400, 5, 5],
-  ])('host atur %j / %j di lobi: permainan selesai karena batas skor, tidak lebih awal', (atas, bawah, minPutaran, seedMeja) => {
+  ])('host atur %j / %j di lobi: permainan selesai karena batas skor, tidak lebih awal', { timeout: 30_000 }, (atas, bawah, minPutaran, seedMeja) => {
     let ringkasan: RingkasanAkhir | null = null;
     const galat: unknown[] = [];
     const ctx = siapkan({
+      namaLawan: ['Warga A', 'Warga B'],
       saatSelesai: (r) => (ringkasan = r),
       saatGalat: (_k, e) => galat.push(e),
       ...(seedMeja === undefined ? {} : { buatSeed: () => seedMeja }),

@@ -276,6 +276,22 @@ describe('PencatatBaca', () => {
     expect(punyaJadi.stat[0].kelasAwal).toEqual([0, 0, 0, 1, 0]);
   });
 
+  it('buangan ke-4..6 masuk L|iso4-6 dan As|boleh4-6, bukan L|iso/As|boleh; ke-7 tidak dihitung', () => {
+    const { stat, p } = buatPencatat(3);
+    const g = meja(['J love', 'As love', '7 kriting', '9 kriting'], { kartuJadi0: true });
+    const s = stat[0];
+    for (let i = 0; i < 3; i++) p.sebelumBuang(g, aksiBuang(0, '7 kriting'));
+    expect([s.lIsoA, s.lIsoB, s.asA, s.asB]).toEqual([0, 3, 0, 3]);
+    p.sebelumBuang(g, aksiBuang(0, 'J love')); // ke-4
+    p.sebelumBuang(g, aksiBuang(0, 'As love')); // ke-5
+    expect([s.lIso2A, s.lIso2B, s.as2A, s.as2B]).toEqual([1, 2, 1, 2]);
+    p.sebelumBuang(g, aksiBuang(0, '9 kriting')); // ke-6
+    p.sebelumBuang(g, aksiBuang(0, 'J love')); // ke-7: di luar kedua jendela
+    expect([s.lIso2A, s.lIso2B, s.as2A, s.as2B]).toEqual([1, 3, 1, 3]);
+    expect([s.lIsoA, s.lIsoB, s.asA, s.asB]).toEqual([0, 3, 0, 3]);
+    expect(s.kelasAwal.reduce((a, b) => a + b, 0)).toBe(3);
+  });
+
   it('Londo sesudah pemain lain membuang Londo tidak dihitung dini; nomor buangan bertambah per pemain', () => {
     const { stat, p } = buatPencatat(3);
     const g = meja(['J love', 'K waru', 'Q waru', '7 kriting']);
@@ -327,12 +343,18 @@ describe('PencatatBaca', () => {
       perPutaranPemain.set(kunci, (perPutaranPemain.get(kunci) ?? 0) + 1);
     }
     for (let i = 0; i < n; i++) {
-      const awal = [...perPutaranPemain].filter(([k]) => k.endsWith(`/${i}`)).reduce((s, [, x]) => s + Math.min(3, x), 0);
+      const milik = [...perPutaranPemain].filter(([k]) => k.endsWith(`/${i}`));
+      const awal = milik.reduce((s, [, x]) => s + Math.min(3, x), 0);
+      const lanjut = milik.reduce((s, [, x]) => s + Math.max(0, Math.min(6, x) - 3), 0);
       const s = stat[i];
       expect(s.kelasAwal.reduce((a, b) => a + b, 0)).toBe(awal);
+      expect(s.lIso2B).toBeLessThanOrEqual(lanjut);
+      expect(s.as2B).toBeLessThanOrEqual(lanjut);
       for (const [a, b] of [
         [s.lIsoA, s.lIsoB],
         [s.asA, s.asB],
+        [s.lIso2A, s.lIso2B],
+        [s.as2A, s.as2B],
         [s.diniA, s.diniB],
         [s.sambungA, s.sambungB],
         [s.suapA, s.suapB],
