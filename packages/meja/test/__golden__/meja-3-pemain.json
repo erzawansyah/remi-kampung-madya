@@ -12,73 +12,70 @@
     "seedManusia": 9,
     "batasPutaran": 2
   },
-  "jumlahPesan": 244,
+  "jumlahPesan": 323,
   "jumlahPerJenis": {
-    "emote": 2,
+    "emote": 1,
     "masuk": 1,
-    "meja": 122,
-    "view": 119
+    "meja": 162,
+    "view": 159
   },
   "emote": [
-    "1:Suwun, Bos!",
-    "2:Suwun, Bos!"
+    "1:Suwun, Bos!"
   ],
-  "waktuAkhir": 1007600,
+  "waktuAkhir": 1011000,
   "putaran": [
     {
       "nomor": 1,
-      "cara": "mentung",
-      "pementung": 2,
-      "kepentung": [
-        0
-      ],
+      "cara": "deckHabis",
+      "pementung": null,
+      "kepentung": [],
       "total": [
-        -190,
-        0,
-        170
+        25,
+        35,
+        10
       ]
     },
     {
       "nomor": 2,
       "cara": "mentung",
-      "pementung": 0,
+      "pementung": 1,
       "kepentung": [
-        2
+        0
       ],
       "total": [
-        80,
-        -50,
-        -100
+        -225,
+        280,
+        10
       ]
     }
   ],
   "skorAkhir": [
-    -110,
-    -50,
-    70
+    -200,
+    315,
+    20
   ],
   "ringkasanAkhir": {
     "kode": "GOLD1",
-    "selesaiPada": 1007600,
+    "selesaiPada": 1010300,
     "alasan": "batasPutaran",
     "jumlahPutaran": 2,
     "jumlahDeck": 1,
     "modeKaldu": false,
     "pemain": [
       {
-        "kursi": 2,
-        "nama": "Cak Kopag",
-        "bot": true,
-        "skor": 70,
-        "peringkat": 1,
-        "mentung": 1,
-        "kepentung": 1
-      },
-      {
         "kursi": 1,
         "nama": "Kipas Dua",
         "bot": true,
-        "skor": -50,
+        "skor": 315,
+        "peringkat": 1,
+        "mentung": 1,
+        "kepentung": 0
+      },
+      {
+        "kursi": 2,
+        "nama": "Cak Kopag",
+        "bot": true,
+        "skor": 20,
         "peringkat": 2,
         "mentung": 0,
         "kepentung": 0
@@ -87,17 +84,17 @@
         "kursi": 0,
         "nama": "Budi",
         "bot": false,
-        "skor": -110,
+        "skor": -200,
         "peringkat": 3,
-        "mentung": 1,
+        "mentung": 0,
         "kepentung": 1
       }
     ]
   },
   "hash": {
-    "semuaPesan": "efe984dd36088f3bbd74a6fafafe4093d827955c09d1b1aad243b5fef226ef37",
-    "pesanView": "88862b601e54a6d32bc82cc1fd2a0d4448644561b40b32e3ee6b35f649161096",
-    "pesanMeja": "870d4ed200a2da807457672af0cca7c9b3ae343b32dde3b14eebdae8b817b18c",
-    "dataMejaAkhir": "0421d30f0e86d96f0f75bab77f9062f33ff2a77939e50ef611a4a2c00f998eb9"
+    "semuaPesan": "d6edc0d73d48f7cc3b933be3e588d9fe16775017c091ac99b773a86839b0d922",
+    "pesanView": "abf6760a62e6cdebe2bebe3266ea31855c343e7fe82af0785ad99fb87174505f",
+    "pesanMeja": "a257652985be59640cc8ce7410f0d549bf7bbe9367c9863815a38dff07e73afc",
+    "dataMejaAkhir": "d2ed418b84dba1aa7ba7dfbf401a1b1e08409ed38474ad298549df4c68c8bf6f"
   }
 }

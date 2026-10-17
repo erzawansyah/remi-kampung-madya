@@ -1,10 +1,11 @@
-// Simulasi mode kaldu (#42, #43): warga kedai semua level (termasuk jago/suhu) bermain dengan batas
-// putaran 2. Setiap permainan harus berakhir karena putaran kaldu ditutup mentung, setiap putaran mulai
+// Simulasi mode kaldu (#42, #43): warga kedai semua level (termasuk jago/suhu) dan semua gaya main
+// (#47) bermain dengan batas putaran 2. Setiap permainan harus berakhir karena putaran kaldu ditutup mentung, setiap putaran mulai
 // batas itu putaran kaldu, batas skor tidak pernah dipakai, dan tidak ada aksi ditolak atau state ilegal.
 
 import { describe, expect, it } from 'vitest';
 import {
   buatPermainan,
+  DAFTAR_GAYA_BOT,
   DAFTAR_LEVEL_BOT,
   periksaInvarian,
   pilihAksiBot,
@@ -13,6 +14,7 @@ import {
   viewUntuk,
   type Aksi,
   type GameState,
+  type GayaBot,
   type LevelBot,
 } from '../src/index.js';
 
@@ -20,7 +22,7 @@ const BATAS_PUTARAN = 2;
 /** Pengaman: peluang putaran kaldu habis tanpa mentung sebanyak ini berturut-turut praktis nol. */
 const BATAS_AMAN_PUTARAN = 40;
 
-function mainkanKaldu(n: number, seed: number, level: LevelBot[]) {
+function mainkanKaldu(n: number, seed: number, level: LevelBot[], gaya: GayaBot[]) {
   let g: GameState = buatPermainan({
     pemain: Array.from({ length: n }, (_, i) => `Warga ${i + 1}`),
     seed,
@@ -34,11 +36,11 @@ function mainkanKaldu(n: number, seed: number, level: LevelBot[]) {
     let aksi: Aksi;
     if (g.status === 'putaranBerjalan') {
       const giliran = g.putaran!.giliran;
-      aksi = pilihAksiBot(viewUntuk(g, giliran), level[giliran], rng);
+      aksi = pilihAksiBot(viewUntuk(g, giliran), level[giliran], rng, gaya[giliran]);
     } else if (g.status === 'susunAkhir') {
       const belum = g.putaran!.selesaiSusun.map((x, i) => (x ? -1 : i)).filter((i) => i >= 0);
       const siapa = rng.pick(belum);
-      aksi = pilihAksiBot(viewUntuk(g, siapa), level[siapa], rng);
+      aksi = pilihAksiBot(viewUntuk(g, siapa), level[siapa], rng, gaya[siapa]);
     } else aksi = { jenis: 'mulaiPutaran' };
     const h = terapkanAksi(g, aksi);
     if (!h.ok) throw new Error(`aksi ditolak (seed ${seed}): ${JSON.stringify(aksi)} → ${h.error.pesan}`);
@@ -71,12 +73,14 @@ function mainkanKaldu(n: number, seed: number, level: LevelBot[]) {
 
 describe('simulasi mode kaldu: setiap permainan berakhir di putaran kaldu yang ditutup mentung', () => {
   for (const n of [3, 4, 6]) {
-    it(`${n} pemain, 10 seed, semua level`, async () => {
+    it(`${n} pemain, 10 seed, semua level dan gaya`, async () => {
       let lanjut = 0;
       let putaran = 0;
       for (let seed = 1; seed <= 10; seed++) {
         const level: LevelBot[] = Array.from({ length: n }, (_, i) => DAFTAR_LEVEL_BOT[(seed + i) % DAFTAR_LEVEL_BOT.length]);
-        const h = mainkanKaldu(n, seed, level);
+        // Rumus ini memunculkan ketujuh gaya di 10 seed (simulasi.ts memakai rumus lain untuk 60 seed).
+        const gaya: GayaBot[] = Array.from({ length: n }, (_, i) => DAFTAR_GAYA_BOT[(seed + 3 * i) % DAFTAR_GAYA_BOT.length]);
+        const h = mainkanKaldu(n, seed, level, gaya);
         lanjut += h.kalduLanjut;
         putaran += h.putaran;
         // Beri kesempatan worker memproses pesan dari Vitest.

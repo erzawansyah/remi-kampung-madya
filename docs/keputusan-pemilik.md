@@ -1,6 +1,6 @@
 # Keputusan pemilik: rincian butir #25–#47
 
-Dokumen ini merinci baris **#25–#47** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #40–#46 sudah diterapkan (#42–#43 di engine, meja, server, warga kedai, dan aplikasi), sedangkan #47 sudah diputuskan tapi baru diterapkan di rilis berikutnya (ditandai **Diputuskan, diterapkan di rilis berikutnya**; perilaku warga kedai di permainan untuk butir itu belum berubah).
+Dokumen ini merinci baris **#25–#47** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #40–#47 semuanya sudah diterapkan (#42–#43 di engine, meja, server, warga kedai, dan aplikasi; #47 di engine dan meja, tanpa tampilan apa pun di aplikasi).
 
 **Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026, #40–#47 pada 16 Okt 2026. Baris #20–#23 README (susun akhir) juga sudah diputuskan 16 Okt 2026: sesuai bawaan yang sudah berjalan. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. Yang masih perlu dikonfirmasi pemilik hanya dua tafsiran: #43 (mode kaldu tanpa batas skor) dan kelompok "berubah-ubah" di #47. Catatan kecil dari 14 Okt 2026 (bunyi dramatis, gaya Jago/Suhu) sudah ditanggapi, lihat [Catatan lain](#catatan-lain-belum-masuk-tabel).
 
@@ -39,7 +39,7 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 | [44](#k44) | Batas skor kaku ±500 | `packages/meja` (validasi) + client | Diputuskan: angka bebas kelipatan 10 |
 | [45](#k45) | Leaderboard terasa tidak adil | `packages/meja` + `apps/server` + client | Diputuskan: banyak urutan, bawaan rata-rata per permainan |
 | [46](#k46) | Banyak teman tidak tahu game ini bisa dipasang | client (beranda) | Diputuskan: tombol pasang melayang hanya di beranda, "Nanti saja" 3 hari |
-| [47](#k47) | Warga kedai gampang dibaca, bahkan Suhu | `packages/engine` (bot) + `packages/meja` | Diputuskan (kelompok berubah-ubah perlu konfirmasi), diterapkan di rilis berikutnya |
+| [47](#k47) | Warga kedai gampang dibaca, bahkan Suhu | `packages/engine` (bot) + `packages/meja` | Diputuskan (kelompok berubah-ubah perlu konfirmasi), diterapkan |
 
 ---
 
@@ -476,11 +476,11 @@ Tanpa anulir, pemakaian RNG dan urutan deck sama persis dengan sebelum aturan in
 
 ## 47. Gaya main warga kedai per persona
 
-**Diputuskan, diterapkan di rilis berikutnya.** Lapisan gaya di engine (`packages/engine/src/bot/gaya.ts`) sudah ada dan angkanya sudah disetel di arena (17 Okt 2026, lihat [hasil penyetelan](#k47-arena)), tapi belum disambung ke meja: warga kedai di permainan masih bermain seperti sebelumnya.
+**Diputuskan, diterapkan (17 Okt 2026, belum dirilis).** Lapisan gaya di engine (`packages/engine/src/bot/gaya.ts`) angkanya disetel di arena (lihat [hasil penyetelan](#k47-arena)), dan meja memakai gaya sesuai nama warga kedai (`packages/meja/src/gayaWarga.ts`, lihat [penerapan di meja](#k47-meja)).
 
 **Keputusan pemilik (16 Okt 2026):** warga kedai gampang dibaca, bahkan level Suhu (Londo dan As selalu dibuang di awal). Setiap persona (nama warga kedai) mendapat **gaya main** sendiri, terpisah dari level. Gaya **tidak ditampilkan** ke pemain: tidak ada di UI, Bantuan, protokol, maupun CHANGELOG bagian pemain (cukup ditulis umum, tanpa nama). Pemetaan nama ke gaya di bawah disetujui, ditambah **satu kelompok yang gayanya berubah-ubah** tiap putaran. "Ngurutin" = membuang kartu yang menyambung buangan pemain sebelumnya.
 
-**Pemetaan yang disetujui** (nanti di `packages/meja/src/gayaWarga.ts`; jangan ditampilkan ke pemain):
+**Pemetaan yang disetujui** (`GAYA_WARGA` di `packages/meja/src/gayaWarga.ts`; jangan ditampilkan ke pemain). Kolom "Inti perilaku" adalah rencana awal; yang benar-benar dipakai setelah penyetelan ada di [hasil penyetelan](#k47-arena) (misalnya Kilat: yang terukur mulung lebih rakus, bukan nutup lebih cepat):
 
 | Gaya | Inti perilaku (hanya dari info yang terlihat di view) | Persona |
 |---|---|---|
@@ -493,9 +493,9 @@ Tanpa anulir, pemakaian RNG dan urutan deck sama persis dengan sebelum aturan in
 
 **Perlu konfirmasi pemilik:** cara kerja kelompok "berubah-ubah" (berganti tiap putaran di antara lima gaya) adalah tafsiran pengembang.
 
-**Rencana penerapan:** `GayaBot` dan `DEFINISI_GAYA` di `packages/engine/src/bot/gaya.ts` (gaya `standar` = perilaku sekarang, tanpa rng); `pilihAksiBot(view, level, rng, gaya = 'standar')`; "mood" per putaran dan pilihan acak di antara nilai yang hampir seri supaya satu persona pun tidak terbaca; Mudah mengabaikan gaya (latihan tidak berubah), susun akhir tanpa gaya. Di meja, `gayaKursi(k)`: persona memakai gayanya, nama lain ("Warga N"), kursi yang ditinggal manusia (`Kursi.keluar`), dan giliran manusia yang diambil alih memakai `standar`. Diukur di arena (`packages/engine/scripts/arena.ts`) dengan syarat: Suhu bergaya apa pun tetap signifikan di atas Normal, tiap gaya terukur beda di metrik khasnya, peluang Londo/As dibuang di awal turun ≥ 30 %, dan p99 lama mikir ≤ 1,15× level yang sama.
+**Rencana penerapan (sudah dikerjakan):** `GayaBot` dan `DEFINISI_GAYA` di `packages/engine/src/bot/gaya.ts` (gaya `standar` = perilaku sekarang, tanpa rng); `pilihAksiBot(view, level, rng, gaya = 'standar')`; "mood" per putaran dan pilihan acak di antara nilai yang hampir seri supaya satu persona pun tidak terbaca; Mudah mengabaikan gaya (latihan tidak berubah), susun akhir tanpa gaya. Di meja, `gayaKursi(k)`: persona memakai gayanya, nama lain ("Warga N"), kursi yang ditinggal manusia (`Kursi.keluar`), dan giliran manusia yang diambil alih memakai `standar`. Diukur di arena (`packages/engine/scripts/arena.ts`) dengan syarat: Suhu bergaya apa pun tetap signifikan di atas Normal, tiap gaya terukur beda di metrik khasnya, peluang Londo/As dibuang di awal turun ≥ 30 %, dan p99 lama mikir ≤ 1,15× level yang sama.
 
-**Test yang direncanakan:** setiap nama di `NAMA_LAWAN_BAWAAN` wajib punya gaya; golden engine lolos tanpa `-u`; golden meja bergeser hanya karena gaya (dibuktikan dengan `gayaKursi` dipaksa `standar`), lalu ditinjau dan dicatat; simulasi ikut memutar gaya tanpa aksi yang ditolak.
+**Test:** `packages/engine/test/bot-gaya.test.ts` (standar sama persis dengan perilaku lama, mudah dan susun akhir tanpa gaya, kemurnian, permainan penuh tiap gaya, perilaku khas tiap gaya); `packages/meja/test/gaya.test.ts` (setiap nama di `NAMA_LAWAN_BAWAAN` punya gaya, kelompok sesuai tabel di atas, gaya yang diteruskan `langkahBot`, tanpa kebocoran ke pesan); simulasi `sim-*.test.ts` memutar ketujuh gaya sehingga setiap pasangan level × gaya muncul di setiap ukuran meja, tanpa aksi yang ditolak. Golden engine tidak bergeser; golden meja bergeser hanya karena gaya (dibuktikan dengan `gayaKursi` dipaksa `standar`, dicatat di [docs/baseline-gameplay.md](baseline-gameplay.md)).
 
 <a id="k47-arena"></a>
 
@@ -613,20 +613,30 @@ Penahan Suhu ditulis dua desimal dari jalan arena penyetelan yang mencetak disua
 
 **Tuas yang dicoba lalu dibuang** (tidak terbukti di arena): kesiapan mentung bernilai tetap untuk Kilat (pentungan rata-rata turun ke ±81 tanpa menaikkan laju mentung), bobot mentung × 2 dan potensi lebih kecil untuk Kilat (laju mentung malah turun), menurunkan kartu jadi lebih awal untuk Kilat Jago/Suhu (laju mulung turun 14,6 → 13,0%), menahan kartu yang sekelompok dengan buangan teratas untuk Penahan (nyambung turun ke ±2%, disuap tidak berubah), dan `tahanBerikut` versi Jago/Suhu (disuap tidak berubah).
 
+<a id="k47-meja"></a>
+
+### Penerapan di meja (17 Okt 2026)
+
+- **Gaya mengikuti nama, satu arah.** Nama warga kedai tetap dipilih tanpa melihat level atau gaya (urutan acak `NAMA_LAWAN_BAWAAN`, latihan urutan tetap); gayanya dibaca dari nama itu (`gayaUntukNama()`, tanpa beda huruf besar/kecil dan spasi tepi). Level tetap pilihan host/pemain dan tetap menentukan kekuatan.
+- **`gayaKursi(k)`:** kursi warga kedai bernama persona memakai gayanya. Nama di luar daftar ("Warga N", nama orang), kursi yang ditinggal pemainnya di tengah permainan (`Kursi.keluar`, namanya nama orang itu), dan giliran orang yang diambil alih (terputus atau kehabisan waktu, dimainkan level Normal) memakai `standar`. Sesudah Main lagi tanda `keluar` hilang; kalau warga kedai ganti nama di lobi (namanya dipakai orang yang baru masuk), ia ikut gaya nama barunya.
+- **`Meja.langkahBot`:** gaya hanya dikirim ke strategi level kursi. Cadangan galat #38 (strategi mudah, lalu aksi aman) tanpa gaya. Level Mudah mengabaikan gaya di engine, jadi latihan tidak berubah.
+- **Tersembunyi = tidak pernah ditampilkan.** Gaya tidak masuk `InfoMeja` (`info()` menyalin jenis, nama, terhubung, level saja), `DataMeja`, view, maupun pesan lain, dan tidak disebut di UI, Bantuan, atau CHANGELOG bagian pemain. Tabel `GAYA_WARGA` sendiri ikut kode sumber dan bundel offline di HP, jadi orang yang membaca kode bisa melihatnya; yang dijaga adalah tampilan ke pemain.
+- **Nama baru** di `NAMA_LAWAN_BAWAAN` tetap ditambahkan di belakang dan wajib diberi gaya di `GAYA_WARGA` (`gaya.test.ts` gagal kalau lupa). Kalau pemilik mau memindah nama ke gaya lain, cukup ubah tabel itu; golden meja ikut bergeser kalau yang dipindah Kipas Dua atau Cak Kopag (dua kursi Normal di skenario golden).
+
 ---
 
 ## Catatan lain (belum masuk tabel)
 
 Temuan audit yang lebih kecil, dicatat supaya tidak hilang:
 
-- **Pemenang dan seri belum didefinisikan di README.** Engine tidak punya konsep pemenang. Klasemen dibuat `buatRingkasanAkhir()` (`packages/meja/src/meja.ts:886`, per 16 Okt 2026): urut skor tertinggi, skor sama berbagi peringkat. UI mengikuti ini ("X juara (bareng)").
+- **Pemenang dan seri belum didefinisikan di README.** Engine tidak punya konsep pemenang. Klasemen dibuat `buatRingkasanAkhir()` (`packages/meja/src/meja.ts:976`, per 17 Okt 2026): urut skor tertinggi, skor sama berbagi peringkat. UI mengikuti ini ("X juara (bareng)").
 - **Prioritas batas skor vs batas putaran:** kalau keduanya tercapai di putaran yang sama, alasan selesai = batas skor (urutan `if` di `selesaikanPutaran`, `packages/engine/src/mesin.ts`; di mode kaldu keduanya tidak dipakai, #42/#43). Batasnya inklusif (`>=`/`<=`). Belum tertulis di README.
 - **Urutan bagi kartu:** animasi bagi sudah disamakan dengan engine (mulai dari pengocok, nomor kursi naik, tanpa melihat arah; `apps/client/src/game/MejaScene.ts`, `bagiKartu`). Kalau di Kedai Madya urutannya lain, itu keputusan pemilik dan harus diubah di engine dulu.
 - **Simpanan offline berisi state lengkap** (deck, tangan bot) di `localStorage` (`remi.mejaOffline`). Hanya mode lawan bot, tapi bisa diintip lewat devtools.
 
 **Ditanggapi pemilik (16 Okt 2026).** Dua hal dari 14 Okt 2026 yang dulu dikerjakan sesuai saran pengembang sekarang sudah disetujui. Jangan diubah tanpa izin pemilik:
 - **Bunyi dramatis dan bunyi khusus pentung joker: sudah oke** ("kayaknya sudah oke"). Pentungan joker (250) memutar bunyi `mentungJoker` yang lebih besar, baru sesudah kartunya terbuka di meja. Bunyi `tegang` sebelum dibuka sama untuk pentungan apa pun, jadi tidak membocorkan isinya (dijaga `apps/client/test/suaraDramatis.test.ts`), dan judul panel PENTUNG JOKER! sudah begitu sejak 0.2.0. Tempatnya: `apps/client/src/efek/pemutar.ts` (peristiwa `mentung`).
-- **Gaya warga kedai Jago dan Suhu yang menahan kartu jadi di tangan: disetujui, tetap.** Sah menurut aturan, karena semua pemain boleh menurunkan kartu jadi di susun akhir (#19, #24), dan di arena jauh lebih kuat daripada langsung menurunkan (selalu menurunkan rugi sekitar 17–67 poin per putaran). Parameternya di `packages/engine/src/bot/strategi.ts`. Gaya main per persona (#47) nanti ditambahkan di atas gaya ini.
+- **Gaya warga kedai Jago dan Suhu yang menahan kartu jadi di tangan: disetujui, tetap.** Sah menurut aturan, karena semua pemain boleh menurunkan kartu jadi di susun akhir (#19, #24), dan di arena jauh lebih kuat daripada langsung menurunkan (selalu menurunkan rugi sekitar 17–67 poin per putaran). Parameternya di `packages/engine/src/bot/strategi.ts`. Gaya main per persona (#47) sudah ditambahkan di atas gaya ini.
 - **Aturan Terbuka #20–#23 (susun akhir): disetujui sesuai bawaan yang sudah berjalan** ("sesuaikan aja"): semua pemain ikut susun akhir termasuk yang mengambil kartu terakhir (#20), boleh menurunkan sampai tangan habis tanpa dihitung mentung (#21), serentak (#22), batas waktu sama dengan batas giliran lalu warga kedai menurunkan yang bisa dijadikan dan selesai (#23). Tidak ada kode yang berubah.
 
 ## Identitas Kedai Madya (sudah diputuskan, Okt 2026)

@@ -13,28 +13,31 @@
     "seedManusia": 10,
     "batasPutaran": 2
   },
-  "jumlahPesan": 454,
+  "jumlahPesan": 373,
   "jumlahPerJenis": {
-    "emote": 1,
+    "emote": 2,
     "masuk": 1,
-    "meja": 228,
-    "view": 224
+    "meja": 187,
+    "view": 183
   },
   "emote": [
-    "3:😎"
+    "3:😎",
+    "2:🔥"
   ],
-  "waktuAkhir": 1016500,
+  "waktuAkhir": 1014228,
   "putaran": [
     {
       "nomor": 1,
-      "cara": "deckHabis",
-      "pementung": null,
-      "kepentung": [],
+      "cara": "mentung",
+      "pementung": 0,
+      "kepentung": [
+        2
+      ],
       "total": [
-        50,
-        25,
-        30,
-        -40
+        165,
+        75,
+        -55,
+        -30
       ]
     },
     {
@@ -45,22 +48,22 @@
         0
       ],
       "total": [
-        -130,
-        65,
-        185,
-        20
+        -65,
+        30,
+        165,
+        -20
       ]
     }
   ],
   "skorAkhir": [
-    -80,
-    90,
-    215,
-    -20
+    100,
+    105,
+    110,
+    -50
   ],
   "ringkasanAkhir": {
     "kode": "GOLD1",
-    "selesaiPada": 1016500,
+    "selesaiPada": 1013600,
     "alasan": "batasPutaran",
     "jumlahPutaran": 2,
     "jumlahDeck": 2,
@@ -70,26 +73,17 @@
         "kursi": 2,
         "nama": "Cak Kopag",
         "bot": true,
-        "skor": 215,
+        "skor": 110,
         "peringkat": 1,
         "mentung": 1,
-        "kepentung": 0
+        "kepentung": 1
       },
       {
         "kursi": 1,
         "nama": "Kipas Dua",
         "bot": true,
-        "skor": 90,
+        "skor": 105,
         "peringkat": 2,
-        "mentung": 0,
-        "kepentung": 0
-      },
-      {
-        "kursi": 3,
-        "nama": "Mbak Teras",
-        "bot": true,
-        "skor": -20,
-        "peringkat": 3,
         "mentung": 0,
         "kepentung": 0
       },
@@ -97,17 +91,26 @@
         "kursi": 0,
         "nama": "Budi",
         "bot": false,
-        "skor": -80,
+        "skor": 100,
+        "peringkat": 3,
+        "mentung": 1,
+        "kepentung": 1
+      },
+      {
+        "kursi": 3,
+        "nama": "Mbak Teras",
+        "bot": true,
+        "skor": -50,
         "peringkat": 4,
         "mentung": 0,
-        "kepentung": 1
+        "kepentung": 0
       }
     ]
   },
   "hash": {
-    "semuaPesan": "d50a9028c06812abb2a93af95a4e04200ab5dfccb13776233dc46051f4a892ba",
-    "pesanView": "f682a6d0ed6c9e478eb38f86c30baac09d10c67ae9a60db6d2ae54ca0e6afa39",
-    "pesanMeja": "ee2a2b85f1e41d6c394fc1ec33e925b3464c36441e9c4643606c831f07ec939f",
-    "dataMejaAkhir": "794bf7e7be79f2c5b49508076ce39d4ae85d346dd7228172b3ca76769073bbcc"
+    "semuaPesan": "3a609ea1bddea419e3ac8b7bfb322096f5b7571f53d2353fa1301e81c59b6582",
+    "pesanView": "3f3637e41187aaf53f7148f44043ea3b6f215e50941cea9da20b112cd186ca93",
+    "pesanMeja": "946b745cffa20dfe574a3fc927ae205a39ece82be7f8d745425de98ca735c57f",
+    "dataMejaAkhir": "29f6242810b65e0657d6bd20ed0720c6989a1ed52fd3b0eaa5cc31fd190ebd71"
   }
 }
