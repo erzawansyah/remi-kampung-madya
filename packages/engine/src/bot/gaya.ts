@@ -20,12 +20,25 @@
 // - nilai yang hampir seri (selisih ≤ `toleransi` dari yang terbaik) dipilih acak lewat rng (pilihDekat);
 // - batas "gugup menurunkan kartu jadi" Jago digeser −1/0/+1 per putaran (selain gaya kilat).
 //
-// Angka di DEFINISI_GAYA masih nilai awal (C2), belum disetel. Hasil ukur arena dicatat di sini sesudah
-// penyetelan (C3). Cek awal 16 Okt 2026 (--uji=suhu --gaya=semua --lawan=normal --seed=60): tanpa aksi
-// ditolak, Suhu dengan gaya apa pun tetap signifikan di atas Normal di semua meja. Kilat paling jauh di
-// bawah Suhu-standar (3 pemain +21,8 vs +51,3; 4 pemain 2 deck +57,4 vs +101,5 per putaran). Metrik
-// khas bergerak untuk sabarLondo (londoDini 1,3% vs 6,8%), ngurutin (nyambung 12,1% vs 7,0%), dan
-// pemburu (As|boleh 30,6% vs 68,7%); penahan Suhu belum terukur beda di disuap (6,1% vs 6,1%).
+// Angka di DEFINISI_GAYA hasil penyetelan arena (C3, 17 Okt 2026; semua tabel, syarat, dan kompromi di
+// docs/keputusan-pemilik.md #47). 200 seed per meja, 4 putaran, lawan Normal standar kecuali disebut lain:
+// - Kekuatan: Suhu bergaya apa pun signifikan di atas Normal di keenam meja (rata-rata meja +55,6 sampai
+//   +59,9 per putaran, standar +58,4). Jago bergaya signifikan di atas Normal di 6/6 meja (+31,8 sampai
+//   +37,1, standar +41,6) dan di bawah Suhu standar. Normal bergaya −5,6 sampai +2,6 (batas ±13,9 = ⅓
+//   selisih Jago − Normal); per meja hanya Pemburu Normal di 4 pemain yang lewat (−8,1, batas ±5,3).
+// - Kepala ke kepala [gaya, suhu, suhu, suhu]: suhu:gaya − suhu −2,7 sampai +3,6 (4 pemain) dan −3,5
+//   sampai +2,3 (4 pemain 2 deck); pembanding jago − suhu −6,9 dan −15,9. Pemburu −2,7 sedikit lewat
+//   batas −2,3 (⅓ dari −6,9).
+// - Keterbacaan di meja persona (--lawan=normal:acak), standar → gabungan gaya: Suhu L|iso 93,1 → 56,6%,
+//   As|boleh 63,7 → 31,2%, entropi buangan awal 1,41 → 1,65 bit; Jago 89,9 → 47,5% dan 72,4 → 32,7%;
+//   Normal 88,4 → 61,6% dan 82,4 → 50,0%.
+// - Metrik khas (Suhu, standar → gaya): londoDini 6,8 → 1,2%, nyambung 7,0 → 14,1%, disuap 6,18 → 5,98%,
+//   pentungan rata² 108 → 129 (laju mentung 0,87×), laju mulung Kilat 11,4 → 14,1%.
+// - Tidak tercapai: deck habis Kilat tidak turun di level mana pun (standar sudah nutup di setiap
+//   kesempatan); disuap Penahan Suhu turun tapi CI-nya bertumpang tipis (setelan yang lebih berat kalah
+//   −14 per putaran dari Suhu standar di 4 pemain 2 deck); pentungan Pemburu Normal hanya +9,7 (bukan +15).
+// - Lama mikir (40 seed, dua jalan): p99 paling besar 1,10× standar di level yang sama; maksimum satu
+//   keputusan berisik dan lewat 1,5× untuk sebagian gaya Jago/Suhu (paling buruk 157 ms vs 75 ms).
 
 import { AS, isAngka, isLondo, type Kartu } from '../kartu.js';
 import { isJokerHidup, type KonteksJoker } from '../kartuJadi.js';
@@ -60,25 +73,56 @@ export interface DefinisiGaya {
   peluangLibur: number;
   /** Calon yang nilainya paling jauh segini di bawah yang terbaik dipilih acak (pilihDekat). */
   toleransi: number;
+  /** Pengali kekuatan gaya (kali) di level Normal; bawaan 1. Di arena, bias yang sama lebih merugikan Normal. */
+  skalaNormal?: number;
   /** Sabar Londo: bias menahan Londo selama belum ada pemain lain yang membuang Londo di putaran ini. */
   tahanLondo?: number;
-  /** Menahan kartu tinggi di awal putaran (fase < 0,3); aktif di sebagian putaran (`peluang`). */
-  tahanTinggi?: { bobot: number; peluang: number; jenis: 'as' | 'asLondo' };
+  /**
+   * Menahan kartu tinggi di awal putaran (selama fase < `sampai`, bawaan 0,3); aktif di sebagian
+   * putaran (`peluang`). `bobotAs` = bobot untuk As (bawaan `bobot`).
+   */
+  tahanTinggi?: { bobot: number; peluang: number; jenis: 'as' | 'asLondo'; sampai?: number; bobotAs?: number };
   /** Pemburu: bias menahan satu calon pentungan terbesar di tangan (As > Londo). */
   tahanPentungan?: number;
   /** Ngurutin: bias membuang kartu yang menyambung buangan teratas pemain sebelumnya (saat pesimis). */
   nyambung?: number;
   /** Penahan (Normal): bias menahan kartu yang dekat dengan kartu yang diketahui dipegang pemain berikutnya. */
   tahanBerikut?: number;
+  /**
+   * Penahan (Normal): bias menahan kartu angka per salinan tetangga sebunga (±1, ±2) yang belum terlihat
+   * (bacaIngatan). Kartu yang tetangganya masih banyak lebih mungkin dipungut pemain berikutnya.
+   */
+  risikoNormal?: number;
   /** Ambang mulung Normal (bawaan 0: mulung bila skornya > 0). */
   ambangMulungNormal?: number;
   /** Peluang (× kali) menunda mentung berpentungan kecil demi pentungan lebih besar. Bawaan 0 = tidak pernah. */
   tundaMentung?: number;
+  /** Menunda mentung hanya kalau semua lawan masih memegang paling sedikit segini kartu (bawaan 5). */
+  tundaLawanMin?: number;
+  /** Menunda mentung hanya kalau sisa giliran (deck ÷ pemain) paling sedikit segini (bawaan 3). */
+  tundaSisaMin?: number;
   /** Ubahan parameter Jago/Suhu (berlaku kalau gayanya tidak libur). */
   ubahParam?: (base: ParamStrategi, level: 'jago' | 'suhu') => Partial<ParamStrategi>;
 }
 
-/** Definisi tiap gaya. standar dan berubah tidak punya definisi sendiri. Nilai awal C2, belum disetel. */
+/**
+ * Menahan As (bobot 16) dan Londo (bobot 10) selama 45% awal deck di sebagian putaran: sumber utama
+ * "tidak terbaca" (Londo/As tidak lagi selalu dibuang di awal). Dengan bobot 10 untuk As juga, As
+ * masih sering dibuang (As|boleh hanya turun ±25% di meja persona). Penahan tidak memakainya, karena
+ * menahan kartu tinggi berarti membuang kartu angka yang gampang dipungut pemain berikutnya.
+ */
+const tahanAsLondo = (peluang: number): NonNullable<DefinisiGaya['tahanTinggi']> => ({
+  bobot: 10,
+  bobotAs: 16,
+  peluang,
+  jenis: 'asLondo',
+  sampai: 0.45,
+});
+
+/**
+ * Definisi tiap gaya, hasil penyetelan arena (C3, lihat angka di kepala berkas). standar dan berubah
+ * tidak punya definisi sendiri.
+ */
 export const DEFINISI_GAYA: Readonly<Record<GayaBot, DefinisiGaya | null>> = {
   standar: null,
   sabarLondo: {
@@ -86,47 +130,56 @@ export const DEFINISI_GAYA: Readonly<Record<GayaBot, DefinisiGaya | null>> = {
     peluangLibur: 0.1,
     toleransi: 1.5,
     tahanLondo: 14,
-    tahanTinggi: { bobot: 6, peluang: 0.3, jenis: 'as' },
+    tahanTinggi: tahanAsLondo(0.6),
   },
   ngurutin: {
     mood: 0.35,
     peluangLibur: 0.1,
     toleransi: 1.5,
-    nyambung: 9,
-    tahanTinggi: { bobot: 6, peluang: 0.35, jenis: 'asLondo' },
+    skalaNormal: 0.7,
+    nyambung: 14,
+    tahanTinggi: tahanAsLondo(0.65),
   },
   pemburu: {
     mood: 0.3,
     peluangLibur: 0.1,
     toleransi: 1,
-    tahanPentungan: 12,
-    tundaMentung: 0,
+    skalaNormal: 0.6,
+    tahanPentungan: 20,
+    tahanTinggi: tahanAsLondo(0.5),
+    // Jago/Suhu: pentungan angka ditunda selama semua lawan masih ≥ 3 kartu dan sisa giliran ≥ 1,5.
+    // Normal tidak pernah menunda (tundaMentung hanya di aksiKuat).
+    tundaMentung: 1,
+    tundaLawanMin: 3,
+    tundaSisaMin: 1.5,
     ubahParam: (b) => ({ mentung: b.mentung * 1.4, korban: b.korban * 2 }),
   },
   penahan: {
     mood: 0.25,
     peluangLibur: 0.1,
     toleransi: 1,
-    tahanBerikut: 3,
-    tahanTinggi: { bobot: 6, peluang: 0.35, jenis: 'asLondo' },
-    // Suhu: bahaya bagi pemain berikutnya lebih berat. Jago (aslinya tidak menimbang bahaya): hanya
-    // bahaya bagi pemain berikutnya, dan ikut mengingat peristiwa di view (ingatRiwayat) supaya tahu
-    // kartu yang dipungut pemain berikutnya; tanpa itu peluangPasangan Jago hanya perkiraan kasar dan
-    // bahayanya nyaris nol.
+    tahanBerikut: 6,
+    risikoNormal: 2,
+    // Suhu: bahaya dan suap bagi pemain berikutnya lebih berat, bagi pemain lain sedikit lebih ringan
+    // (bobotBerikut 8 dan suap 5 menurunkan disuap lebih banyak, tapi kalah ±14 per putaran dari Suhu
+    // standar di meja 4 pemain 2 deck). Jago (aslinya tidak menimbang bahaya): hanya bahaya bagi pemain
+    // berikutnya, dan ikut mengingat peristiwa di view (ingatRiwayat) supaya tahu kartu yang dipungut
+    // pemain berikutnya; tanpa itu peluangPasangan Jago hanya perkiraan kasar dan bahayanya nyaris nol.
     ubahParam: (_b, level) =>
       level === 'suhu'
-        ? { bobotBerikut: 2.5 }
-        : { bahaya: 20, suap: 2, bobotBerikut: 1, bobotLainnya: 0, ingatRiwayat: true },
+        ? { bobotBerikut: 5, suap: 4, bobotLainnya: 0.7 }
+        : { bahaya: 20, suap: 10, bobotBerikut: 1, bobotLainnya: 0, ingatRiwayat: true },
   },
   kilat: {
     mood: 0.25,
     peluangLibur: 0.1,
     toleransi: 1.5,
+    skalaNormal: 0.5,
     ambangMulungNormal: -3,
-    ubahParam: (_b, level) =>
-      level === 'suhu'
-        ? { ambangMulung: 5, untungDeck: 0.5, potensi: 0.4, turunTanganLawan: 3, turunDemiAs: 3 }
-        : { ambangMulung: -5, turunTanganLawan: 4, turunDemiAs: 3 },
+    tahanTinggi: tahanAsLondo(0.7),
+    // Mulung lebih rakus. Menurunkan kartu jadi lebih awal (turunTanganLawan) tidak dipakai: di arena itu
+    // justru menurunkan laju mulung dan laju mentung Jago.
+    ubahParam: (_b, level) => (level === 'suhu' ? { ambangMulung: 6, untungDeck: 0.5 } : { ambangMulung: -20 }),
   },
   berubah: null,
 };
@@ -165,6 +218,8 @@ export interface KonteksGaya {
   pesimis: boolean;
   /** Penahan Normal: skor "dibutuhkan pemain berikutnya" per tipe kartu; null bila tidak dipakai. */
   dekatBerikut: number[] | null;
+  /** Penahan Normal (risikoNormal): salinan per tipe yang belum terlihat; null bila tidak dipakai. */
+  belum: Int8Array | null;
 }
 
 /** Kunci info publik putaran ini untuk kursi saya: berubah tiap putaran, sama sepanjang satu putaran. */
@@ -252,7 +307,7 @@ export function buatKonteksGaya(view: ViewPemain, level: LevelBot, gaya: GayaBot
   const def = DEFINISI_GAYA[nyata]!;
   const kuat = level === 'jago' || level === 'suhu';
   const [uMood, uLibur, uTinggi, uJitter] = moodPutaran(view, nyata);
-  const kali = uLibur < def.peluangLibur ? 0 : 1 + def.mood * (2 * uMood - 1);
+  const kali = (uLibur < def.peluangLibur ? 0 : 1 + def.mood * (2 * uMood - 1)) * (kuat ? 1 : (def.skalaNormal ?? 1));
   const n = view.konfigurasi.jumlahPemain;
   const prev = (((saya - p.arah) % n) + n) % n;
   const next = (((saya + p.arah) % n) + n) % n;
@@ -284,11 +339,13 @@ export function buatKonteksGaya(view: ViewPemain, level: LevelBot, gaya: GayaBot
     sisaGiliran: p.jumlahDeck / n,
     pesimis: false,
     dekatBerikut: null,
+    belum: null,
   };
   // Normal (dan cadangan normal Jago/Suhu): kartu jadi sudah diturunkan, jadi kartu lepas = tangan.
   // Jago/Suhu mengisi ulang pesimis dari susunan terbaik di aksiKuat.
   if (def.nyambung && kali > 0 && n >= 3 && atasPrev) kg.pesimis = perkiraanPesimis(kg, p.tangan[saya]!.length);
   if (def.tahanBerikut && kali > 0 && !kuat && p.tahap === 'main') kg.dekatBerikut = hitungDekatBerikut(view, p, next);
+  if (def.risikoNormal && !kuat && kali > 0 && p.tahap === 'main') kg.belum = bacaIngatan(view, true).belum;
   return kg;
 }
 
@@ -338,8 +395,13 @@ export function biasBuang(kg: KonteksGaya, k: Kartu, tangan: readonly Kartu[]): 
   if (def.tahanLondo && isLondo(k.rank) && !kg.londoLawan) b -= def.tahanLondo * kali * (kg.fase > 0.85 ? 0.5 : 1);
   // Tahan kartu tinggi di awal putaran.
   const tinggi = def.tahanTinggi;
-  if (tinggi && kg.tahanTinggiAktif && kg.fase < 0.3 && (k.rank === AS || (tinggi.jenis === 'asLondo' && isLondo(k.rank)))) {
-    b -= tinggi.bobot * kali;
+  if (
+    tinggi &&
+    kg.tahanTinggiAktif &&
+    kg.fase < (tinggi.sampai ?? 0.3) &&
+    (k.rank === AS || (tinggi.jenis === 'asLondo' && isLondo(k.rank)))
+  ) {
+    b -= (k.rank === AS ? (tinggi.bobotAs ?? tinggi.bobot) : tinggi.bobot) * kali;
   }
   // Pemburu: simpan satu calon pentungan besar.
   if (def.tahanPentungan && tangan.length >= 3 && tipeKartu(k) === calonPentungan(tangan, kg.ctx)) b -= def.tahanPentungan * kali;
@@ -347,6 +409,15 @@ export function biasBuang(kg: KonteksGaya, k: Kartu, tangan: readonly Kartu[]): 
   if (def.nyambung && kg.n >= 3 && kg.pesimis && kg.atasPrev && menyambung(k, kg.atasPrev, kg.ctx)) b += def.nyambung * kali;
   // Penahan (Normal): jangan suapi pemain berikutnya.
   if (def.tahanBerikut && kg.dekatBerikut) b -= def.tahanBerikut * kali * Math.max(0, kg.dekatBerikut[tipeKartu(k)]);
+  // Penahan (Normal): kartu angka yang tetangga sebunganya masih banyak belum terlihat.
+  if (def.risikoNormal && kg.belum && isAngka(k.rank)) {
+    let r = 0;
+    for (const d of [-2, -1, 1, 2]) {
+      const q = k.rank + d;
+      if (q >= 2 && q <= 10) r += kg.belum[tipeKartu({ bunga: k.bunga, rank: q as Kartu['rank'] })];
+    }
+    b -= def.risikoNormal * kali * r;
+  }
   return b;
 }
 
@@ -366,15 +437,17 @@ export function pilihDekat<T>(calon: readonly { isi: T; skor: number }[], kg: Pi
 }
 
 /**
- * Boleh menunda mentung: pentungannya satu kartu angka biasa, semua lawan masih ≥ 5 kartu, sisa giliran
- * ≥ 3, tangan masih memegang As/Londo/joker hidup (calon pentungan lebih besar), dan bukan putaran kaldu.
+ * Boleh menunda mentung: pentungannya satu kartu angka biasa, semua lawan masih ≥ `tundaLawanMin` (5)
+ * kartu, sisa giliran ≥ `tundaSisaMin` (3), tangan masih memegang As/Londo/joker hidup (calon pentungan
+ * lebih besar), dan bukan putaran kaldu.
  */
 export function bolehTundaMentung(kg: KonteksGaya, p: ViewPutaran, pentungan: readonly Kartu[], tangan: readonly Kartu[]): boolean {
   if (pentungan.length !== 1 || p.kaldu) return false;
   const k = pentungan[0];
   if (isJokerHidup(k, kg.ctx) || !isAngka(k.rank)) return false;
-  for (let j = 0; j < kg.n; j++) if (j !== kg.saya && p.jumlahKartuTangan[j] < 5) return false;
-  if (kg.sisaGiliran < 3) return false;
+  const lawanMin = kg.def.tundaLawanMin ?? 5;
+  for (let j = 0; j < kg.n; j++) if (j !== kg.saya && p.jumlahKartuTangan[j] < lawanMin) return false;
+  if (kg.sisaGiliran < (kg.def.tundaSisaMin ?? 3)) return false;
   return tangan.some((x) => x.rank === AS || isLondo(x.rank) || isJokerHidup(x, kg.ctx));
 }
 

@@ -1,6 +1,6 @@
 # Keputusan pemilik: rincian butir #25–#47
 
-Dokumen ini merinci baris **#25–#47** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #40–#46 sudah diterapkan (#42–#43 di engine, meja, server, warga kedai, dan aplikasi), sedangkan #47 sudah diputuskan tapi baru diterapkan di rilis berikutnya (ditandai **Diputuskan, diterapkan di rilis berikutnya**; aturan dan kode untuk butir itu belum berubah).
+Dokumen ini merinci baris **#25–#47** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #40–#46 sudah diterapkan (#42–#43 di engine, meja, server, warga kedai, dan aplikasi), sedangkan #47 sudah diputuskan tapi baru diterapkan di rilis berikutnya (ditandai **Diputuskan, diterapkan di rilis berikutnya**; perilaku warga kedai di permainan untuk butir itu belum berubah).
 
 **Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026, #40–#47 pada 16 Okt 2026. Baris #20–#23 README (susun akhir) juga sudah diputuskan 16 Okt 2026: sesuai bawaan yang sudah berjalan. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. Yang masih perlu dikonfirmasi pemilik hanya dua tafsiran: #43 (mode kaldu tanpa batas skor) dan kelompok "berubah-ubah" di #47. Catatan kecil dari 14 Okt 2026 (bunyi dramatis, gaya Jago/Suhu) sudah ditanggapi, lihat [Catatan lain](#catatan-lain-belum-masuk-tabel).
 
@@ -476,7 +476,7 @@ Tanpa anulir, pemakaian RNG dan urutan deck sama persis dengan sebelum aturan in
 
 ## 47. Gaya main warga kedai per persona
 
-**Diputuskan, diterapkan di rilis berikutnya.** Strategi bot belum berubah.
+**Diputuskan, diterapkan di rilis berikutnya.** Lapisan gaya di engine (`packages/engine/src/bot/gaya.ts`) sudah ada dan angkanya sudah disetel di arena (17 Okt 2026, lihat [hasil penyetelan](#k47-arena)), tapi belum disambung ke meja: warga kedai di permainan masih bermain seperti sebelumnya.
 
 **Keputusan pemilik (16 Okt 2026):** warga kedai gampang dibaca, bahkan level Suhu (Londo dan As selalu dibuang di awal). Setiap persona (nama warga kedai) mendapat **gaya main** sendiri, terpisah dari level. Gaya **tidak ditampilkan** ke pemain: tidak ada di UI, Bantuan, protokol, maupun CHANGELOG bagian pemain (cukup ditulis umum, tanpa nama). Pemetaan nama ke gaya di bawah disetujui, ditambah **satu kelompok yang gayanya berubah-ubah** tiap putaran. "Ngurutin" = membuang kartu yang menyambung buangan pemain sebelumnya.
 
@@ -496,6 +496,122 @@ Tanpa anulir, pemakaian RNG dan urutan deck sama persis dengan sebelum aturan in
 **Rencana penerapan:** `GayaBot` dan `DEFINISI_GAYA` di `packages/engine/src/bot/gaya.ts` (gaya `standar` = perilaku sekarang, tanpa rng); `pilihAksiBot(view, level, rng, gaya = 'standar')`; "mood" per putaran dan pilihan acak di antara nilai yang hampir seri supaya satu persona pun tidak terbaca; Mudah mengabaikan gaya (latihan tidak berubah), susun akhir tanpa gaya. Di meja, `gayaKursi(k)`: persona memakai gayanya, nama lain ("Warga N"), kursi yang ditinggal manusia (`Kursi.keluar`), dan giliran manusia yang diambil alih memakai `standar`. Diukur di arena (`packages/engine/scripts/arena.ts`) dengan syarat: Suhu bergaya apa pun tetap signifikan di atas Normal, tiap gaya terukur beda di metrik khasnya, peluang Londo/As dibuang di awal turun ≥ 30 %, dan p99 lama mikir ≤ 1,15× level yang sama.
 
 **Test yang direncanakan:** setiap nama di `NAMA_LAWAN_BAWAAN` wajib punya gaya; golden engine lolos tanpa `-u`; golden meja bergeser hanya karena gaya (dibuktikan dengan `gayaKursi` dipaksa `standar`), lalu ditinjau dan dicatat; simulasi ikut memutar gaya tanpa aksi yang ditolak.
+
+<a id="k47-arena"></a>
+
+### Hasil penyetelan di arena (17 Okt 2026)
+
+Semua angka dari `packages/engine/scripts/arena.ts`: 200 seed per meja, 4 putaran per permainan, susunan kursi diputar, CI 95% (satu seed = satu sampel). "Selisih" = skor per putaran dibanding Normal standar di meja yang sama. Perintahnya (keluaran lengkap tidak disimpan di repo, tapi deterministik):
+
+- kekuatan dan metrik khas: `--uji=suhu --gaya=semua --lawan=normal`, juga `--uji=jago` dan `--uji=normal`;
+- meja persona (syarat 4): `--uji=suhu --gaya=semua --lawan=normal:acak`, juga jago dan normal;
+- kepala ke kepala: `--susunan=suhu:<gaya>,suhu,suhu,suhu --meja=4,4d` dan pembandingnya `--susunan=jago,suhu,suhu,suhu --meja=4,4d`;
+- lama mikir: `--uji=normal,jago,suhu --gaya=semua --lawan=normal --waktu --seed=40` (dan `--seedAwal=41`), dijalankan sendirian.
+
+Angka penjajakan di bawah ("dicoba lalu dibuang") dari jalan 40–60 seed.
+
+**Yang dipakai tiap gaya** (`DEFINISI_GAYA`; semua gaya juga memakai mood ±25–35% per putaran, libur 10% putaran, dan pilihan acak di antara calon yang nilainya selisih ≤ 1–1,5):
+
+- **Menahan As dan Londo di awal** (dipakai semua gaya kecuali Penahan): di sebagian putaran (Sabar Londo 60%, Ngurutin 65%, Pemburu 50%, Kilat 70%), selama 45% awal deck, As ditahan dengan bobot 16 dan Londo 10. Inilah sumber utama "tidak terbaca".
+- **Sabar Londo:** Londo ditahan (bobot 14) sampai pemain lain membuang Londo, setengahnya menjelang deck habis.
+- **Ngurutin:** saat merasa tidak bakal menang, condong membuang kartu yang menyambung buangan pemain sebelumnya (bobot 14). Di Normal kekuatannya × 0,7.
+- **Pemburu:** menahan satu calon pentungan (As; kalau tidak ada As, Londo; bobot 20), bobot mentung × 1,4 dan korban × 2. Jago/Suhu menunda mentung berpentungan kartu angka selama semua lawan masih ≥ 3 kartu dan sisa giliran ≥ 1,5 (Normal tidak pernah menunda). Di Normal kekuatannya × 0,6.
+- **Penahan:** tidak menahan As/Londo (itu membuat kartu angka yang gampang dipungut pemain berikutnya ikut terbuang). Normal: menahan tetangga kartu yang diketahui dipungut pemain berikutnya (bobot 6) dan kartu angka yang tetangga sebunganya masih banyak belum terlihat (2 per salinan). Jago: menimbang bahaya hanya untuk pemain berikutnya (bahaya 20, suap 10) dan ingat riwayat. Suhu: bahaya dan suap bagi pemain berikutnya × 5 dengan suap 4 (bawaan 3), bagi pemain lain × 0,7.
+- **Kilat:** mulung lebih rakus (ambang mulung Normal −3, bawaan 0; Jago −20, bawaan 0; Suhu 6 dengan untung deck 0,5, bawaan 15 dan 1). Di Normal kekuatan biasnya × 0,5 (ambang mulung tidak ikut dikali).
+- **Berubah-ubah:** tiap putaran salah satu dari lima gaya di atas.
+
+**Kekuatan.** Selisih skor per putaran terhadap Normal standar (* = signifikan):
+
+| Suhu (gaya) | 2 pemain | 3 pemain | 4 pemain | 4 pemain 2 deck | 5 pemain | 6 pemain |
+|---|---|---|---|---|---|---|
+| standar | +77,1 ± 15,9* | +52,9 ± 7,0* | +25,0 ± 3,8* | +95,9 ± 6,0* | +60,8 ± 4,3* | +38,8 ± 2,6* |
+| Sabar Londo | +79,5 ± 13,7* | +46,1 ± 6,8* | +24,8 ± 3,4* | +104,1 ± 5,6* | +63,1 ± 3,9* | +41,7 ± 2,6* |
+| Ngurutin | +71,9 ± 15,4* | +42,3 ± 6,5* | +24,8 ± 3,5* | +97,4 ± 5,5* | +58,9 ± 3,7* | +38,2 ± 2,5* |
+| Pemburu | +88,0 ± 15,6* | +39,9 ± 7,1* | +20,3 ± 4,1* | +99,3 ± 6,2* | +61,1 ± 4,2* | +38,1 ± 2,9* |
+| Penahan | +76,1 ± 14,8* | +45,7 ± 6,6* | +23,2 ± 3,4* | +90,8 ± 5,1* | +62,2 ± 4,0* | +37,6 ± 2,6* |
+| Kilat | +70,2 ± 15,3* | +45,2 ± 6,2* | +24,2 ± 3,5* | +95,0 ± 5,1* | +57,1 ± 3,3* | +42,2 ± 2,3* |
+| Berubah-ubah | +77,3 ± 14,9* | +40,7 ± 6,1* | +22,9 ± 3,5* | +95,9 ± 5,5* | +59,7 ± 3,9* | +38,1 ± 2,5* |
+
+| Jago (gaya) | 2 pemain | 3 pemain | 4 pemain | 4 pemain 2 deck | 5 pemain | 6 pemain |
+|---|---|---|---|---|---|---|
+| standar | +73,9 ± 16,2* | +30,3 ± 5,7* | +16,0 ± 3,8* | +61,4 ± 4,5* | +39,1 ± 3,9* | +28,8 ± 2,1* |
+| Sabar Londo | +42,4 ± 13,9* | +24,9 ± 5,9* | +13,8 ± 3,1* | +60,5 ± 4,8* | +36,0 ± 3,2* | +31,2 ± 2,3* |
+| Ngurutin | +44,8 ± 14,6* | +20,9 ± 6,2* | +14,2 ± 2,9* | +58,6 ± 4,6* | +39,8 ± 3,3* | +28,4 ± 1,9* |
+| Pemburu | +43,6 ± 14,3* | +17,8 ± 6,4* | +10,0 ± 3,6* | +64,3 ± 5,1* | +35,3 ± 3,5* | +27,8 ± 2,1* |
+| Penahan | +54,4 ± 14,1* | +27,3 ± 6,0* | +18,6 ± 3,2* | +57,7 ± 4,5* | +35,8 ± 3,2* | +28,5 ± 2,0* |
+| Kilat | +46,7 ± 14,2* | +21,3 ± 5,0* | +13,4 ± 2,9* | +48,5 ± 4,0* | +32,2 ± 2,9* | +28,9 ± 1,8* |
+| Berubah-ubah | +41,5 ± 14,5* | +21,5 ± 5,8* | +14,6 ± 3,3* | +58,8 ± 4,6* | +35,5 ± 3,4* | +28,4 ± 2,2* |
+
+| Normal (gaya) | 2 pemain | 3 pemain | 4 pemain | 4 pemain 2 deck | 5 pemain | 6 pemain |
+|---|---|---|---|---|---|---|
+| Sabar Londo | −17,8 ± 11,1* | −10,1 ± 5,0* | −3,9 ± 2,4* | −0,2 ± 2,7 | −0,3 ± 2,1 | −1,2 ± 1,2 |
+| Ngurutin | −13,8 ± 12,0* | −5,1 ± 4,2* | −5,2 ± 2,5* | −0,8 ± 2,5 | −0,9 ± 2,3 | −0,8 ± 1,3 |
+| Pemburu | −11,2 ± 12,3 | −4,9 ± 4,3* | −8,1 ± 2,2* | −0,6 ± 2,8 | −1,1 ± 2,2 | −4,3 ± 1,4* |
+| Penahan | +15,0 ± 10,9* | +2,7 ± 3,9 | +1,0 ± 2,0 | −1,6 ± 2,1 | −1,0 ± 1,9 | −0,3 ± 1,2 |
+| Kilat | −9,7 ± 10,8 | −9,2 ± 4,5* | −2,8 ± 2,4* | +2,9 ± 2,5* | +0,8 ± 2,2 | +1,8 ± 1,2* |
+| Berubah-ubah | −3,7 ± 11,8 | −4,9 ± 4,1* | −3,8 ± 2,2* | −0,3 ± 2,5 | −0,7 ± 2,2 | −1,0 ± 1,2 |
+
+Kepala ke kepala di meja [gaya, suhu, suhu, suhu] (syarat 2: selisih tidak boleh lebih buruk dari ⅓ selisih Jago − Suhu di seed yang sama, yaitu −2,3 di 4 pemain dan −5,3 di 4 pemain 2 deck):
+
+| suhu:gaya − suhu | 4 pemain | 4 pemain 2 deck |
+|---|---|---|
+| Jago standar (pembanding: jago − suhu) | −6,9 ± 3,5 | −15,9 ± 5,0 |
+| Sabar Londo | +2,5 ± 3,1 | +0,9 ± 5,1 |
+| Ngurutin | −1,8 ± 2,9 | −1,9 ± 5,7 |
+| Pemburu | −2,7 ± 3,2 | −2,2 ± 6,0 |
+| Penahan | 0,0 ± 2,8 | −3,5 ± 5,0 |
+| Kilat | +3,6 ± 3,0 | +2,3 ± 5,0 |
+| Berubah-ubah | +1,1 ± 3,4 | +1,5 ± 5,4 |
+
+**Keterbacaan sebelum → sesudah** di meja persona (lawan Normal dengan gaya acak, gabungan semua meja; "gaya" = gabungan kelima gaya dan berubah-ubah). L|iso = peluang Londo terpencil dibuang di tiga buangan pertama, As|boleh = peluang As yang boleh dibuang ikut dibuang di tiga buangan pertama, entropiAwal = keragaman jenis buangan awal (maksimal 2,32 bit):
+
+| Level | Metrik | Standar | Gabungan gaya | Turun | Sabar Londo | Ngurutin | Pemburu | Penahan | Kilat | Berubah-ubah |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Normal | L\|iso | 88,4 ± 0,5% | 61,6 ± 0,4% | 30% | 35,5% | 58,4% | 60,4% | 85,7% | 72,7% | 61,8% |
+| Normal | As\|boleh | 82,4 ± 1,2% | 50,0 ± 0,8% | 39% | 35,9% | 45,9% | 22,2% | 93,3% | 73,7% | 50,3% |
+| Normal | entropiAwal (bit) | 1,570 ± 0,013 | 1,810 ± 0,003 | naik 0,240 | 1,853 | 1,824 | 1,746 | 1,565 | 1,778 | 1,809 |
+| Jago | L\|iso | 89,9 ± 0,4% | 47,5 ± 0,5% | 47% | 34,6% | 42,9% | 43,5% | 89,8% | 32,6% | 47,8% |
+| Jago | As\|boleh | 72,4 ± 1,6% | 32,7 ± 0,7% | 55% | 32,7% | 26,8% | 16,7% | 72,7% | 21,6% | 34,0% |
+| Jago | entropiAwal (bit) | 1,483 ± 0,014 | 1,747 ± 0,003 | naik 0,264 | 1,754 | 1,732 | 1,695 | 1,489 | 1,725 | 1,750 |
+| Suhu | L\|iso | 93,1 ± 0,4% | 56,6 ± 0,5% | 39% | 44,9% | 52,7% | 52,1% | 94,0% | 44,8% | 56,8% |
+| Suhu | As\|boleh | 63,7 ± 2,2% | 31,2 ± 0,8% | 51% | 29,9% | 29,1% | 19,2% | 61,1% | 23,9% | 30,2% |
+| Suhu | entropiAwal (bit) | 1,406 ± 0,014 | 1,648 ± 0,003 | naik 0,242 | 1,681 | 1,655 | 1,634 | 1,393 | 1,688 | 1,643 |
+
+Dengan lawan Normal standar angkanya mirip (Suhu L|iso 93,5 → 59,2%, As|boleh 66,0 → 29,9%; Jago 91,3 → 49,6% dan 73,4 → 33,0%; Normal 88,8 → 63,1% dan 82,9 → 50,2%).
+
+**Metrik khas tiap gaya** (lawan Normal standar, gabungan semua meja, standar → gaya, CI 95%):
+
+| Gaya | Metrik | Normal | Jago | Suhu |
+|---|---|---|---|---|
+| Sabar Londo | londoDini (Londo dibuang sebelum pemain lain) | 7,8 → 1,1% | 6,8 → 1,1% | 6,8 → 1,2% |
+| Ngurutin | nyambung (buangan menyambung buangan pemain sebelumnya) | 5,4 → 12,0% | 4,8 → 13,8% | 7,0 → 14,1% |
+| Penahan | disuap (buangan langsung dipungut pemain berikutnya) | 6,3 ± 0,1 → 5,8 ± 0,1% | 6,7 ± 0,1 → 6,2 ± 0,1% | 6,18 ± 0,14 → 5,98 ± 0,13% |
+| Pemburu | pentungan rata² (laju mentung) | 78,2 → 87,9 (12,8 → 11,1%, 0,87×) | 105,7 → 128,9 (21,5 → 17,8%, 0,83×) | 108,0 → 129,2 (29,6 → 25,9%, 0,87×) |
+| Kilat | laju mulung (deck habis) | 6,1 → 7,3% (55,1 → 55,9%) | 14,5 → 16,3% (47,7 → 51,6%) | 11,4 → 14,1% (42,9 → 45,4%) |
+
+Penahan Suhu ditulis dua desimal dari jalan arena penyetelan yang mencetak disuap lebih teliti (seed dan definisi sama; keluaran arena biasa membulatkannya jadi 6,2 ± 0,1 → 6,0 ± 0,1%). Lebar CI 95%: londoDini, nyambung, disuap, dan laju mulung ±0,1–0,3 poin; laju mentung ±0,6–1,0; deck habis ±1,3–1,7; pentungan rata-rata ±2,2–3,1.
+
+**Lama mikir** (`--waktu`, 40 seed, dijalankan sendirian dua kali: seed 1–40 dan 41–80; ms per keputusan di container 4 CPU, Node 22). p99 standar → p99 gaya terlambat: Normal 0,65 → 0,70 (ember histogram 0,05 ms), Jago 5,30 → 5,20 dan 5,50 → 5,65, Suhu 6,95 → 7,65 (Ngurutin) dan 7,40 → 8,10 (Penahan); paling besar 1,10×. Maksimum satu keputusan sangat berisik (Normal standar sendiri 38,3 ms di jalan pertama dan 14,5 ms di jalan kedua): Jago standar 37,1 dan 36,2, Jago bergaya 31,6–78,5; Suhu standar 74,8 dan 57,3, Suhu bergaya 38,8–156,9 (Penahan). Penahan Jago memang bekerja lebih banyak (menghitung bahaya tiap calon buangan, yang di Jago standar dilewati); untuk gaya lain dugaannya tangan yang kadang lebih besar karena As/Londo ditahan (belum diukur).
+
+**Syarat diterima dan hasilnya:**
+
+1. **Suhu bergaya apa pun signifikan di atas Normal di keenam meja; Jago bergaya signifikan di atas Normal secara rata-rata dan di ≥ 5 dari 6 meja:** terpenuhi. Suhu bergaya rata-rata keenam meja +55,6 sampai +59,9 per putaran (standar +58,4), 36 dari 36 sel signifikan. Jago bergaya signifikan di 6 dari 6 meja, rata-rata +31,8 sampai +37,1 (standar +41,6).
+2. **Kekuatan dibanding Suhu standar dan Normal:** kepala ke kepala terpenuhi kecuali Pemburu di 4 pemain (−2,7, batas −2,3). Normal bergaya signifikan di bawah Jago di semua meja, dan rata-rata keenam meja di dalam ±⅓ selisih Jago − Normal untuk semua gaya (−5,6 sampai +2,6, batas ±13,9); per meja terpenuhi kecuali Pemburu Normal di 4 pemain (−8,1, batas ±5,3). Tidak ada Jago bergaya yang di atas Suhu standar di meja mana pun (semuanya lebih rendah, sebagian besar signifikan).
+3. **Metrik khas beda terukur (CI tidak bertumpang):** Sabar Londo dan Ngurutin terpenuhi di ketiga level. Penahan terpenuhi di Normal dan Jago, **belum** di Suhu (CI bertumpang tipis). Pemburu terpenuhi di Jago dan Suhu (pentungan +23,2 dan +21,2, laju mentung 0,83× dan 0,87×); di Normal laju mentung terpenuhi (0,87×) tapi pentungan hanya +9,7. Kilat: laju mulung lebih tinggi di ketiga level, deck habis **tidak** lebih rendah di level mana pun.
+4. **Meja persona: L|iso dan As|boleh turun ≥ 30%, entropi naik:** Suhu −39% dan −51%, Jago −47% dan −55%, Normal −30% dan −39%; entropi buangan awal naik ±0,24–0,26 bit di ketiga level.
+5. **Lama mikir:** p99 tiap gaya ≤ 1,15× standar di level yang sama terpenuhi di kedua jalan (paling besar 1,10×). Maksimum ≤ 1,5× **tidak** terpenuhi untuk sebagian gaya Jago dan Suhu (paling buruk Penahan Suhu 156,9 vs 74,8 ms dan Berubah-ubah Jago 78,5 vs 37,1 ms di jalan pertama); lihat catatan lama mikir di atas.
+
+**Kompromi (sesuai maksud pemilik: lebih susah dibaca, gaya beda-beda, Suhu tetap kuat):**
+
+- **Kilat tidak menurunkan laju deck habis** (Normal 55,1 → 55,9%, Jago 47,7 → 51,6%, Suhu 42,9 → 45,4%, CI ±1,3–1,7). Deck habis berarti tidak ada yang mentung, dan warga kedai standar sudah mentung di setiap kesempatan; semua tuas "nutup secepatnya" yang dicoba (bobot mentung × 2, kesiapan mentung bernilai tetap, potensi lebih kecil, ambang mulung lebih rendah) justru menurunkan laju mentung Kilat sendiri (Suhu 29,6 → 26,6%). Ciri Kilat yang terukur: laju mulung lebih tinggi di ketiga level dan Londo/As tidak lagi dibuang di awal. "Menurunkan kartu jadi lebih cepat" tidak dipakai, karena di Jago itu menurunkan laju mulung (14,6 → 13,0%) dan laju mentung (20,6 → 16,4%; penjajakan 40 seed).
+- **Syarat Penahan disesuaikan (revisi 2 rencana):** dari "disuap ≤ 0,8× standar" jadi "disuap turun signifikan dibanding standar di level yang sama". Angka 0,8× tidak realistis: disuap standar sudah rendah (6,2–6,7%), kira-kira separuhnya pungutan beberapa kartu sekaligus (yang wajib jadi kartu jadi baru adalah kartu paling bawah, bukan buangan kita di atasnya), dan tuas utama "tidak terbaca" (menahan As/Londo) justru menaikkan disuap gaya lain ke 6,5–7,3%.
+- **Disuap Penahan di Suhu hanya turun 0,2 poin** (6,18 ± 0,14 → 5,98 ± 0,13%): kedua CI 95% bertumpang tipis (6,04–6,32 dan 5,85–6,11), jadi menurut aturan "CI tidak bertumpang" syarat 3 untuk Penahan Suhu **belum** terpenuhi (di Normal dan Jago terpenuhi). Setelan yang lebih berat (bobot pemain berikutnya × 8, suap 5) memang menurunkan disuap ke 5,8% dengan CI terpisah, tapi kalah −14,2 ± 4,8 per putaran dari Suhu standar di meja 4 pemain 2 deck, hampir seluruh selisih Jago − Suhu (−15,9). Sesuai maksud pemilik (Suhu tetap kuat), dipilih setelan yang ringan.
+- **Penahan tetap gampang dibaca soal Londo** (L|iso ±90–94%, sama dengan standar) karena tidak menahan As/Londo. Keterbacaan meja persona ditanggung gaya lain; gabungannya tetap jauh di bawah standar (tabel di atas).
+- **Pemburu Normal:** pentungan rata-rata hanya naik 9,7 (78,2 → 87,9; CI tidak bertumpang, tapi di bawah syarat +15), dan di meja 4 pemain kalah −8,1 ± 2,2 per putaran dari Normal standar (batas ±5,3 = ⅓ selisih Jago − Normal 16,0; rata-rata keenam meja −5,0, batas ±13,9). Normal tidak punya "tunda mentung" (Normal selalu mentung begitu bisa), jadi pentungannya hanya bisa dinaikkan dengan menahan kartu besar lebih kuat, dan itu makin melemahkan Normal: dengan kekuatan penuh (tanpa × 0,6; penjajakan 60 seed, sebelum bobot As 16) pentungan naik ±24, tapi kalah ±10 di 4 pemain dan laju mentung tinggal 0,72×.
+- **Pemburu Suhu kepala ke kepala di 4 pemain:** −2,7 ± 3,2, sedikit melewati batas −2,3 (tidak signifikan beda dari nol maupun dari batasnya); di 4 pemain 2 deck −2,2 (batas −5,3). Diterima.
+- **Normal bergaya di meja 2 pemain** cenderung lebih lemah (−3,7 sampai −17,8 per putaran, sebagian signifikan), tetap di dalam batas ±24,6; Penahan Normal justru +15,0.
+
+**Tuas yang dicoba lalu dibuang** (tidak terbukti di arena): kesiapan mentung bernilai tetap untuk Kilat (pentungan rata-rata turun ke ±81 tanpa menaikkan laju mentung), bobot mentung × 2 dan potensi lebih kecil untuk Kilat (laju mentung malah turun), menurunkan kartu jadi lebih awal untuk Kilat Jago/Suhu (laju mulung turun 14,6 → 13,0%), menahan kartu yang sekelompok dengan buangan teratas untuk Penahan (nyambung turun ke ±2%, disuap tidak berubah), dan `tahanBerikut` versi Jago/Suhu (disuap tidak berubah).
 
 ---
 

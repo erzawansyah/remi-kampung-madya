@@ -78,7 +78,8 @@ function denganMood(
   throw new Error(`mood ${gaya} yang dicari tidak ketemu`);
 }
 const aktif = (kg: KonteksGaya) => kg.kali > 0;
-const penuh = (kg: KonteksGaya) => kg.kali >= 1;
+/** Kekuatan dasar gaya ≥ 1 (di Normal kali sudah dikali skalaNormal). */
+const penuh = (kg: KonteksGaya) => kg.kali >= (kg.kuat ? 1 : (kg.def.skalaNormal ?? 1));
 
 const aksi0 = (g: GameState, level: LevelBot, gaya?: GayaBot, rng = new Rng(3)) => pilihAksiBot(viewUntuk(g, 0), level, rng, gaya);
 const dibuang = (a: Aksi) => (a.jenis === 'buang' ? a.kartuId : `(${a.jenis})`);
@@ -155,8 +156,9 @@ describe('gaya: daftar dan definisi', () => {
     }
     expect(DEFINISI_GAYA.standar).toBeNull();
     expect(DEFINISI_GAYA.berubah).toBeNull();
-    // Pemburu belum pernah menunda mentung (nilai awal).
-    expect(DEFINISI_GAYA.pemburu!.tundaMentung).toBe(0);
+    // Hasil penyetelan C3: hanya pemburu yang menunda mentung, dan penahan tidak menahan As/Londo di awal.
+    for (const g of GAYA_TETAP) expect((DEFINISI_GAYA[g]!.tundaMentung ?? 0) > 0).toBe(g === 'pemburu');
+    expect(DEFINISI_GAYA.penahan!.tahanTinggi).toBeUndefined();
   });
 
   it('isGaya hanya menerima nama di daftar', () => {
@@ -387,14 +389,43 @@ describe('alat gaya', () => {
     const lagi = vs.filter((v) => v.putaran!.nomor === 1 && v.saya === 0).at(-1)!;
     expect(moodPutaran(lagi, 'kilat')).toEqual(m);
     expect(moodPutaran(kedua, 'kilat')).not.toEqual(m);
-    // Kekuatan gaya di rentang 1 ± mood, atau 0 (libur).
+    // Kekuatan gaya di rentang 1 ± mood, atau 0 (libur); Normal dikali skalaNormal (bawaan 1).
     for (const v of vs) {
       for (const g of GAYA_TETAP) {
-        const kg = buatKonteksGaya(v, 'normal', g, new Rng(1))!;
-        if (kg.kali === 0) continue;
-        expect(Math.abs(kg.kali - 1)).toBeLessThanOrEqual(DEFINISI_GAYA[g]!.mood + 1e-12);
+        const d = DEFINISI_GAYA[g]!;
+        const kj = buatKonteksGaya(v, 'jago', g, new Rng(1))!;
+        const kn = buatKonteksGaya(v, 'normal', g, new Rng(1))!;
+        expect(kn.kali).toBeCloseTo(kj.kali * (d.skalaNormal ?? 1), 12);
+        if (kj.kali === 0) continue;
+        expect(Math.abs(kj.kali - 1)).toBeLessThanOrEqual(d.mood + 1e-12);
       }
     }
+  });
+
+  it('tahanTinggi: As (bobotAs) dan Londo ditahan selama fase < sampai (bawaan 0,3), hanya di putaran yang aktif', () => {
+    const g = skenario({
+      rankJoker: 4,
+      giliran: 0,
+      tangan: [['As love', 'K waru', '2 kriting', '7 wajik'], ['J love', '6 kriting', '2 waru'], ['8 wajik', 'Q wajik', '3 waru']],
+      buangan: [['5 love', 2]],
+    });
+    sesudahDeck(g);
+    const v = viewUntuk(g, 0);
+    const tangan = v.putaran!.tangan[0]!;
+    const kg = buatKonteksGaya(v, 'jago', 'kilat', new Rng(1))!;
+    const t = DEFINISI_GAYA.kilat!.tahanTinggi!;
+    const dgn = (x: Partial<KonteksGaya>) => ({ ...kg, kali: 1, tahanTinggiAktif: true, ...x });
+    expect(t.sampai).toBe(0.45);
+    expect(t.bobotAs).toBeGreaterThan(t.bobot);
+    expect(biasBuang(dgn({ fase: 0.44 }), kartu('As love'), tangan)).toBe(-t.bobotAs!);
+    expect(biasBuang(dgn({ fase: 0.44 }), kartu('K waru'), tangan)).toBe(-t.bobot);
+    expect(biasBuang(dgn({ fase: 0.44 }), kartu('7 wajik'), tangan)).toBe(0);
+    expect(biasBuang(dgn({ fase: 0.46 }), kartu('As love'), tangan)).toBe(0);
+    expect(biasBuang(dgn({ fase: 0.44, tahanTinggiAktif: false }), kartu('As love'), tangan)).toBe(0);
+    // Tanpa sampai dan bobotAs: fase < 0,3, dan As memakai bobot yang sama dengan Londo.
+    const bawaan = { ...kg.def, tahanTinggi: { ...t, sampai: undefined, bobotAs: undefined } };
+    expect(biasBuang(dgn({ fase: 0.29, def: bawaan }), kartu('As love'), tangan)).toBe(-t.bobot);
+    expect(biasBuang(dgn({ fase: 0.31, def: bawaan }), kartu('As love'), tangan)).toBe(0);
   });
 
   it('pilihDekat: tanpa seri tidak memakai rng; seri dalam toleransi dipilih acak', () => {
@@ -493,8 +524,9 @@ describe('sabar Londo', () => {
     ],
     buangan: [['6 waru', 2]],
   };
+  // Gerbang Londo diuji di putaran yang tahanTinggi-nya tidak aktif (tahanTinggi juga menahan Londo).
   const buat = (s: Partial<Skenario>, level: LevelBot, ubah: (g: GameState) => void = () => {}) =>
-    denganMood({ ...dasar, ...s }, level, 'sabarLondo', aktif, (g) => {
+    denganMood({ ...dasar, ...s }, level, 'sabarLondo', (kg) => aktif(kg) && !kg.tahanTinggiAktif, (g) => {
       sesudahDeck(g);
       ubah(g);
     });
@@ -574,7 +606,8 @@ describe('ngurutin', () => {
 
   describe('hanya buangan pemain sebelumnya, hanya di meja ≥ 3 orang', () => {
     // K Waru terpencil (10) jauh di atas 6 Love (3,5), jadi tanpa bias tidak ada seri. Deck tinggal 15
-    // kartu (fase > 0,3): tahanTinggi tidak berlaku. Kekuatan gaya ≥ 1, jadi bias menyambung ≥ 9.
+    // kartu (fase > 0,45): tahanTinggi tidak berlaku. Kekuatan dasar gaya ≥ 1, jadi di Normal bias
+    // menyambung ≥ 14 × skalaNormal 0,7 = 9,8.
     const k: Partial<Skenario> = {
       tangan: [['K waru', '2 kriting', '3 kriting', '6 love', '9 wajik', '10 wajik'], dasar.tangan[1], dasar.tangan[2]],
       deck: ['3 love', '4 love', '7 love', '8 love', '9 love', '10 love', '2 wajik', '3 wajik', '4 wajik', '5 wajik', '6 wajik', '7 wajik', '4 kriting', '5 kriting', '7 kriting'],
@@ -685,8 +718,8 @@ describe('pemburu pentungan', () => {
         expect(bolehTundaMentung(kg, v.putaran!, [kartu('9 kriting')], v.putaran!.tangan[0]!)).toBe(true);
         expect(aksi).toMatchObject({ jenis: 'mulung', jumlah: 1 });
         expect(kg.rng.state).toBe(new Rng(5).state);
-        // Lewat pilihAksiBot (definisi asli, tundaMentung 0): mentung juga.
-        expect(aksi0(g, level, 'pemburu')).toMatchObject({ jenis: 'mulung', jumlah: 1 });
+        // Lewat pilihAksiBot dengan definisi asli (tundaMentung 1) dan kekuatan dasar ≥ 1: selalu ditunda.
+        expect(aksi0(denganMood(tunda(false), level, 'pemburu', penuh), level, 'pemburu')).toEqual({ jenis: 'ambilDeck', pemain: 0 });
       }
     });
 
@@ -709,8 +742,15 @@ describe('pemburu pentungan', () => {
       expect(bolehTundaMentung(kg, v.putaran!, [kartu('4 love')], tangan)).toBe(false);
       expect(bolehTundaMentung(kg, v.putaran!, [kartu('K love')], tangan)).toBe(false);
       expect(bolehTundaMentung(kg, v.putaran!, [kartu('9 kriting'), kartu('4 waru')], tangan)).toBe(false);
-      const sedikit = { ...v.putaran!, jumlahKartuTangan: [6, 4, 5] };
-      expect(bolehTundaMentung(kg, sedikit, [kartu('9 kriting')], tangan)).toBe(false);
+      // Pemburu: lawan masih ≥ 3 kartu (tundaLawanMin) dan sisa giliran ≥ 1,5 (tundaSisaMin).
+      expect(bolehTundaMentung(kg, { ...v.putaran!, jumlahKartuTangan: [6, 3, 5] }, [kartu('9 kriting')], tangan)).toBe(true);
+      expect(bolehTundaMentung(kg, { ...v.putaran!, jumlahKartuTangan: [6, 2, 5] }, [kartu('9 kriting')], tangan)).toBe(false);
+      expect(bolehTundaMentung({ ...kg, sisaGiliran: 1.4 }, v.putaran!, [kartu('9 kriting')], tangan)).toBe(false);
+      // Tanpa tundaLawanMin/tundaSisaMin: bawaan 5 kartu dan 3 giliran.
+      const bawaan = { ...kg, def: { ...kg.def, tundaLawanMin: undefined, tundaSisaMin: undefined } };
+      expect(bolehTundaMentung(bawaan, v.putaran!, [kartu('9 kriting')], tangan)).toBe(true);
+      expect(bolehTundaMentung(bawaan, { ...v.putaran!, jumlahKartuTangan: [6, 4, 5] }, [kartu('9 kriting')], tangan)).toBe(false);
+      expect(bolehTundaMentung({ ...bawaan, sisaGiliran: 2.9 }, v.putaran!, [kartu('9 kriting')], tangan)).toBe(false);
     });
   });
 });
@@ -752,9 +792,25 @@ describe('penahan', () => {
     }
   });
 
-  it('normal: tanpa pungutan yang diketahui, 9 Kriting tetap dibuang', () => {
+  it('normal: tanpa pungutan yang diketahui, tahanBerikut tidak menahan apa pun', () => {
     const g = denganMood(dasar, 'normal', 'penahan', aktif, sesudahDeck);
-    expect(dibuang(aksi0(g, 'normal', 'penahan'))).toBe(id('9 kriting'));
+    const v = viewUntuk(g, 0);
+    const kg = buatKonteksGaya(v, 'normal', 'penahan', new Rng(1))!;
+    expect(kg.dekatBerikut!.every((x) => x <= 0)).toBe(true);
+    // Tanpa risikoNormal (belum = null) bias semua kartu 0: penahan tidak memakai tahanTinggi.
+    for (const k of v.putaran!.tangan[0]!) expect(biasBuang({ ...kg, belum: null }, k, v.putaran!.tangan[0]!)).toBe(0);
+  });
+
+  it('normal: risikoNormal menahan kartu angka per tetangga sebunga yang belum terlihat; Jago/Suhu tidak', () => {
+    const g = denganMood(dasar, 'normal', 'penahan', aktif, sesudahDeck);
+    const v = viewUntuk(g, 0);
+    const tangan = v.putaran!.tangan[0]!;
+    const kg = buatKonteksGaya(v, 'normal', 'penahan', new Rng(1))!;
+    const r = DEFINISI_GAYA.penahan!.risikoNormal! * kg.kali;
+    // 9 Kriting: 7, 8, 10 Kriting belum terlihat. 3 Love: 2 Love di tangan, 5 Love di kartu jadi, 4 Love belum.
+    expect(biasBuang(kg, kartu('9 kriting'), tangan)).toBeCloseTo(-3 * r, 12);
+    expect(biasBuang(kg, kartu('3 love'), tangan)).toBeCloseTo(-1 * r, 12);
+    for (const level of ['jago', 'suhu'] as const) expect(buatKonteksGaya(v, level, 'penahan', new Rng(1))!.belum).toBeNull();
   });
 
   it('normal: tetangga kartu yang dibuang sendiri oleh pemain berikutnya dikurangi', () => {
@@ -773,7 +829,7 @@ describe('penahan', () => {
     const v = viewUntuk(g, 0);
     const kg = buatKonteksGaya(v, 'jago', 'penahan', new Rng(1))!;
     const par = paramDenganGaya(PARAM_JAGO, 'jago', kg);
-    expect(par).toMatchObject({ bahaya: 20, suap: 2, bobotBerikut: 1, bobotLainnya: 0, ingatRiwayat: true });
+    expect(par).toMatchObject({ bahaya: 20, suap: 10, bobotBerikut: 1, bobotLainnya: 0, ingatRiwayat: true });
     const nl = new Penilai(v, v.putaran!, 0, par);
     expect(nl.bahaya(kartu('9 kriting'))).toBeGreaterThan(10);
     expect(new Penilai(v, v.putaran!, 0, PARAM_JAGO).bahaya(kartu('9 kriting'))).toBe(0);
@@ -798,40 +854,25 @@ describe('kilat', () => {
     expect(aksi0(g, 'normal', 'kilat')).toMatchObject({ jenis: 'mulung', jumlah: 2 });
   });
 
-  it('jago menurunkan kartu jadi saat lawan tinggal 4 kartu', () => {
-    const g = denganMood(
-      {
-        rankJoker: 4,
-        giliran: 0,
-        tangan: [['5 love', '6 love', '7 love', 'K waru', '2 kriting', '9 wajik'], ['J love', '6 kriting', '2 waru', 'As kriting'], ['8 wajik', 'Q wajik', '3 waru', 'K love', '10 waru']],
-        buangan: [['5 waru', 2]],
-      },
-      'jago',
-      'kilat',
-      aktif,
-      sesudahDeck,
-    );
-    expect(aksi0(g, 'jago').jenis).toBe('buang');
-    expect(aksi0(g, 'jago', 'kilat')).toMatchObject({ jenis: 'turunkan' });
-  });
-
-  it('suhu kadang mulung di view yang membuat suhu standar ambil deck', () => {
-    let ketemu = 0;
-    let dicek = 0;
-    for (const [n, dua] of [[3, false], [4, true]] as const) {
-      for (const seed of [1, 2, 3]) {
-        for (const v of viewDariPermainan(n, dua, seed, 200)) {
-          if (v.putaran!.tahap !== 'ambil' || !v.putaran!.buangan.length) continue;
-          const kg = buatKonteksGaya(v, 'suhu', 'kilat', new Rng(1))!;
-          if (kg.kali === 0) continue;
-          dicek++;
-          const standar = pilihAksiBot(v, 'suhu', new Rng(1));
-          const kilat = pilihAksiBot(v, 'suhu', new Rng(1), 'kilat');
-          if (standar.jenis === 'ambilDeck' && kilat.jenis === 'mulung') ketemu++;
+  it('jago dan suhu kadang mulung di view yang membuat level yang sama tanpa gaya ambil deck', () => {
+    for (const level of ['jago', 'suhu'] as const) {
+      let ketemu = 0;
+      let dicek = 0;
+      for (const [n, dua] of [[3, false], [4, true]] as const) {
+        for (const seed of [1, 2, 3]) {
+          for (const v of viewDariPermainan(n, dua, seed, 200)) {
+            if (v.putaran!.tahap !== 'ambil' || !v.putaran!.buangan.length) continue;
+            const kg = buatKonteksGaya(v, level, 'kilat', new Rng(1))!;
+            if (kg.kali === 0) continue;
+            dicek++;
+            const standar = pilihAksiBot(v, level, new Rng(1));
+            const kilat = pilihAksiBot(v, level, new Rng(1), 'kilat');
+            if (standar.jenis === 'ambilDeck' && kilat.jenis === 'mulung') ketemu++;
+          }
         }
       }
+      expect(dicek).toBeGreaterThan(50);
+      expect(ketemu).toBeGreaterThan(0);
     }
-    expect(dicek).toBeGreaterThan(50);
-    expect(ketemu).toBeGreaterThan(0);
   });
 });

@@ -20,7 +20,8 @@
 // GAYA_TETAP dari seed dan urutan kursinya di susunan (kursi ikut berputar bersama pesertanya):
 // GAYA_ACAK_DARI[1 + ((seed·7 + kursi·3) mod 5)], dengan GAYA_ACAK_DARI = [standar, ...GAYA_TETAP].
 //
-// Opsi: --uji=a,b (peserta yang diuji, satu kursi), --lawan=normal (peserta kursi lain),
+// Opsi: --uji=a,b (peserta yang diuji, satu kursi; yang sama dengan --lawan diberi label sendiri, mis.
+// "normal:standar"), --lawan=normal (peserta kursi lain),
 // --gaya=a,b|semua (dikalikan dengan --uji; --uji harus level polos), --susunan=... (isi meja
 // sendiri; mengganti --uji/--lawan, jumlah pemain = panjangnya), --meja=2,3,4,4d,5,6
 // (4d = 4 pemain 2 deck), --seed=200 (jumlah seed per meja), --seedAwal=1, --putaran=4,
@@ -32,10 +33,15 @@
 // pengocok tidak menguntungkan siapa pun), lalu selisih "skor rata-rata level A − skor rata-rata
 // level B" per seed jadi satu sampel. Selang kepercayaan 95% = rata-rata ± 1,96 × sd / √n.
 // Semua deterministik: seed yang sama selalu memberi angka yang sama.
+// "deck habis" (per meja) dan "mulung" (per peserta: bagian keputusan di tahap ambil yang mulung,
+// bukan ambil deck) adalah rasio dengan CI 95% per seed (ringkasRasio di keterbacaan.ts).
 //
 // Baris "baca:" di bawah tiap peserta: metrik keterbacaan (L|iso, As|boleh, londoDini,
 // giliranLondo1, nyambung, disuap, entropiAwal; definisinya di keterbacaan.ts), angka dalam kurung
-// = jumlah kejadian penyebutnya. Di akhir dicetak lagi gabungan semua meja per peserta.
+// = jumlah kejadian penyebutnya. Di akhir dicetak lagi gabungan semua meja per peserta: baris "baca:" dan
+// baris "main:" (laju mentung, pentungan rata-rata, laju mulung, deck habis, semuanya dengan CI 95%), dan
+// kalau satu level diuji dengan ≥ 2 gaya selain standar (--gaya), gabungan gaya-gaya itu ("suhu:*",
+// ukuran meja persona keputusan #47).
 
 import { availableParallelism } from 'node:os';
 import { isMainThread, parentPort, Worker, workerData } from 'node:worker_threads';
@@ -54,8 +60,17 @@ import {
   type LevelBot,
   type ViewPemain,
 } from '../src/index.js';
-import { barisBaca, PencatatBaca, ringkas, statBacaKosong, type StatBaca } from './keterbacaan.js';
 import {
+  barisBaca,
+  PencatatBaca,
+  ringkas,
+  ringkasRasio,
+  statBacaKosong,
+  type Ringkas,
+  type StatBaca,
+} from './keterbacaan.js';
+import {
+  GAYA_ACAK,
   GAYA_STANDAR,
   gayaUntukKursi,
   silangGaya,
@@ -113,6 +128,9 @@ interface StatLevel {
   kepentung: number;
   jokerDibuang: number;
   kursi: number;
+  /** Keputusan di tahap ambil (mulung atau ambil deck) dan berapa yang mulung. */
+  ambil: number;
+  mulung: number;
 }
 
 interface HasilTugas {
@@ -157,6 +175,11 @@ function mainkanSatu(t: Tugas, rotasi: number, hasil: HasilTugas): void {
         : null;
     const mulai = t.waktu ? performance.now() : 0;
     const aksi = pilihAksi(view, level[siapa], rng, gaya[siapa]);
+    if (g.status === 'putaranBerjalan' && g.putaran!.tahap === 'ambil') {
+      const s = hasil.perLevel[label[siapa]];
+      s.ambil++;
+      if (aksi.jenis === 'mulung') s.mulung++;
+    }
     if (t.waktu) {
       const lama = performance.now() - mulai;
       const w = (hasil.waktu[label[siapa]] ??= { ember: Array(JUMLAH_EMBER).fill(0), maks: 0, jumlah: 0 });
@@ -209,7 +232,7 @@ function mainkanSatu(t: Tugas, rotasi: number, hasil: HasilTugas): void {
 function jalankanTugas(t: Tugas): HasilTugas {
   const hasil: HasilTugas = { perLevel: {}, baca: {}, putaran: 0, deckHabis: 0, waktu: {} };
   for (const l of new Set(t.susunan.map((x) => x.label))) {
-    hasil.perLevel[l] = { skor: 0, mentung: 0, pentungan: 0, kepentung: 0, jokerDibuang: 0, kursi: 0 };
+    hasil.perLevel[l] = { skor: 0, mentung: 0, pentungan: 0, kepentung: 0, jokerDibuang: 0, kursi: 0, ambil: 0, mulung: 0 };
     hasil.baca[l] = statBacaKosong();
   }
   for (let r = 0; r < t.meja.n; r++) mainkanSatu(t, r, hasil);
@@ -237,6 +260,39 @@ function buatPekerja(data: Tugas[]): Worker {
 }
 
 const f1 = (x: number) => (x >= 0 ? '+' : '') + x.toFixed(1);
+
+/** Satu sampel (seed × percobaan) untuk baris "main:" gabungan semua meja. */
+interface SampelMain {
+  mentung: number;
+  pentungan: number;
+  putaranKursi: number;
+  ambil: number;
+  mulung: number;
+  /** Deck habis dan jumlah putaran di meja itu (semua kursi, bukan hanya peserta ini). */
+  deckHabis: number;
+  putaran: number;
+}
+
+/**
+ * Baris "main:" per peserta, gabungan semua meja, semua rasio dengan CI 95% per sampel (ringkasRasio):
+ * mentung per putaran-kursi, pentungan rata-rata per mentung, mulung per keputusan ambil, dan deck habis
+ * di meja yang diikuti peserta ini.
+ */
+function barisMain(sampel: readonly SampelMain[]): string {
+  const rasio = (a: keyof SampelMain, b: keyof SampelMain) =>
+    ringkasRasio(
+      sampel.map((x) => x[a]),
+      sampel.map((x) => x[b]),
+    );
+  const pentungan = rasio('pentungan', 'mentung');
+  return (
+    `main: mentung ${persenCi(rasio('mentung', 'putaranKursi'), 1)}` +
+    `  pentungan rata² ${pentungan.n ? `${pentungan.rata.toFixed(1)}±${pentungan.ci.toFixed(1)}` : '-'}` +
+    `  mulung ${persenCi(rasio('mulung', 'ambil'), 1)}  deck habis ${persenCi(rasio('deckHabis', 'putaran'), 1)}`
+  );
+}
+/** Rasio sebagai persen dengan CI 95%, misalnya "22±2%". */
+const persenCi = (r: Ringkas, d: number) => (r.n ? `${(100 * r.rata).toFixed(d)}±${(100 * r.ci).toFixed(d)}%` : '-');
 
 async function utama(): Promise<void> {
   const putaran = Number(opsi('putaran', '4'));
@@ -273,7 +329,12 @@ async function utama(): Promise<void> {
     for (const meja of cocok.length ? cocok : [mejaS]) percobaan.push({ meja, susunan: s });
   } else {
     for (const meja of daftarMeja) {
-      for (const x of diuji) percobaan.push({ meja, susunan: [x, ...Array(meja.n - 1).fill(lawan)] });
+      for (const x of diuji) {
+        // Peserta uji yang sama persis dengan lawan (mis. --uji=normal --lawan=normal) diberi label sendiri
+        // ("normal:standar"), supaya metrik kursi uji tidak tercampur kursi lawan.
+        const uji = x.label === lawan.label ? { ...x, label: x.gaya === GAYA_STANDAR ? `${x.level}:standar` : `${x.label}:uji` } : x;
+        percobaan.push({ meja, susunan: [uji, ...Array(meja.n - 1).fill(lawan)] });
+      }
     }
   }
   const semuaTugas: { i: number; t: Tugas }[] = [];
@@ -312,13 +373,18 @@ async function utama(): Promise<void> {
   console.log('');
   const bacaGabung: Record<string, StatBaca[]> = {};
   const waktuGabung: Record<string, { ember: number[]; maks: number; jumlah: number }> = {};
+  // Per peserta, satu sampel per seed per percobaan: bahan baris "main:" gabungan semua meja.
+  const mainGabung: Record<string, SampelMain[]> = {};
   percobaan.forEach((c, i) => {
     const hs = hasilPer[i];
     const levelUnik = [...new Set(c.susunan.map((x) => x.label))];
     const totalPutaran = hs.reduce((s, h) => s + h.putaran, 0);
-    const deckHabis = hs.reduce((s, h) => s + h.deckHabis, 0);
+    const deckHabis = ringkasRasio(
+      hs.map((h) => h.deckHabis),
+      hs.map((h) => h.putaran),
+    );
     console.log(
-      `${c.meja.label} [${c.susunan.map((x) => x.label).join(', ')}]: ${totalPutaran} putaran, deck habis ${((100 * deckHabis) / totalPutaran).toFixed(0)}%`,
+      `${c.meja.label} [${c.susunan.map((x) => x.label).join(', ')}]: ${totalPutaran} putaran, deck habis ${persenCi(deckHabis, 0)}`,
     );
     // Rata-rata skor per kursi per putaran untuk tiap level. Satu rotasi kursi = satu permainan; di mode
     // kaldu panjang permainannya beda-beda, jadi dibagi rata-rata putaran per permainan tugas itu.
@@ -335,16 +401,35 @@ async function utama(): Promise<void> {
         { m: 0, p: 0, k: 0, j: 0, pk: 0 },
       );
       const putaranKursi = st.pk;
+      const mulung = ringkasRasio(
+        hs.map((h) => h.perLevel[l].mulung),
+        hs.map((h) => h.perLevel[l].ambil),
+      );
       console.log(
         `  ${l.padEnd(7)} skor/putaran ${f1(r.rata).padStart(7)} ± ${r.ci.toFixed(1).padEnd(5)}` +
           ` mentung ${((100 * st.m) / putaranKursi).toFixed(1).padStart(5)}%` +
           ` (pentungan rata² ${st.m ? (st.p / st.m).toFixed(0) : '-'})` +
           ` kepentung ${((100 * st.k) / putaranKursi).toFixed(1).padStart(5)}%` +
-          ` buang joker ${(st.j / putaranKursi).toFixed(3)}/putaran`,
+          ` buang joker ${(st.j / putaranKursi).toFixed(3)}/putaran` +
+          ` mulung ${persenCi(mulung, 1)}`,
       );
       const sampelBaca = hs.map((h) => h.baca[l]);
       console.log(`    ${barisBaca(sampelBaca, baca)}`);
       (bacaGabung[l] ??= []).push(...sampelBaca);
+      (mainGabung[l] ??= []).push(
+        ...hs.map((h) => {
+          const x = h.perLevel[l];
+          return {
+            mentung: x.mentung,
+            pentungan: x.pentungan,
+            putaranKursi: x.kursi * putaranPermainan(h),
+            ambil: x.ambil,
+            mulung: x.mulung,
+            deckHabis: h.deckHabis,
+            putaran: h.putaran,
+          };
+        }),
+      );
     }
     for (let a = 0; a < levelUnik.length; a++) {
       for (let b = a + 1; b < levelUnik.length; b++) {
@@ -365,6 +450,22 @@ async function utama(): Promise<void> {
   console.log('\nKeterbacaan gabungan semua meja (satu sampel = satu seed di satu percobaan):');
   for (const [l, sampel] of Object.entries(bacaGabung)) {
     console.log(`  ${l.padEnd(7)} ${barisBaca(sampel, baca)}`);
+    console.log(`  ${''.padEnd(7)} ${barisMain(mainGabung[l])}`);
+  }
+  // Meja persona (#47): gabungan semua gaya selain standar per level, kalau levelnya diuji dengan ≥ 2 gaya.
+  const pesertaLabel = new Map(percobaan.flatMap((c) => c.susunan).map((x) => [x.label, x]));
+  const perLevel = new Map<string, StatBaca[][]>();
+  for (const [l, sampel] of Object.entries(bacaGabung)) {
+    const x = pesertaLabel.get(l)!;
+    if (x.gaya === GAYA_STANDAR || x.gaya === GAYA_ACAK) continue;
+    const daftar = perLevel.get(x.level) ?? [];
+    daftar.push(sampel);
+    perLevel.set(x.level, daftar);
+  }
+  const gabungGaya = [...perLevel].filter(([, d]) => d.length >= 2);
+  if (gabungGaya.length) {
+    console.log('\nGabungan semua gaya selain standar per level (tiap gaya sama banyak percobaannya):');
+    for (const [level, d] of gabungGaya) console.log(`  ${`${level}:*`.padEnd(7)} ${barisBaca(d.flat(), baca)}`);
   }
   if (waktu) {
     console.log('\nLama keputusan per aksi (ms, Node di mesin ini; perhitungan paralel bisa sedikit memperlambat):');
