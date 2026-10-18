@@ -26,7 +26,7 @@ import {
   type ViewPemain,
   berikutnya,
 } from '@remi/engine';
-import { DAFTAR_EMOTE, type Emote, type InfoMeja, type PesanKlien, type TempoBot } from '@remi/meja';
+import { DAFTAR_EMOTE, MAKS_PESAN, rapikanPesan, type InfoMeja, type PesanKlien, type TempoBot } from '@remi/meja';
 import { KabarKoneksi, type Kabar, type StatusKoneksi } from './koneksi';
 import type { AksiAdegan, KotakLayar, MejaScene, ModelMeja } from './game/MejaScene';
 import { gambarKartuKeKanvas } from './game/kartuGrafisGambar';
@@ -339,6 +339,9 @@ export function teksInfoKaldu(v: Pick<ViewPemain, 'konfigurasi' | 'riwayat' | 'k
   return h.kaldu && h.cara === 'deckHabis' ? TEKS_KALDU.lagi : TEKS_KALDU.berikutnya;
 }
 
+/** Emote berupa satu emoji (gambar, paling banyak dua code point), bukan celetukan/pesan teks. */
+const apaEmoji = (isi: string) => [...isi].length <= 2 && /^\p{Extended_Pictographic}/u.test(isi);
+
 export class KontrolMeja implements AksiAdegan {
   private info: InfoMeja | null = null;
   private view: ViewPemain | null = null;
@@ -386,7 +389,7 @@ export class KontrolMeja implements AksiAdegan {
   private timerAksi = new Map<number, ReturnType<typeof setTimeout>>();
   private giliranSayaSebelumnya = false;
   private hancur = false;
-  private emoteTertunda: [number, Emote][] = [];
+  private emoteTertunda: [number, string][] = [];
   private timerDetak: ReturnType<typeof setInterval> | null = null;
   /** Klasemen akhir sudah ditampilkan untuk permainan yang selesai ini. */
   private selesaiDitampilkan = false;
@@ -1848,12 +1851,37 @@ export class KontrolMeja implements AksiAdegan {
     el.className = 'palet-emote';
     el.setAttribute('role', 'group');
     el.setAttribute('aria-label', 'Pilih emote');
-    el.innerHTML = DAFTAR_EMOTE.map((e) => `<button type="button" data-emote="${esc(e)}" class="${[...e].length <= 2 ? 'emoji' : ''}">${esc(e)}</button>`).join('');
+    const tombol = (e: string) => `<button type="button" data-emote="${esc(e)}">${esc(e)}</button>`;
+    const emoji = DAFTAR_EMOTE.filter(apaEmoji);
+    const celetukan = DAFTAR_EMOTE.filter((e) => !apaEmoji(e));
+    el.innerHTML = `
+      <div class="palet-emoji">${emoji.map(tombol).join('')}</div>
+      <div class="palet-celetukan">${celetukan.map(tombol).join('')}</div>
+      <form class="palet-tulis">
+        <input type="text" name="pesan" maxlength="${MAKS_PESAN * 2}" placeholder="Tulis pesan…" aria-label="Tulis pesan" autocomplete="off" enterkeyhint="send" />
+        <button type="submit" class="utama">Kirim</button>
+      </form>`;
     el.addEventListener('click', (ev) => {
       const b = (ev.target as HTMLElement).closest<HTMLElement>('[data-emote]');
       if (!b) return;
-      this.app.kirim({ t: 'emote', isi: b.dataset.emote as Emote });
+      this.app.kirim({ t: 'emote', isi: b.dataset.emote! });
       this.tutupPaletEmote(ev.detail === 0);
+    });
+    const form = el.querySelector('form')!;
+    const isian = form.querySelector('input')!;
+    form.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const isi = rapikanPesan(isian.value);
+      if (!isi) return isian.focus();
+      this.app.kirim({ t: 'emote', isi });
+      this.tutupPaletEmote(true);
+    });
+    // Pintasan meja diabaikan selama mengetik, jadi Esc ditangani di isian sendiri.
+    isian.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        this.tutupPaletEmote(true);
+      }
     });
     this.akar.appendChild(el);
     this.elAtas.querySelector('[data-a=emote]')!.setAttribute('aria-expanded', 'true');
@@ -1868,7 +1896,7 @@ export class KontrolMeja implements AksiAdegan {
   }
 
   /** Emote masuk. Kalau animasi sedang berjalan, ditunda sebentar supaya tidak mendahului kejadiannya. */
-  terimaEmote(kursi: number, isi: Emote) {
+  terimaEmote(kursi: number, isi: string) {
     if (this.hancur) return;
     if (this.animasi) {
       this.emoteTertunda.push([kursi, isi]);
@@ -1882,19 +1910,25 @@ export class KontrolMeja implements AksiAdegan {
     for (const [kursi, isi] of this.emoteTertunda.splice(0)) this.gelembung(kursi, isi);
   }
 
-  private gelembung(kursi: number, isi: Emote) {
+  private gelembung(kursi: number, isi: string) {
     if (this.hancur) return;
     const pos = this.scene.posisiPemain(kursi);
     const dpr = window.devicePixelRatio || 1;
     const el = document.createElement('div');
-    const emoji = [...isi].length <= 2;
+    const emoji = apaEmoji(isi);
     const milikku = kursi === this.saya;
-    el.className = `gelembung${emoji ? ' emoji' : ''}${milikku ? ' milikku' : ''}`;
+    // Pesan panjang (diketik sendiri) tampil lebih lama supaya sempat dibaca.
+    const panjang = isi.length > 24;
+    const lama = panjang ? 4500 : 2600;
+    el.className = `gelembung${emoji ? ' emoji' : ''}${milikku ? ' milikku' : ''}${panjang ? ' panjang' : ''}`;
+    el.style.animationDuration = `${lama}ms`;
     el.textContent = isi;
     el.setAttribute('aria-hidden', 'true');
     const x = pos ? pos.x / dpr : window.innerWidth / 2;
     const y = pos ? pos.y / dpr : window.innerHeight / 2;
-    el.style.left = `${Math.min(window.innerWidth - 60, Math.max(60, x))}px`;
+    // Jarak tepi ≈ setengah lebar gelembung supaya tidak terpotong layar.
+    const tepi = panjang ? Math.min(136, window.innerWidth / 2) : 60;
+    el.style.left = `${Math.min(window.innerWidth - tepi, Math.max(tepi, x))}px`;
     el.style.top = `${Math.max(40, y - (milikku ? 70 : 10))}px`;
     this.akar.appendChild(el);
     if (milikku) bunyi('pop');
@@ -1902,7 +1936,7 @@ export class KontrolMeja implements AksiAdegan {
       bunyi('notifikasi');
       umumkan(`${this.namaUntukPembaca(kursi)}: ${isi}`);
     }
-    setTimeout(() => el.remove(), 2600);
+    setTimeout(() => el.remove(), lama);
   }
 
   // ---------- jendela ----------

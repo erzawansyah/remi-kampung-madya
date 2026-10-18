@@ -350,16 +350,18 @@ html[data-efek='hemat'] .bar-atas button {
 }
 
 /* ---------- Emote ---------- */
+/* Palet: emoji, celetukan warga Madya, lalu isian pesan sendiri (keputusan #48). */
 .palet-emote {
   position: absolute;
   top: var(--tinggi-bar-atas-ukur, calc(var(--tinggi-bar-atas) + var(--aman-atas)));
   right: calc(var(--ruang-2) + var(--aman-kanan));
-  /* rem: palet ikut melebar saat teks besar, supaya kata seperti "Cepetan!" tetap satu baris. */
-  width: min(21.25rem, calc(100vw - 2 * var(--ruang-2)));
-  display: grid;
-  /* minmax(0, 1fr): kolom tidak melebar mengikuti kata terpanjang (meluber ke kanan di HP sempit). */
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  /* rem: palet ikut melebar saat teks besar. */
+  width: min(22rem, calc(100vw - 2 * var(--ruang-2)));
+  max-height: calc(100dvh - var(--tinggi-bar-atas) - var(--aman-atas) - 2 * var(--ruang-2));
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px;
   background: var(--panel);
   border: 1px solid var(--garis-kuat);
@@ -374,32 +376,43 @@ html[data-efek='hemat'] .bar-atas button {
   min-height: var(--sentuh);
   padding: var(--ruang-2) var(--ruang-1);
   font-size: var(--teks-sm);
+}
+.palet-emoji {
+  display: grid;
+  /* minmax(0, 1fr): kolom tidak melebar mengikuti isi (meluber ke kanan di HP sempit). */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+}
+.palet-emoji button {
+  font-size: 1.5rem;
+  padding: var(--ruang-1) 0;
+}
+.palet-celetukan {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.palet-celetukan button {
+  flex: 1 1 auto;
+  padding-inline: var(--ruang-2);
   /* Celetukan panjang dilipat di spasi; kata yang tetap tidak muat baru dipotong. */
   overflow-wrap: anywhere;
 }
-.palet-emote button.emoji {
-  font-size: 1.625rem;
-  padding: var(--ruang-1);
+.palet-tulis {
+  display: flex;
+  gap: 6px;
 }
-/* Celetukan yang sendirian di baris terakhir ("Kartu itu bundar, kak.") memakai lebar penuh
-   supaya tidak terlipat dua baris di kolom sempit. */
-.palet-emote button:last-child:nth-child(4n + 1) {
-  grid-column: 1 / -1;
+.palet-tulis input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--sentuh);
 }
-/* HP sempit (320–400 px, apalagi teks besar): 3 kolom supaya "Cepetan!" dan kawan-kawan tetap
-   utuh satu kata. Celetukan terakhir mengisi sisa baris. */
 @media (max-width: 400px) {
-  .palet-emote {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .palet-emoji {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
-  .palet-emote button:last-child:nth-child(4n + 1) {
-    grid-column: auto;
-  }
-  .palet-emote button:last-child:nth-child(3n + 1) {
-    grid-column: 1 / -1;
-  }
-  .palet-emote button:last-child:nth-child(3n + 2) {
-    grid-column: span 2;
+  .palet-emoji button {
+    font-size: 1.375rem;
   }
 }
 
@@ -429,6 +442,14 @@ html[data-efek='hemat'] .bar-atas button {
   border: 7px solid transparent;
   border-top-color: var(--krem);
   border-bottom: 0;
+}
+/* Pesan panjang yang diketik sendiri: boleh dua-tiga baris, tidak meluber layar. */
+.gelembung.panjang {
+  white-space: normal;
+  width: max-content;
+  max-width: min(16rem, 70vw);
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 .gelembung.emoji {
   font-size: 2.125rem;

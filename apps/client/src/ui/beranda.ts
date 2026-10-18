@@ -11,18 +11,20 @@
 //
 // "Warga kedai" = istilah untuk pemain komputer (kode tetap memakai 'bot').
 
-import { rapikanLevel, type DataMeja, type PengaturanMeja, type RingkasanMeja } from '@remi/meja';
+import { rapikanLevel, rapikanNama, type DataMeja, type PengaturanMeja, type RingkasanMeja } from '@remi/meja';
 import { svgLogo } from '../aset/logoMadya';
 import { gambarKartuKeKanvas, type KartuGambar } from '../game/kartuGrafisGambar';
 import { htmlTautanKedai, KEDAI } from '../konten/kedai';
 import { TEKS_TAWARAN } from '../konten/pasang';
 import { TEKS_KALDU } from '../konten/kaldu';
+import { TEKS_NAMA } from '../konten/nama';
 import { DAFTAR_LEVEL_WARGA, LEVEL_WARGA, labelLevelKecil } from '../konten/levelWarga';
 import { aturPreferensi, preferensi, saatPreferensiBerubah } from '../preferensi';
+import { labelTanggalGanti, namaTerkunciSampai, simpanNamaBaru, type KeadaanNama } from '../namaPemain';
 import { simpan } from '../penyimpanan';
 import { labelVersi } from '../versi';
 import { bacaIsianBatas, htmlIsianBatas, pasangIsianBatas } from './batasSkor';
-import { esc, konfirmasi } from './dom';
+import { esc, konfirmasi, toast } from './dom';
 
 /** Keadaan main online yang ditampilkan di beranda. */
 export type StatusOnline = 'siap' | 'offline' | 'menyambung' | 'tersambung' | 'gagal';
@@ -212,9 +214,10 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
 
         <section class="kartu-panel panel-main" aria-labelledby="judul-main">
           <h2 id="judul-main">Main sekarang</h2>
-          <label class="medan" for="nama">Nama kamu
-            <input type="text" id="nama" maxlength="16" placeholder="misal: Budi" value="${esc(simpan.nama())}" autocomplete="nickname" enterkeyhint="done" />
+          <label class="medan" for="nama">${TEKS_NAMA.label}
+            <input type="text" id="nama" maxlength="16" placeholder="misal: Budi" value="${esc(simpan.nama())}" autocomplete="nickname" enterkeyhint="done" aria-describedby="ket-nama" />
           </label>
+          <p class="bantuan rapat ket-nama" id="ket-nama"></p>
           ${
             simpanan
               ? `<button type="button" class="utama besar penuh tombol-dua-baris" id="lanjut">
@@ -307,12 +310,58 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   const layarEl = akar.querySelector<HTMLElement>('.layar.beranda')!;
 
   const el = <T extends HTMLElement>(id: string) => akar.querySelector<T>(`#${id}`);
-  const nama = () => {
-    const n = el<HTMLInputElement>('nama')!.value.trim();
-    simpan.setNama(n);
-    return n || 'Pemain';
+  // ---------- nama (keputusan #49: wajib diisi, ganti seminggu sekali) ----------
+  const isianNama = el<HTMLInputElement>('nama')!;
+  const ketNama = el('ket-nama')!;
+  const keadaanNama = (): KeadaanNama => ({ nama: simpan.nama().trim(), diganti: simpan.namaDiganti() });
+  const aturTampilNama = () => {
+    const sampai = namaTerkunciSampai(keadaanNama(), Date.now());
+    isianNama.readOnly = sampai !== null;
+    ketNama.textContent = sampai !== null ? `${TEKS_NAMA.bisaGantiLagi} ${labelTanggalGanti(sampai)}.` : TEKS_NAMA.ketBaru;
   };
-  el('nama')!.addEventListener('change', () => nama());
+  /** Cek nama di isian, konfirmasi kalau diganti, lalu simpan. Null = belum bisa main. */
+  const cekNama = async (): Promise<string | null> => {
+    const k = keadaanNama();
+    const baru = isianNama.value.trim() ? rapikanNama(isianNama.value) : '';
+    const kembalikan = () => {
+      isianNama.value = k.nama;
+      return k.nama || null;
+    };
+    if (!baru) {
+      if (k.nama) return kembalikan();
+      toast(TEKS_NAMA.isiDulu, true);
+      isianNama.focus();
+      return null;
+    }
+    if (baru === k.nama) return kembalikan();
+    if (namaTerkunciSampai(k, Date.now()) !== null) return kembalikan();
+    if (k.nama) {
+      const ya = await konfirmasi({
+        judul: TEKS_NAMA.judulGanti,
+        pesan: `${TEKS_NAMA.pesanGanti} "${baru}"?`,
+        ya: TEKS_NAMA.yaGanti,
+        tidak: TEKS_NAMA.tidakGanti,
+      });
+      if (!ya) {
+        kembalikan();
+        return null;
+      }
+    }
+    const hasil = simpanNamaBaru(k, baru, Date.now());
+    simpan.setNama(hasil.nama);
+    simpan.setNamaDiganti(hasil.diganti);
+    isianNama.value = hasil.nama;
+    aturTampilNama();
+    return hasil.nama;
+  };
+  // Isian ditinggalkan dan tombol main diketuk hampir bersamaan: cukup satu konfirmasi.
+  let menungguNama: Promise<string | null> | null = null;
+  const pastikanNama = (): Promise<string | null> =>
+    (menungguNama ??= cekNama().finally(() => {
+      menungguNama = null;
+    }));
+  isianNama.addEventListener('change', () => void pastikanNama());
+  aturTampilNama();
 
   // ---------- kipas kartu ----------
   const kipas = akar.querySelector<HTMLElement>('.kipas')!;
@@ -385,20 +434,22 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   /** Permainan baru menimpa simpanan offline: minta konfirmasi dulu kalau ada. */
   const bolehTimpa = konfirmasiTimpaSimpanan;
 
-  el('lanjut')?.addEventListener('click', () => {
-    nama();
-    aksi.lanjutOffline();
-  });
+  // Lanjutkan simpanan tidak butuh nama baru: namanya sudah tersimpan di meja.
+  el('lanjut')?.addEventListener('click', () => aksi.lanjutOffline());
   el('mulai-bot')!.addEventListener('click', async () => {
+    const n = await pastikanNama();
+    if (!n) return;
     if (!(await bolehTimpa('Main baru pakai slot simpanan yang sama.'))) return;
     const pengaturan = bacaPengaturan();
     simpan.setPengaturanOffline(pengaturan);
-    aksi.mainOffline(nama(), pengaturan, el<HTMLSelectElement>('o-kocok')!.value === 'saya');
+    aksi.mainOffline(n, pengaturan, el<HTMLSelectElement>('o-kocok')!.value === 'saya');
   });
   akar.querySelectorAll('[data-latihan]').forEach((b) =>
     b.addEventListener('click', async () => {
+      const n = await pastikanNama();
+      if (!n) return;
       if (!(await bolehTimpa('Latihan pakai slot simpanan yang sama.'))) return;
-      aksi.latihan(nama());
+      aksi.latihan(n);
     }),
   );
   el('tawaran-nanti')?.addEventListener('click', () => {
@@ -416,26 +467,30 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
     tombolOnline.forEach((x) => x.removeAttribute('aria-busy'));
     b.setAttribute('aria-busy', 'true');
   };
-  const gabung = () => {
+  const gabung = async () => {
+    const n = await pastikanNama();
+    if (!n) return;
     sibuk(el('gabung')!);
-    aksi.gabung(nama(), kodeEl.value);
+    aksi.gabung(n, kodeEl.value);
   };
-  el('buat')!.addEventListener('click', () => {
+  el('buat')!.addEventListener('click', async () => {
+    const n = await pastikanNama();
+    if (!n) return;
     sibuk(el('buat')!);
-    aksi.buatMeja(nama());
+    aksi.buatMeja(n);
   });
-  el('gabung')!.addEventListener('click', gabung);
+  el('gabung')!.addEventListener('click', () => void gabung());
   kodeEl.addEventListener('input', () => {
     // Kode meja: huruf besar dan angka saja.
     const rapi = kodeEl.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (rapi !== kodeEl.value) kodeEl.value = rapi;
   });
   kodeEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') gabung();
+    if (e.key === 'Enter') void gabung();
   });
-  el('publik')!.addEventListener('click', () => {
+  el('publik')!.addEventListener('click', async () => {
+    if (!(await pastikanNama())) return;
     sibuk(el('publik')!);
-    nama();
     aksi.lihatPublik();
   });
 

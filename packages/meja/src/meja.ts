@@ -640,8 +640,8 @@ export class Meja {
     this.celetukBot(h.state.peristiwa.filter((e) => e.id > idTerakhir));
   }
 
-  /** Kirim emote ke semua pemain manusia. Maksimal satu emote per 1,2 detik per kursi. */
-  private kirimEmote(kursi: number, isi: Emote): void {
+  /** Kirim emote/pesan ke semua pemain manusia. Maksimal satu per 1,2 detik per kursi. */
+  private kirimEmote(kursi: number, isi: string): void {
     const sekarang = this.penjadwal.sekarang();
     if (sekarang - (this.emoteTerakhir.get(kursi) ?? -Infinity) < 1200) return;
     this.emoteTerakhir.set(kursi, sekarang);

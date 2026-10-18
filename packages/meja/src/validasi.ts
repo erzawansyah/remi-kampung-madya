@@ -5,6 +5,7 @@ import { DAFTAR_LEVEL_BOT, type LevelBot, type SpesifikasiKartuJadi } from '@rem
 import {
   DAFTAR_EMOTE,
   EMOTE_LAMA,
+  MAKS_PESAN,
   PENGATURAN_BAWAAN,
   type AksiKlien,
   type Emote,
@@ -224,7 +225,11 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       if ((DAFTAR_EMOTE as readonly string[]).includes(x.isi)) return { t: 'emote', isi: x.isi as Emote };
       // Emote dari aplikasi versi lama: diteruskan sebagai padanan barunya.
       const padanan = EMOTE_LAMA.get(x.isi);
-      return padanan ? { t: 'emote', isi: padanan } : null;
+      if (padanan) return { t: 'emote', isi: padanan };
+      // Pesan yang diketik sendiri (keputusan #48), dirapikan dulu.
+      if (x.isi.length > BATAS_PESAN_MENTAH) return null;
+      const isi = rapikanPesan(x.isi);
+      return isi ? { t: 'emote', isi } : null;
     }
     default:
       return null;
@@ -322,9 +327,9 @@ function buangFormat(s: string): string {
 }
 
 /** Potong per grapheme (huruf yang tampil) supaya emoji/aksara tidak terbelah. */
-function potong(s: string): string {
+function potong(s: string, maksHuruf = MAKS_HURUF, maksCp = MAKS_CODE_POINT): string {
   const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
-  if (!Segmenter) return Array.from(s).slice(0, MAKS_HURUF).join('');
+  if (!Segmenter) return Array.from(s).slice(0, maksHuruf).join('');
   let hasil = '';
   let jumlahHuruf = 0;
   let jumlahCp = 0;
@@ -334,7 +339,7 @@ function potong(s: string): string {
       .filter((c) => !TANDA.test(c) || ++tanda <= MAKS_TANDA_PER_HURUF)
       .join('');
     const n = Array.from(huruf).length;
-    if (jumlahHuruf >= MAKS_HURUF || jumlahCp + n > MAKS_CODE_POINT) break;
+    if (jumlahHuruf >= maksHuruf || jumlahCp + n > maksCp) break;
     hasil += huruf;
     jumlahHuruf++;
     jumlahCp += n;
@@ -363,4 +368,22 @@ export function rapikanNama(nama: string): string {
   // Penggabung yatim di ujung potongan dibuang.
   const hasil = (pendek.length < bersih.length ? pendek.replace(/[‌‍]+$/u, '') : pendek).trim();
   return TERLIHAT.test(hasil) ? hasil : 'Pemain';
+}
+
+/** Pesan mentah yang lebih panjang dari ini ditolak tanpa dirapikan (jaga-jaga isi raksasa). */
+const BATAS_PESAN_MENTAH = 1000;
+
+/**
+ * Pesan yang diketik pemain di meja (keputusan #48): dibersihkan sama seperti nama (NFKC, tanpa
+ * karakter kontrol/format/< >), baris baru jadi spasi, maksimal `MAKS_PESAN` huruf. Kosong atau
+ * tidak ada yang terlihat → null (tidak dikirim).
+ */
+export function rapikanPesan(pesan: string): string | null {
+  const normal = pesan.replace(/[^ㄱ-ㆎ]+/gu, (x) => x.normalize('NFKC'));
+  const bersih = buangFormat(normal.replace(/\s+/gu, ' ').replace(KARAKTER_BUANG, ''))
+    .replace(/\s+/gu, ' ')
+    .trim();
+  const pendek = potong(bersih, MAKS_PESAN, MAKS_PESAN * 3);
+  const hasil = (pendek.length < bersih.length ? pendek.replace(/[‌‍]+$/u, '') : pendek).trim();
+  return TERLIHAT.test(hasil) ? hasil : null;
 }

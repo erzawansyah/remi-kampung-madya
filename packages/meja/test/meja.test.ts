@@ -7,6 +7,8 @@ import {
   urutkanPeringkat,
   DAFTAR_EMOTE,
   EMOTE_LAMA,
+  MAKS_PESAN,
+  rapikanPesan,
   Meja,
   NAMA_LAWAN_BAWAAN,
   namaLawanAcak,
@@ -951,13 +953,45 @@ describe('emote', () => {
     expect(surat.terakhir('host', 'emote')!.isi).toBe('🔥');
   });
 
-  it('emote di luar daftar ditolak validasi', () => {
-    expect(validasiPesan({ t: 'emote', isi: 'kartuku joker 7' })).toBeNull();
+  it('pesan yang diketik sendiri diterima dan dirapikan (keputusan #48)', () => {
     expect(validasiPesan({ t: 'emote', isi: 'Waduh!' })).toEqual({ t: 'emote', isi: 'Waduh!' });
-    // Kunci bawaan objek tidak boleh lolos lewat peta emote lama.
-    for (const isi of ['toString', '__proto__', 'constructor', 'hasOwnProperty', 5, null, ['GG'], { a: 1 }]) {
+    expect(validasiPesan({ t: 'emote', isi: '  ayo   gas\nlagi  ' })).toEqual({ t: 'emote', isi: 'ayo gas lagi' });
+    expect(validasiPesan({ t: 'emote', isi: '<b>halo</b>\u202e' })).toEqual({ t: 'emote', isi: 'bhalo/b' });
+    // Kepanjangan dipotong ke MAKS_PESAN huruf, emoji tidak terbelah.
+    const panjang = validasiPesan({ t: 'emote', isi: '👍'.repeat(100) }) as { isi: string };
+    expect([...panjang.isi].length).toBe(MAKS_PESAN);
+    expect(rapikanPesan('a'.repeat(200))).toHaveLength(MAKS_PESAN);
+    // Kosong, cuma spasi, atau cuma karakter tak terlihat: tidak dikirim.
+    for (const isi of ['', '   ', '\n\t', '\u200b\u200b', '<>']) {
+      expect(validasiPesan({ t: 'emote', isi }), JSON.stringify(isi)).toBeNull();
+    }
+    // Isi raksasa ditolak tanpa dirapikan.
+    expect(validasiPesan({ t: 'emote', isi: 'x'.repeat(5000) })).toBeNull();
+    for (const isi of [5, null, ['GG'], { a: 1 }]) {
       expect(validasiPesan({ t: 'emote', isi }), String(isi)).toBeNull();
     }
+    // Kunci bawaan objek tidak dipetakan lewat peta emote lama; diteruskan apa adanya sebagai teks.
+    expect(validasiPesan({ t: 'emote', isi: '__proto__' })).toEqual({ t: 'emote', isi: '__proto__' });
+  });
+
+  it('pesan sendiri sampai ke semua manusia dan ikut batas 1,2 detik', () => {
+    const { opsi, surat, jam } = siapkan();
+    const meja = Meja.buat(opsi, 'host', 'Budi', { jumlahPemain: 2 });
+    meja.masuk('p2', 'Siti');
+    meja.terima('p2', validasiPesan({ t: 'emote', isi: 'gedein dong' })!);
+    expect(surat.terakhir('host', 'emote')).toEqual({ t: 'emote', kursi: 1, isi: 'gedein dong' });
+    meja.terima('p2', validasiPesan({ t: 'emote', isi: 'lagi' })!);
+    expect(surat.terakhir('host', 'emote')!.isi).toBe('gedein dong');
+    jam.maju(1200);
+    meja.terima('p2', validasiPesan({ t: 'emote', isi: 'lagi' })!);
+    expect(surat.terakhir('host', 'emote')!.isi).toBe('lagi');
+  });
+
+  it('celetukan baru dari pemilik ada di daftar, Cepetan! jadi Buruan!', () => {
+    for (const isi of ['Gedein!', 'Buruan!', 'Lumayan!', 'CEKI!', 'Njir lah!', 'Give me!']) {
+      expect((DAFTAR_EMOTE as readonly string[]).includes(isi), isi).toBe(true);
+    }
+    expect(validasiPesan({ t: 'emote', isi: 'Cepetan!' })).toEqual({ t: 'emote', isi: 'Buruan!' });
   });
 
   it('emote aplikasi lama (0.1.0) diterima dan diteruskan sebagai padanan barunya', () => {

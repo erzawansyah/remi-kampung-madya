@@ -828,14 +828,13 @@ html[data-efek='hemat'] .kipas canvas {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-/* Leaderboard (keputusan #45): pilihan urutan + saringan. "Urutkan dari" dan "Periode" selebar
-   panel (isinya panjang), Pemain dan Deck berdampingan. auto-fit dengan lebar minimal setengah
-   panel: paling banyak dua kolom, dan turun jadi satu kolom kalau setengah panel lebih sempit dari
-   6,5rem (HP 320 dengan teks besar). Kolom Riwayat selebar 480 px, jadi di desktop tetap begini. */
+/* Leaderboard (keputusan #45): "Urutkan" selebar panel, lalu Pemain, Deck, dan Periode satu
+   baris. auto-fit: kolom paling sempit 5,5rem, jadi di HP 320 dengan teks besar turun jadi dua
+   baris tanpa meluber. */
 .kontrol-peringkat {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(max(min(100%, 6.5rem), calc((100% - var(--ruang-3)) / 2)), 1fr));
-  gap: var(--ruang-2) var(--ruang-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.5rem), 1fr));
+  gap: var(--ruang-2) var(--ruang-2);
 }
 .kontrol-peringkat .k-lebar {
   grid-column: 1 / -1;
@@ -847,6 +846,12 @@ html[data-efek='hemat'] .kipas canvas {
 .kontrol-peringkat select {
   width: 100%;
   font-weight: 400;
+}
+/* Tiga saringan sebaris di HP 360: bantalan dirapatkan supaya "Semua" dan "Bulan ini" utuh. */
+.kontrol-peringkat .medan:not(.k-lebar) select {
+  padding-left: var(--ruang-2);
+  padding-right: 26px;
+  background-position: right 6px center;
 }
 .ringkasan-peringkat {
   font-size: var(--teks-sm);

@@ -55,9 +55,11 @@ export const PENGATURAN_BAWAAN: PengaturanMeja = {
 };
 
 /**
- * Emote yang boleh dikirim (dibatasi supaya tidak bisa dipakai untuk pesan bebas). Celetukan warga
- * kedai (Meja.celetukBot) juga hanya boleh memakai isi daftar ini. "Kartu itu bundar, kak." diambil dari
- * balasan Kedai Madya di Threads; sengaja di urutan terakhir (paling panjang, satu baris sendiri di palet).
+ * Celetukan dan emoji siap pakai di palet emote. Pemain juga boleh mengetik pesan sendiri
+ * (keputusan pemilik #48, dirapikan `rapikanPesan`), tapi celetukan warga kedai (Meja.celetukBot)
+ * hanya boleh memakai isi daftar ini. "Kartu itu bundar, kak." diambil dari balasan Kedai Madya di
+ * Threads; "Gedein!", "Lumayan!", "CEKI!", "Njir lah!", dan "Give me!" kata-kata warga Madya dari
+ * pemilik (18 Okt 2026). Urutan menentukan susunan palet.
  */
 export const DAFTAR_EMOTE = [
   '😂',
@@ -68,14 +70,35 @@ export const DAFTAR_EMOTE = [
   '🙏',
   '😎',
   '🤔',
+  '😭',
+  '🤣',
+  '😡',
+  '🥶',
+  '🤡',
+  '😴',
+  '😏',
+  '🙄',
+  '👍',
+  '👀',
+  '💀',
+  '🃏',
+  '☕',
+  '🎉',
+  '💸',
+  '🍀',
   'Awas!',
   'Sabar…',
   'Mantap!',
   'Waduh!',
   'Suwun, Bos!',
-  'Cepetan!',
+  'Buruan!',
   'Nutup, rek!',
   'GG',
+  'Gedein!',
+  'Lumayan!',
+  'CEKI!',
+  'Njir lah!',
+  'Give me!',
   'Kartu itu bundar, kak.',
 ] as const;
 
@@ -90,7 +113,11 @@ export const EMOTE_LAMA: ReadonlyMap<string, Emote> = new Map<string, Emote>([
   ['Makasih, Bos!', 'Suwun, Bos!'],
   ['Tutup!', 'Nutup, rek!'],
   ['Kartu itu bundar…', 'Kartu itu bundar, kak.'],
+  ['Cepetan!', 'Buruan!'],
 ]);
+
+/** Panjang maksimal pesan yang diketik sendiri (huruf yang tampil). */
+export const MAKS_PESAN = 60;
 
 export type JenisKursi = 'kosong' | 'manusia' | 'bot';
 
@@ -186,7 +213,7 @@ export type PesanKlien =
   /** Mode kaldu (#42): setuju/batal "putaran berikutnya terakhir". Hanya di antara putaran. */
   | { t: 'putaranTerakhir'; setuju: boolean }
   | { t: 'siapJoker' }
-  | { t: 'emote'; isi: Emote }
+  | { t: 'emote'; isi: string }
   | { t: 'mainLagi' }
   | { t: 'ping' };
 
@@ -197,5 +224,5 @@ export type PesanServer =
   | { t: 'error'; pesan: string }
   | { t: 'daftar'; meja: RingkasanMeja[] }
   | { t: 'keluar'; alasan: string }
-  | { t: 'emote'; kursi: number; isi: Emote }
+  | { t: 'emote'; kursi: number; isi: string }
   | { t: 'pong' };

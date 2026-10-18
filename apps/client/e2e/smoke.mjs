@@ -650,8 +650,11 @@ async function jalankanTawaranPasang(chromium, executablePath, url) {
           if (!lagi.ubin) masalah.push(`${arah}: ubin "Pasang ke layar utama" hilang sesudah "Nanti saja"`);
         });
         await langkahKe(`${arah}: tidak ada tombol pasang di meja`, page, async () => {
-          // Tunda dihapus supaya tombolnya ada di beranda sebelum main.
-          await page.evaluate(() => localStorage.removeItem('remi.tawaranPasang'));
+          // Tunda dihapus supaya tombolnya ada di beranda sebelum main. Nama wajib diisi (#49).
+          await page.evaluate(() => {
+            localStorage.removeItem('remi.tawaranPasang');
+            localStorage.setItem('remi.nama', JSON.stringify('Penguji'));
+          });
           await page.reload({ waitUntil: 'load' });
           await tungguTombol(page);
           await page.locator('#mulai-bot').scrollIntoViewIfNeeded();

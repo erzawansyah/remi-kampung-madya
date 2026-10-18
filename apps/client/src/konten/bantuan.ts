@@ -8,7 +8,7 @@
 // atau peringatan "kartu berbahaya". Contoh joker selalu ditulis "misal joker putaran ini N".
 
 import type { Bunga, Rank } from '@remi/engine';
-import { TENGGANG_SAMBUNG_MS } from '@remi/meja';
+import { MAKS_PESAN, TENGGANG_SAMBUNG_MS } from '@remi/meja';
 import { TEKS_KALDU } from './kaldu';
 import { DAFTAR_LEVEL_WARGA } from './levelWarga';
 
@@ -731,7 +731,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Tombol yang belum bisa dipakai tetap menjelaskan alasannya kalau diketuk.',
           'Kalau kartu pilihanmu bisa disusun lebih dari satu cara, kamu akan diminta memilih susunannya.',
           'Kartu yang baru masuk tangan ditaruh di ujung kanan. Urutan kartu lain tidak berubah.',
-          'Emote: tekan tombol emote di bar atas untuk mengirim emoji atau celetukan singkat ke meja.',
+          `Emote: tekan tombol 😀 di bar atas untuk mengirim emoji, celetukan khas warga Madya (Gedein!, CEKI!, Give me!, dan lainnya), atau pesan yang kamu tulis sendiri (paling panjang ${MAKS_PESAN} huruf).`,
           'Skor dan log permainan bisa dibuka dari bar atas. Menu ☰ berisi Pengaturan, Bantuan & aturan, pintasan keyboard (kalau pakai keyboard/mouse), Layar penuh, Tentang, dan tombol keluar (Simpan & ke beranda di permainan offline).',
           'Pengaturan seperti suara, musik, getar, kurangi gerak, kecepatan animasi, kartu empat warna, dan ukuran teks hanya berlaku di HP-mu sendiri.',
           'Kalau ada pintasan keyboard, daftarnya bisa dilihat di menu.',
@@ -755,7 +755,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: `**Level warga kedai** (${DAFTAR_LEVEL_WARGA.map((l) => l.label).join(', ')}) dipilih di Atur meja (main offline), atau per kursi di lobi oleh host (meja online). Warga kedai nggak bisa ngintip kartu orang: yang dilihatnya sama dengan yang terlihat dari kursinya.`,
+        teks: `**Level warga kedai** (${DAFTAR_LEVEL_WARGA.map((l) => l.label).join(', ')}) dipilih di Atur meja (main offline), atau per kursi di lobi oleh host (meja online). Warga kedai nggak bisa ngintip kartu orang: yang dilihatnya sama dengan yang terlihat dari kursinya. Tiap warga juga punya kebiasaan main sendiri.`,
       },
       {
         t: 'langkah',
@@ -790,7 +790,15 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: 'Hasil akhir permainan online masuk **Riwayat & peringkat**. Yang dihitung di peringkat cuma meja yang dimainkan minimal 2 orang. Urutan bawaannya rata-rata skor akhir per permainan, dan bisa diganti (skor terbaik, persen juara, jumlah juara, dan lainnya). Peringkat menggabungkan pemain berdasarkan nama tanpa beda huruf besar/kecil, jadi pakai nama yang sama setiap main. Cara hitung lengkapnya ada di tab Peringkat.',
+        teks: 'Hasil akhir permainan online masuk **Riwayat & peringkat**. Yang dihitung di peringkat cuma meja yang dimainkan minimal 2 orang. Urutan bawaannya rata-rata skor akhir per permainan, dan bisa diganti (skor terbaik, persen juara, jumlah juara, dan lainnya). Rata-rata, persen juara, dan poin posisi baru muncul sesudah 3 kali main. Peringkat menggabungkan pemain berdasarkan nama tanpa beda huruf besar/kecil, jadi pakai nama yang sama setiap main.',
+      },
+      {
+        t: 'paragraf',
+        teks: '**Nama** wajib diisi sebelum main. Sesudah diganti, nama baru bisa diganti lagi seminggu kemudian. Tanggalnya tertulis di bawah isian nama di beranda.',
+      },
+      {
+        t: 'paragraf',
+        teks: '**Pasang ke layar utama:** game ini bisa dipasang di HP seperti aplikasi. Ketuk "Pasang ke layar utama" di beranda lalu ikuti petunjuknya. Sesudah terpasang, main offline tetap jalan tanpa internet, dan pembaruan masuk sendiri waktu kamu nggak sedang main.',
       },
     ],
   },
@@ -858,6 +866,10 @@ export const FAQ: { tanya: string; jawab: string }[] = [
     jawab: `Tidak. Kartumu tetap di kursimu. Giliranmu ditunggu ${DETIK_TENGGANG} detik, dihitung sejak kamu terputus. Lewat dari itu, warga kedai yang menjalankan giliranmu sampai kamu kembali. Buka lagi aplikasinya, dan kamu kembali ke kursimu.`,
   },
   {
+    tanya: 'Kok namaku nggak bisa diganti?',
+    jawab: 'Nama cuma bisa diganti seminggu sekali, supaya peringkat nggak kacau. Tanggal bisa ganti lagi tertulis di bawah isian nama di beranda.',
+  },
+  {
     tanya: 'Ada taruhan atau koin di game ini?',
     jawab: 'Tidak ada. Skornya cuma poin buat seru-seruan.',
   },
@@ -896,5 +908,11 @@ export const GLOSARIUM: { istilah: string; arti: string }[] = [
     arti: 'Mode meja: putaran terakhir (putaran kaldu) nilai pentungannya dikali 2. Kalau putaran kaldu habis tanpa ada yang mentung, kaldu lagi.',
   },
   { istilah: 'Susun akhir', arti: 'Kesempatan terakhir semua pemain menurunkan kartu jadi setelah mentung atau deck habis.' },
+  {
+    istilah: 'Gedein!',
+    arti: 'Celetukan ke pemain sebelumnya supaya membuang kartu besar (misalnya As), karena buangannya bakal jadi pentungan orang lain. Sering dipakai buat mancing, jadi jangan langsung percaya.',
+  },
+  { istilah: 'CEKI!', arti: 'Peringatan ke lawan bahwa kartumu sudah siap mentung. Di aplikasi cuma celetukan, nggak mengubah skor.' },
+  { istilah: 'Give me!', arti: 'Harapan waktu ambil dari deck: semoga dapat joker.' },
   { istilah: 'Mode ingatan', arti: 'Seperti meja asli: angka joker diumumkan sekali, dan kartu buangan lama harus diingat sendiri.' },
 ];
