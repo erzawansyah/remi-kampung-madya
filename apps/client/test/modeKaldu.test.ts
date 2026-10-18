@@ -258,6 +258,16 @@ describe('lobi online', () => {
     expect(meja.data.game!.konfigurasi).toMatchObject({ modeKaldu: true, batasSkorAtas: null, batasSkorBawah: null });
   });
 
+  it('menggambar ulang lobi tidak menggulir layar balik ke atas', () => {
+    const { meja } = lobi('host');
+    q('.layar-lobi')!.scrollTop = 420;
+    centang(isian('kaldu'), true);
+    expect(q('.layar-lobi')!.scrollTop).toBe(420);
+    // Perubahan dari luar (ada yang masuk, kursi diatur) juga tidak menggeser.
+    meja.terima('host', { t: 'aturKursi', kursi: 2, jenis: 'bot' });
+    expect(q('.layar-lobi')!.scrollTop).toBe(420);
+  });
+
   it('bukan host: keadaannya sebagai teks, tanpa kotak centang', () => {
     lobi('tamu');
     expect(q('input#kaldu')).toBeNull();

@@ -6,6 +6,12 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+### Untuk pemain
+
+#### Diperbaiki
+
+- Di lobi meja online, mengubah pengaturan (atau ada yang masuk) tidak lagi menggulir layar balik ke atas.
+
 ## [0.4.0] - 2026-10-18
 
 Layar Riwayat lebih ringkas, Bantuan memuat pembaruan terakhir, celetukan khas warga Madya bertambah, dan sekarang bisa kirim pesan sendiri di meja. Nama wajib diisi dan cuma bisa diganti seminggu sekali. Aturan main tidak berubah.

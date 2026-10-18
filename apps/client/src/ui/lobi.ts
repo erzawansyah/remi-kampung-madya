@@ -108,6 +108,9 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   const aktif = document.activeElement;
   const sedangDiisi =
     aktif instanceof HTMLInputElement && aktif.dataset.batasSkor && akar.contains(aktif) ? { id: aktif.id, nilai: aktif.value } : null;
+  // Layar lobi (yang digulir) ikut diganti: posisi gulirnya dipulihkan supaya mengubah pengaturan di
+  // bawah tidak melempar host (dan tamu yang sedang membaca) balik ke atas.
+  const gulir = akar.querySelector('.layar-lobi')?.scrollTop ?? 0;
   lepasIsianBatas(akar);
   const p = info.pengaturan;
   const tautan = `${location.origin}/?meja=${info.kode}`;
@@ -182,6 +185,7 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   </div></div>`;
 
   const q = <T extends HTMLElement>(sel: string) => akar.querySelector(sel) as T | null;
+  q('.layar-lobi')!.scrollTop = gulir;
   q('#salin')!.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(tautan);
@@ -227,7 +231,7 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
     const el = q<HTMLInputElement>(`#${sedangDiisi.id}`);
     if (el) {
       el.value = sedangDiisi.nilai;
-      el.focus();
+      el.focus({ preventScroll: true });
     }
   }
   q('#detik')!.addEventListener('change', () => ubah({ detikGiliran: Number(q<HTMLSelectElement>('#detik')!.value) }));
