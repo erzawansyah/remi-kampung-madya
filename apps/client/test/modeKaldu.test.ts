@@ -268,6 +268,24 @@ describe('lobi online', () => {
     expect(q('.layar-lobi')!.scrollTop).toBe(420);
   });
 
+  it('pilihan pengocok pertama bertahan saat lobi digambar ulang', () => {
+    const { meja } = lobi('host');
+    const kocok = () => q<HTMLSelectElement>('#kocok')!;
+    kocok().value = '1';
+    centang(isian('kaldu'), true);
+    expect(kocok().value).toBe('1');
+    meja.terima('host', { t: 'aturKursi', kursi: 2, jenis: 'bot' });
+    expect(kocok().value).toBe('1');
+    // Kursinya kini dipakai orang lain (tanpa sempat digambar kosong): pilihan tidak pindah ke Ani.
+    const info = meja.info(0);
+    renderLobi(akar(), { ...info, kursi: info.kursi.map((k, i) => (i === 1 ? { ...k, nama: 'Ani' } : k)) }, vi.fn(), vi.fn());
+    expect(kocok().value).toBe('acak');
+    // Siti keluar: kursinya kosong, pilihan kembali ke Acak.
+    kocok().value = '1';
+    meja.tinggalkan('tamu');
+    expect(kocok().value).toBe('acak');
+  });
+
   it('bukan host: keadaannya sebagai teks, tanpa kotak centang', () => {
     lobi('tamu');
     expect(q('input#kaldu')).toBeNull();

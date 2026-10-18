@@ -11,6 +11,7 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 #### Diperbaiki
 
 - Di lobi meja online, mengubah pengaturan (atau ada yang masuk) tidak lagi menggulir layar balik ke atas.
+- Pilihan **Pengocok pertama** di lobi meja online tidak lagi kembali ke Acak setiap ada pengaturan yang diubah atau ada yang masuk. Kalau pemain yang dipilih keluar, pilihannya kembali ke Acak.
 
 ## [0.4.0] - 2026-10-18
 

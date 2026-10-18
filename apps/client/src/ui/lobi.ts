@@ -111,6 +111,11 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   // Layar lobi (yang digulir) ikut diganti: posisi gulirnya dipulihkan supaya mengubah pengaturan di
   // bawah tidak melempar host (dan tamu yang sedang membaca) balik ke atas.
   const gulir = akar.querySelector('.layar-lobi')?.scrollTop ?? 0;
+  // Pilihan pengocok pertama hanya ada di layar host (belum dikirim sebelum Mulai main), jadi ikut
+  // dicatat. Dicocokkan dengan nama juga: kursi yang ditinggal lalu diisi orang lain tidak mewarisi
+  // pilihan itu diam-diam.
+  const kocokLama = akar.querySelector<HTMLSelectElement>('#kocok')?.selectedOptions[0];
+  const kocok = kocokLama ? { nilai: kocokLama.value, nama: kocokLama.textContent } : null;
   lepasIsianBatas(akar);
   const p = info.pengaturan;
   const tautan = `${location.origin}/?meja=${info.kode}`;
@@ -237,6 +242,9 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   q('#detik')!.addEventListener('change', () => ubah({ detikGiliran: Number(q<HTMLSelectElement>('#detik')!.value) }));
   q('#tempo')!.addEventListener('change', () => ubah({ tempoBot: q<HTMLSelectElement>('#tempo')!.value as PengaturanMeja['tempoBot'] }));
   q('#publik')!.addEventListener('change', () => ubah({ publik: q<HTMLInputElement>('#publik')!.checked }));
+  const pilihKocok = q<HTMLSelectElement>('#kocok')!;
+  const opsiKocok = [...pilihKocok.options].find((o) => o.value === kocok?.nilai && o.textContent === kocok.nama);
+  if (opsiKocok) pilihKocok.value = opsiKocok.value;
   q('#mulai')!.addEventListener('click', () => {
     if (kosong) return toast('Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.', true);
     const v = q<HTMLSelectElement>('#kocok')!.value;
