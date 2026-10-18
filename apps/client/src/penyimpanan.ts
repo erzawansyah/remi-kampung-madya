@@ -10,6 +10,8 @@ import { aturPreferensi, preferensi } from './preferensi';
 
 const KUNCI = {
   nama: 'remi.nama',
+  /** Kapan nama terakhir diganti (ms), untuk jeda ganti nama seminggu (keputusan #49). */
+  namaDiganti: 'remi.namaDiganti',
   sesi: 'remi.sesiOnline',
   offline: 'remi.mejaOffline',
   pengaturanOffline: 'remi.pengaturanOffline',
@@ -212,6 +214,9 @@ export function kunciPermainan(kode: string, v: Pick<ViewPemain, 'skor' | 'riway
 export const simpan = {
   nama: () => baca<string>(KUNCI.nama, '', rapikanString),
   setNama: (n: string) => tulis(KUNCI.nama, n),
+  /** Data rusak dianggap belum pernah diganti (boleh ganti), supaya pemain tidak terkunci selamanya. */
+  namaDiganti: () => baca<number | null>(KUNCI.namaDiganti, null, (x) => (typeof x === 'number' && Number.isFinite(x) ? x : undefined)),
+  setNamaDiganti: (ms: number | null) => tulis(KUNCI.namaDiganti, ms),
 
   sesi: () => baca<SesiOnline | null>(KUNCI.sesi, null, rapikanSesi),
   setSesi: (s: SesiOnline | null) => tulis(KUNCI.sesi, s),

@@ -304,10 +304,10 @@ describe('renderRiwayat tab Peringkat (leaderboard v2)', () => {
     expect(panggil).toEqual(['/api/peringkat?v=2&urut=rata']);
     // Empat pilihan, masing-masing <select> di dalam <label>.
     const label = [...akar.querySelectorAll('.kontrol-peringkat label')].map((l) => l.firstChild!.textContent!.trim());
-    expect(label).toEqual(['Urutkan dari', 'Pemain', 'Deck', 'Periode']);
+    expect(label).toEqual(['Urutkan', 'Pemain', 'Deck', 'Periode']);
     for (const l of akar.querySelectorAll('.kontrol-peringkat label')) expect(l.querySelector('select')).not.toBeNull();
     expect(akar.querySelector<HTMLSelectElement>('#urut-peringkat')!.value).toBe('rata');
-    expect([...akar.querySelectorAll('#saring-periode option')].map((o) => o.textContent)).toEqual(['Sepanjang masa', 'Bulan ini (Oktober 2026)']);
+    expect([...akar.querySelectorAll('#saring-periode option')].map((o) => o.textContent)).toEqual(['Semua', 'Bulan ini']);
     // Urut rata-rata: Siti (100) di atas Budi (50); Joko baru 1 kali main.
     expect(namaBaris(akar)).toEqual(['Siti', 'Budi']);
     const pertama = akar.querySelector('#hasil-peringkat .baris-peringkat')!;
@@ -315,17 +315,19 @@ describe('renderRiwayat tab Peringkat (leaderboard v2)', () => {
     expect(pertama.querySelector('.kanan-peringkat small')!.textContent).toBe('rata-rata');
     const budi = akar.querySelectorAll('#hasil-peringkat .baris-peringkat')[1]!;
     expect(budi.classList.contains('saya')).toBe(true);
-    expect(budi.querySelector('small')!.textContent).toBe('main 5× · juara 3× (60%) · rata-rata 50 · terbaik 500 · mentung 2× · kepentung 0× · keluar di tengah 1×');
+    expect(budi.querySelector('small')!.textContent).toBe('5× main · 3× juara · terbaik 500 · keluar 1×');
     expect(pertama.querySelector('small')!.textContent).not.toContain('keluar');
-    expect(akar.querySelector('#hasil-peringkat')!.textContent).toContain('Belum cukup main (kurang dari 3 kali)');
+    expect(akar.querySelector('#hasil-peringkat')!.textContent).toContain('Belum 3 kali main');
     expect(namaBaris(akar, '.belum-cukup .baris-peringkat .nama-skor > b')).toEqual(['Joko']);
-    expect(akar.querySelector('#jelas-urut')!.textContent).toContain('200 dan 100, rata-ratanya 150');
-    expect(akar.querySelector('#jelas-urut')!.textContent).toContain('Minimal 3 kali main.');
+    // Penjelasan urutan ada di lipatan "Cara hitungnya", bukan di layar utama.
+    expect(akar.querySelector('details.cara-hitung #jelas-urut')!.textContent).toContain('200 dan 100 jadi 150');
+    expect(akar.querySelector('details.cara-hitung')!.textContent).toContain('sesudah 3 kali main');
+    expect(akar.querySelector('.layar-riwayat .judul p')).toBeNull();
     expect(akar.querySelector('#ringkasan-peringkat')!.getAttribute('role')).toBe('status');
-    expect(akar.querySelector('#ringkasan-peringkat')!.textContent).toBe('Rata-rata skor · Sepanjang masa · 3 orang dari 7 permainan');
+    expect(akar.querySelector('#ringkasan-peringkat')!.textContent).toBe('3 orang · 7 permainan');
     const cara = akar.querySelector('details.cara-hitung')!;
     expect(cara.querySelector('summary')!.textContent).toBe('Cara hitungnya');
-    for (const kata of ['minimal 2 orang', 'warga kedai', 'juru kunci', 'skor terendah', 'huruf besar/kecil']) expect(cara.textContent).toContain(kata);
+    for (const kata of ['minimal 2 orang', 'Warga kedai', 'juru kunci', 'huruf besar/kecil']) expect(cara.textContent).toContain(kata);
     // Istilah UI: warga kedai, bukan "bot".
     expect(akar.querySelector('#isi-riwayat')!.textContent).not.toMatch(/\bbot\b/i);
   });
@@ -344,14 +346,16 @@ describe('renderRiwayat tab Peringkat (leaderboard v2)', () => {
     // Skor terbaik tidak butuh minimal main: Joko (900) ikut di atas.
     expect(namaBaris(akar)).toEqual(['Joko', 'Budi', 'Siti']);
     expect(akar.querySelector('#hasil-peringkat .kanan-peringkat small')!.textContent).toBe('skor terbaik');
-    expect(akar.querySelector('#hasil-peringkat')!.textContent).not.toContain('Belum cukup main');
+    expect(akar.querySelector('#hasil-peringkat')!.textContent).not.toContain('Belum 3 kali main');
     ganti(sel, 'persen');
     expect(namaBaris(akar)).toEqual(['Budi', 'Siti']);
     expect(akar.querySelector('#hasil-peringkat .kanan-peringkat b')!.textContent).toBe('60%');
     ganti(sel, 'mentung');
     expect(namaBaris(akar)).toEqual(['Siti', 'Budi', 'Joko']);
     expect(akar.querySelector('#hasil-peringkat .kanan-peringkat b')!.textContent).toBe('6×');
-    expect(akar.querySelector('#ringkasan-peringkat')!.textContent).toContain('Paling sering mentung');
+    expect(akar.querySelector('#jelas-urut')!.textContent).toContain('Paling sering mentung');
+    // Urut mentung: kepentung ikut di baris kecil.
+    expect(akar.querySelector('#hasil-peringkat .baris-peringkat small')!.textContent).toContain('kepentung');
     expect(panggil).toHaveLength(1);
   });
 
@@ -387,7 +391,7 @@ describe('renderRiwayat tab Peringkat (leaderboard v2)', () => {
     stubFetch(() => papanContoh({ periode: { dari: '', sampai: '', bulan: '2026-10' } }));
     ganti(akar.querySelector<HTMLSelectElement>('#saring-periode')!, 'bulan');
     await tunggu();
-    expect(akar.querySelector('#ringkasan-peringkat')!.textContent).toContain('Bulan ini (Oktober 2026)');
+    expect(akar.querySelector('#ringkasan-peringkat')!.textContent).toContain('Oktober 2026');
   });
 
   it('kosong: pesan sesuai ada/tidaknya saringan', async () => {
@@ -398,7 +402,7 @@ describe('renderRiwayat tab Peringkat (leaderboard v2)', () => {
     expect(akar.querySelector('#hasil-peringkat')!.textContent).toContain('Belum ada permainan online bareng teman yang selesai.');
     ganti(akar.querySelector<HTMLSelectElement>('#saring-pemain')!, '6');
     await tunggu();
-    expect(akar.querySelector('#hasil-peringkat')!.textContent).toContain('Belum ada permainan yang cocok dengan pilihan ini.');
+    expect(akar.querySelector('#hasil-peringkat')!.textContent).toContain('Belum ada permainan yang cocok.');
   });
 
   it('server lama (jawaban array): tampil cara lama, pilihan dimatikan, ada catatan singkat', async () => {
@@ -530,7 +534,7 @@ describe('renderRiwayat tab Statistik: pemilih urutan', () => {
     const nama = () => [...akar.querySelectorAll('#tabel-statistik tbody tr td:first-child')].map((td) => td.textContent!.replace(' kamu', ''));
     // Rata-rata: Sari 133 (3 main), Budi 40 (5 main); Joko baru 1 kali → Belum cukup main.
     expect(nama()).toEqual(['Sari', 'Budi', 'Joko']);
-    expect(akar.querySelector('#tabel-statistik .sub-judul')!.textContent).toContain('Belum cukup main');
+    expect(akar.querySelector('#tabel-statistik .sub-judul')!.textContent).toContain('Belum 3 kali main');
     expect(akar.querySelector('#tabel-statistik tr.saya')!.textContent).toContain('1 (20%)');
     ganti(sel, 'main');
     expect(nama()).toEqual(['Budi', 'Sari', 'Joko']);
@@ -538,6 +542,5 @@ describe('renderRiwayat tab Statistik: pemilih urutan', () => {
     expect(akar.querySelector('#tabel-statistik .sub-judul')).toBeNull();
     ganti(sel, 'terbaik');
     expect(nama()).toEqual(['Joko', 'Sari', 'Budi']);
-    expect(akar.querySelector('#jelas-lokal')!.textContent).toBe('Skor akhir paling tinggi dalam satu permainan.');
   });
 });

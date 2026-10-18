@@ -4,11 +4,9 @@
 // Aturan hitung peringkat satu sumber dengan server: packages/meja/src/peringkat.ts (#45).
 
 import {
-  BUTUH_MIN_MAIN,
   DAFTAR_URUTAN,
   SARINGAN_BAWAAN,
   URUTAN_BAWAAN,
-  bulanWib,
   hitungPeringkat,
   kunciNama,
   nilaiUrutan,
@@ -26,6 +24,10 @@ import {
   CATATAN_DECK,
   CATATAN_SERVER_LAMA,
   CATATAN_STATISTIK,
+  KET_LOKAL,
+  KOSONG_LOKAL,
+  KOSONG_PERMAINAN,
+  KOSONG_STATISTIK,
   JELAS_URUTAN,
   JUDUL_BELUM_CUKUP,
   JUDUL_CARA_HITUNG,
@@ -36,7 +38,6 @@ import {
   LABEL_URUTAN,
   LENCANA_KELUAR,
   LENCANA_TIDAK_DIHITUNG,
-  SYARAT_MIN_MAIN,
   labelBulan,
 } from '../konten/peringkat';
 import { simpan, type CatatanPermainan } from '../penyimpanan';
@@ -107,7 +108,6 @@ const persen = (x: number) => `${Math.round(x)}%`;
 /** Urutan yang bisa dipilih di Statistik HP ini: mentung tidak tersimpan di riwayat lokal. */
 const URUTAN_LOKAL: readonly UrutanPeringkat[] = DAFTAR_URUTAN.filter((u) => u !== 'mentung');
 
-const jelasUrutan = (u: UrutanPeringkat) => `${JELAS_URUTAN[u]}${BUTUH_MIN_MAIN.includes(u) ? ` ${SYARAT_MIN_MAIN}` : ''}`;
 
 /** Angka besar di kanan baris peringkat: nilai urutan yang sedang dipilih. */
 function angkaUrutan(b: BarisPeringkat, urut: UrutanPeringkat): { teks: string; kelas: string } {
@@ -125,17 +125,11 @@ function angkaUrutan(b: BarisPeringkat, urut: UrutanPeringkat): { teks: string; 
   }
 }
 
-/** Baris kecil di bawah nama: semua angka penting, apa pun urutannya. */
-function rincianBaris(b: BarisPeringkat): string {
-  const bagian = [
-    `main ${b.main}×`,
-    `juara ${b.juara}× (${persen(b.persenJuara)})`,
-    `rata-rata ${angkaSkor(b.rataRata)}`,
-    `terbaik ${angkaSkor(b.skorTerbaik)}`,
-    `mentung ${b.mentung}×`,
-    `kepentung ${b.kepentung}×`,
-  ];
-  if (b.keluar > 0) bagian.push(`keluar di tengah ${b.keluar}×`);
+/** Baris kecil di bawah nama: ringkas, angka urutan yang dipilih sudah tampil besar di kanan. */
+function rincianBaris(b: BarisPeringkat, urut: UrutanPeringkat): string {
+  const bagian = [`${b.main}× main`, `${b.juara}× juara`, `terbaik ${angkaSkor(b.skorTerbaik)}`];
+  if (urut === 'mentung') bagian.push(`${b.kepentung}× kepentung`);
+  if (b.keluar > 0) bagian.push(`keluar ${b.keluar}×`);
   return bagian.join(' · ');
 }
 
@@ -202,11 +196,10 @@ const KOLOM_STATISTIK: [string, UrutanPeringkat[]][] = [
 const opsiUrutan = (daftar: readonly UrutanPeringkat[]) => daftar.map((u) => `<option value="${u}">${esc(LABEL_URUTAN[u])}</option>`).join('');
 
 function htmlStatistik(s: Statistik, namaSaya: string): string {
-  if (!s.jumlah) return '<p class="redup rapat">Belum ada permainan yang selesai di HP ini. Main sampai tuntas dulu, nanti angkanya muncul di sini.</p>';
+  if (!s.jumlah) return `<p class="redup rapat">${esc(KOSONG_STATISTIK)}</p>`;
   const saya = s.pemain.find((p) => kunciNama(p.nama) === kunciNama(namaSaya));
   const kotak = (angka: string | number, label: string) => `<div class="stat-kotak"><b class="angka">${esc(angka)}</b><small>${esc(label)}</small></div>`;
-  return `<p class="redup rapat">Dihitung dari ${s.jumlah} permainan terakhir yang tersimpan di HP ini (online dan offline).</p>
-    <div class="stat-grid">
+  return `<div class="stat-grid">
       ${kotak(s.jumlah, 'permainan selesai')}
       ${kotak(s.putaran, 'putaran dimainkan')}
       ${kotak(`${s.offline} / ${s.online}`, 'offline / online')}
@@ -228,9 +221,8 @@ function htmlStatistik(s: Statistik, namaSaya: string): string {
     <p class="kelompok-judul">Per pemain</p>
     <p class="redup rapat">${esc(CATATAN_STATISTIK)}</p>
     <div class="kontrol-peringkat">
-      <label class="medan">Urutkan dari<select id="urut-lokal" aria-describedby="jelas-lokal">${opsiUrutan(URUTAN_LOKAL)}</select></label>
+      <label class="medan">Urutkan<select id="urut-lokal">${opsiUrutan(URUTAN_LOKAL)}</select></label>
     </div>
-    <p class="redup rapat" id="jelas-lokal"></p>
     <div class="tabel-gulir" id="tabel-statistik"></div>
     ${s.terpanjang ? `<p class="redup rapat">Permainan terpanjang: ${s.terpanjang.putaran} putaran (${esc(tanggal(s.terpanjang.waktu))}).</p>` : ''}`;
 }
@@ -294,7 +286,7 @@ function htmlBarisPapan(b: BarisPeringkat, label: string, urut: UrutanPeringkat,
   const angka = angkaUrutan(b, urut);
   return `<div class="baris-peringkat${kunciNama(b.nama) === kunciSaya ? ' saya' : ''}">
       <span class="medali">${label}</span>
-      <span class="nama-skor"><b>${esc(b.nama)}</b><small class="redup">${esc(rincianBaris(b))}</small></span>
+      <span class="nama-skor"><b>${esc(b.nama)}</b><small class="redup">${esc(rincianBaris(b, urut))}</small></span>
       <span class="kanan-peringkat"><b class="total ${angka.kelas}">${esc(angka.teks)}</b><small class="redup">${esc(KETERANGAN_ANGKA[urut])}</small></span>
     </div>`;
 }
@@ -315,7 +307,7 @@ function htmlPapan(papan: PapanPeringkat, urut: UrutanPeringkat, s: SaringanPeri
 }
 
 function htmlPermainan(daftar: PermainanTersimpan[]): string {
-  if (!daftar.length) return '<p class="redup">Belum ada permainan online yang selesai.</p>';
+  if (!daftar.length) return `<p class="redup">${esc(KOSONG_PERMAINAN)}</p>`;
   return daftar
     .map(
       (g) => `<details class="akordion putaran-akordion">
@@ -343,9 +335,8 @@ function htmlPermainan(daftar: PermainanTersimpan[]): string {
 
 function htmlLokal(): string {
   const daftar = simpan.riwayat();
-  if (!daftar.length)
-    return '<p class="redup">Belum ada permainan yang selesai di HP ini. Main sampai tuntas dulu, nanti klasemennya tercatat di sini. Kalau mau main langsung, ajak teman ke Kedai Madya.</p>';
-  return `<p class="redup rapat">Tersimpan di HP ini saja (online dan offline), 30 terakhir.</p>${daftar
+  if (!daftar.length) return `<p class="redup">${esc(KOSONG_LOKAL)}</p>`;
+  return `<p class="redup rapat">${esc(KET_LOKAL)}</p>${daftar
     .map(
       (r) => `<div class="baris-peringkat">
         <span class="medali" role="img" aria-label="${r.mode === 'offline' ? 'offline' : 'online'}">${r.mode === 'offline' ? '📴' : '🌐'}</span>
@@ -357,30 +348,28 @@ function htmlLokal(): string {
 }
 
 /** Kerangka tab Peringkat: kontrol dibuat sekali, hanya #hasil-peringkat yang diganti. */
-function htmlKerangkaPeringkat(sekarang: number): string {
-  const bulan = labelBulan(bulanWib(sekarang).bulan);
+function htmlKerangkaPeringkat(): string {
   const opsi = (xs: [string, string][]) => xs.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
   return `<div class="kontrol-peringkat">
-      <label class="medan k-lebar">Urutkan dari<select id="urut-peringkat" aria-describedby="jelas-urut">${opsiUrutan(DAFTAR_URUTAN)}</select></label>
+      <label class="medan k-lebar">Urutkan<select id="urut-peringkat">${opsiUrutan(DAFTAR_URUTAN)}</select></label>
       <label class="medan">Pemain<select id="saring-pemain">${opsi([['', 'Semua'], ...[2, 3, 4, 5, 6].map((n): [string, string] => [String(n), `${n} orang`])])}</select></label>
       <label class="medan">Deck<select id="saring-deck" aria-describedby="catatan-deck">${opsi([
         ['', 'Semua'],
         ['1', '1 deck'],
         ['2', '2 deck'],
       ])}</select></label>
-      <label class="medan k-lebar">Periode<select id="saring-periode">${opsi([
+      <label class="medan">Periode<select id="saring-periode">${opsi([
         ['semua', LABEL_PERIODE.semua],
-        ['bulan', `${LABEL_PERIODE.bulan} (${bulan})`],
+        ['bulan', LABEL_PERIODE.bulan],
       ])}</select></label>
     </div>
-    <p class="redup rapat" id="jelas-urut"></p>
     <p class="redup rapat" id="catatan-deck" hidden>${esc(CATATAN_DECK)}</p>
     <p class="redup rapat" id="catatan-server" hidden>${esc(CATATAN_SERVER_LAMA)}</p>
     <p class="redup rapat ringkasan-peringkat" id="ringkasan-peringkat" role="status"></p>
     <div id="hasil-peringkat"></div>
     <details class="akordion cara-hitung">
       <summary>${esc(JUDUL_CARA_HITUNG)}</summary>
-      <ul class="redup">${CARA_HITUNG.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+      <ul class="redup"><li id="jelas-urut"></li>${CARA_HITUNG.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
     </details>`;
 }
 
@@ -433,7 +422,7 @@ export function pasangIsyaratGulir(deret: HTMLElement): () => void {
 export function renderRiwayat(akar: HTMLElement, kembali: () => void, tabAwal: TabRiwayat = 'peringkat'): void {
   akar.innerHTML = `
   <div class="layar layar-riwayat"><div class="kolom">
-    <div class="judul"><h1>🏆 Riwayat</h1><p>Klasemen akhir dan statistik Remi Kampung Madya</p></div>
+    <div class="judul"><h1>🏆 Riwayat</h1></div>
     <div class="tab" role="tablist" aria-label="Jenis riwayat">
       ${TAB.map(
         ([id, label]) =>
@@ -484,9 +473,7 @@ export function renderRiwayat(akar: HTMLElement, kembali: () => void, tabAwal: T
     const sel = isi.querySelector<HTMLSelectElement>('#urut-lokal');
     if (!sel) return;
     const tabel = isi.querySelector<HTMLElement>('#tabel-statistik')!;
-    const jelas = isi.querySelector<HTMLElement>('#jelas-lokal')!;
     const tampil = () => {
-      jelas.textContent = jelasUrutan(urutLokal);
       tabel.innerHTML = htmlTabelStatistik(pemain, urutLokal, namaSaya);
     };
     // Nilai dipasang dari JS (bukan atribut selected) supaya pilihan terakhir selalu terbaca benar.
@@ -500,7 +487,7 @@ export function renderRiwayat(akar: HTMLElement, kembali: () => void, tabAwal: T
   };
 
   const bukaPeringkat = () => {
-    isi.innerHTML = htmlKerangkaPeringkat(Date.now());
+    isi.innerHTML = htmlKerangkaPeringkat();
     const q = <T extends HTMLElement>(s: string) => isi.querySelector<T>(s)!;
     const selUrut = q<HTMLSelectElement>('#urut-peringkat');
     const selPemain = q<HTMLSelectElement>('#saring-pemain');
@@ -517,14 +504,14 @@ export function renderRiwayat(akar: HTMLElement, kembali: () => void, tabAwal: T
     selPeriode.value = saringan.periode;
 
     const perbaruiJelas = () => {
-      jelas.textContent = jelasUrutan(urutPeringkat);
+      jelas.textContent = JELAS_URUTAN[urutPeringkat];
       catatanDeck.hidden = saringan.jumlahDeck === null;
     };
     const tampilPapan = (p: PapanPeringkat) => {
       hasil.innerHTML = htmlPapan(p, urutPeringkat, saringan, namaSaya);
-      const periode = p.periode ? `${LABEL_PERIODE.bulan} (${labelBulan(p.periode.bulan)})` : LABEL_PERIODE.semua;
       const orang = p.peringkat.length + p.belumCukup.length;
-      ringkas.textContent = `${LABEL_URUTAN[urutPeringkat]} · ${periode} · ${orang} orang dari ${p.jumlahPermainan} permainan`;
+      const periode = p.periode ? `${labelBulan(p.periode.bulan)} · ` : '';
+      ringkas.textContent = `${periode}${orang} orang · ${p.jumlahPermainan} permainan`;
     };
     const muat = () => {
       const ke = ++permintaan;
@@ -542,10 +529,9 @@ export function renderRiwayat(akar: HTMLElement, kembali: () => void, tabAwal: T
             // Server lama (sebelum #45): tampil seperti dulu, pilihan dimatikan.
             for (const s of [selUrut, selPemain, selDeck, selPeriode]) s.disabled = true;
             catatanServer.hidden = false;
-            jelas.hidden = true;
             catatanDeck.hidden = true;
             hasil.innerHTML = htmlPeringkatLama(d as BarisPeringkatLama[], namaSaya);
-            ringkas.textContent = `${LABEL_URUTAN.juara} · ${LABEL_PERIODE.semua} · ${d.length} orang`;
+            ringkas.textContent = `${d.length} orang`;
             return;
           }
           if (!isPapan(d)) return gagal();

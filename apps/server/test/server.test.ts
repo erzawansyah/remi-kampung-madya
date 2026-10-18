@@ -143,6 +143,19 @@ describe('server WebSocket', () => {
     c.tutup();
   });
 
+  it('pesan yang diketik sendiri diteruskan sesudah dirapikan (keputusan #48)', async () => {
+    const a = new Klien(server.port);
+    await a.kirim({ t: 'buat', nama: 'Budi', pengaturan: { jumlahPemain: 2 } });
+    const { kode } = await a.tunggu('masuk');
+    const b = new Klien(server.port);
+    await b.kirim({ t: 'gabung', kode, nama: 'Siti' });
+    await b.tunggu('masuk');
+    await a.kirim({ t: 'emote', isi: '  gedein   dong <3 ' } as Record<string, unknown>);
+    expect((await b.tunggu('emote')).isi).toBe('gedein dong 3');
+    a.tutup();
+    b.tutup();
+  });
+
   it('HP yang masih memakai aplikasi 0.1.0: emote lama diteruskan sebagai padanan baru, bukan ditolak', async () => {
     // Pesan persis seperti yang dikirim client 0.1.0 (JSON mentah, tanpa field baru).
     const lama = new Klien(server.port);

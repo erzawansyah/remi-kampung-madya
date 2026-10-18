@@ -49,6 +49,8 @@ const isi = (el: HTMLInputElement, nilai: string) => {
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('remi.preferensi', JSON.stringify({ tutorialSelesai: true }));
+  // Nama wajib diisi sebelum main (keputusan #49).
+  localStorage.setItem('remi.nama', JSON.stringify('Pemain'));
   _setelUlangCache();
   pasangMatchMediaPalsu(false);
   document.body.innerHTML =

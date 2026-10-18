@@ -46,6 +46,7 @@ const tunggu = async () => {
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('remi.preferensi', JSON.stringify({ tutorialSelesai: true }));
+  localStorage.setItem('remi.nama', JSON.stringify('Budi'));
   _setelUlangCache();
   pasangMatchMediaPalsu(false);
   document.body.innerHTML =
@@ -82,6 +83,90 @@ describe('konfirmasiTimpaSimpanan', () => {
   it('simpanan permainan yang sudah selesai tidak perlu dikonfirmasi', async () => {
     localStorage.setItem('remi.mejaOffline', JSON.stringify({ ...SIMPANAN, game: { ...SIMPANAN.game, status: 'selesai' } }));
     await expect(konfirmasiTimpaSimpanan('Latihan.')).resolves.toBe(true);
+  });
+});
+
+describe('nama wajib dan ganti seminggu sekali (#49)', () => {
+  const HARI = 24 * 60 * 60 * 1000;
+  const isian = () => document.querySelector<HTMLInputElement>('#nama')!;
+  const ket = () => document.querySelector('#ket-nama')!.textContent!;
+  const ubahNama = (n: string) => {
+    isian().value = n;
+    isian().dispatchEvent(new Event('change'));
+  };
+
+  it('belum ada nama: tombol main tidak jalan, minta isi nama dulu', async () => {
+    localStorage.removeItem('remi.nama');
+    const aksi = aksiPalsu();
+    renderBeranda(document.getElementById('ui')!, aksi);
+    document.querySelector<HTMLElement>('#mulai-bot')!.click();
+    document.querySelector<HTMLElement>('#buat')!.click();
+    await tunggu();
+    expect(aksi.mainOffline).not.toHaveBeenCalled();
+    expect(aksi.buatMeja).not.toHaveBeenCalled();
+    expect(document.querySelector('#toast')!.textContent).toContain('Isi namamu dulu');
+  });
+
+  it('isi nama pertama kali: tersimpan tanpa konfirmasi dan tanpa jeda', async () => {
+    localStorage.removeItem('remi.nama');
+    const aksi = aksiPalsu();
+    renderBeranda(document.getElementById('ui')!, aksi);
+    isian().value = '  Siti  ';
+    document.querySelector<HTMLElement>('#buat')!.click();
+    await tunggu();
+    expect(document.querySelector('.dialog.konfirmasi')).toBeNull();
+    expect(aksi.buatMeja).toHaveBeenCalledWith('Siti');
+    expect(JSON.parse(localStorage.getItem('remi.nama')!)).toBe('Siti');
+    expect(localStorage.getItem('remi.namaDiganti')).toBeNull();
+    expect(isian().readOnly).toBe(false);
+  });
+
+  it('ganti nama perlu konfirmasi; sesudah diganti terkunci seminggu', async () => {
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    ubahNama('Joko');
+    await tunggu();
+    document.querySelector<HTMLElement>('.dialog.konfirmasi [data-ya]')!.click();
+    await tunggu();
+    expect(JSON.parse(localStorage.getItem('remi.nama')!)).toBe('Joko');
+    expect(Number(localStorage.getItem('remi.namaDiganti'))).toBeGreaterThan(Date.now() - 5000);
+    expect(isian().readOnly).toBe(true);
+    expect(ket()).toContain('Bisa ganti lagi');
+    // Beranda digambar ulang: tetap terkunci.
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    expect(isian().readOnly).toBe(true);
+  });
+
+  it('batal ganti: nama lama kembali, tidak terkunci', async () => {
+    const aksi = aksiPalsu();
+    renderBeranda(document.getElementById('ui')!, aksi);
+    isian().value = 'Joko';
+    document.querySelector<HTMLElement>('#buat')!.click();
+    await tunggu();
+    document.querySelector<HTMLElement>('.dialog.konfirmasi [data-tidak]')!.click();
+    await tunggu();
+    expect(aksi.buatMeja).not.toHaveBeenCalled();
+    expect(isian().value).toBe('Budi');
+    expect(localStorage.getItem('remi.namaDiganti')).toBeNull();
+  });
+
+  it('lewat seminggu boleh ganti lagi; jeda rusak dianggap boleh', () => {
+    localStorage.setItem('remi.namaDiganti', String(Date.now() - 8 * HARI));
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    expect(isian().readOnly).toBe(false);
+    localStorage.setItem('remi.namaDiganti', '"rusak"');
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    expect(isian().readOnly).toBe(false);
+    localStorage.setItem('remi.namaDiganti', String(Date.now() - 2 * HARI));
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    expect(isian().readOnly).toBe(true);
+  });
+
+  it('mengosongkan nama tidak menghapusnya', async () => {
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    ubahNama('   ');
+    await tunggu();
+    expect(isian().value).toBe('Budi');
+    expect(JSON.parse(localStorage.getItem('remi.nama')!)).toBe('Budi');
   });
 });
 

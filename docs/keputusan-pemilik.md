@@ -1,8 +1,8 @@
-# Keputusan pemilik: rincian butir #25–#47
+# Keputusan pemilik: rincian butir #25–#50
 
-Dokumen ini merinci baris **#25–#47** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #40–#47 semuanya sudah diterapkan (#42–#43 di engine, meja, server, warga kedai, dan aplikasi; #47 di engine dan meja, tanpa tampilan apa pun di aplikasi).
+Dokumen ini merinci baris **#25–#50** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #40–#47 semuanya sudah diterapkan (#42–#43 di engine, meja, server, warga kedai, dan aplikasi; #47 di engine dan meja, tanpa tampilan apa pun di aplikasi). Butir #48–#50 datang dari permintaan pemilik 18 Okt 2026 dan diterapkan di rilis 0.4.0.
 
-**Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026, #40–#47 pada 16 Okt 2026. Baris #20–#23 README (susun akhir) juga sudah diputuskan 16 Okt 2026: sesuai bawaan yang sudah berjalan. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. Yang masih perlu dikonfirmasi pemilik hanya dua tafsiran: #43 (mode kaldu tanpa batas skor) dan kelompok "berubah-ubah" di #47. Catatan kecil dari 14 Okt 2026 (bunyi dramatis, gaya Jago/Suhu) sudah ditanggapi, lihat [Catatan lain](#catatan-lain-belum-masuk-tabel).
+**Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026, #40–#47 pada 16 Okt 2026, #48–#50 pada 18 Okt 2026. Baris #20–#23 README (susun akhir) juga sudah diputuskan 16 Okt 2026: sesuai bawaan yang sudah berjalan. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. Yang masih perlu dikonfirmasi pemilik hanya dua tafsiran: #43 (mode kaldu tanpa batas skor) dan kelompok "berubah-ubah" di #47. Catatan kecil dari 14 Okt 2026 (bunyi dramatis, gaya Jago/Suhu) sudah ditanggapi, lihat [Catatan lain](#catatan-lain-belum-masuk-tabel).
 
 Untuk tiap butir ada: keputusan pemilik (kalau sudah), apa yang terjadi sebelum keputusan, bukti di kode (`file:baris`, per kode saat rilis 0.2.0, jadi nomor baris bisa sudah bergeser), pilihan yang waktu itu ditawarkan, dan dampaknya. Pilihan **bukan aturan baru**, hanya daftar kemungkinan yang ditawarkan ke pemilik.
 
@@ -40,6 +40,9 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 | [45](#k45) | Leaderboard terasa tidak adil | `packages/meja` + `apps/server` + client | Diputuskan: banyak urutan, bawaan rata-rata per permainan |
 | [46](#k46) | Banyak teman tidak tahu game ini bisa dipasang | client (beranda) | Diputuskan: tombol pasang melayang hanya di beranda, "Nanti saja" 3 hari |
 | [47](#k47) | Warga kedai gampang dibaca, bahkan Suhu | `packages/engine` (bot) + `packages/meja` | Diputuskan (kelompok berubah-ubah perlu konfirmasi), diterapkan |
+| [48](#k48) | Emote hanya dari daftar; celetukan khas warga Madya belum ada | `packages/meja` (validasi) + client | Diputuskan: celetukan baru + pesan bebas diketik sendiri |
+| [49](#k49) | Nama bisa diganti kapan saja (peringkat bisa diakali) | client (beranda) | Diputuskan: wajib diisi, ganti seminggu sekali, dikunci di HP |
+| [50](#k50) | Versi tetap 0.2.0 walau sudah berkali-kali rilis | rilis | Diputuskan: naik versi tiap rilis, 0.3.0 lalu 0.4.0 |
 
 ---
 
@@ -643,6 +646,36 @@ Penahan Suhu ditulis dua desimal dari jalan arena penyetelan yang mencetak disua
 - **`Meja.langkahBot`:** gaya hanya dikirim ke strategi level kursi. Cadangan galat #38 (strategi mudah, lalu aksi aman) tanpa gaya. Level Mudah mengabaikan gaya di engine, jadi latihan tidak berubah.
 - **Tersembunyi = tidak pernah ditampilkan.** Gaya tidak masuk `InfoMeja` (`info()` menyalin jenis, nama, terhubung, level saja), `DataMeja`, view, maupun pesan lain, dan tidak disebut di UI, Bantuan, atau CHANGELOG bagian pemain. Tabel `GAYA_WARGA` sendiri ikut kode sumber dan bundel offline di HP, jadi orang yang membaca kode bisa melihatnya; yang dijaga adalah tampilan ke pemain.
 - **Nama baru** di `NAMA_LAWAN_BAWAAN` tetap ditambahkan di belakang dan wajib diberi gaya di `GAYA_WARGA` (`gaya.test.ts` gagal kalau lupa). Kalau pemilik mau memindah nama ke gaya lain, cukup ubah tabel itu; golden meja ikut bergeser kalau yang dipindah Kipas Dua atau Cak Kopag (dua kursi Normal di skenario golden).
+
+<a id="k48"></a>
+
+## 48. Celetukan warga Madya dan pesan bebas
+
+**Keputusan pemilik (18 Okt 2026):** tambah celetukan yang sering diucapkan warga Madya, dan pemain boleh menulis pesan sendiri ("bisa tulis pesan manual, jadi gak template aja"). Ini mengganti aturan lama "emote hanya dari `DAFTAR_EMOTE` supaya tidak bisa dipakai mengirim pesan bebas".
+
+Arti celetukan dari pemilik:
+- **Gedein!**: kode ke pemain sebelumnya supaya membuang kartu besar (misalnya As), karena apa pun yang dia buang bakal jadi pentungan pemain lain. Sekarang jarang dipercaya karena sering dipakai mancing.
+- **Buruan!** menggantikan **Cepetan!**.
+- **Lumayan!**: bisa dipakai untuk apa saja.
+- **CEKI!**: peringatan ke lawan bahwa kartunya sudah siap mentung. Di meja asli, lawan yang kartunya dipakai tidak bisa minus kalau sudah diperingatkan, tapi di game ini cukup jadi celetukan (skor tidak berubah).
+- **Njir lah!**: ungkapan kesal.
+- **Give me!**: waktu ambil dari deck dan berharap joker.
+
+**Yang dikerjakan:** `DAFTAR_EMOTE` ditambah lima celetukan dan 16 emoji, `EMOTE_LAMA['Cepetan!'] = 'Buruan!'`. Teks bebas dirapikan `rapikanPesan()` (`packages/meja/src/validasi.ts`, maksimal `MAKS_PESAN` = 60 huruf, tanpa karakter kontrol/format/`<>`, baris baru jadi spasi) dan tetap lewat pesan `emote`, jadi aplikasi lama ikut menampilkannya. Batas 1 per 1,2 detik per kursi tetap. Celetukan warga kedai tidak berubah dan tidak pernah memakai teks bebas maupun "CEKI!" (supaya tidak jadi penanda siap mentung). Isi pesan sepenuhnya tanggung jawab pemain, seperti ngobrol di meja asli.
+
+<a id="k49"></a>
+
+## 49. Nama wajib dan ganti seminggu sekali
+
+**Keputusan pemilik (18 Okt 2026):** nama harus diisi dan hanya bisa diganti paling cepat seminggu sekali. Pemilik memilih **dikunci di HP saja** (bukan akun di server).
+
+**Yang dikerjakan:** `apps/client/src/namaPemain.ts` dan simpanan `remi.namaDiganti`. Main offline, latihan, buat meja, gabung, dan cari meja publik menolak nama kosong ("Isi namamu dulu, Bos."). Mengganti nama minta konfirmasi, lalu isian nama terkunci 7 hari dengan keterangan tanggal bisa ganti lagi. **Default pengembang:** isi nama pertama kali tidak memasang jeda; pemain lama yang sudah punya nama boleh mengganti sekali tanpa menunggu; jam HP yang mundur jauh tidak mengunci selamanya; mengosongkan isian mengembalikan nama lama. Batasnya bisa diakali dengan menghapus data browser, dan orang lain tetap bisa memakai nama yang sama (belum ada akun).
+
+<a id="k50"></a>
+
+## 50. Penomoran versi
+
+**Keputusan pemilik (18 Okt 2026):** versi harus teratur. Semua yang tayang 13–17 Okt 2026 dicatat **0.3.0**, pembaruan 18 Okt **0.4.0**. Seterusnya setiap PR ke `main` naik versi: fitur atau perubahan aturan menaikkan angka tengah, perbaikan saja menaikkan angka belakang. CHANGELOG dipindah dari `[Belum dirilis]` ke `[x.y.z] - tanggal`, lalu commit merge diberi tag `vX.Y.Z`. Dijaga `apps/client/test/versiRilis.test.ts`.
 
 ---
 

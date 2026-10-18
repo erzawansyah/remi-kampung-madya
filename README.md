@@ -8,7 +8,7 @@ Game kartu Remi versi digital dengan **aturan yang kami berlakukan saat main di 
 
 Istilah: di UI, pemain komputer disebut **warga kedai** (Kipas Dua, Cak Kopag, Si Rak, dan kawan-kawan). Di kode dan dokumen teknis tetap disebut `bot`.
 
-> Status: **versi 0.2.0** (lihat [CHANGELOG.md](CHANGELOG.md), termasuk bagian "Belum dirilis" yang sebagian sudah tayang). Aturan main yang sudah tayang = 0.1.0 ditambah tiga aturan baru dari keputusan pemilik 16 Okt 2026: joker beda dari putaran sebelumnya (#40), mentung pakai beberapa joker (#41), dan mode kaldu (#42, #43), yang tayang 17 Okt 2026 (PR #7). Selain itu yang berubah tampilan, rasa main, pengaturan, bantuan, warga kedai, dan kesiapan produksi. Aturan yang berlaku sekarang sudah diputuskan pemilik semua, termasuk susun akhir #20–#23 di tabel [Aturan Terbuka](#aturan-terbuka-dan-keputusan) (16 Okt 2026, sesuai bawaan). Gaya main warga kedai per persona (#47, 16 Okt 2026) sudah diterapkan di kode tapi belum dirilis (tafsiran #43 dan sebagian #47 masih perlu konfirmasi); rincian keputusan #25–#47 di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md).
+> Status: **versi 0.4.0** (lihat [CHANGELOG.md](CHANGELOG.md)). Aturan main yang berlaku = 0.1.0 ditambah tiga aturan dari keputusan pemilik 16 Okt 2026: joker beda dari putaran sebelumnya (#40), mentung pakai beberapa joker (#41), dan mode kaldu (#42, #43), yang tayang 17 Okt 2026 (0.3.0). Gaya main warga kedai per persona (#47) juga tayang di 0.3.0. Versi 0.4.0 menambah celetukan dan pesan bebas (#48), nama terkunci seminggu (#49), dan penomoran versi (#50); aturan main tidak berubah. Tafsiran #43 dan kelompok berubah-ubah di #47 masih perlu konfirmasi pemilik; rincian keputusan #25–#50 di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md).
 
 ## Fitur
 
@@ -205,7 +205,7 @@ Dokumen pendukung:
 - [docs/baseline-gameplay.md](docs/baseline-gameplay.md): perilaku aktual mesin aturan dan meja, plus cara meninjau golden test.
 - [docs/arsitektur-client.md](docs/arsitektur-client.md): peta modul client (scene, animasi, jendela, audio, preferensi).
 - [docs/riset-desain.md](docs/riset-desain.md): riset game feel, aksesibilitas, dan benchmark UX, beserta status implementasinya.
-- [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): rincian keputusan pemilik #25–#47 (termasuk yang sudah diterapkan tapi belum dirilis) dan dua tafsiran yang masih perlu dikonfirmasi pemilik (#43, kelompok berubah-ubah di #47).
+- [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): rincian keputusan pemilik #25–#50 dan dua tafsiran yang masih perlu dikonfirmasi pemilik (#43, kelompok berubah-ubah di #47).
 - [docs/deploy.md](docs/deploy.md): daftar cek sesudah deploy, identitas build, dan perilaku update PWA.
 
 ### Arsitektur online
@@ -311,8 +311,8 @@ Ini perilaku aplikasi, bukan aturan main. Semuanya bisa diubah kalau perlu.
   - Saat giliranmu membuang, tumpukan menampilkan "berikutnya: X".
   - Bar waktu giliran berubah warna di 10 detik terakhir (dan diumumkan ke pembaca layar).
 - **Emote:**
-  - Tombol 😀 di bar atas membuka 17 emote (emoji dan celetukan seperti "Awas!", "Sabar…", "GG", "Kartu itu bundar, kak.").
-  - Emote muncul sebagai gelembung di dekat pemainnya, dibatasi 1 per 1,2 detik.
+  - Tombol 😀 di bar atas membuka emoji, celetukan (misalnya "Awas!", "Gedein!", "CEKI!", "Give me!", "Kartu itu bundar, kak."), dan isian untuk menulis pesan sendiri (maksimal 60 huruf, keputusan #48).
+  - Emote dan pesan muncul sebagai gelembung di dekat pemainnya, dibatasi 1 per 1,2 detik.
   - Warga kedai sesekali nyeletuk menanggapi kejadian yang terlihat semua orang, misalnya "Suwun, Bos!" saat mungut kartu orang, "Nutup, rek!" saat mentung, atau "Kartu itu bundar, kak." saat kepentung.
 
 ## Ringkasan aturan
@@ -441,7 +441,10 @@ Kartu bergambar joker tidak dipakai.
 | 44 | Batas skor hanya bisa ±500 (offline) atau 300/500/1000 (lobi) | Angka bebas kelipatan 10 untuk batas atas dan batas bawah, kosong = tanpa batas. Batas bawah diketik positif dan disimpan negatif. Nilai lama tetap sah ([rinci](docs/keputusan-pemilik.md#k44)) | Diputuskan pemilik (16 Okt 2026) |
 | 45 | Leaderboard terasa tidak adil (urut jumlah juara, jadi yang paling sering main selalu di atas; meja sendirian dicampur; kabur di tengah permainan tidak tercatat; nama beda huruf besar/kecil dianggap orang lain) | Banyak pilihan urutan, bawaan rata-rata skor akhir per permainan. Meja 1 orang + warga kedai tidak dihitung. Yang keluar di tengah permainan dihitung juru kunci. Default yang tidak dikomentari pemilik: minimal 3 kali main untuk rata-rata/persen/posisi, periode bawaan sepanjang masa (pilihan bulan ini, WIB), yang keluar diberi skor terendah di meja, menutup aplikasi tanpa Keluar tidak dihitung kabur ([rinci](docs/keputusan-pemilik.md#k45)) | Diputuskan pemilik (16 Okt 2026) |
 | 46 | Banyak teman tidak tahu game ini bisa dipasang ke layar utama | Tombol **Pasang aplikasi** melayang, **hanya di beranda**, selama belum terpasang. "Nanti saja" menyembunyikannya 3 hari; ubin menu "Pasang ke layar utama" tetap ada. Petunjuk khusus iPhone/iPad, Android, dan browser bawaan aplikasi (Instagram, WhatsApp, dll.). Tidak pernah muncul di lobi, meja, atau selama permainan ([rinci](docs/keputusan-pemilik.md#k46)) | Diputuskan pemilik (16 Okt 2026) |
-| 47 | Warga kedai gampang dibaca, bahkan Suhu | Gaya main per persona (nama warga kedai), terpisah dari level, tidak ditampilkan ke pemain, ditambah satu kelompok yang gayanya berubah-ubah tiap putaran ([rinci](docs/keputusan-pemilik.md#k47)) | Diputuskan pemilik (16 Okt 2026), kelompok berubah-ubah perlu konfirmasi; diterapkan (`bot/gaya.ts`, `packages/meja/src/gayaWarga.ts`), belum dirilis |
+| 47 | Warga kedai gampang dibaca, bahkan Suhu | Gaya main per persona (nama warga kedai), terpisah dari level, tidak ditampilkan ke pemain, ditambah satu kelompok yang gayanya berubah-ubah tiap putaran ([rinci](docs/keputusan-pemilik.md#k47)) | Diputuskan pemilik (16 Okt 2026), kelompok berubah-ubah perlu konfirmasi; diterapkan di 0.3.0 (`bot/gaya.ts`, `packages/meja/src/gayaWarga.ts`) |
+| 48 | Emote hanya dari daftar tetap | Celetukan warga Madya (Gedein!, Buruan!, Lumayan!, CEKI!, Njir lah!, Give me!) dan pesan yang diketik sendiri, maksimal 60 huruf. CEKI! hanya celetukan, skor tidak berubah ([rinci](docs/keputusan-pemilik.md#k48)) | Diputuskan pemilik (18 Okt 2026), diterapkan di 0.4.0 |
+| 49 | Nama bisa diganti kapan saja | Nama wajib diisi, ganti paling cepat seminggu sekali, dikunci di HP ([rinci](docs/keputusan-pemilik.md#k49)) | Diputuskan pemilik (18 Okt 2026), diterapkan di 0.4.0 |
+| 50 | Versi tidak naik walau sering rilis | Naik versi tiap rilis ke `main` (fitur/aturan = minor, perbaikan = patch), tag `vX.Y.Z` ([rinci](docs/keputusan-pemilik.md#k50)) | Diputuskan pemilik (18 Okt 2026) |
 
 ## Test
 

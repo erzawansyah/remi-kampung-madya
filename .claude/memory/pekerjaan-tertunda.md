@@ -1,6 +1,6 @@
 # Pekerjaan tertunda
 
-Diperbarui: 17 Okt 2026. Hapus butir yang sudah selesai, tambahkan yang baru.
+Diperbarui: 18 Okt 2026. Hapus butir yang sudah selesai, tambahkan yang baru.
 
 ## Latar
 
@@ -11,7 +11,8 @@ Batch 14 Okt 2026 (level warga kedai Jago dan Suhu, 12 nama warga kedai baru, bu
 16 Okt 2026 pemilik memberi tujuh permintaan sesudah main bareng di kedai, dan memutuskan #40–#47 plus #20–#23 (rincian: `docs/keputusan-pemilik.md`). Rencananya dibagi tiga rilis (masing-masing PR sendiri dari `produksi` ke `main`):
 - **Rilis A** (tanpa perubahan aturan main): leaderboard baru (#45), batas skor bebas kelipatan 10 (#44), tombol pasang melayang (#46), perbaikan kecil (toast koneksi, cek `/healthz` di setiap sambungan, inisial pembuang di buangan, komentar golden), dan pencatatan keputusan. **Sudah tayang 16 Okt 2026:** PR #6 di-merge ke `main` (`e2eae81`, termasuk `344ae2e` tombol pasang satu baris di layar < 360 px). Dicek dari luar: `/healthz` = `"versi":"0.2.0","sha":"h-e29404c"` (sama dengan hash isi pohon `344ae2e`), `/api/peringkat` masih array, `/api/peringkat?v=2&urut=rata` objek.
 - **Rilis B** (aturan baru #40 joker beda dari putaran sebelumnya, #41 mentung pakai beberapa joker, #42/#43 mode kaldu; rinci di `docs/keputusan-pemilik.md`). **Sudah tayang 17 Okt 2026:** PR #7 di-merge pemilik ke `main` (`86591d8`, isi pohonnya sama dengan `3bebe0f` di `produksi`). Dicek dari luar 17 Okt 2026: `/healthz` = `"versi":"0.2.0","sha":"h-282dcd2"` (sama dengan hash isi pohon `86591d8`). #41 dan mode kaldu baru dicek di Chromium emulasi HP dan desktop (lihat butir 5).
-- **Rilis C** (gaya main warga kedai per persona, #47; `bot/gaya.ts`, `packages/meja/src/gayaWarga.ts`, hasil arena dan kompromi di `docs/keputusan-pemilik.md` #47). **Sudah tayang 17 Okt 2026:** PR #8 di-merge pemilik ke `main` (`b44ef39`, isi pohonnya sama dengan `e9ff5fc`). Dicek dari luar: `/healthz` = `"versi":"0.2.0","sha":"h-2ccca73"` (sama dengan hash isi pohon `b44ef39`), `/api/peringkat` masih array, `?v=2` objek. `produksi` sudah di-fast-forward ke `b44ef39`.
+- **Rilis C** (gaya main warga kedai per persona, #47; `bot/gaya.ts`, `packages/meja/src/gayaWarga.ts`, hasil arena dan kompromi di `docs/keputusan-pemilik.md` #47). **Sudah tayang 17 Okt 2026:** PR #8 di-merge pemilik ke `main` (`b44ef39`, isi pohonnya sama dengan `e9ff5fc`). Dicek dari luar: `/healthz` = `"versi":"0.2.0","sha":"h-2ccca73"` (sama dengan hash isi pohon `b44ef39`), `/api/peringkat` masih array, `?v=2` objek. `produksi` sudah di-fast-forward ke `b44ef39`. Semua ini sekarang dicatat sebagai versi **0.3.0** (keputusan #50).
+- **Rilis D = 0.4.0** (18 Okt 2026, permintaan pemilik sesudah Rilis C): Riwayat ringkas, Bantuan diperbarui, celetukan warga Madya + pesan bebas (#48), nama wajib dan ganti seminggu sekali di HP (#49), penomoran versi (#50). PR dari `produksi` ke `main`; sesudah merge cek `/healthz` (`"versi":"0.4.0"`), lalu pasang tag `v0.3.0` di `b44ef39` dan `v0.4.0` di commit merge.
 
 ## Belum selesai
 

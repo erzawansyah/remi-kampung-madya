@@ -807,6 +807,59 @@ describe('bar aksi', () => {
 
 // ---------- popup joker ----------
 
+describe('palet emote (#48: celetukan dan pesan sendiri)', () => {
+  const buka = () => (meja!.akar.querySelector('[data-a=emote]') as HTMLElement).click();
+  const emote = () => meja!.terkirim.filter((p) => p.t === 'emote');
+
+  it('palet berisi emoji, celetukan warga Madya, dan isian pesan', () => {
+    meja = new MejaUji(permainanGiliranku());
+    buka();
+    const palet = meja.akar.querySelector('.palet-emote')!;
+    const celetukan = [...palet.querySelectorAll('.palet-celetukan button')].map((b) => b.textContent);
+    for (const isi of ['Gedein!', 'Buruan!', 'Lumayan!', 'CEKI!', 'Njir lah!', 'Give me!', 'GG']) expect(celetukan).toContain(isi);
+    expect(palet.querySelectorAll('.palet-emoji button').length).toBeGreaterThanOrEqual(20);
+    expect(palet.querySelector('.palet-tulis input')).not.toBeNull();
+    (palet.querySelector('[data-emote="CEKI!"]') as HTMLElement).click();
+    expect(emote()).toEqual([{ t: 'emote', isi: 'CEKI!' }]);
+    expect(meja.akar.querySelector('.palet-emote')).toBeNull();
+  });
+
+  it('pesan yang diketik dikirim sesudah dirapikan; kosong tidak dikirim', () => {
+    meja = new MejaUji(permainanGiliranku());
+    buka();
+    const form = meja.akar.querySelector<HTMLFormElement>('.palet-tulis')!;
+    const isian = form.querySelector('input')!;
+    isian.value = '   ';
+    form.requestSubmit();
+    expect(emote()).toEqual([]);
+    expect(meja.akar.querySelector('.palet-emote')).not.toBeNull();
+    isian.value = '  gedein   dong ';
+    form.requestSubmit();
+    expect(emote()).toEqual([{ t: 'emote', isi: 'gedein dong' }]);
+    expect(meja.akar.querySelector('.palet-emote')).toBeNull();
+  });
+
+  it('mengetik huruf pintasan di isian pesan tidak memicu aksi meja; Esc menutup palet', () => {
+    meja = new MejaUji(permainanGiliranku());
+    buka();
+    const isian = meja.akar.querySelector<HTMLInputElement>('.palet-tulis input')!;
+    isian.focus();
+    tekan('d', isian);
+    expect(meja.aksi).toEqual([]);
+    isian.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(meja.akar.querySelector('.palet-emote')).toBeNull();
+  });
+
+  it('pesan panjang tampil di gelembung bertanda panjang, teksnya apa adanya (bukan HTML)', () => {
+    meja = new MejaUji(permainanGiliranku());
+    meja.kontrol.terimaEmote(1, 'jangan buang As dulu ya, aku butuh <b>');
+    const g = meja.akar.querySelector('.gelembung')!;
+    expect(g.classList.contains('panjang')).toBe(true);
+    expect(g.textContent).toBe('jangan buang As dulu ya, aku butuh <b>');
+    expect(g.querySelector('b')).toBeNull();
+  });
+});
+
 describe('popup joker', () => {
   it('fokus otomatis di OK, kartu digambar kanvas, OK mengirim siapJoker sekali', async () => {
     const g = permainanGiliranku();

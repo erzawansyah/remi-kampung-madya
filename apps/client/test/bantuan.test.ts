@@ -2,7 +2,7 @@
 // Pusat Bantuan: pencarian, sorotan aman, navigasi bab, dan contoh kartu.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BAB_BANTUAN, FAQ } from '../src/konten/bantuan';
+import { BAB_BANTUAN, FAQ, GLOSARIUM } from '../src/konten/bantuan';
 import { TENGGANG_SAMBUNG_MS } from '@remi/meja';
 import { bukaBantuan, cariBantuan, cuplikan } from '../src/ui/bantuan';
 import { tutupDialogTeratas } from '../src/ui/dom';
@@ -140,5 +140,19 @@ describe('konten: status keputusan pemilik dan isi menu', () => {
     const butir = BAB_BANTUAN.flatMap((b) => b.isi).flatMap((x) => (x.t === 'daftar' ? x.butir : []));
     const menu = butir.find((t) => t.includes('Menu ☰'))!;
     for (const isi of ['Pengaturan', 'Bantuan & aturan', 'pintasan keyboard', 'Layar penuh', 'Tentang', 'keluar']) expect(menu).toContain(isi);
+  });
+});
+
+describe('konten: pembaruan 18 Okt 2026', () => {
+  const semua = () => JSON.stringify([BAB_BANTUAN, FAQ, GLOSARIUM]);
+
+  it('memuat tombol pasang (#46), kebiasaan warga kedai (#47), syarat 3 kali main (#45), pesan sendiri (#48), dan aturan nama (#49)', () => {
+    const t = semua();
+    for (const isi of ['Pasang ke layar utama', 'kebiasaan main sendiri', 'sesudah 3 kali main', 'tulis sendiri', 'seminggu']) expect(t).toContain(isi);
+  });
+
+  it('glosarium menjelaskan celetukan khas warga Madya', () => {
+    const istilah = GLOSARIUM.map((g) => g.istilah);
+    for (const isi of ['Gedein!', 'CEKI!', 'Give me!']) expect(istilah).toContain(isi);
   });
 });

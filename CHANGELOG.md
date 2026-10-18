@@ -6,6 +6,33 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.4.0] - 2026-10-18
+
+Layar Riwayat lebih ringkas, Bantuan memuat pembaruan terakhir, celetukan khas warga Madya bertambah, dan sekarang bisa kirim pesan sendiri di meja. Nama wajib diisi dan cuma bisa diganti seminggu sekali. Aturan main tidak berubah.
+
+### Untuk pemain
+
+#### Ditambahkan
+
+- Celetukan baru di palet emote: **Gedein!**, **Lumayan!**, **CEKI!**, **Njir lah!**, dan **Give me!**. **Cepetan!** diganti **Buruan!**.
+- Emoji di palet bertambah, dan ada isian **Tulis pesan…** untuk mengirim pesan sendiri ke meja (paling panjang 60 huruf). Pesan panjang tampil dua-tiga baris di atas kursimu, sedikit lebih lama supaya sempat dibaca.
+- Bantuan memuat tombol **Pasang ke layar utama**, kebiasaan main tiap warga kedai, syarat 3 kali main di peringkat, aturan nama, pesan sendiri, dan arti Gedein!, CEKI!, dan Give me! di glosarium.
+
+#### Diubah
+
+- **Nama wajib diisi** sebelum main. Sesudah diganti, nama baru bisa diganti lagi seminggu kemudian, dan tanggalnya tertulis di bawah isian nama. Isi nama pertama kali tidak kena jeda, dan yang sudah punya nama boleh mengganti sekali kapan saja. Aturan ini dicatat di HP masing-masing.
+- Layar **Riwayat** lebih ringkas: tanpa subjudul, pilihan Pemain, Deck, dan Periode satu baris, ringkasan cukup "16 orang · 11 permainan", dan baris tiap pemain cukup "3× main · 1× juara · terbaik 140". Penjelasan urutan pindah ke lipatan **Cara hitungnya**.
+- Versi aplikasi sekarang naik setiap ada pembaruan. Pembaruan 13–17 Okt dicatat sebagai 0.3.0, yang ini 0.4.0.
+
+### Teknis
+
+- Pesan sendiri (keputusan pemilik #48): protokol tetap `{ t: 'emote', isi }`, jadi aplikasi lama tetap menampilkannya. `validasiPesan` menerima isi dari `DAFTAR_EMOTE`, padanan `EMOTE_LAMA` (sekarang termasuk `'Cepetan!'` → `'Buruan!'`), atau teks bebas yang dirapikan `rapikanPesan()` (`packages/meja/src/validasi.ts`: NFKC, tanpa karakter kontrol/format/`<>`, baris baru jadi spasi, maksimal `MAKS_PESAN` = 60 huruf; isi mentah > 1000 karakter ditolak). Batas 1 per 1,2 detik per kursi tetap. Celetukan warga kedai (`celetukBot`) tidak berubah, jadi golden meja tetap. Client: palet emote jadi tiga bagian (`.palet-emoji`, `.palet-celetukan`, `.palet-tulis`), gelembung `.panjang` untuk pesan > 24 karakter, dan Esc di isian menutup palet.
+- Nama pemain (keputusan pemilik #49): `apps/client/src/namaPemain.ts` (`JEDA_GANTI_NAMA_MS`, `namaTerkunciSampai`, `simpanNamaBaru`), simpanan baru `remi.namaDiganti`, teks di `konten/nama.ts` (ikut antislop). Beranda memakai `pastikanNama()` sebelum main offline, latihan, buat, gabung, dan cari meja publik; tidak lagi jatuh diam-diam ke "Pemain". Dikunci di HP saja, server tidak berubah.
+- Riwayat: teks yang dulu ditulis langsung di `ui/riwayat.ts` pindah ke `konten/peringkat.ts` supaya ikut antislop.
+- Versi (keputusan pemilik #50): semua workspace 0.4.0, test baru memastikan versi workspace sama dengan root dan CHANGELOG punya heading versi itu. Setiap PR ke `main` naik versi (fitur atau aturan = minor, perbaikan = patch) dan diberi tag `vX.Y.Z`.
+
+## [0.3.0] - 2026-10-17
+
 Tampilan dan teks disesuaikan dengan Kedai Madya, tempat remi ini biasa dimainkan. Game ini versi online-nya. Ada juga dua level warga kedai yang lebih kuat, kebiasaan main yang beda-beda untuk tiap warga kedai, bunyi baru untuk momen mentung dan joker dibuang, dan beberapa perbaikan meja dari keputusan pemilik. Peringkat online sekarang lebih adil, batas skor bisa diisi angka bebas (kelipatan 10), dan beranda punya tombol untuk memasang aplikasi. **Ada aturan main yang berubah** (keputusan pemilik): angka joker sekarang tidak boleh sama dengan joker putaran sebelumnya, nutup sekarang boleh pakai beberapa joker sekaligus, dan ada opsi meja baru **mode kaldu** (rinciannya di bagian Diubah). Tiga hal yang sejak awal sudah berjalan begitu di aplikasi sekarang dikonfirmasi pemilik dan ditulis di aturan: di permainan 2 deck kartu kembar boleh jadi joker pengganti di seri yang sama, joker mati yang masih di tangan dinilai seperti kartu aslinya, dan tangan 1 kartu memang tidak bisa mulung atau mentung.
 
 ### Untuk pemain
