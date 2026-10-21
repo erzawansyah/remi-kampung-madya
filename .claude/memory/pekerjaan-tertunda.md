@@ -1,6 +1,6 @@
 # Pekerjaan tertunda
 
-Diperbarui: 18 Okt 2026. Hapus butir yang sudah selesai, tambahkan yang baru.
+Diperbarui: 21 Okt 2026. Hapus butir yang sudah selesai, tambahkan yang baru.
 
 ## Latar
 
@@ -13,6 +13,8 @@ Batch 14 Okt 2026 (level warga kedai Jago dan Suhu, 12 nama warga kedai baru, bu
 - **Rilis B** (aturan baru #40 joker beda dari putaran sebelumnya, #41 mentung pakai beberapa joker, #42/#43 mode kaldu; rinci di `docs/keputusan-pemilik.md`). **Sudah tayang 17 Okt 2026:** PR #7 di-merge pemilik ke `main` (`86591d8`, isi pohonnya sama dengan `3bebe0f` di `produksi`). Dicek dari luar 17 Okt 2026: `/healthz` = `"versi":"0.2.0","sha":"h-282dcd2"` (sama dengan hash isi pohon `86591d8`). #41 dan mode kaldu baru dicek di Chromium emulasi HP dan desktop (lihat butir 5).
 - **Rilis C** (gaya main warga kedai per persona, #47; `bot/gaya.ts`, `packages/meja/src/gayaWarga.ts`, hasil arena dan kompromi di `docs/keputusan-pemilik.md` #47). **Sudah tayang 17 Okt 2026:** PR #8 di-merge pemilik ke `main` (`b44ef39`, isi pohonnya sama dengan `e9ff5fc`). Dicek dari luar: `/healthz` = `"versi":"0.2.0","sha":"h-2ccca73"` (sama dengan hash isi pohon `b44ef39`), `/api/peringkat` masih array, `?v=2` objek. `produksi` sudah di-fast-forward ke `b44ef39`. Semua ini sekarang dicatat sebagai versi **0.3.0** (keputusan #50).
 - **Rilis D = 0.4.0** (18 Okt 2026, permintaan pemilik sesudah Rilis C): Riwayat ringkas, Bantuan diperbarui, celetukan warga Madya + pesan bebas (#48), nama wajib dan ganti seminggu sekali di HP (#49), penomoran versi (#50). PR dari `produksi` ke `main`; sesudah merge cek `/healthz` (`"versi":"0.4.0"`), lalu pasang tag `v0.3.0` di `b44ef39` dan `v0.4.0` di commit merge.
+
+21 Okt 2026: Claude Code ikut main dua kali di server live bareng pemilik (meja WPUAF kalah, ZMRJG mode kaldu juara) lewat WebSocket langsung, bukan mengetuk kanvas. Pemilik ingin AI lain bisa ikut main; promptnya di `docs/main-sebagai-ai.md`.
 
 ## Belum selesai
 
@@ -34,6 +36,10 @@ Batch 14 Okt 2026 (level warga kedai Jago dan Suhu, 12 nama warga kedai baru, bu
    - Transisi 0.1.0 → versi baru. Baru diuji unit test (`swTransisi.test.ts`, `simpananLama.test.ts`). Cara: build 0.1.0 dari commit `8588853` di worktree, sajikan di origin yang sama, buka, lalu ganti ke build baru dan pastikan halaman dimuat ulang sekali dan simpanan offline tetap bisa dilanjutkan.
    - Lama mikir Jago/Suhu (di komputer pengembang p99 < 7 ms, terburuk 26–41 ms; tangan > 14 kartu jatuh ke strategi normal lewat `BATAS_TANGAN_KUAT`; HP diperkirakan 4–5× lebih lambat, dan di mode offline bot jalan di main thread browser), dan biaya menjadwalkan bunyi besar (±20–25 ms di CPU yang diperlambat 4x).
 6. **Kecil, opsional:** di HP 360 × 780 dengan 6 pemain, label pembuang di bawah kartu buangan yang tertimpa (bukan yang teratas) tetap tersembunyi, **dengan teks biasa maupun teks besar**: celahnya ±11–15 px CSS, jadi inisial berhuruf lebar (MM, MS, CO) 9 px pun tidak muat. Teks biasa: hanya "AK" dan "OG" yang tampil; teks besar: hanya nama di bawah kartu teratas. Kalau mau diperbaiki, tata letak buangan yang harus diubah; mengecilkan huruf saja tidak cukup.
+7. **Main bareng AI (21 Okt 2026), tanyakan ke pemilik:**
+   - Perlukah nama AI ditandai atau dipisah di peringkat? Server menghitung AI sebagai manusia, jadi permainan dengan AI masuk riwayat dan peringkat.
+   - `rankJoker`/`kartuDibuka` tetap ada di view sepanjang putaran (#29). Pagar "joker diumumkan sekali" hanya ada di UI, jadi client AI dijaga etika di prompt saja.
+   - Kursi manusia yang terputus di lobi tidak pernah dikosongkan dan host tidak bisa melepasnya; tanpa token, pemilik kursi masuk lagi di kursi baru (terjadi waktu container Claude restart). Kalau mengganggu, opsinya tombol host untuk melepas kursi terputus di lobi.
 
 ## Sudah selesai (dicek 16 Okt 2026, jangan dikerjakan ulang)
 
