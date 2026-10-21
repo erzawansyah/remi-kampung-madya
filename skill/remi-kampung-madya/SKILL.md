@@ -29,7 +29,7 @@ Kalau kode meja belum ada, tanyakan. Jangan menebak kode.
    Folder `--data` menyimpan token kursi. Kalau client mati atau putus, jalankan lagi dengan `--kode` dan `--data` yang sama supaya kembali ke kursi lama (di lobi, kursi yang terputus tidak dikosongkan dan host tidak bisa melepasnya).
 4. Cek: `node <skill>/scripts/remi.mjs lihat`. Harus tertulis "tersambung" dan kursimu.
 5. **Kalau kamu host** (membuat meja sendiri, atau host lama keluar):
-   - Atur sesuai permintaan pengguna: `remi host atur '{"batasPutaran":3,"detikGiliran":0,"tempoBot":"cepat"}'`. Field: `jumlahPemain` (2–6), `duaDeckUntukEmpat`, `batasPutaran` (angka/null), `batasSkorAtas`, `batasSkorBawah` (kelipatan 10/null), `publik`, `detikGiliran` (0 = tanpa batas), `levelBot` (`mudah`/`normal`/`jago`/`suhu`), `tempoBot` (`santai`/`normal`/`cepat`), `modeKaldu`. Semuanya juga bisa langsung lewat `--pengaturan` saat `--buat`.
+   - Atur sesuai permintaan pengguna: `remi host atur '{"batasPutaran":3,"detikGiliran":0,"tempoBot":"cepat"}'`. Field: `jumlahPemain` (2–6), `duaDeckUntukEmpat`, `batasPutaran` (angka/null), `batasSkorAtas`, `batasSkorBawah` (kelipatan 10/null), `publik`, `detikGiliran` (0 = tanpa batas), `levelBot` (`mudah`/`normal`/`jago`/`suhu`), `tempoBot` (`santai`/`normal`/`cepat`), `modeKaldu`. Semuanya juga bisa langsung lewat `--pengaturan` saat `--buat`. `levelBot` hanya level bawaan untuk warga kedai yang mengisi kursi nanti; ia tidak mengisi kursi sendiri.
    - Kursi kosong diisi orang yang masuk dengan kode meja, atau warga kedai: `remi host bot <kursi> <level>` (kursi mulai dari 0; kursi 0 biasanya kamu). Permainan baru bisa dimulai kalau tidak ada kursi kosong.
    - `remi host mulai`. Kalau pengguna akan ikut main, tunggu dia masuk dulu (`remi tunggu` bangun saat ada yang duduk).
 6. Kabari pengguna singkat: sudah duduk di kursi berapa, siapa saja di meja, dan pengaturannya. Kalau waktu per giliran 30–60 detik, sarankan host menaikkannya ke 120 detik atau tanpa batas. Kamu butuh waktu berpikir, dan lewat batas giliranmu dijalankan warga kedai.
@@ -49,7 +49,7 @@ Baca baris terakhir ringkasan:
 | `PERLU AKSIMU: catat angka joker` | Catat angka joker di catatanmu sendiri, lalu `remi siap`. Permainan menunggu semua manusia menekan OK, jadi jangan lama. |
 | `giliranmu, tahap 'ambil'` | Putuskan mulung atau ambil (lihat Cara memutuskan), lalu `remi mulung ...` atau `remi ambil`. |
 | `giliranmu, tahap 'main'` | Opsional `remi turunkan ...`, lalu wajib `remi buang <id>`. |
-| `susun akhir` | Turunkan kartu jadi yang bisa dari tangan (`remi turunkan ...`, tanpa mulung, boleh sampai habis), lalu `remi selesai`. |
+| `susun akhir` | Turunkan kartu jadi yang bisa dari tangan (`remi turunkan ...`, tanpa mulung, boleh sampai habis), lalu `remi selesai`. Kirim `selesai` hanya kalau baris ini muncul: kalau tanganmu sudah kosong (misalnya kamu yang mentung) atau semua sudah selesai, fase ini lewat sendiri. |
 | `Belum giliranmu` | `remi tunggu 100` lagi. |
 | `PUTARAN SELESAI` | Kabari skor ke pengguna. Kalau kamu host, `remi host berikut` sesudah jeda singkat; kalau bukan, `remi tunggu`. |
 | `PERMAINAN SELESAI` | Laporkan klasemen, lalu `remi keluar`, kecuali pengguna minta main lagi. Berhenti memanggil `tunggu`. |
@@ -100,7 +100,7 @@ Detail strategi: `references/strategi.md`. Gaya yang dipakai mengubah cara menim
 
 Manusia di meja hanya melihat tangannya sendiri, kartu jadi semua orang, buangan teratas, dan apa yang dibuang tiap pemain. AI yang ikut main harus setara, kalau tidak permainannya tidak adil dan pemilik game berhenti mengundang AI.
 
-- **Angka joker diumumkan sekali.** Itu aturan pemilik game: pemain harus mengingatnya sendiri. Client menampilkan pengumuman joker hanya sampai kamu menekan `remi siap`, lalu menyembunyikannya (juga dari `remi json`). Catat sendiri saat pengumuman. Jangan membaca `rankJoker`/`kartuDibuka` dari sumber lain sesudah itu. Pengecualian yang memang terbuka untuk semua: label `→angka` di kartu jadi dan joker yang sudah dibuang.
+- **Angka joker diumumkan sekali.** Itu aturan pemilik game: pemain harus mengingatnya sendiri. Client menampilkan pengumuman joker hanya sampai kamu menekan `remi siap`, lalu menyembunyikannya (juga dari `remi json`). Catat sendiri saat pengumuman. Jangan membaca `rankJoker`/`kartuDibuka` dari sumber lain sesudah itu. Pengecualian yang memang terbuka untuk semua: label `→angka` di kartu jadi, joker yang sudah dibuang, dan angka joker putaran yang sudah selesai (`riwayat[].rankJoker`).
 - **Jangan membocorkan isi tanganmu** lewat obrolan atau ke penggunamu selama putaran berjalan kalau penggunamu juga pemain di meja itu. Sesudah putaran selesai semua tangan terbuka, jadi boleh dibahas.
 - **Putuskan sendiri.** Jangan menyerahkan langkahmu ke strategi otomatis atau ke warga kedai. Kalau kamu ingin cepat, itu urusan waktu berpikirmu.
 - **Jangan berbohong soal isi tangan** lewat obrolan. Memancing lewat pilihan buangan itu bagian permainan.

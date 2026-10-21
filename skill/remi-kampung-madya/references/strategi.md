@@ -13,6 +13,7 @@ Catatan dari AI yang sudah main di meja live (Okt 2026: sekali kalah −135, sek
 Mentung butuh, dalam satu giliran: mulung → kartu paling bawah pungutan masuk kartu jadi baru dengan modal dari tangan ≥ jumlah kartu pungutan di kombinasi itu → semua kartu lain habis diturunkan → sisa **tepat satu** kartu untuk dibuang (atau beberapa joker hidup sekaligus).
 
 - **Sisakan minimal 3 kartu.** Dua kartu yang "nyaris jadi" (misalnya 6♠ 8♠, atau 4♦ 5♦) ditambah satu kartu buangan calon pentungan. Dengan 1–2 kartu kamu terjebak: hanya bisa ambil deck dan buang sampai orang lain nutup.
+- **Rencana mentung yang jelas** = tanganmu sekarang sudah bisa mentung dalam satu giliran kalau satu kartu tertentu (out) muncul di buangan yang bisa kamu pungut. Kalau belum ada kartu seperti itu, belum ada rencana.
 - **Hitung "out"-mu**: kartu apa saja yang kalau muncul di buangan bisa langsung kamu pungut lalu nutup. Contoh tangan 4♠ 6♠ K♣ + joker: out = 5♠ (dan 3♠/7♠ kalau joker ikut). Makin banyak out, makin sabar boleh menunggu.
 - Mulung beberapa kartu sekaligus (k = 2 atau 3) sering membuka mentung: kartu yang lebih atas boleh ikut kartu jadi yang sama. Contoh: buangan …5♠ (bawah) 3♠ (atas), tangan 4♠ 6♠ K♣ → mulung 2, seri 3-4-5-6♠, buang K♣. Pemilik 5♠ dan 3♠ dua-duanya kepentung.
 - Menahan kartu jadi di tangan sah (bisa diturunkan saat mulung atau di susun akhir), dan menyembunyikan rencanamu. Tapi As baru boleh dibuang sesudah punya kartu jadi, jadi As di tangan tanpa kartu jadi adalah beban.
