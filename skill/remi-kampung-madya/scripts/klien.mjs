@@ -94,6 +94,11 @@ function terima(m) {
       s.galatTerakhir = m.pesan;
       s.kotak.push(m);
       break;
+    case 'emote':
+      // Server memantulkan emote kita sendiri; tidak perlu dicatat.
+      if (m.kursi === s.kursi) return;
+      s.kotak.push(m);
+      break;
     case 'keluar':
       s.kotak.push(m);
       log(`dikeluarkan dari meja: ${m.alasan}`);
@@ -178,6 +183,8 @@ function lihat() {
           ? `LOBI, kamu host: ${kosong ? `${kosong} kursi kosong (tunggu orang masuk, atau \`remi.mjs host bot <kursi> [level]\`), ` : ''}atur dengan \`remi.mjs host atur '<json>'\`, lalu \`remi.mjs host mulai\` kalau sudah sesuai permintaan pengguna.`
           : 'LOBI: tunggu host memulai (`remi.mjs tunggu`).',
     );
+    const obrolan = bagianPesan(out, m ? m.kursi.map((x) => x.nama) : []);
+    if (obrolan.some(dariManusia)) out.push('(Boleh dibalas: `remi.mjs emote <teks>`, maks 60 huruf, lihat bagian Ngobrol di SKILL.md.)');
     return out.join('\n');
   }
   const p = v.putaran;
@@ -226,9 +233,9 @@ function lihat() {
     else out.push('menunggu host memulai putaran berikutnya.');
   }
   out.push(`log: ${v.log.slice(-6).map((l) => l.pesan).join(' / ')}`);
-  const lain = s.kotak.splice(0);
-  if (lain.length) out.push(`pesan masuk: ${lain.map((x) => (x.t === 'emote' ? `${nama[x.kursi] ?? m?.kursi[x.kursi]?.nama ?? x.kursi}: "${x.isi}"` : x.t === 'error' ? `DITOLAK: ${x.pesan}` : JSON.stringify(x))).join(' · ')}`);
+  const obrolan = bagianPesan(out, nama);
   const a = perluAksi();
+  if (obrolan.some(dariManusia)) out.push('(Boleh dibalas: `remi.mjs emote <teks>`, maks 60 huruf, lihat bagian Ngobrol di SKILL.md.)');
   out.push('');
   out.push(
     a === 'joker'
@@ -246,6 +253,28 @@ function lihat() {
               : 'Belum giliranmu. Pakai `remi.mjs tunggu`.',
   );
   return out.join('\n');
+}
+function bagianPesan(out, nama) {
+  const lain = s.kotak.splice(0);
+  const obrolan = lain.filter((x) => x.t === 'emote');
+  const lainnya = lain.filter((x) => x.t !== 'emote');
+  if (lainnya.length) out.push(`pesan masuk: ${lainnya.map((x) => (x.t === 'error' ? `DITOLAK: ${x.pesan}` : JSON.stringify(x))).join(' · ')}`);
+  if (obrolan.length) {
+    out.push('obrolan meja:');
+    for (const x of obrolan) {
+      const siapa = nama[x.kursi] ?? s.meja?.kursi[x.kursi]?.nama ?? `kursi ${x.kursi}`;
+      const tag = dariManusia(x) ? (menyebutku(x.isi) ? 'manusia, MENYEBUT KAMU' : 'manusia') : 'warga kedai';
+      out.push(`  ${siapa} (${tag}): "${x.isi}"`);
+    }
+  }
+  return obrolan;
+}
+
+const dariManusia = (x) => x.t === 'emote' && x.kursi !== s.kursi && s.meja?.kursi[x.kursi]?.jenis === 'manusia';
+function menyebutku(isi) {
+  const t = isi.toLocaleLowerCase('id-ID');
+  const kata = (sesi.nama ?? '').toLocaleLowerCase('id-ID').split(/\s+/).filter((w) => w.length >= 3 && w !== 'ai');
+  return kata.some((w) => t.includes(w)) || /\b(ai|bot)\b/.test(t);
 }
 const tanda = (x) => (typeof x === 'number' ? (x > 0 ? '+' + x : String(x)) : '?');
 
@@ -272,7 +301,7 @@ function tunggu(maksDetik) {
     const cek = () => {
       const a = perluAksi();
       const kunci = kunciStatus();
-      const adaPesan = s.kotak.some((x) => x.t === 'error' || x.t === 'keluar' || x.t === 'emote');
+      const adaPesan = s.kotak.some((x) => x.t === 'error' || x.t === 'keluar' || (x.t === 'emote' && dariManusia(x)));
       if (a || (kunci !== statusAwal && s.versi !== awal) || adaPesan) return beres();
       if (s.view && (s.view.status === 'putaranSelesai' || s.view.status === 'selesai') && s.hasilTerlapor !== kunci) {
         s.hasilTerlapor = kunci;

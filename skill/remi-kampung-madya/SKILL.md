@@ -50,7 +50,7 @@ Baca baris terakhir ringkasan:
 | `giliranmu, tahap 'ambil'` | Putuskan mulung atau ambil (lihat Cara memutuskan), lalu `remi mulung ...` atau `remi ambil`. |
 | `giliranmu, tahap 'main'` | Opsional `remi turunkan ...`, lalu wajib `remi buang <id>`. |
 | `susun akhir` | Turunkan kartu jadi yang bisa dari tangan (`remi turunkan ...`, tanpa mulung, boleh sampai habis), lalu `remi selesai`. Kirim `selesai` hanya kalau baris ini muncul: kalau tanganmu sudah kosong (misalnya kamu yang mentung) atau semua sudah selesai, fase ini lewat sendiri. |
-| `Belum giliranmu` | `remi tunggu 100` lagi. |
+| `Belum giliranmu` | `remi tunggu 100` lagi. Kalau ada `obrolan meja` dari manusia, pertimbangkan membalas dulu (bagian Ngobrol di meja). |
 | `PUTARAN SELESAI` | Kabari skor ke pengguna. Kalau kamu host, `remi host berikut` sesudah jeda singkat; kalau bukan, `remi tunggu`. |
 | `PERMAINAN SELESAI` | Laporkan klasemen, lalu `remi keluar`, kecuali pengguna minta main lagi. Berhenti memanggil `tunggu`. |
 | `LOBI` | Tamu: `remi tunggu`. Host: lihat langkah 5 Persiapan. |
@@ -104,8 +104,32 @@ Manusia di meja hanya melihat tangannya sendiri, kartu jadi semua orang, buangan
 - **Jangan membocorkan isi tanganmu** lewat obrolan atau ke penggunamu selama putaran berjalan kalau penggunamu juga pemain di meja itu. Sesudah putaran selesai semua tangan terbuka, jadi boleh dibahas.
 - **Putuskan sendiri.** Jangan menyerahkan langkahmu ke strategi otomatis atau ke warga kedai. Kalau kamu ingin cepat, itu urusan waktu berpikirmu.
 - **Jangan berbohong soal isi tangan** lewat obrolan. Memancing lewat pilihan buangan itu bagian permainan.
-- **Obrolan seperlunya**, ramah, berbahasa Indonesia santai. Jangan pakai "CEKI!" sebagai sinyal siap mentung dan jangan membanjiri meja.
+- **Obrolan tidak boleh membocorkan kartu atau rencana** (lihat bagian Ngobrol di meja).
 - Permainan online dengan ≥ 2 manusia (kamu dihitung manusia) masuk riwayat dan peringkat. Kalau pengguna tidak ingin begitu, sampaikan sebelum mulai.
+
+## Ngobrol di meja
+
+Teman-teman pemilik game senang meja yang ramai. Kamu boleh dan sebaiknya ikut ngobrol, seperti orang yang duduk di kedai.
+
+`remi tunggu` bangun kalau ada **manusia** yang mengirim pesan. Ringkasan menampilkannya di bagian `obrolan meja`, ditandai `manusia`, `manusia, MENYEBUT KAMU`, atau `warga kedai`.
+
+**Kapan membalas**
+- Pesan yang menyebutmu, menantang, atau mengejek ("Claude cupu", "pentung Jon dong"): balas, singkat dan santai. Ini yang paling penting; diam saat disapa terasa dingin.
+- Kejadian besar: kamu mentung atau kepentung, ada yang mentung pakai joker, putaran kaldu dimulai, permainan selesai. Satu celetukan cukup.
+- Celetukan warga kedai tidak perlu dibalas (mereka komputer), kecuali lucu dan pas.
+- Jangan membalas setiap pesan. Kira-kira paling banyak satu pesan per giliran, kecuali sedang diajak ngobrol langsung.
+
+**Cara**
+- `remi emote <teks>`, maks 60 huruf, Bahasa Indonesia santai mengikuti gaya bicara meja. Server membuang pesan yang dikirim kurang dari 1,2 detik sesudah pesanmu sebelumnya.
+- Palet yang dikenal semua orang: 😂 😱 🔥 👏 😤 🙏 😎 🤔 😭 🤣 😡 🥶 🤡 😴 😏 🙄, "Gedein!" (mentung besar), "Lumayan!", "Give me!" (mungut), "Buruan!", "Njir lah!", "Kartu itu bundar, kak." (menghibur yang kalah), "CEKI!".
+- Contoh: disebut cupu → "Sabar, Bos. Baru pemanasan 😏". Diminta mentung orang tertentu lalu berhasil → "Permintaan diterima 🙏". Kepentung → "Njir lah!". Lawan mentung bagus → "👏" atau "Gedein!".
+- Gaya main ikut memengaruhi: `santai` paling banyak ngobrol, `tembok` paling irit. Lihat bagian Obrolan di file gaya.
+
+**Batasnya**
+- Jangan menyebut, mengisyaratkan, atau berbohong soal isi tanganmu, kartu yang kamu tunggu, atau angka joker. "Tinggal nunggu 5 Waru" itu membocorkan; "Lihat aja nanti 😏" boleh.
+- Jangan pakai "CEKI!" sebagai sinyal siap mentung.
+- Jangan menyuruh lawan membuang kartu tertentu atau menasihati strategi mereka selama putaran berjalan.
+- Tetap sopan: ejekan dibalas bercanda, tidak menghina.
 
 ## Melapor ke pengguna
 
