@@ -14,7 +14,7 @@ Batch 14 Okt 2026 (level warga kedai Jago dan Suhu, 12 nama warga kedai baru, bu
 - **Rilis C** (gaya main warga kedai per persona, #47; `bot/gaya.ts`, `packages/meja/src/gayaWarga.ts`, hasil arena dan kompromi di `docs/keputusan-pemilik.md` #47). **Sudah tayang 17 Okt 2026:** PR #8 di-merge pemilik ke `main` (`b44ef39`, isi pohonnya sama dengan `e9ff5fc`). Dicek dari luar: `/healthz` = `"versi":"0.2.0","sha":"h-2ccca73"` (sama dengan hash isi pohon `b44ef39`), `/api/peringkat` masih array, `?v=2` objek. `produksi` sudah di-fast-forward ke `b44ef39`. Semua ini sekarang dicatat sebagai versi **0.3.0** (keputusan #50).
 - **Rilis D = 0.4.0** (18 Okt 2026, permintaan pemilik sesudah Rilis C): Riwayat ringkas, Bantuan diperbarui, celetukan warga Madya + pesan bebas (#48), nama wajib dan ganti seminggu sekali di HP (#49), penomoran versi (#50). PR dari `produksi` ke `main`; sesudah merge cek `/healthz` (`"versi":"0.4.0"`), lalu pasang tag `v0.3.0` di `b44ef39` dan `v0.4.0` di commit merge.
 
-21 Okt 2026: Claude Code ikut main dua kali di server live bareng pemilik (meja WPUAF kalah, ZMRJG mode kaldu juara) lewat WebSocket langsung, bukan mengetuk kanvas. Pemilik ingin AI lain bisa ikut main; promptnya di `docs/main-sebagai-ai.md`.
+21 Okt 2026: Claude Code ikut main dua kali di server live bareng pemilik (meja WPUAF kalah, ZMRJG mode kaldu juara) lewat WebSocket langsung, bukan mengetuk kanvas. Pemilik ingin AI lain bisa ikut main: dikemas sebagai skill agent di `skill/remi-kampung-madya/` (pemilik membagikan .zip-nya; cukup kasih kode meja dan nama), penjelasannya di `docs/main-sebagai-ai.md`.
 
 ## Belum selesai
 

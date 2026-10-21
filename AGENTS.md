@@ -59,7 +59,7 @@ npx tsx packages/engine/scripts/arena.ts   # ukur kekuatan dan keterbacaan level
   - Level baru: tambah di `DAFTAR_LEVEL_BOT` dan `LEVEL_WARGA` (`apps/client/src/konten/levelWarga.ts`, satu sumber label untuk beranda, lobi, Bantuan); validasi meja ikut otomatis. Level dari data tak dipercaya (simpanan, isian UI) dirapikan dengan `rapikanLevel()` dari `@remi/meja`.
 - **Perilaku room/online:** `packages/meja/src/meja.ts` dan `protokol.ts`.
   - Pesan dari jaringan divalidasi di `validasi.ts`. Tambah case di sana setiap ada pesan baru.
-  - Prompt untuk client AI yang ikut main ([docs/main-sebagai-ai.md](docs/main-sebagai-ai.md)) menyalin protokol, bentuk view, dan ringkasan aturan. Ubah juga kalau salah satunya berubah.
+  - Skill agent untuk AI yang ikut main (`skill/remi-kampung-madya/`, lihat [docs/main-sebagai-ai.md](docs/main-sebagai-ai.md)) menyalin protokol, bentuk view, dan ringkasan aturan di `references/`, dan client-nya di `scripts/`. Ubah juga kalau salah satunya berubah.
   - Semua timer `Meja` dipasang lewat `pasangTimer()` (galat ditangkap, dilaporkan `OpsiMeja.saatGalat`, jadwal disusun ulang; keputusan #38). Timer baru wajib lewat `pasangTimer()`; hanya `pulihkanJadwal()` yang memanggil `penjadwal.setel` langsung.
 - **Client** (peta lengkap: [docs/arsitektur-client.md](docs/arsitektur-client.md)):
   - **Tata letak meja:** `game/tataMeja.ts`, fungsi **murni** (tanpa Phaser) yang mengubah `ModelMeja` + ukuran layar jadi daftar kartu/teks/hiasan beserta posisinya.
