@@ -34,7 +34,7 @@ Kartu bergambar joker tidak dipakai.
 - **Seri angka:** satu bunga, berurutan, 3–9 kartu, hanya dalam rentang 2–10.
 - **Seri Londo:** hanya J-Q-K satu bunga.
 - Angka dan Londo tidak bisa disambung. As tidak bisa masuk seri.
-- **Kembar As:** 3 atau 4 As dengan bunga berbeda semua. 4 As selalu boleh. 3 As butuh kartu jadi lain (sudah di meja, atau diturunkan bersamaan).
+- **Kembar As:** 3 atau 4 As dengan bunga berbeda semua. 4 As selalu boleh. 3 As butuh kartu jadi lain **milikmu sendiri** (sudah kamu turunkan sebelumnya, atau diturunkan bersamaan di aksi yang sama). Kartu jadi pemain lain tidak dihitung; server menolak dengan "3 As baru boleh turun kalau kamu sudah punya kartu jadi lain."
 
 **Joker**
 - Joker = semua kartu yang angkanya sama dengan kartu yang dibuka.

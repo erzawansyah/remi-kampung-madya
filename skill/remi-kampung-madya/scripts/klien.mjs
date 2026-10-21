@@ -133,7 +133,8 @@ const RANK = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' };
 const BUNGA = { love: '♥', wajik: '♦', kriting: '♣', waru: '♠' };
 const k = (c) => `${RANK[c.rank] ?? c.rank}${BUNGA[c.bunga]}${c.deck ? "'" : ''}`;
 const kid = (c) => `${k(c)} [${c.id}]`;
-const peran = (x) => (x ? `→${RANK[x.rank] ?? x.rank}${BUNGA[x.bunga] ?? ''}` : '');
+// Panah hanya untuk joker pengganti (kartu yang mewakili angka/bunga lain).
+const peran = (c, x) => (x && (x.rank !== c.rank || x.bunga !== c.bunga) ? `→${RANK[x.rank] ?? x.rank}${BUNGA[x.bunga] ?? ''}` : '');
 
 function perluAksi() {
   const v = s.view;
@@ -155,7 +156,7 @@ function lihat() {
     const pg = m.pengaturan;
     out.push(`meja: status=${m.status} · ${kursi.join(' | ')}`);
     out.push(
-      `pengaturan: ${pg.jumlahPemain} pemain · batas putaran ${pg.batasPutaran ?? 'tanpa'} · waktu/giliran ${pg.detikGiliran ? pg.detikGiliran + ' dtk' : 'tanpa batas'}${pg.modeKaldu ? ' · MODE KALDU' : ''} · batas skor ${pg.batasSkorAtas ?? '-'}/${pg.batasSkorBawah ?? '-'}`,
+      `pengaturan: ${pg.jumlahPemain} pemain${pg.duaDeckUntukEmpat ? ' (2 deck)' : ''} · warga kedai ${pg.levelBot}, tempo ${pg.tempoBot}${pg.publik ? ' · publik' : ''} · batas putaran ${pg.batasPutaran ?? 'tanpa'} · waktu/giliran ${pg.detikGiliran ? pg.detikGiliran + ' dtk' : 'tanpa batas'}${pg.modeKaldu ? ' · MODE KALDU' : ''} · batas skor ${pg.batasSkorAtas ?? '-'}/${pg.batasSkorBawah ?? '-'}`,
     );
     if (m.batasWaktu) out.push(`sisa waktu giliran: ${Math.max(0, Math.round((m.batasWaktu - Date.now()) / 1000))} dtk${m.diambilAlihBot ? ' (sedang diambil alih warga kedai)' : ''}`);
     if (m.setujuAkhiri?.length) out.push(`setuju akhiri: kursi ${m.setujuAkhiri.join(',')}`);
@@ -166,7 +167,19 @@ function lihat() {
     out.push(`*** PENGUMUMAN JOKER putaran ${j.nomor}: ${v.pemain[j.pengocok]?.nama ?? '?'} membuka ${j.kartu ? k(j.kartu) : '?'}. SEMUA kartu ${RANK[j.rank] ?? j.rank} jadi joker putaran ini. ***`);
     out.push('*** Ingat baik-baik: sesudah kamu menekan OK (remi.mjs siap), angka ini tidak ditampilkan lagi. ***');
   }
-  if (!v) return out.join('\n') + '\n(belum ada permainan)';
+  if (!v) {
+    const host = m && s.kursi === m.host;
+    const kosong = m ? m.kursi.filter((x) => x.jenis === 'kosong').length : 0;
+    out.push('');
+    out.push(
+      !m
+        ? 'Belum masuk meja. Tunggu sebentar lalu `remi.mjs lihat`.'
+        : host
+          ? `LOBI, kamu host: ${kosong ? `${kosong} kursi kosong (tunggu orang masuk, atau \`remi.mjs host bot <kursi> [level]\`), ` : ''}atur dengan \`remi.mjs host atur '<json>'\`, lalu \`remi.mjs host mulai\` kalau sudah sesuai permintaan pengguna.`
+          : 'LOBI: tunggu host memulai (`remi.mjs tunggu`).',
+    );
+    return out.join('\n');
+  }
   const p = v.putaran;
   const n = v.pemain.length;
   const nama = v.pemain.map((x) => x.nama);
@@ -182,7 +195,7 @@ function lihat() {
     out.push(`TANGANMU (${p.tangan[v.saya]?.length ?? 0}): ${(p.tangan[v.saya] ?? []).map(kid).join('  ')}`);
     out.push(`buangan terlihat (bawah → ATAS): ${p.buangan.map((b) => `${kid(b.kartu)} dari ${nama[b.pemilik]}`).join(' · ') || '(kosong)'} · total ${p.jumlahBuangan}`);
     p.kartuJadi.forEach((daftar, i) => {
-      if (daftar.length) out.push(`kartu jadi ${nama[i]}: ${daftar.map((kj) => kj.kartu.map((d) => k(d.kartu) + peran(d.sebagai)).join(' ')).join(' | ')}`);
+      if (daftar.length) out.push(`kartu jadi ${nama[i]}: ${daftar.map((kj) => kj.kartu.map((d) => k(d.kartu) + peran(d.kartu, d.sebagai)).join(' ')).join(' | ')}`);
     });
     if (p.jokerMati?.length) out.push(`joker mati (sudah dibuang, jadi kartu biasa): ${p.jokerMati.map(k).join(' ')}`);
     if (p.pungutan?.length) out.push(`pungutan giliran ini: ${p.pungutan.map((x) => k(x.kartu ?? x)).join(' ')}`);
@@ -224,7 +237,13 @@ function lihat() {
         ? `PERLU AKSIMU: giliranmu, tahap ${p.tahap === 'ambil' ? "'ambil' → ambil atau mulung" : "'main' → turunkan (opsional) lalu buang"}.`
         : a === 'susun'
           ? 'PERLU AKSIMU: susun akhir → turunkan kartu jadi dari tangan kalau ada, lalu `remi.mjs selesai`.'
-          : 'Belum giliranmu. Pakai `remi.mjs tunggu`.',
+          : v.status === 'selesai'
+            ? 'PERMAINAN SELESAI: laporkan klasemen ke pengguna, lalu `remi.mjs keluar` (kecuali pengguna minta main lagi).'
+            : v.status === 'putaranSelesai'
+              ? s.kursi === m?.host
+                ? 'PUTARAN SELESAI: kamu host. Sesudah manusia sempat melihat hasil, `remi.mjs host berikut`.'
+                : 'PUTARAN SELESAI: tunggu host memulai putaran berikutnya (`remi.mjs tunggu`).'
+              : 'Belum giliranmu. Pakai `remi.mjs tunggu`.',
   );
   return out.join('\n');
 }
@@ -248,7 +267,7 @@ function jsonAman() {
 function tunggu(maksDetik) {
   return new Promise((selesai) => {
     const awal = s.versi;
-    const kunciStatus = () => `${s.meja?.status}|${s.view?.status}|${s.view?.putaran?.nomor}`;
+    const kunciStatus = () => `${s.meja?.status}|${s.view?.status}|${s.view?.putaran?.nomor}|${s.meja?.status === 'lobi' ? s.meja.kursi.map((x) => x.jenis + x.nama).join(',') : ''}`;
     const statusAwal = kunciStatus();
     const cek = () => {
       const a = perluAksi();

@@ -28,7 +28,11 @@ Kalau kode meja belum ada, tanyakan. Jangan menebak kode.
    Opsi lain: `--server ws://localhost:2567/ws` (server lokal), `--port 9334` (kalau 9333 dipakai; set juga `REMI_PORT=9334` untuk `remi.mjs`).
    Folder `--data` menyimpan token kursi. Kalau client mati atau putus, jalankan lagi dengan `--kode` dan `--data` yang sama supaya kembali ke kursi lama (di lobi, kursi yang terputus tidak dikosongkan dan host tidak bisa melepasnya).
 4. Cek: `node <skill>/scripts/remi.mjs lihat`. Harus tertulis "tersambung" dan kursimu.
-5. Kabari pengguna singkat: sudah duduk di kursi berapa, siapa saja di meja, dan pengaturannya. Kalau waktu per giliran 30–60 detik, sarankan host menaikkannya ke 120 detik atau tanpa batas. Kamu butuh waktu berpikir, dan lewat batas giliranmu dijalankan warga kedai.
+5. **Kalau kamu host** (membuat meja sendiri, atau host lama keluar):
+   - Atur sesuai permintaan pengguna: `remi host atur '{"batasPutaran":3,"detikGiliran":0,"tempoBot":"cepat"}'`. Field: `jumlahPemain` (2–6), `duaDeckUntukEmpat`, `batasPutaran` (angka/null), `batasSkorAtas`, `batasSkorBawah` (kelipatan 10/null), `publik`, `detikGiliran` (0 = tanpa batas), `levelBot` (`mudah`/`normal`/`jago`/`suhu`), `tempoBot` (`santai`/`normal`/`cepat`), `modeKaldu`. Semuanya juga bisa langsung lewat `--pengaturan` saat `--buat`.
+   - Kursi kosong diisi orang yang masuk dengan kode meja, atau warga kedai: `remi host bot <kursi> <level>` (kursi mulai dari 0; kursi 0 biasanya kamu). Permainan baru bisa dimulai kalau tidak ada kursi kosong.
+   - `remi host mulai`. Kalau pengguna akan ikut main, tunggu dia masuk dulu (`remi tunggu` bangun saat ada yang duduk).
+6. Kabari pengguna singkat: sudah duduk di kursi berapa, siapa saja di meja, dan pengaturannya. Kalau waktu per giliran 30–60 detik, sarankan host menaikkannya ke 120 detik atau tanpa batas. Kamu butuh waktu berpikir, dan lewat batas giliranmu dijalankan warga kedai.
 
 ## Loop permainan
 
@@ -47,10 +51,10 @@ Baca baris terakhir ringkasan:
 | `giliranmu, tahap 'main'` | Opsional `remi turunkan ...`, lalu wajib `remi buang <id>`. |
 | `susun akhir` | Turunkan kartu jadi yang bisa dari tangan (`remi turunkan ...`, tanpa mulung, boleh sampai habis), lalu `remi selesai`. |
 | `Belum giliranmu` | `remi tunggu 100` lagi. |
+| `PUTARAN SELESAI` | Kabari skor ke pengguna. Kalau kamu host, `remi host berikut` sesudah jeda singkat; kalau bukan, `remi tunggu`. |
+| `PERMAINAN SELESAI` | Laporkan klasemen, lalu `remi keluar`, kecuali pengguna minta main lagi. Berhenti memanggil `tunggu`. |
+| `LOBI` | Tamu: `remi tunggu`. Host: lihat langkah 5 Persiapan. |
 
-Status lain:
-- `putaranSelesai`: host memulai putaran berikutnya. Kalau kamu host, tunggu sebentar supaya manusia sempat melihat hasil, lalu `remi host berikut`.
-- `selesai`: permainan berakhir. Laporkan klasemen ke pengguna. Jangan `remi host mainlagi` kecuali diminta.
 - Perhatikan `sisa waktu giliran` kalau meja memakai batas waktu: putuskan dalam waktu itu.
 
 ### Perintah
