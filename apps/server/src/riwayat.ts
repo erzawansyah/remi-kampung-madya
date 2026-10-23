@@ -22,6 +22,7 @@ import {
   type SaringanPeringkat,
   type UrutanPeringkat,
 } from '@remi/meja';
+import { buatPenyimpanKompetisi, SKEMA_KOMPETISI, type PenyimpanKompetisi } from './kompetisi.js';
 
 export interface PermainanTersimpan {
   id: number;
@@ -85,6 +86,8 @@ export interface PenyimpanRiwayat {
   peringkat(): BarisPeringkat[];
   /** Leaderboard dengan pilihan urutan dan saringan (keputusan pemilik #45). */
   papan(permintaan?: PermintaanPapan): PapanPeringkat;
+  /** Kompetisi (#51), di database yang sama. Hasil meja kompetisi dicatat simpan() sekalian. */
+  kompetisi: PenyimpanKompetisi;
   tutup(): void;
 }
 
@@ -133,6 +136,8 @@ export const MIGRASI: readonly string[] = [
    ALTER TABLE klasemen ADD COLUMN kunci_nama TEXT;
    CREATE INDEX IF NOT EXISTS permainan_selesai ON permainan (selesai_pada);
    CREATE INDEX IF NOT EXISTS klasemen_kunci ON klasemen (kunci_nama) WHERE bot = 0;`,
+  // v2 (23 Okt 2026, keputusan pemilik #51): kompetisi, pesertanya, dan hasil per permainan.
+  SKEMA_KOMPETISI,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */
@@ -217,6 +222,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   migrasiSkema(db, log);
   lengkapiBaris(db, log);
+  const kompetisi = buatPenyimpanKompetisi(db);
 
   const tambahPermainan = db.prepare(
     `INSERT INTO permainan (kode_meja, selesai_pada, alasan, jumlah_putaran, jumlah_pemain, jumlah_deck, jumlah_manusia, mode_kaldu)
@@ -309,6 +315,14 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
         for (const p of r.pemain) {
           tambahBaris.run(id, p.kursi, p.peringkat, p.nama, p.bot ? 1 : 0, p.skor, p.mentung, p.kepentung, p.keluar ? 1 : 0, kunciNama(p.nama));
         }
+        if (r.kompetisi) {
+          // Galat kompetisi tidak boleh membatalkan klasemen akhir biasa (SQLite membatalkan per pernyataan).
+          try {
+            kompetisi.catatHasil(id, r);
+          } catch (e) {
+            log(`galat mencatat hasil kompetisi ${r.kompetisi}`, e);
+          }
+        }
         return id;
       });
       cache.clear();
@@ -370,6 +384,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
       const { peringkat, belumCukup } = urutkanPeringkat(baris, urut);
       return { v: 2, urut, saringan, periode, minMain: MIN_MAIN, jumlahPermainan: jumlah, peringkat, belumCukup };
     },
+    kompetisi,
     tutup() {
       if (milikSendiri) db.close();
     },

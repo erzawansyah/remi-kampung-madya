@@ -1,8 +1,8 @@
-# Keputusan pemilik: rincian butir #25–#50
+# Keputusan pemilik: rincian butir #25–#51
 
-Dokumen ini merinci baris **#25–#50** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #40–#47 semuanya sudah diterapkan (#42–#43 di engine, meja, server, warga kedai, dan aplikasi; #47 di engine dan meja, tanpa tampilan apa pun di aplikasi). Butir #48–#50 datang dari permintaan pemilik 18 Okt 2026 dan diterapkan di rilis 0.4.0.
+Dokumen ini merinci baris **#25–#51** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #40–#47 semuanya sudah diterapkan (#42–#43 di engine, meja, server, warga kedai, dan aplikasi; #47 di engine dan meja, tanpa tampilan apa pun di aplikasi). Butir #48–#50 datang dari permintaan pemilik 18 Okt 2026 dan diterapkan di rilis 0.4.0. Butir #51 (kompetisi) diputuskan pemilik 23 Okt 2026.
 
-**Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026, #40–#47 pada 16 Okt 2026, #48–#50 pada 18 Okt 2026. Baris #20–#23 README (susun akhir) juga sudah diputuskan 16 Okt 2026: sesuai bawaan yang sudah berjalan. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. Yang masih perlu dikonfirmasi pemilik hanya dua tafsiran: #43 (mode kaldu tanpa batas skor) dan kelompok "berubah-ubah" di #47. Catatan kecil dari 14 Okt 2026 (bunyi dramatis, gaya Jago/Suhu) sudah ditanggapi, lihat [Catatan lain](#catatan-lain-belum-masuk-tabel).
+**Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026, #40–#47 pada 16 Okt 2026, #48–#50 pada 18 Okt 2026. Baris #20–#23 README (susun akhir) juga sudah diputuskan 16 Okt 2026: sesuai bawaan yang sudah berjalan. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. Yang masih perlu dikonfirmasi pemilik hanya tafsiran: #43 (mode kaldu tanpa batas skor), kelompok "berubah-ubah" di #47, dan detail kompetisi di #51. Catatan kecil dari 14 Okt 2026 (bunyi dramatis, gaya Jago/Suhu) sudah ditanggapi, lihat [Catatan lain](#catatan-lain-belum-masuk-tabel).
 
 Untuk tiap butir ada: keputusan pemilik (kalau sudah), apa yang terjadi sebelum keputusan, bukti di kode (`file:baris`, per kode saat rilis 0.2.0, jadi nomor baris bisa sudah bergeser), pilihan yang waktu itu ditawarkan, dan dampaknya. Pilihan **bukan aturan baru**, hanya daftar kemungkinan yang ditawarkan ke pemilik.
 
@@ -43,6 +43,7 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 | [48](#k48) | Emote hanya dari daftar; celetukan khas warga Madya belum ada | `packages/meja` (validasi) + client | Diputuskan: celetukan baru + pesan bebas diketik sendiri |
 | [49](#k49) | Nama bisa diganti kapan saja (peringkat bisa diakali) | client (beranda) | Diputuskan: wajib diisi, ganti seminggu sekali, dikunci di HP |
 | [50](#k50) | Versi tetap 0.2.0 walau sudah berkali-kali rilis | rilis | Diputuskan: naik versi tiap rilis, 0.3.0 lalu 0.4.0 |
+| [51](#k51) | Belum ada kompetisi | `packages/meja` + `apps/server` + client | Diputuskan (sebagian tafsiran perlu konfirmasi), diterapkan |
 
 ---
 
@@ -676,6 +677,33 @@ Arti celetukan dari pemilik:
 ## 50. Penomoran versi
 
 **Keputusan pemilik (18 Okt 2026):** versi harus teratur. Semua yang tayang 13–17 Okt 2026 dicatat **0.3.0**, pembaruan 18 Okt **0.4.0**. Seterusnya setiap PR ke `main` naik versi: fitur atau perubahan aturan menaikkan angka tengah, perbaikan saja menaikkan angka belakang. CHANGELOG dipindah dari `[Belum dirilis]` ke `[x.y.z] - tanggal`, lalu commit merge diberi tag `vX.Y.Z`. Dijaga `apps/client/test/versiRilis.test.ts`.
+
+<a id="k51"></a>
+
+## 51. Kompetisi
+
+**Keputusan pemilik (23 Okt 2026),** dijawab lewat pilihan di percakapan ("kayaknya perlu ada modul kompetisi deh"):
+- **Bentuk:** pemilik belum punya gambaran; pengembang mengusulkan kompetisi berkode. Pemilik mengubah satu hal: kompetisi **tidak dibuat sepihak**. Ada yang **mengajukan**, lalu orang lain menekan **Ikut serta**.
+- **Siapa saja boleh mengajukan.** Kompetisi **jalan begitu 4 orang ikut** (termasuk pengaju). Kalau 24 jam belum cukup, pengajuan batal sendiri.
+- **Boleh ikut serta sesudah kompetisi jalan**, sampai kompetisi selesai.
+- **Masa berlaku:** 1 malam, 1 minggu, atau 1 bulan.
+- **Yang dihitung:** hanya meja online manusia, dan hanya **meja khusus kompetisi** (host memilih kompetisi saat membuat meja; pengaturan meja ikut kompetisi). **Meja kompetisi tanpa warga kedai.**
+- **Juara ditentukan poin per posisi:** poin = **banyaknya pemain yang kamu kalahkan** di meja itu (meja 4 orang 3-2-1-0, meja 6 orang 5-4-3-2-1-0; meja ramai lebih bernilai).
+- **Minimal 3 kali main** supaya masuk klasemen (sama dengan #45).
+- **Poin sama:** rata-rata poin per main, lalu rata-rata skor akhir.
+- **Mengakhiri lebih awal:** voting peserta, lebih dari separuh setuju.
+
+**Tafsiran pengembang (perlu konfirmasi pemilik):**
+- **Yang keluar di tengah permainan** dihitung juru kunci (0 poin, dikalahkan semua yang bertahan), sama dengan #45. Kursinya tetap diteruskan warga kedai supaya permainan tidak macet, tapi warga kedai itu tidak mendapat poin. Giliran pemain yang terputus atau kehabisan waktu juga tetap dijalankan warga kedai seperti meja biasa; level warga kedainya ikut dikunci kompetisi (bawaan Normal).
+- **"1 malam"** berakhir pukul 06.00 WIB berikutnya yang paling cepat 3 jam sesudah kompetisi jalan (jalan jam 20.00 → besok 06.00; jalan jam 05.00 → besoknya lagi 06.00). **1 minggu** = 7 × 24 jam, **1 bulan** = 30 × 24 jam, semuanya sejak kompetisi jalan (bukan sejak diajukan).
+- **Permainan yang selesai sesudah kompetisi berakhir tidak dihitung.** Meja kompetisi tidak bisa memulai permainan baru sesudah kompetisi selesai, tapi permainan yang sedang jalan dibiarkan selesai.
+- **Pengaturan yang dikunci:** 2 deck untuk 4 pemain, batas putaran, batas skor, mode kaldu, waktu per giliran, dan level warga kedai (untuk giliran yang diambil alih). Jumlah pemain (2–6), tempo, dan meja publik bebas diatur host.
+- **Identitas peserta:** belum ada akun, jadi peserta dikenali dari tiket acak yang disimpan di HP saat ikut serta (server hanya menyimpan hash-nya). Nama peserta tidak boleh kembar dalam satu kompetisi (tanpa beda huruf besar/kecil). Di meja kompetisi nama kursi = nama yang terdaftar. HP lain (atau data browser yang dihapus) tidak bisa memakai tiket itu.
+- **Pengaju tidak punya hak khusus:** tidak bisa membatalkan pengajuan, menutup sendiri, atau menghapus hasil. Peserta tidak bisa membatalkan ikut serta.
+- **Semua kompetisi terlihat** di daftar (menunggu peserta, sedang jalan, 20 terakhir yang selesai). Juara kompetisi yang selesai = peringkat 1 klasemen (lebih dari satu kalau poin, rata-rata poin, dan rata-rata skor sama persis).
+- **Batas penyalahgunaan** (bukan aturan main): paling banyak 3 pengajuan menunggu per jaringan dan 50 total, 100 peserta per kompetisi, 30 permintaan tulis per menit per jaringan.
+
+**Yang dikerjakan:** aturan hitung di `packages/meja/src/kompetisi.ts` (dipakai server dan client), meja kompetisi di `packages/meja/src/meja.ts` (field baru hanya ditulis di meja kompetisi, golden tidak bergeser), penyimpan dan migrasi SQLite v2 di `apps/server/src/kompetisi.ts` + `riwayat.ts`, API `/api/kompetisi` dan tiket di pesan `buat`/`gabung` di `apps/server/src/server.ts`, layar `apps/client/src/ui/kompetisi.ts`, lobi, Bantuan. Test: `packages/meja/test/kompetisi.test.ts`, `apps/server/test/kompetisi.test.ts`, `apps/client/test/kompetisi.test.ts`.
 
 ---
 

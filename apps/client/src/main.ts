@@ -35,6 +35,7 @@ import {
 } from './pasangAplikasi';
 import { mejaMasukPeringkat, opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
 import { renderRiwayat } from './ui/riwayat';
+import { renderKompetisi } from './ui/kompetisi';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang, siapkanJendelaMalas } from './ui/jendelaMalas';
 import {
@@ -99,7 +100,7 @@ interface PromptPasang extends Event {
   readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform?: string }>;
 }
 
-type Layar = 'beranda' | 'publik' | 'riwayat' | 'lobi' | 'meja';
+type Layar = 'beranda' | 'publik' | 'riwayat' | 'kompetisi' | 'lobi' | 'meja';
 
 /** sessionStorage: halaman dimuat ulang oleh "Coba lagi" meja yang gagal dimuat; lanjutkan meja offline. */
 const KUNCI_LANJUT = 'remi.lanjutSetelahMuatUlang';
@@ -206,11 +207,11 @@ class Aplikasi implements AppUntukMeja {
     // dom.ts menangkap Escape lebih dulu (fase capture) untuk menutup dialog yang terbuka.
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape' || e.defaultPrevented || e.repeat || adaJendelaTerbuka()) return;
-      if (this.layar !== 'riwayat' && this.layar !== 'publik') return;
+      if (this.layar !== 'riwayat' && this.layar !== 'publik' && this.layar !== 'kompetisi') return;
       e.preventDefault();
       const dari = this.layar;
       this.tampilkanBeranda();
-      if (dari === 'riwayat') this.beranda?.fokusNav('riwayat');
+      if (dari === 'riwayat' || dari === 'kompetisi') this.beranda?.fokusNav(dari);
     });
     window.addEventListener('online', () => {
       if (this.layar === 'beranda') this.beranda?.aturStatusOnline('siap');
@@ -394,6 +395,7 @@ class Aplikasi implements AppUntukMeja {
         return toast('Tekan Back sekali lagi untuk keluar.', false, 2000);
       case 'publik':
       case 'riwayat':
+      case 'kompetisi':
         this.pastikanJaga();
         return this.tampilkanBeranda();
       case 'lobi':
@@ -413,6 +415,7 @@ class Aplikasi implements AppUntukMeja {
         offline,
         selesai: asal === 'meja' && this.view?.status === 'selesai',
         masukPeringkat: asal === 'meja' && !offline && mejaMasukPeringkat(this.info),
+        kompetisi: !offline && !!this.info?.kompetisi,
       }),
     );
     // Layar sudah berganti selagi dialog terbuka (mis. host memulai permainan dari lobi):
@@ -452,7 +455,7 @@ class Aplikasi implements AppUntukMeja {
 
   /** `kabar` dari KabarKoneksi koneksi ini: null = tidak ada yang perlu dikabarkan. */
   private saatStatusBerubah(s: StatusKoneksi, kabar: Kabar | null) {
-    if (this.layar === 'beranda' || this.layar === 'publik') {
+    if (this.layar === 'beranda' || this.layar === 'publik' || this.layar === 'kompetisi') {
       if (s !== 'gagal') {
         this.beranda?.aturStatusOnline(s === 'terputus' ? 'menyambung' : s);
         return;
@@ -482,7 +485,7 @@ class Aplikasi implements AppUntukMeja {
   private cobaLagiOnline() {
     const niat = this.niatOnline;
     // Tombol "Coba lagi" yang basi (pemain sudah pindah ke meja/lobi) tidak boleh mengganti koneksi.
-    if (!niat || (this.layar !== 'beranda' && this.layar !== 'publik')) return;
+    if (!niat || (this.layar !== 'beranda' && this.layar !== 'publik' && this.layar !== 'kompetisi')) return;
     if (this.layar === 'beranda') this.beranda?.aturStatusOnline('menyambung');
     niat();
   }
@@ -638,6 +641,7 @@ class Aplikasi implements AppUntukMeja {
           renderRiwayat(this.ui, () => this.tampilkanBeranda());
           this.pastikanJaga();
         },
+        lihatKompetisi: () => this.tampilkanKompetisi(),
         mainOffline: (nama, pengaturan, pengocokSaya) => this.mainOffline(nama, pengaturan, pengocokSaya),
         lanjutOffline: () => this.lanjutOffline(),
         latihan: (nama) => this.mulaiLatihan(nama),
@@ -721,7 +725,26 @@ class Aplikasi implements AppUntukMeja {
       return toast('Kode meja 5 huruf/angka, Bos.', true);
     }
     const sesi = simpan.sesi();
-    this.kirimOnline({ t: 'gabung', kode, nama, token: sesi?.kode === kode ? sesi.token : undefined });
+    // Tiket kompetisi (#51) ikut dikirim: server memakainya kalau mejanya meja kompetisi.
+    const tiket = simpan.tiketKompetisi().map(({ kode: k, token }) => ({ kode: k, token }));
+    this.kirimOnline({ t: 'gabung', kode, nama, token: sesi?.kode === kode ? sesi.token : undefined, ...(tiket.length ? { tiket } : {}) });
+  }
+
+  /** Layar Kompetisi (#51). Buat meja kompetisi lewat jalur online yang sama dengan Buat meja. */
+  private tampilkanKompetisi() {
+    this.layar = 'kompetisi';
+    this.niatOnline = null;
+    this.sembunyikanGame();
+    suasanaMusik('beranda');
+    renderKompetisi(this.ui, {
+      kembali: () => {
+        this.tampilkanBeranda();
+        this.beranda?.fokusNav('kompetisi');
+      },
+      buatMeja: (kode, token) =>
+        this.kirimOnline({ t: 'buat', nama: simpan.nama() || 'Pemain', pengaturan: { jumlahPemain: 4 }, kompetisi: { kode, token } }),
+    });
+    this.pastikanJaga();
   }
 
   private mainOffline(nama: string, pengaturan: Partial<PengaturanMeja>, pengocokSaya: boolean, latihan = false) {

@@ -27,6 +27,7 @@ const aksiPalsu = (): AksiBeranda => ({
   gabung: vi.fn(),
   lihatPublik: vi.fn(),
   lihatRiwayat: vi.fn(),
+  lihatKompetisi: vi.fn(),
   mainOffline: vi.fn(),
   lanjutOffline: vi.fn(),
   latihan: vi.fn(),

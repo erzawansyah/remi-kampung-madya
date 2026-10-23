@@ -8,7 +8,7 @@
 // atau peringatan "kartu berbahaya". Contoh joker selalu ditulis "misal joker putaran ini N".
 
 import type { Bunga, Rank } from '@remi/engine';
-import { MAKS_PESAN, TENGGANG_SAMBUNG_MS } from '@remi/meja';
+import { MAKS_PESAN, MIN_MAIN_KOMPETISI, MIN_PESERTA, TENGGANG_SAMBUNG_MS } from '@remi/meja';
 import { TEKS_KALDU } from './kaldu';
 import { DAFTAR_LEVEL_WARGA } from './levelWarga';
 
@@ -791,6 +791,19 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'paragraf',
         teks: 'Hasil akhir permainan online masuk **Riwayat & peringkat**. Yang dihitung di peringkat cuma meja yang dimainkan minimal 2 orang. Urutan bawaannya rata-rata skor akhir per permainan, dan bisa diganti (skor terbaik, persen juara, jumlah juara, dan lainnya). Rata-rata, persen juara, dan poin posisi baru muncul sesudah 3 kali main. Peringkat menggabungkan pemain berdasarkan nama tanpa beda huruf besar/kecil, jadi pakai nama yang sama setiap main.',
+      },
+      {
+        t: 'paragraf',
+        teks: `**Kompetisi** (tombol Kompetisi di beranda): siapa saja boleh mengajukan kompetisi, lengkap dengan lama kompetisi (1 malam, 1 minggu, atau 1 bulan) dan aturan mejanya. Kompetisi jalan begitu ${MIN_PESERTA} orang menekan Ikut serta; kalau 24 jam belum cukup, pengajuannya batal. Yang telat boleh ikut selama kompetisi masih jalan. Peserta membuat meja kompetisi dari layar Kompetisi, lalu peserta lain gabung pakai kode meja. Meja kompetisi khusus peserta (tanpa warga kedai) dan aturannya ikut kompetisi.`,
+      },
+      {
+        t: 'daftar',
+        butir: [
+          'Poin tiap permainan = banyaknya peserta yang kalah skor darimu di meja itu. Meja 4 orang: juara 3 poin, juru kunci 0. Keluar di tengah permainan = 0 poin.',
+          `Klasemen diurutkan dari total poin, dan kamu masuk klasemen sesudah ${MIN_MAIN_KOMPETISI} kali main. Poin sama: rata-rata poin per main, lalu rata-rata skor akhir.`,
+          'Kompetisi bisa disudahi lebih awal kalau lebih dari separuh peserta setuju.',
+          'Tiket peserta tersimpan di HP yang dipakai waktu ikut serta, jadi main kompetisi dari HP itu.',
+        ],
       },
       {
         t: 'paragraf',

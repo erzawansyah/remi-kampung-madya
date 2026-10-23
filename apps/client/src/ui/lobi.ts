@@ -4,10 +4,12 @@
 // Juga teks konfirmasi keluar meja yang dipakai bersama semua jalur (tombol di lobi, menu meja,
 // tombol Back di main.ts), supaya isinya sama dan jujur soal apa yang terjadi pada kursimu.
 // "Warga kedai" = istilah UI untuk pemain komputer (kode/protokol tetap memakai 'bot').
+// Meja kompetisi (#51): tanpa warga kedai, dan pengaturan aturannya ikut kompetisi (tidak bisa diubah).
 
 import type { LevelBot } from '@remi/engine';
 import type { InfoKursi, InfoMeja, PengaturanMeja, PesanKlien } from '@remi/meja';
 import { TEKS_KALDU } from '../konten/kaldu';
+import { TEKS_KOMPETISI } from '../konten/kompetisi';
 import { DAFTAR_LEVEL_WARGA, infoLevel, labelLevelKecil } from '../konten/levelWarga';
 import { htmlIsianBatas, lepasIsianBatas, pasangIsianBatas } from './batasSkor';
 import { esc, konfirmasi, toast, type OpsiKonfirmasi } from './dom';
@@ -23,8 +25,8 @@ export function levelDariPilihan(nilai: string): LevelBot | undefined {
   return DAFTAR_LEVEL_WARGA.find((l) => nilai === nilaiBot(l.level))?.level;
 }
 
-/** Pilihan isi kursi untuk host: tunggu orang, atau warga kedai per level. */
-function pilihanKursi(k: InfoKursi, i: number): string {
+/** Pilihan isi kursi untuk host: tunggu orang, atau warga kedai per level (meja kompetisi: tanpa warga kedai). */
+function pilihanKursi(k: InfoKursi, i: number, kompetisi: boolean): string {
   const nilai = k.jenis === 'kosong' ? 'kosong' : k.jenis === 'bot' ? nilaiBot(k.level) : 'manusia';
   const dipilih = (v: string) => (v === nilai ? 'selected' : '');
   // Level yang tidak dikenal versi ini (server lebih baru): tetap tampil sebagai warga kedai, bukan "Tunggu orang".
@@ -33,9 +35,13 @@ function pilihanKursi(k: InfoKursi, i: number): string {
       ${k.jenis === 'manusia' ? `<option value="manusia" selected>${esc(k.nama)}</option>` : ''}
       ${levelAsing ? '<option value="bot" selected>Warga kedai</option>' : ''}
       <option value="kosong" ${dipilih('kosong')}>Tunggu orang</option>
-      <optgroup label="Warga kedai">${DAFTAR_LEVEL_WARGA.map(
-        (l) => `<option value="${nilaiBot(l.level)}" ${dipilih(nilaiBot(l.level))}>${esc(l.pilihan)}</option>`,
-      ).join('')}</optgroup>
+      ${
+        kompetisi
+          ? ''
+          : `<optgroup label="Warga kedai">${DAFTAR_LEVEL_WARGA.map(
+              (l) => `<option value="${nilaiBot(l.level)}" ${dipilih(nilaiBot(l.level))}>${esc(l.pilihan)}</option>`,
+            ).join('')}</optgroup>`
+      }
     </select>`;
 }
 
@@ -50,6 +56,8 @@ export interface KeadaanKeluar {
    * tengah permainan dihitung juru kunci, jadi pemain diberi tahu.
    */
   masukPeringkat?: boolean;
+  /** Meja kompetisi (#51): keluar di tengah permainan = 0 poin. */
+  kompetisi?: boolean;
 }
 
 /** Ada minimal 2 kursi manusia (yang keluar sudah jadi warga kedai): permainannya masuk peringkat online. */
@@ -94,7 +102,7 @@ export function opsiKonfirmasiKeluar(k: KeadaanKeluar): OpsiKonfirmasi {
     judul: 'Keluar dari meja?',
     pesan: `Kursimu diteruskan warga kedai sampai permainan selesai, dan kamu nggak bisa balik ke kursi ini lagi.${
       k.masukPeringkat ? ' Di peringkat online kamu dihitung juru kunci.' : ''
-    }`,
+    }${k.kompetisi ? ` ${TEKS_KOMPETISI.keluarMeja}` : ''}`,
     ya: 'Keluar',
     tidak: 'Tetap di sini',
     bahaya: true,
@@ -113,6 +121,10 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   const tautan = `${location.origin}/?meja=${info.kode}`;
   const kosong = info.kursi.filter((k) => k.jenis === 'kosong').length;
   const dis = host ? '' : 'disabled';
+  const kompetisi = info.kompetisi ?? null;
+  // Pengaturan aturan di meja kompetisi dikunci kompetisinya; jumlah pemain, tempo, dan publik tetap bebas.
+  const ubahAturan = host && !kompetisi;
+  const disAturan = ubahAturan ? '' : 'disabled';
 
   const barisKursi = info.kursi
     .map((k, i) => {
@@ -123,17 +135,17 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
         k.jenis === 'manusia' && !k.terhubung ? '<span class="lencana merah">terputus</span>' : '',
       ].join('');
       const nama = k.jenis === 'kosong' ? '<span class="redup">menunggu orang masuk…</span>' : `<b>${esc(k.nama)}</b>`;
-      const pilih = host && i !== info.kursiSaya ? pilihanKursi(k, i) : '';
+      const pilih = host && i !== info.kursiSaya ? pilihanKursi(k, i, !!kompetisi) : '';
       return `<div class="kursi"><span class="redup" aria-label="Kursi ${i + 1}">${i + 1}</span><span class="nama">${nama}</span>${lencana}${pilih}</div>`;
     })
     .join('');
 
   const pilihanBatas = (id: string, nilai: number | null, opsi: number[], label: (n: number) => string) =>
-    `<select id="${id}" ${dis}>${opsi.map((n) => `<option value="${n}" ${n === (nilai ?? 0) ? 'selected' : ''}>${label(n)}</option>`).join('')}</select>`;
+    `<select id="${id}" ${disAturan}>${opsi.map((n) => `<option value="${n}" ${n === (nilai ?? 0) ? 'selected' : ''}>${label(n)}</option>`).join('')}</select>`;
   const kaldu = p.modeKaldu === true;
   // Host: kotak centang + satu baris keterangan. Bukan host: keadaannya sebagai teks (keterangan
   // hanya kalau nyala).
-  const htmlKaldu = host
+  const htmlKaldu = ubahAturan
     ? `<label class="baris">${esc(TEKS_KALDU.label)}<input type="checkbox" id="kaldu" aria-describedby="ket-kaldu" ${kaldu ? 'checked' : ''} /></label>
        <p class="bantuan rapat" id="ket-kaldu">${esc(TEKS_KALDU.ket)}</p>`
     : `<div class="baris baris-teks"><span>${esc(TEKS_KALDU.label)}</span><b id="kaldu">${esc(kaldu ? TEKS_KALDU.nyala : TEKS_KALDU.mati)}</b></div>
@@ -142,22 +154,24 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   akar.innerHTML = `
   <div class="layar layar-lobi"><div class="kolom">
     <div class="judul"><p>Kode meja</p><div class="kode-besar bisa-dipilih" aria-label="Kode meja ${esc(info.kode.split('').join(' '))}">${esc(info.kode)}</div></div>
+    ${kompetisi ? `<p class="lencana emas lencana-kompetisi">🏅 ${esc(TEKS_KOMPETISI.lencanaMeja)}: ${esc(kompetisi.nama)}</p>` : ''}
     <div class="deret"><button type="button" id="salin">Salin link undangan</button>${'share' in navigator ? '<button type="button" id="bagi">Bagikan</button>' : ''}</div>
 
     <div class="kartu-panel">
       <h2>Kursi (${info.kursi.length - kosong}/${info.kursi.length})</h2>
       ${barisKursi}
-      ${host && kosong ? '<button type="button" id="isi-bot" class="kecil">Ajak warga kedai isi kursi kosong</button>' : ''}
+      ${host && kosong && !kompetisi ? '<button type="button" id="isi-bot" class="kecil">Ajak warga kedai isi kursi kosong</button>' : ''}
     </div>
 
     <div class="kartu-panel">
       <h2>Pengaturan ${host ? '' : '<span class="redup">(diatur host)</span>'}</h2>
+      ${kompetisi ? `<p class="bantuan rapat">${esc(TEKS_KOMPETISI.aturanDikunci)}</p>` : ''}
       <label class="baris">Jumlah pemain
         <select id="jumlah" ${dis}>${[2, 3, 4, 5, 6].map((n) => `<option ${n === p.jumlahPemain ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-      ${p.jumlahPemain === 4 ? `<label class="baris">Pakai 2 deck (12 kartu)<input type="checkbox" id="dua" ${p.duaDeckUntukEmpat ? 'checked' : ''} ${dis} /></label>` : ''}
+      ${p.jumlahPemain === 4 ? `<label class="baris">Pakai 2 deck (12 kartu)<input type="checkbox" id="dua" ${p.duaDeckUntukEmpat ? 'checked' : ''} ${disAturan} /></label>` : ''}
       <label class="baris">Batas putaran ${pilihanBatas('putaran', p.batasPutaran, [3, 5, 10, 15, 20, 0], (n) => (n ? String(n) : 'Tanpa batas'))}</label>
       ${htmlKaldu}
-      ${kaldu ? '' : htmlIsianBatas({ id: 'skor', nilai: p, bisaUbah: host })}
+      ${kaldu ? '' : htmlIsianBatas({ id: 'skor', nilai: p, bisaUbah: ubahAturan })}
       <label class="baris">Waktu per giliran ${pilihanBatas('detik', p.detikGiliran, [30, 60, 90, 120, 0], (n) => (n ? `${n} detik` : 'Tanpa batas'))}</label>
       <label class="baris">Tempo warga kedai
         <select id="tempo" ${dis}>${(['santai', 'normal', 'cepat'] as const)
@@ -174,7 +188,7 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
                 .map((k, i) => (k.jenis === 'kosong' ? '' : `<option value="${i}">${esc(k.nama)}</option>`))
                 .join('')}</select></label>
             <button type="button" class="utama besar${kosong ? ' mati' : ''}" id="mulai" ${kosong ? 'aria-disabled="true" aria-describedby="ket-mulai"' : ''}>Mulai main</button>
-            ${kosong ? '<p class="redup rapat" id="ket-mulai">Masih ada kursi kosong: tunggu teman masuk atau ajak warga kedai.</p>' : ''}
+            ${kosong ? `<p class="redup rapat" id="ket-mulai">${esc(kompetisi ? TEKS_KOMPETISI.kursiKosong : 'Masih ada kursi kosong: tunggu teman masuk atau ajak warga kedai.')}</p>` : ''}
           </div>`
         : '<div class="kartu-panel"><p class="redup rapat" role="status">Menunggu host memulai permainan…</p></div>'
     }
@@ -218,6 +232,14 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   const ubah = (pengaturan: Partial<PengaturanMeja>) => kirim({ t: 'pengaturan', pengaturan });
   const angka = (id: string) => Number(q<HTMLSelectElement>(id)!.value) || null;
   q('#jumlah')!.addEventListener('change', () => ubah({ jumlahPemain: Number(q<HTMLSelectElement>('#jumlah')!.value) }));
+  q('#tempo')!.addEventListener('change', () => ubah({ tempoBot: q<HTMLSelectElement>('#tempo')!.value as PengaturanMeja['tempoBot'] }));
+  q('#publik')!.addEventListener('change', () => ubah({ publik: q<HTMLInputElement>('#publik')!.checked }));
+  q('#mulai')!.addEventListener('click', () => {
+    if (kosong) return toast(kompetisi ? TEKS_KOMPETISI.kursiKosong : 'Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.', true);
+    const v = q<HTMLSelectElement>('#kocok')!.value;
+    kirim({ t: 'mulai', pengocok: v === 'acak' ? undefined : Number(v) });
+  });
+  if (!ubahAturan) return;
   q('#dua')?.addEventListener('change', () => ubah({ duaDeckUntukEmpat: q<HTMLInputElement>('#dua')!.checked }));
   q('#putaran')!.addEventListener('change', () => ubah({ batasPutaran: angka('#putaran') }));
   q('#kaldu')!.addEventListener('change', () => ubah({ modeKaldu: q<HTMLInputElement>('#kaldu')!.checked }));
@@ -231,11 +253,4 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
     }
   }
   q('#detik')!.addEventListener('change', () => ubah({ detikGiliran: Number(q<HTMLSelectElement>('#detik')!.value) }));
-  q('#tempo')!.addEventListener('change', () => ubah({ tempoBot: q<HTMLSelectElement>('#tempo')!.value as PengaturanMeja['tempoBot'] }));
-  q('#publik')!.addEventListener('change', () => ubah({ publik: q<HTMLInputElement>('#publik')!.checked }));
-  q('#mulai')!.addEventListener('click', () => {
-    if (kosong) return toast('Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.', true);
-    const v = q<HTMLSelectElement>('#kocok')!.value;
-    kirim({ t: 'mulai', pengocok: v === 'acak' ? undefined : Number(v) });
-  });
 }

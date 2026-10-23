@@ -6,6 +6,24 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+### Untuk pemain
+
+#### Ditambahkan
+
+- **Kompetisi** (tombol Kompetisi di panel Main online beranda). Siapa saja bisa mengajukan kompetisi: kasih nama, pilih lamanya (1 malam sampai jam 6 pagi, 1 minggu, atau 1 bulan), dan atur aturan mejanya (batas putaran, mode kaldu, batas skor, 2 deck untuk meja 4 orang, waktu per giliran). Teman-teman menekan **Ikut serta**; begitu 4 orang ikut, kompetisinya jalan. Kalau 24 jam belum cukup, pengajuannya batal sendiri. Yang telat boleh ikut selama kompetisi masih jalan.
+- **Meja kompetisi:** peserta menekan **Buat meja kompetisi**, peserta lain gabung pakai kode meja seperti biasa. Meja ini khusus peserta, tanpa warga kedai, dan aturannya ikut kompetisi (host cuma bisa mengatur jumlah pemain, tempo, dan meja publik).
+- **Klasemen kompetisi:** tiap permainan, kamu dapat 1 poin untuk setiap peserta yang kalah skor darimu (meja 4 orang: 3-2-1-0). Keluar di tengah permainan = 0 poin. Masuk klasemen sesudah 3 kali main; poin sama diurutkan dari rata-rata poin, lalu rata-rata skor akhir. Kompetisi yang sudah selesai menampilkan juaranya.
+- Kompetisi bisa disudahi lebih awal kalau lebih dari separuh peserta setuju.
+- Tiket peserta tersimpan di HP yang dipakai waktu ikut serta, jadi main kompetisi dari HP itu. Bantuan memuat cara main kompetisi.
+
+### Teknis
+
+- Kompetisi (keputusan pemilik #51). Aturan hitungnya satu sumber di `packages/meja/src/kompetisi.ts`: `MIN_PESERTA` (4), `BATAS_PENGAJUAN_MS` (24 jam), `MIN_MAIN_KOMPETISI` (3), `akhirKompetisi()` (malam = 06.00 WIB berikutnya yang paling cepat 3 jam lagi, minggu = 7 hari, bulan = 30 hari sejak jalan), `statusKompetisi()`, `poinKompetisi()` (dari `nilaiEfektif`, jadi yang keluar juru kunci), `hitungKlasemenKompetisi()`, `tutupDisetujui()`, dan `KUNCI_PENGATURAN_KOMPETISI` + `rapikanPengaturanKompetisi()`.
+- Meja: `Meja.buat(..., kompetisi?)` dan `masuk(pemainId, nama, peserta?)`. Meja kompetisi menolak duduk tanpa id peserta, satu peserta satu kursi, menolak kursi warga kedai dan ubahan pengaturan yang dikunci, dan mengosongkan kursi warga kedai saat main lagi. `DataMeja.kompetisi`, `Kursi.peserta`, `InfoMeja.kompetisi`, dan `RingkasanAkhir.kompetisi`/`pemain[].peserta` hanya ditulis di meja kompetisi, jadi meja biasa dan golden tidak berubah. Id peserta tidak pernah dikirim ke client.
+- Protokol: `buat` boleh membawa `kompetisi: { kode, token }`, `gabung` boleh membawa `tiket: TiketKompetisi[]` (paling banyak `MAKS_TIKET` = 20). Server mencocokkan token dengan hash-nya di database, lalu memberi meja id dan nama peserta yang terdaftar. `mulai` dan `mainLagi` di meja kompetisi ditolak sesudah kompetisinya selesai; permainan yang sedang jalan dibiarkan selesai, tapi hanya dihitung kalau selesai sebelum kompetisi berakhir.
+- Server: skema SQLite v2 (tabel `kompetisi`, `peserta_kompetisi` dengan `hash_token` SHA-256, `hasil_kompetisi`), penyimpan di `apps/server/src/kompetisi.ts` (dibuka bersama `bukaRiwayat`, hasil meja kompetisi dicatat di transaksi `simpan()` yang sama). API baru `GET /api/kompetisi`, `GET /api/kompetisi/KODE` (header `x-tiket-kompetisi`), `POST /api/kompetisi`, `POST /api/kompetisi/KODE/ikut`, `POST /api/kompetisi/KODE/tutup`. POST wajib `application/json` dari asal yang sama, maksimal 4 KB, 30 tulis per menit per jaringan, dan paling banyak 3 pengajuan menunggu per jaringan (50 total). Pengajuan batal dihapus 7 hari sesudah batal.
+- Client: layar `ui/kompetisi.ts` (teks di `konten/kompetisi.ts`, ikut antislop), simpanan `remi.tiketKompetisi`, lobi meja kompetisi (lencana nama kompetisi, tanpa pilihan warga kedai, aturan terkunci), dan konfirmasi keluar yang menyebut 0 poin. Layar Kompetisi = momen pembaruan "senyap", sama seperti Riwayat.
+
 ## [0.4.0] - 2026-10-18
 
 Layar Riwayat lebih ringkas, Bantuan memuat pembaruan terakhir, celetukan khas warga Madya bertambah, dan sekarang bisa kirim pesan sendiri di meja. Nama wajib diisi dan cuma bisa diganti seminggu sekali. Aturan main tidak berubah.

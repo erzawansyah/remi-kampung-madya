@@ -134,6 +134,24 @@ export interface InfoKursi {
 
 export type StatusMeja = 'lobi' | 'main' | 'selesai';
 
+/** Meja kompetisi (keputusan #51): kode dan nama kompetisinya. */
+export interface KompetisiMeja {
+  kode: string;
+  nama: string;
+}
+
+/**
+ * Bukti ikut serta kompetisi, disimpan di HP peserta. Token hanya dicocokkan server dengan hash-nya
+ * di database; meja tidak pernah melihatnya.
+ */
+export interface TiketKompetisi {
+  kode: string;
+  token: string;
+}
+
+/** Tiket paling banyak yang dikirim bersama pesan gabung. */
+export const MAKS_TIKET = 20;
+
 export interface InfoMeja {
   kode: string;
   status: StatusMeja;
@@ -158,6 +176,8 @@ export interface InfoMeja {
   menungguJoker: number[];
   /** Kursi bot yang sedang "mikir" sebelum aksi pertamanya. */
   botMikir: number | null;
+  /** Hanya ada di meja kompetisi (#51). */
+  kompetisi?: KompetisiMeja;
 }
 
 /** Klasemen akhir satu permainan (disimpan server ke database saat permainan selesai). */
@@ -172,6 +192,8 @@ export interface RingkasanAkhir {
   jumlahDeck: number;
   /** Permainan memakai mode kaldu (#42). */
   modeKaldu: boolean;
+  /** Kode kompetisi; hanya ada di meja kompetisi (#51). */
+  kompetisi?: string;
   /** Urut dari peringkat 1. Skor sama = peringkat sama. */
   pemain: {
     kursi: number;
@@ -184,6 +206,8 @@ export interface RingkasanAkhir {
     peringkat: number;
     mentung: number;
     kepentung: number;
+    /** Id peserta kompetisi yang duduk di kursi ini; hanya di meja kompetisi. */
+    peserta?: number;
   }[];
 }
 
@@ -200,8 +224,10 @@ export type AksiGiliran = Extract<Aksi, { pemain: number }>;
 export type AksiKlien = AksiGiliran extends infer A ? (A extends { pemain: number } ? Omit<A, 'pemain'> : never) : never;
 
 export type PesanKlien =
-  | { t: 'buat'; nama: string; pengaturan?: Partial<PengaturanMeja> }
-  | { t: 'gabung'; kode: string; nama: string; token?: string }
+  /** `kompetisi`: buat meja kompetisi (#51); pembuatnya wajib peserta. */
+  | { t: 'buat'; nama: string; pengaturan?: Partial<PengaturanMeja>; kompetisi?: TiketKompetisi }
+  /** `tiket`: semua tiket kompetisi di HP ini, untuk duduk di meja kompetisi (#51). */
+  | { t: 'gabung'; kode: string; nama: string; token?: string; tiket?: TiketKompetisi[] }
   | { t: 'daftar' }
   | { t: 'keluar' }
   | { t: 'aturKursi'; kursi: number; jenis: 'bot' | 'kosong'; level?: LevelBot }

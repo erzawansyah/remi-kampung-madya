@@ -17,6 +17,7 @@ import { gambarKartuKeKanvas, type KartuGambar } from '../game/kartuGrafisGambar
 import { htmlTautanKedai, KEDAI } from '../konten/kedai';
 import { TEKS_TAWARAN } from '../konten/pasang';
 import { TEKS_KALDU } from '../konten/kaldu';
+import { TEKS_KOMPETISI } from '../konten/kompetisi';
 import { TEKS_NAMA } from '../konten/nama';
 import { DAFTAR_LEVEL_WARGA, LEVEL_WARGA, labelLevelKecil } from '../konten/levelWarga';
 import { aturPreferensi, preferensi, saatPreferensiBerubah } from '../preferensi';
@@ -34,6 +35,8 @@ export interface AksiBeranda {
   gabung(nama: string, kode: string): void;
   lihatPublik(): void;
   lihatRiwayat(): void;
+  /** Layar Kompetisi (keputusan #51). */
+  lihatKompetisi(): void;
   mainOffline(nama: string, pengaturan: Partial<PengaturanMeja>, pengocokSaya: boolean): void;
   lanjutOffline(): void;
   /** Permainan latihan dengan panduan (tutorial). */
@@ -274,6 +277,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
             <button type="button" id="gabung">Gabung</button>
           </div>
           <button type="button" class="hantu penuh" id="publik">Cari meja publik</button>
+          <button type="button" class="hantu penuh" id="kompetisi"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.tombolBeranda)}</button>
         </section>
       </div>
 
@@ -461,7 +465,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   });
 
   // ---------- main online ----------
-  const tombolOnline = ['buat', 'gabung', 'publik'].map((id) => el<HTMLButtonElement>(id)!);
+  const tombolOnline = ['buat', 'gabung', 'publik', 'kompetisi'].map((id) => el<HTMLButtonElement>(id)!);
   const kodeEl = el<HTMLInputElement>('kode')!;
   const sibuk = (b: HTMLElement) => {
     tombolOnline.forEach((x) => x.removeAttribute('aria-busy'));
@@ -492,6 +496,11 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
     if (!(await pastikanNama())) return;
     sibuk(el('publik')!);
     aksi.lihatPublik();
+  });
+  // Ikut serta dan meja kompetisi memakai nama ini, jadi nama dipastikan dulu (#49).
+  el('kompetisi')!.addEventListener('click', async () => {
+    if (!(await pastikanNama())) return;
+    aksi.lihatKompetisi();
   });
 
   const statusEl = el('status-online')!;
@@ -609,7 +618,11 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   aturPasang(aksi.pasangAplikasi);
   aturMuatUlang(aksi.muatUlang);
 
-  const fokusNav = (n: string) => nav.querySelector<HTMLElement>(`[data-nav="${n.replace(/[^a-z-]/gi, '')}"]`)?.focus();
+  // Ubin menu, atau tombol dengan id itu (Kompetisi ada di panel Main online).
+  const fokusNav = (n: string) => {
+    const bersih = n.replace(/[^a-z-]/gi, '');
+    (nav.querySelector<HTMLElement>(`[data-nav="${bersih}"]`) ?? (bersih ? el(bersih) : null))?.focus();
+  };
 
   const pesanGagalTerlihat = () => {
     if (infoGagalEl.classList.contains('tersembunyi') || !infoGagalEl.isConnected) return false;

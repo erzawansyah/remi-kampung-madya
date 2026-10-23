@@ -6,11 +6,13 @@ import {
   DAFTAR_EMOTE,
   EMOTE_LAMA,
   MAKS_PESAN,
+  MAKS_TIKET,
   PENGATURAN_BAWAAN,
   type AksiKlien,
   type Emote,
   type PengaturanMeja,
   type PesanKlien,
+  type TiketKompetisi,
 } from './protokol.js';
 
 type Obj = Record<string, unknown>;
@@ -182,6 +184,12 @@ export function validasiPengaturan(x: unknown): Partial<PengaturanMeja> | null {
   return hasil;
 }
 
+/** Tiket kompetisi (#51): kode 5 huruf/angka dan token. Bentuk salah = null. */
+export function validasiTiket(x: unknown): TiketKompetisi | null {
+  if (!isObj(x) || !isStr(x.kode, 20) || !isStr(x.token, 100) || !x.token) return null;
+  return { kode: x.kode.trim().toUpperCase(), token: x.token };
+}
+
 /** Ubah data mentah (hasil JSON.parse) menjadi PesanKlien yang sah, atau null. */
 export function validasiPesan(x: unknown): PesanKlien | null {
   if (!isObj(x) || typeof x.t !== 'string') return null;
@@ -190,12 +198,20 @@ export function validasiPesan(x: unknown): PesanKlien | null {
     case 'buat': {
       if (!isStr(x.nama, 100)) return null;
       const pengaturan = x.pengaturan === undefined ? {} : validasiPengaturan(x.pengaturan);
-      return pengaturan ? { t: 'buat', nama: x.nama, pengaturan } : null;
+      if (!pengaturan) return null;
+      if (x.kompetisi === undefined) return { t: 'buat', nama: x.nama, pengaturan };
+      const kompetisi = validasiTiket(x.kompetisi);
+      return kompetisi ? { t: 'buat', nama: x.nama, pengaturan, kompetisi } : null;
     }
-    case 'gabung':
+    case 'gabung': {
       if (!isStr(x.kode, 20) || !isStr(x.nama, 100)) return null;
       if (x.token !== undefined && !isStr(x.token, 100)) return null;
-      return { t: 'gabung', kode: x.kode, nama: x.nama, token: x.token as string | undefined };
+      const pesan: PesanKlien = { t: 'gabung', kode: x.kode, nama: x.nama, token: x.token as string | undefined };
+      if (x.tiket === undefined) return pesan;
+      if (!Array.isArray(x.tiket) || x.tiket.length > MAKS_TIKET) return null;
+      const tiket = x.tiket.map(validasiTiket);
+      return tiket.every((t) => t !== null) ? { ...pesan, tiket: tiket as TiketKompetisi[] } : null;
+    }
     case 'daftar':
     case 'keluar':
     case 'mainLagi':
@@ -379,11 +395,24 @@ const BATAS_PESAN_MENTAH = 1000;
  * tidak ada yang terlihat → null (tidak dikirim).
  */
 export function rapikanPesan(pesan: string): string | null {
+  return rapikanBaris(pesan, MAKS_PESAN);
+}
+
+/** Panjang maksimal nama kompetisi (huruf yang tampil). */
+export const MAKS_NAMA_KOMPETISI = 32;
+
+/** Nama kompetisi (#51): dibersihkan sama seperti pesan, maksimal `MAKS_NAMA_KOMPETISI` huruf. Kosong → null. */
+export function rapikanNamaKompetisi(nama: unknown): string | null {
+  if (typeof nama !== 'string' || nama.length > BATAS_PESAN_MENTAH) return null;
+  return rapikanBaris(nama, MAKS_NAMA_KOMPETISI);
+}
+
+function rapikanBaris(pesan: string, maks: number): string | null {
   const normal = pesan.replace(/[^ㄱ-ㆎ]+/gu, (x) => x.normalize('NFKC'));
   const bersih = buangFormat(normal.replace(/\s+/gu, ' ').replace(KARAKTER_BUANG, ''))
     .replace(/\s+/gu, ' ')
     .trim();
-  const pendek = potong(bersih, MAKS_PESAN, MAKS_PESAN * 3);
+  const pendek = potong(bersih, maks, maks * 3);
   const hasil = (pendek.length < bersih.length ? pendek.replace(/[‌‍]+$/u, '') : pendek).trim();
   return TERLIHAT.test(hasil) ? hasil : null;
 }

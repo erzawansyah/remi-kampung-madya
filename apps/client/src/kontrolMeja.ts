@@ -2454,6 +2454,7 @@ export class KontrolMeja implements AksiAdegan {
                   offline: false,
                   selesai: this.view?.status === 'selesai',
                   masukPeringkat: mejaMasukPeringkat(this.info),
+                  kompetisi: !!this.info?.kompetisi,
                 }),
               ).then((ya) => {
                 if (!ya || this.hancur) return;

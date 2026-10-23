@@ -4,7 +4,7 @@
 // diperiksa: nilai yang tidak cocok diganti bawaan dan kuncinya dihapus supaya tidak mengganggu terus.
 
 import type { ViewPemain } from '@remi/engine';
-import { rapikanBatasSkor, rapikanLevel, type DataMeja, type InfoKursi, type PengaturanMeja } from '@remi/meja';
+import { MAKS_TIKET, rapikanBatasSkor, rapikanLevel, type DataMeja, type InfoKursi, type PengaturanMeja } from '@remi/meja';
 import type { TawaranPasang } from './pasangAplikasi';
 import { aturPreferensi, preferensi } from './preferensi';
 
@@ -24,6 +24,8 @@ const KUNCI = {
   latihan: 'remi.latihanTersimpan',
   /** Tawaran pasang aplikasi di beranda (keputusan #46): "Nanti saja" / "Sudah kupasang". */
   tawaranPasang: 'remi.tawaranPasang',
+  /** Tiket peserta kompetisi (keputusan #51), terbaru di depan. */
+  tiketKompetisi: 'remi.tiketKompetisi',
 } as const;
 
 /** Riwayat lokal yang disimpan (permainan terbaru di depan). */
@@ -82,6 +84,14 @@ export interface SesiOnline {
   token: string;
 }
 
+/** Tiket ikut serta satu kompetisi; token dicocokkan server dengan hash-nya. */
+export interface TiketTersimpan {
+  kode: string;
+  token: string;
+  /** Nama peserta yang terdaftar. */
+  nama: string;
+}
+
 export interface BarisCatatan {
   nama: string;
   skor: number;
@@ -106,6 +116,14 @@ const rapikanString: Rapikan<string> = (x) => (typeof x === 'string' ? x : undef
 const rapikanObjek = <T>(x: unknown): T | undefined => (objek(x) ? (x as T) : undefined);
 /** Null tersimpan = tidak ada (bukan rusak). */
 const rapikanObjekAtauNull = <T>(x: unknown): T | null | undefined => (x === null ? null : rapikanObjek<T>(x));
+
+const rapikanTiket: Rapikan<TiketTersimpan[]> = (x) =>
+  Array.isArray(x)
+    ? x
+        .filter((t): t is TiketTersimpan => objek(t) && typeof t.kode === 'string' && typeof t.token === 'string' && !!t.kode && !!t.token)
+        .map((t) => ({ kode: t.kode, token: t.token, nama: typeof t.nama === 'string' ? t.nama : '' }))
+        .slice(0, MAKS_TIKET)
+    : undefined;
 
 const rapikanSesi: Rapikan<SesiOnline | null> = (x) =>
   x === null ? null : objek(x) && typeof x.kode === 'string' && typeof x.token === 'string' && x.kode && x.token ? { kode: x.kode, token: x.token } : undefined;
@@ -217,6 +235,11 @@ export const simpan = {
   /** Data rusak dianggap belum pernah diganti (boleh ganti), supaya pemain tidak terkunci selamanya. */
   namaDiganti: () => baca<number | null>(KUNCI.namaDiganti, null, (x) => (typeof x === 'number' && Number.isFinite(x) ? x : undefined)),
   setNamaDiganti: (ms: number | null) => tulis(KUNCI.namaDiganti, ms),
+
+  tiketKompetisi: () => baca<TiketTersimpan[]>(KUNCI.tiketKompetisi, [], rapikanTiket),
+  /** Simpan tiket baru di depan (kode yang sama diganti), paling banyak MAKS_TIKET. */
+  tambahTiketKompetisi: (t: TiketTersimpan) =>
+    tulis(KUNCI.tiketKompetisi, [t, ...baca<TiketTersimpan[]>(KUNCI.tiketKompetisi, [], rapikanTiket).filter((x) => x.kode !== t.kode)].slice(0, MAKS_TIKET)),
 
   sesi: () => baca<SesiOnline | null>(KUNCI.sesi, null, rapikanSesi),
   setSesi: (s: SesiOnline | null) => tulis(KUNCI.sesi, s),

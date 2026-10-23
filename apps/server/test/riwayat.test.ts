@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { RingkasanAkhir } from '@remi/meja';
-import { bukaRiwayat, type PenyimpanRiwayat } from '../src/riwayat.js';
+import { bukaRiwayat, MIGRASI, type PenyimpanRiwayat } from '../src/riwayat.js';
 import { jalankanServer, type ServerRemi } from '../src/server.js';
 
 const ringkasan = (kode: string, waktu: number, pemain: [string, number, boolean?][]): RingkasanAkhir => {
@@ -124,7 +124,7 @@ const ringkasanKeluar = (kode: string, waktu: number, pemain: [string, number, (
   })),
 });
 
-describe('riwayat SQLite: migrasi skema v0 → v1', () => {
+describe('riwayat SQLite: migrasi skema v0 → terbaru', () => {
   it('database v0 buatan tangan dimigrasi, baris lama dilengkapi, dan migrasi tidak diulang saat dibuka lagi', () => {
     const db = new DatabaseSync(':memory:');
     db.exec(DDL_V0);
@@ -138,8 +138,8 @@ describe('riwayat SQLite: migrasi skema v0 → v1', () => {
 
     const log: string[] = [];
     const r = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
-    expect(versiSkema(db)).toBe(1);
-    expect(log.some((l) => l.includes('v0 → v1'))).toBe(true);
+    expect(versiSkema(db)).toBe(MIGRASI.length);
+    expect(log.some((l) => l.includes(`v0 → v${MIGRASI.length}`))).toBe(true);
     expect(log.some((l) => l.startsWith('riwayat dilengkapi'))).toBe(true);
 
     const permainan = db.prepare('SELECT kode_meja, jumlah_pemain, jumlah_deck, jumlah_manusia, mode_kaldu FROM permainan ORDER BY id').all();
@@ -171,7 +171,7 @@ describe('riwayat SQLite: migrasi skema v0 → v1', () => {
     // Dibuka lagi: tidak ada ALTER ulang (yang akan galat), tidak ada yang perlu dilengkapi.
     const log2: string[] = [];
     const r2 = bukaRiwayat(db, { log: (...x) => log2.push(x.join(' ')) });
-    expect(versiSkema(db)).toBe(1);
+    expect(versiSkema(db)).toBe(MIGRASI.length);
     expect(log2).toEqual([]);
     expect(r2.peringkat()).toEqual(lama);
     r2.tutup();
@@ -181,7 +181,7 @@ describe('riwayat SQLite: migrasi skema v0 → v1', () => {
   it('database baru langsung v1; baris yang ditulis server lama (tanpa kolom baru) dilengkapi saat dibuka lagi', () => {
     const db = new DatabaseSync(':memory:');
     const r = bukaRiwayat(db);
-    expect(versiSkema(db)).toBe(1);
+    expect(versiSkema(db)).toBe(MIGRASI.length);
     // Server versi sebelumnya (deploy dibatalkan) menulis tanpa kolom baru.
     tulisV0(db, 'LAMAA', '2026-10-06T10:00:00.000Z', [['Élia', 10], ['Budi', 0]]);
     r.tutup();

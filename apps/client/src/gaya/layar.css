@@ -882,3 +882,31 @@ table.skor tr.sub-judul th {
 table.skor tr.redup td {
   color: var(--teks-redup);
 }
+
+/* ---------- Kompetisi (#51) ----------
+   .daftar-kompetisi > button.daftar-item.item-kompetisi: satu kompetisi (nama, masa, waktu)
+   .lencana-kompetisi: penanda meja kompetisi di lobi · .sub-judul: judul kecil di klasemen */
+.item-kompetisi .nama-skor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  gap: 2px;
+}
+.item-kompetisi .nama-skor .lencana {
+  align-self: flex-start;
+}
+.lencana-kompetisi {
+  align-self: center;
+  font-size: var(--teks-sm);
+}
+.layar-kompetisi .sub-judul {
+  font-size: var(--teks-md);
+  margin: var(--ruang-3) 0 var(--ruang-2);
+}
+.layar-kompetisi .rincian {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+}

@@ -55,6 +55,7 @@ Istilah: di UI, pemain komputer disebut **warga kedai** (Kipas Dua, Cak Kopag, S
   - **Keluar di tengah permainan** (menekan Keluar) dihitung juru kunci: skornya disamakan dengan skor terendah di meja itu (kalau skornya sendiri lebih rendah, itu yang dipakai), peringkatnya n, dan kursi lain diurutkan di antara mereka sendiri. Sinyal putus atau menutup aplikasi tanpa Keluar tidak dihitung keluar. Konfirmasi keluar di meja yang masuk peringkat menyebut ini. Mentung dan kepentung yang tercatat untuknya hanya dari putaran yang hasilnya sudah jatuh sebelum ia keluar (`Kursi.keluarSesudahPutaran`); sesudahnya yang main warga kedai penerus kursinya.
   - Nama digabung tanpa beda huruf besar/kecil (`kunciNama`), yang tampil ejaan terakhir.
   - Aturan hitungnya satu sumber di `packages/meja/src/peringkat.ts`, dipakai server dan tab Statistik di HP (tab Statistik tanpa syarat minimal 2 orang dan tanpa urutan mentung, karena mentung tidak tersimpan di HP).
+- Kompetisi (keputusan pemilik #51, rinci di [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md#k51)): siapa saja mengajukan, jalan begitu **4 orang** menekan Ikut serta (24 jam belum cukup = batal), masa **1 malam / 1 minggu / 1 bulan** sejak jalan. Hanya **meja kompetisi** yang dihitung: khusus peserta, tanpa warga kedai, aturan meja dikunci dari kompetisi. **Poin** satu permainan = banyaknya peserta yang kalah skor darimu di meja itu; keluar di tengah permainan = 0 poin. Klasemen: total poin, minimal 3 kali main, seri = rata-rata poin lalu rata-rata skor akhir. Disudahi lebih awal kalau lebih dari separuh peserta setuju. Belum ada akun: peserta dikenali dari tiket di HP-nya. Aturan hitungnya satu sumber di `packages/meja/src/kompetisi.ts`.
 
 **Kedai Madya**
 - Logo Kedai Madya (dipakai dengan izin) di beranda dan Tentang.
@@ -138,7 +139,7 @@ curl -s http://127.0.0.1:2567/healthz                                 # {"ok":tr
   - Endpoint baca: `GET /api/riwayat?batas=30` (permainan terbaru; tiap permainan membawa `jumlahPemain`, `jumlahDeck`, `dihitung`, dan `klasemen[].keluar`).
   - `GET /api/peringkat` tanpa `v=2` tetap mengembalikan **array bentuk lama** (`nama, main, juara, totalSkor, rataRata, skorTerbaik, mentung, kepentung`, urut jumlah juara lalu total skor), supaya HP yang masih memakai aplikasi lama tidak macet. Isinya sudah memakai aturan #45 (minimal 2 orang, yang keluar juru kunci, nama tanpa beda huruf besar/kecil).
   - `GET /api/peringkat?v=2&urut=&pemain=&deck=&periode=` mengembalikan objek `{ v: 2, urut, saringan, periode, minMain, jumlahPermainan, peringkat, belumCukup }`. `urut`: `rata` (bawaan), `terbaik`, `persen`, `juara`, `main`, `mentung`, `posisi`. `pemain`: 2–6. `deck`: 1 atau 2. `periode`: `semua` (bawaan) atau `bulan` (bulan kalender WIB berjalan; `periode` di jawaban berisi `dari`/`sampai` ISO UTC dan `bulan` `YYYY-MM`). Nilai yang tidak sah jatuh ke bawaan, tidak pernah 400. Baris membawa juga `persenJuara`, `poinPosisi` (belum dibulatkan), `skorTerburuk`, dan `keluar`. Hasil di-cache per saringan dan cache dikosongkan setiap ada permainan baru tersimpan.
-  - **Skema SQLite** diberi versi lewat `PRAGMA user_version` (`MIGRASI` di `apps/server/src/riwayat.ts`, hanya boleh ditambah di belakang). v1 (16 Okt 2026) menambah `permainan.jumlah_pemain`, `jumlah_deck` (NULL untuk meja 4 orang lama, karena 1 atau 2 deck tidak tercatat), `jumlah_manusia`, `mode_kaldu`, `klasemen.keluar`, `klasemen.kunci_nama`, dan indeks `permainan(selesai_pada)` serta `klasemen(kunci_nama)`. Migrasi jalan otomatis saat server start (log: `skema riwayat dimigrasi v0 → v1`), lalu baris lama dilengkapi setiap database dibuka (`kunci_nama` dihitung di JS karena `lower()` SQLite hanya ASCII).
+  - **Skema SQLite** diberi versi lewat `PRAGMA user_version` (`MIGRASI` di `apps/server/src/riwayat.ts`, hanya boleh ditambah di belakang). v2 (23 Okt 2026, #51) menambah tabel `kompetisi`, `peserta_kompetisi`, dan `hasil_kompetisi`. v1 (16 Okt 2026) menambah `permainan.jumlah_pemain`, `jumlah_deck` (NULL untuk meja 4 orang lama, karena 1 atau 2 deck tidak tercatat), `jumlah_manusia`, `mode_kaldu`, `klasemen.keluar`, `klasemen.kunci_nama`, dan indeks `permainan(selesai_pada)` serta `klasemen(kunci_nama)`. Migrasi jalan otomatis saat server start (log: `skema riwayat dimigrasi v0 → v1`), lalu baris lama dilengkapi setiap database dibuka (`kunci_nama` dihitung di JS karena `lower()` SQLite hanya ASCII).
   - Database memakai mode WAL, jadi jangan menyalin `remi.db` saja selagi server jalan. Cadangan yang aman tanpa menghentikan server:
     `docker compose exec remi node --disable-warning=ExperimentalWarning -e "new (require('node:sqlite').DatabaseSync)('/app/data/remi.db').exec(\"VACUUM INTO '/app/data/cadangan.db'\")"`, lalu `docker compose cp remi:/app/data/cadangan.db .`
 - **CI** (`.github/workflows/ci.yml`): typecheck, test, dan build di Node 22 dan 24 untuk setiap push ke `main`/`produksi` dan pull request, lalu job **Docker image** (`docker build` penuh + cek `/healthz`, header cache, dan stop rapi). Job E2E smoke di Chrome runner bersifat opsional (tidak memblok).
@@ -169,6 +170,7 @@ packages/meja/            Satu meja/room: kursi, host, bot, timer giliran, sambu
   src/meja.ts             Kelas Meja (tanpa jaringan; dipakai server dan mode offline)
   src/gayaWarga.ts        Gaya tiap warga kedai menurut namanya (GAYA_WARGA, gayaKursi; #47)
   src/peringkat.ts        Aturan hitung leaderboard (#45), dipakai server dan tab Statistik di HP
+  src/kompetisi.ts        Aturan kompetisi (#51): masa berlaku, status, poin, klasemen, pengaturan terkunci
 apps/server/              HTTP + WebSocket (ws). Melayani file PWA, /healthz, /api, dan /ws
   scripts/bundel.mjs      Bundel server (esbuild) + suntik versi/commit
 apps/client/              Phaser 4 + HTML + Vite + vite-plugin-pwa
@@ -205,7 +207,7 @@ Dokumen pendukung:
 - [docs/baseline-gameplay.md](docs/baseline-gameplay.md): perilaku aktual mesin aturan dan meja, plus cara meninjau golden test.
 - [docs/arsitektur-client.md](docs/arsitektur-client.md): peta modul client (scene, animasi, jendela, audio, preferensi).
 - [docs/riset-desain.md](docs/riset-desain.md): riset game feel, aksesibilitas, dan benchmark UX, beserta status implementasinya.
-- [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): rincian keputusan pemilik #25–#50 dan dua tafsiran yang masih perlu dikonfirmasi pemilik (#43, kelompok berubah-ubah di #47).
+- [docs/keputusan-pemilik.md](docs/keputusan-pemilik.md): rincian keputusan pemilik #25–#51 dan tafsiran yang masih perlu dikonfirmasi pemilik (#43, kelompok berubah-ubah di #47, detail kompetisi #51).
 - [docs/deploy.md](docs/deploy.md): daftar cek sesudah deploy, identitas build, dan perilaku update PWA.
 
 ### Arsitektur online
@@ -445,6 +447,7 @@ Kartu bergambar joker tidak dipakai.
 | 48 | Emote hanya dari daftar tetap | Celetukan warga Madya (Gedein!, Buruan!, Lumayan!, CEKI!, Njir lah!, Give me!) dan pesan yang diketik sendiri, maksimal 60 huruf. CEKI! hanya celetukan, skor tidak berubah ([rinci](docs/keputusan-pemilik.md#k48)) | Diputuskan pemilik (18 Okt 2026), diterapkan di 0.4.0 |
 | 49 | Nama bisa diganti kapan saja | Nama wajib diisi, ganti paling cepat seminggu sekali, dikunci di HP ([rinci](docs/keputusan-pemilik.md#k49)) | Diputuskan pemilik (18 Okt 2026), diterapkan di 0.4.0 |
 | 50 | Versi tidak naik walau sering rilis | Naik versi tiap rilis ke `main` (fitur/aturan = minor, perbaikan = patch), tag `vX.Y.Z` ([rinci](docs/keputusan-pemilik.md#k50)) | Diputuskan pemilik (18 Okt 2026) |
+| 51 | Belum ada kompetisi | Diajukan siapa saja, jalan saat 4 orang ikut (24 jam), boleh ikut telat, masa 1 malam/1 minggu/1 bulan, meja kompetisi khusus peserta tanpa warga kedai, poin = peserta yang dikalahkan, minimal 3 main, seri = rata-rata poin, disudahi lewat voting > separuh peserta. Beberapa detail tafsiran pengembang ([rinci](docs/keputusan-pemilik.md#k51)) | Diputuskan pemilik (23 Okt 2026), tafsiran perlu konfirmasi |
 
 ## Test
 

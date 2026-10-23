@@ -16,6 +16,8 @@ Batch 14 Okt 2026 (level warga kedai Jago dan Suhu, 12 nama warga kedai baru, bu
 
 ## Belum selesai
 
+00. **Kompetisi (#51, 23 Okt 2026):** sudah dikerjakan di branch `ccr-681fc5be-tw8z13` (belum ada PR, belum naik versi; CHANGELOG masih `[Belum dirilis]`). Minta pemilik mengonfirmasi tafsiran di `docs/keputusan-pemilik.md` #51 (yang keluar 0 poin, jam akhir "1 malam", permainan yang selesai sesudah kompetisi berakhir tidak dihitung, pengaturan yang dikunci, pengaju tanpa hak khusus, tiket per HP). Saat rilis: naik ke 0.5.0 (fitur = minor), dan cek log server memuat `skema riwayat dimigrasi v1 → v2`.
+
 0. **Sisa cek sesudah Rilis A tayang** (yang dari luar sudah dicek, lihat Latar): minta pemilik melihat log server memuat `skema riwayat dimigrasi v0 → v1` (butuh akses server), lalu coba tombol pasang di HP sungguhan (lihat butir 5). Cadangan `VACUUM INTO` sebelum migrasi sudah terlambat; kalau pemilik sempat mengambilnya, simpan saja.
 1. **Sisa cek sesudah Rilis B tayang:** coba nutup pakai dua joker dan satu permainan mode kaldu di HP sungguhan (lihat butir 5).
 2. **Sesudah Rilis C tayang** (#47): tabel nama → gaya, catatan arena, dan ajakan mencoba sudah dikabarkan ke pemilik 17 Okt 2026. Tunggu tanggapan sesudah pemilik dan teman-teman main lawan warga kedai (masih gampang dibaca? ada yang terasa aneh?).

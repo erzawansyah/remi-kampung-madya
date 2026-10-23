@@ -17,7 +17,7 @@
 
 import type { StatusKoneksi } from './koneksi';
 
-export type LayarPembaruan = 'beranda' | 'publik' | 'riwayat' | 'lobi' | 'meja';
+export type LayarPembaruan = 'beranda' | 'publik' | 'riwayat' | 'kompetisi' | 'lobi' | 'meja';
 
 /** Seberapa aman memuat ulang halaman sekarang. */
 export type MomenPembaruan = 'bebas' | 'senyap' | 'tidak';
@@ -59,6 +59,7 @@ export function momenPembaruan(k: KeadaanPembaruan): MomenPembaruan {
       return k.modalTerbuka ? 'tidak' : 'bebas';
     case 'publik':
     case 'riwayat':
+    case 'kompetisi':
       return k.modalTerbuka ? 'tidak' : 'senyap';
     case 'lobi':
       // Sesi online tersambung lagi sendiri sesudah dimuat ulang.

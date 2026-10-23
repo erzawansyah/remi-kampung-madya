@@ -8,6 +8,7 @@ import * as PERINGKAT from '../src/konten/peringkat';
 import * as PASANG from '../src/konten/pasang';
 import { TEKS_KALDU } from '../src/konten/kaldu';
 import { TEKS_NAMA } from '../src/konten/nama';
+import * as KOMPETISI from '../src/konten/kompetisi';
 
 // Penjaga gaya teks (antislop) untuk konten yang dibaca pemain: Bantuan, tutorial, info kedai,
 // dan emote/celetukan. Yang dijaga hanya pola formulaik yang jelas (negasi kontras, klise promosi,
@@ -42,6 +43,8 @@ const sumber: [string, string[]][] = [
   ['Pasang aplikasi', semuaTeks(PASANG)],
   // Mode kaldu (keputusan #42, #43): kotak centang di layar persiapan dan teks pendek di meja.
   ['Mode kaldu', semuaTeks(TEKS_KALDU)],
+  // Kompetisi (keputusan #51): layar Kompetisi dan lobi meja kompetisi.
+  ['Kompetisi', semuaTeks(KOMPETISI)],
 ];
 
 describe('antislop: teks pemain', () => {
