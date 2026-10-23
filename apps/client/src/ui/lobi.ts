@@ -116,6 +116,17 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   const aktif = document.activeElement;
   const sedangDiisi =
     aktif instanceof HTMLInputElement && aktif.dataset.batasSkor && akar.contains(aktif) ? { id: aktif.id, nilai: aktif.value } : null;
+  // Posisi gulir dan isian yang sedang difokus juga dipulihkan: tanpa ini setiap pengaturan yang
+  // diubah membuat layar melompat ke atas (layar lobi baru mulai dari gulir 0).
+  const gulirLama = akar.querySelector<HTMLElement>('.layar-lobi')?.scrollTop ?? null;
+  const fokusLama =
+    aktif instanceof HTMLElement && akar.contains(aktif)
+      ? aktif.id && /^[\w-]+$/.test(aktif.id)
+        ? `#${aktif.id}`
+        : aktif.dataset.kursi !== undefined
+          ? `[data-kursi="${Number(aktif.dataset.kursi)}"]`
+          : null
+      : null;
   lepasIsianBatas(akar);
   const p = info.pengaturan;
   const tautan = `${location.origin}/?meja=${info.kode}`;
@@ -196,6 +207,9 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   </div></div>`;
 
   const q = <T extends HTMLElement>(sel: string) => akar.querySelector(sel) as T | null;
+  const layarBaru = q('.layar-lobi');
+  if (layarBaru && gulirLama !== null) layarBaru.scrollTop = gulirLama;
+  if (fokusLama && !sedangDiisi) q(fokusLama)?.focus({ preventScroll: true });
   q('#salin')!.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(tautan);
@@ -249,7 +263,7 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
     const el = q<HTMLInputElement>(`#${sedangDiisi.id}`);
     if (el) {
       el.value = sedangDiisi.nilai;
-      el.focus();
+      el.focus({ preventScroll: true });
     }
   }
   q('#detik')!.addEventListener('change', () => ubah({ detikGiliran: Number(q<HTMLSelectElement>('#detik')!.value) }));

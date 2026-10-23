@@ -16,12 +16,17 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 - Kompetisi bisa disudahi lebih awal kalau lebih dari separuh peserta setuju.
 - Tiket peserta tersimpan di HP yang dipakai waktu ikut serta, jadi main kompetisi dari HP itu. Bantuan memuat cara main kompetisi.
 
+#### Diperbaiki
+
+- Lobi meja online tidak lagi melompat ke atas setiap kali pengaturan diubah (atau ada yang masuk). Posisi gulir dan pilihan yang sedang dipegang tetap di tempatnya.
+
 ### Teknis
 
 - Kompetisi (keputusan pemilik #51). Aturan hitungnya satu sumber di `packages/meja/src/kompetisi.ts`: `MIN_PESERTA` (4), `BATAS_PENGAJUAN_MS` (24 jam), `MIN_MAIN_KOMPETISI` (3), `akhirKompetisi()` (malam = 06.00 WIB berikutnya yang paling cepat 3 jam lagi, minggu = 7 hari, bulan = 30 hari sejak jalan), `statusKompetisi()`, `poinKompetisi()` (dari `nilaiEfektif`, jadi yang keluar juru kunci), `hitungKlasemenKompetisi()`, `tutupDisetujui()`, dan `KUNCI_PENGATURAN_KOMPETISI` + `rapikanPengaturanKompetisi()`.
 - Meja: `Meja.buat(..., kompetisi?)` dan `masuk(pemainId, nama, peserta?)`. Meja kompetisi menolak duduk tanpa id peserta, satu peserta satu kursi, menolak kursi warga kedai dan ubahan pengaturan yang dikunci, dan mengosongkan kursi warga kedai saat main lagi. `DataMeja.kompetisi`, `Kursi.peserta`, `InfoMeja.kompetisi`, dan `RingkasanAkhir.kompetisi`/`pemain[].peserta` hanya ditulis di meja kompetisi, jadi meja biasa dan golden tidak berubah. Id peserta tidak pernah dikirim ke client.
 - Protokol: `buat` boleh membawa `kompetisi: { kode, token }`, `gabung` boleh membawa `tiket: TiketKompetisi[]` (paling banyak `MAKS_TIKET` = 20). Server mencocokkan token dengan hash-nya di database, lalu memberi meja id dan nama peserta yang terdaftar. `mulai` dan `mainLagi` di meja kompetisi ditolak sesudah kompetisinya selesai; permainan yang sedang jalan dibiarkan selesai, tapi hanya dihitung kalau selesai sebelum kompetisi berakhir.
 - Server: skema SQLite v2 (tabel `kompetisi`, `peserta_kompetisi` dengan `hash_token` SHA-256, `hasil_kompetisi`), penyimpan di `apps/server/src/kompetisi.ts` (dibuka bersama `bukaRiwayat`, hasil meja kompetisi dicatat di transaksi `simpan()` yang sama). API baru `GET /api/kompetisi`, `GET /api/kompetisi/KODE` (header `x-tiket-kompetisi`), `POST /api/kompetisi`, `POST /api/kompetisi/KODE/ikut`, `POST /api/kompetisi/KODE/tutup`. POST wajib `application/json` dari asal yang sama, maksimal 4 KB, 30 tulis per menit per jaringan, dan paling banyak 3 pengajuan menunggu per jaringan (50 total). Pengajuan batal dihapus 7 hari sesudah batal.
+- Lobi: `renderLobi()` menggambar ulang seluruh layar setiap info meja berubah, sehingga `.layar-lobi` baru mulai dari gulir 0. Sekarang posisi gulir dan elemen yang difokus (id atau `data-kursi`) dicatat sebelum digambar ulang lalu dipulihkan (`focus({ preventScroll: true })`).
 - Client: layar `ui/kompetisi.ts` (teks di `konten/kompetisi.ts`, ikut antislop), simpanan `remi.tiketKompetisi`, lobi meja kompetisi (lencana nama kompetisi, tanpa pilihan warga kedai, aturan terkunci), dan konfirmasi keluar yang menyebut 0 poin. Layar Kompetisi = momen pembaruan "senyap", sama seperti Riwayat.
 
 ## [0.4.0] - 2026-10-18

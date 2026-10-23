@@ -270,3 +270,38 @@ describe('lobi meja kompetisi', () => {
     expect(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true }).pesan).not.toContain(TEKS_KOMPETISI.keluarMeja);
   });
 });
+
+describe('lobi digambar ulang', () => {
+  function infoBiasa(jumlahPemain: number): InfoMeja {
+    let info: InfoMeja | null = null;
+    const meja = Meja.buat(
+      {
+        kode: 'MEJAB',
+        penjadwal: { setel: () => 0, batal: () => undefined, sekarang: () => 0 },
+        kirim: (_: string, p: PesanServer) => {
+          if (p.t === 'meja') info = p.info;
+        },
+      },
+      'host',
+      'Ani',
+      { jumlahPemain },
+    );
+    meja.hentikan();
+    return info!;
+  }
+
+  it('posisi gulir dan pilihan yang difokus tidak lompat ke atas saat pengaturan berubah', () => {
+    renderLobi(akar(), infoBiasa(4), vi.fn(), vi.fn());
+    akar().querySelector<HTMLElement>('.layar-lobi')!.scrollTop = 420;
+    akar().querySelector<HTMLSelectElement>('#putaran')!.focus();
+    renderLobi(akar(), infoBiasa(5), vi.fn(), vi.fn());
+    expect(akar().querySelector<HTMLElement>('.layar-lobi')!.scrollTop).toBe(420);
+    expect(document.activeElement?.id).toBe('putaran');
+  });
+
+  it('pertama kali dibuka tetap dari atas', () => {
+    akar().innerHTML = '<div class="layar beranda"></div>';
+    renderLobi(akar(), infoBiasa(4), vi.fn(), vi.fn());
+    expect(akar().querySelector<HTMLElement>('.layar-lobi')!.scrollTop).toBe(0);
+  });
+});
