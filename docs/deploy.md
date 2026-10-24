@@ -68,35 +68,38 @@ Tanpa pengaturan di bawah, usulan tetap diterima dan disimpan. Begitu Notion dia
 
 **Langkah pemilik (sekali saja):**
 
-1. Buka https://www.notion.so/profile/integrations, pilih **New integration**. Isi nama (misalnya `Remi Kampung Madya`), pilih workspace yang berisi database Permintaan Fitur, tipe **Internal**, lalu simpan.
-2. Di tab **Capabilities** integrasi itu, pastikan **Read content** dan **Insert content** dicentang (cukup itu; server hanya membuat baris baru).
-3. Di tab **Configuration**, salin **Internal Integration Secret** (diawali `ntn_` atau `secret_`). Simpan baik-baik, jangan ditempel di chat, issue, atau commit.
-4. Buka database **Permintaan Fitur** di Notion, klik **•••** di kanan atas → **Connections** → cari nama integrasi tadi → **Confirm**. Tanpa langkah ini Notion menjawab `object_not_found` walau token benar.
-5. Di VPS, di folder proyek (sebelah `docker-compose.yml`), buat atau tambahkan ke file `.env`:
+Nama menu di Notion cukup sering berganti. Kalau tulisannya sedikit beda dari di bawah, pilih yang paling mirip; yang penting hasilnya: ada integrasi **internal** yang boleh membaca dan menambah konten, token-nya sudah disalin, dan integrasi itu terhubung ke database Permintaan Fitur. (Langkah ini dicocokkan dengan panduan Notion per 24 Okt 2026.)
+
+1. Buka https://www.notion.so/profile/integrations dengan akun pemilik workspace (hanya pemilik workspace yang boleh membuat integrasi). Notion bisa mengalihkannya ke **Developer portal → Connections** (`app.notion.com/developers/connections`); itu tempat yang sama. Pilih **New integration** (bisa juga bernama **New connection**), isi nama (misalnya `Remi Kampung Madya`), pilih workspace yang berisi database Permintaan Fitur, tipe **Internal**, lalu simpan.
+2. Buka tab **Configuration** integrasi itu. Semua yang dibutuhkan ada di tab ini:
+   - Di bagian **Capabilities**, pastikan **Read content** dan **Insert content** dicentang (cukup itu; server hanya membuat baris baru). Tekan **Save** kalau ada.
+   - Salin token-nya, yang disebut **Internal Integration Secret** atau **API token** (diawali `ntn_` atau `secret_`; mungkin perlu klik **Show** dulu). Simpan baik-baik, jangan ditempel di chat, issue, atau commit.
+3. Hubungkan integrasi ke database. Buka database **Permintaan Fitur** di Notion, klik **•••** di kanan atas, buka **More** kalau ada, lalu di bagian **Connections** pilih **Add connections** → cari nama integrasi tadi → pilih (tekan **Confirm** kalau ditanya). Cara lain: di pengaturan integrasi, buka tab **Access**, lalu pilih database Permintaan Fitur. Tanpa langkah ini Notion menjawab `object_not_found` walau token benar.
+4. Di VPS, di folder proyek (sebelah `docker-compose.yml`), buat atau tambahkan ke file `.env`:
 
    ```bash
-   NOTION_TOKEN=ntn_isi_secret_dari_langkah_3
+   NOTION_TOKEN=ntn_isi_token_dari_langkah_2
    NOTION_USULAN_DB=d31d1a9e7a7a44cf963bab9777f02e4a
    ```
 
    Lalu `chmod 600 .env`. File `.env` diabaikan git dan `.dockerignore`, jadi tidak ikut ke repo maupun ke image; `docker compose` membacanya dan meneruskan keduanya sebagai environment container. `NOTION_USULAN_DB` boleh juga ditulis dengan tanda hubung atau berupa tautan database yang disalin dari browser.
-6. Buat ulang container supaya environment baru terbaca: `docker compose up -d` (atau tunggu deploy berikutnya dari webhook, yang menjalankan `docker compose up -d --build`).
-7. Cek log:
+5. Buat ulang container supaya environment baru terbaca: `docker compose up -d` (atau tunggu deploy berikutnya dari webhook, yang menjalankan `docker compose up -d --build`).
+6. Cek log:
 
    ```bash
    docker compose logs remi | grep 'usul fitur'
    # usul fitur: diteruskan ke Notion (database d31d1a9e…)
    ```
 
-   Kalau yang muncul `usul fitur: Notion belum diatur …` atau `… NOTION_TOKEN kosong …`, isi `.env` belum terbaca: pastikan namanya persis `.env` dan letaknya di sebelah `docker-compose.yml`, lalu ulangi langkah 6.
-8. Kirim satu usulan uji dari game (beranda → **💡 Usul fitur**). Di log muncul `usulan #N masuk` lalu `usulan #N terkirim ke Notion`, dan barisnya tampil di database dengan Status `Baru` dan Sumber `Game`. Baris uji boleh dihapus di Notion.
+   Kalau yang muncul `usul fitur: Notion belum diatur …` atau `… NOTION_TOKEN kosong …`, isi `.env` belum terbaca: pastikan namanya persis `.env` dan letaknya di sebelah `docker-compose.yml`, lalu ulangi langkah 5.
+7. Kirim satu usulan uji dari game (beranda → **💡 Usul fitur**). Di log muncul `usulan #N masuk` lalu `usulan #N terkirim ke Notion`, dan barisnya tampil di database dengan Status `Baru` dan Sumber `Game`. Baris uji boleh dihapus di Notion.
 
 **Kalau gagal**, lognya satu baris per percobaan, tanpa token dan tanpa isi usulan:
 
 | Di log | Artinya |
 |---|---|
-| `HTTP 401 unauthorized` | Token salah atau sudah dicabut. Salin ulang secret (langkah 3), perbarui `.env`, ulangi langkah 6. |
-| `HTTP 404 object_not_found` | Integrasi belum dihubungkan ke database (langkah 4), atau `NOTION_USULAN_DB` salah. |
+| `HTTP 401 unauthorized` | Token salah atau sudah dicabut. Salin ulang token (langkah 2), perbarui `.env`, ulangi langkah 5. |
+| `HTTP 404 object_not_found` | Integrasi belum dihubungkan ke database (langkah 3), atau `NOTION_USULAN_DB` salah. |
 | `HTTP 400 validation_error` | Nama atau tipe kolom di Notion berubah (misalnya Judul, Isi usulan, Pengusul, Sumber, Jenis, Status, atau ID server diganti nama, atau opsi Status `Baru` dihapus). Kembalikan namanya, atau minta pengembang menyesuaikan `apps/server/src/notion.ts`. |
 | `Notion tidak terjangkau: …` | Jaringan VPS ke `api.notion.com` bermasalah. Dicoba lagi sendiri. |
 
