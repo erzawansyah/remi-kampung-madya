@@ -877,3 +877,122 @@ html[data-gerak='kurang'] .status-koneksi .titik {
   justify-content: center;
   flex-wrap: wrap;
 }
+
+/* ---------- Hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 Okt 2026) ----------
+   .wadah-ledek: bagian "Ledek" di modal hasil (ui/ledek.ts htmlLedek); kosong = disembunyikan.
+   #lapisan-ledek: lapisan tetap di atas modal hasil (di bawah dialog dan toast), di luar #ui/#modal
+   yang dibuat inert selama ada jendela. Isinya .ledek-besar (ledekan untukku, ketuk untuk menutup)
+   dan .gelembung.ledek (ledekan ke orang lain, di kursi pengirimnya). */
+.wadah-ledek:empty {
+  display: none;
+}
+.ledek {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-2);
+  padding: var(--ruang-3);
+  border: 1px solid var(--garis);
+  border-radius: var(--radius-besar);
+  background: rgba(0, 0, 0, 0.18);
+}
+.ledek .judul-ledek {
+  margin: 0;
+  font-size: var(--teks-lg);
+}
+.ledek-sasaran.segmen {
+  display: flex;
+  flex-wrap: wrap;
+  align-self: stretch;
+}
+.ledek-sasaran.segmen > button {
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+.ledek-kata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ledek-kata button {
+  flex: 1 1 auto;
+  min-height: var(--sentuh);
+  padding-inline: var(--ruang-2);
+  font-size: var(--teks-sm);
+  overflow-wrap: anywhere;
+}
+.ledek-emoji {
+  display: grid;
+  /* minmax(0, 1fr): kolom tidak melebar mengikuti isi (meluber di HP sempit). */
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 4px;
+}
+.ledek-emoji button {
+  min-width: 0;
+  min-height: var(--sentuh);
+  padding: var(--ruang-1) 0;
+  font-size: 1.375rem;
+}
+@media (max-width: 480px) {
+  .ledek-emoji {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+#lapisan-ledek {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-ledek);
+  pointer-events: none;
+}
+.ledek-besar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--ruang-4) + var(--aman-atas)) calc(var(--ruang-4) + var(--aman-kanan))
+    calc(var(--ruang-4) + var(--aman-bawah)) calc(var(--ruang-4) + var(--aman-kiri));
+  pointer-events: auto;
+  cursor: pointer;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.3) 55%, rgba(0, 0, 0, 0) 80%);
+}
+.ledek-kotak {
+  max-width: min(92vw, 36rem);
+  text-align: center;
+  animation: ledek-masuk var(--durasi, 2500ms) var(--ease-pegas) forwards;
+}
+.ledek-dari {
+  margin: 0;
+  font-weight: 800;
+  font-size: clamp(1rem, 4.6vw, 1.5rem);
+  color: var(--krem);
+  text-shadow: 0 2px 4px #000;
+  overflow-wrap: anywhere;
+}
+.ledek-isi {
+  margin: var(--ruang-2) 0 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(2.25rem, 11vw, 4.5rem);
+  line-height: 1.05;
+  color: var(--sorak-emas);
+  -webkit-text-stroke: 2px rgba(0, 0, 0, 0.55);
+  paint-order: stroke fill;
+  text-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.45),
+    0 0 28px rgba(255, 196, 0, 0.75);
+  overflow-wrap: anywhere;
+}
+.ledek-isi.emoji {
+  font-size: clamp(4.5rem, 26vw, 8rem);
+  -webkit-text-stroke: 0;
+  text-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+}
+/* Gelembung ledekan ke orang lain: sama dengan gelembung emote, di lapisan ledekan (di atas modal). */
+.gelembung.ledek {
+  white-space: normal;
+  width: max-content;
+  max-width: min(16rem, 70vw);
+  text-align: center;
+  overflow-wrap: anywhere;
+}

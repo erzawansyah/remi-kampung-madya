@@ -565,6 +565,9 @@ class Aplikasi implements AppUntukMeja {
       case 'emote':
         this.kontrol?.terimaEmote(p.kursi, p.isi);
         break;
+      case 'ledek':
+        this.kontrol?.terimaLedek(p.dari, p.ke, p.isi);
+        break;
       case 'keluar':
         toast(p.alasan);
         this.keluarMeja(!p.alasan.includes('tab atau perangkat lain'));

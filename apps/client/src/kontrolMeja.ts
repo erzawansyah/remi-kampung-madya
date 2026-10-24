@@ -26,7 +26,7 @@ import {
   type ViewPemain,
   berikutnya,
 } from '@remi/engine';
-import { DAFTAR_EMOTE, MAKS_PESAN, rapikanPesan, type InfoMeja, type PesanKlien, type TempoBot } from '@remi/meja';
+import { DAFTAR_EMOTE, MAKS_LEDEK_PER_PUTARAN, MAKS_PESAN, rapikanPesan, type InfoMeja, type PesanKlien, type TempoBot } from '@remi/meja';
 import { KabarKoneksi, type Kabar, type StatusKoneksi } from './koneksi';
 import type { AksiAdegan, KotakLayar, MejaScene, ModelMeja } from './game/MejaScene';
 import { gambarKartuKeKanvas } from './game/kartuGrafisGambar';
@@ -52,6 +52,8 @@ import { bukaBantuan, bukaTentang } from './ui/jendelaMalas';
 import { teksPengumuman, Tutorial, type KeadaanTutorial } from './ui/tutorial';
 import { TEKS_TUTORIAL } from './konten/tutorial';
 import { TEKS_KALDU } from './konten/kaldu';
+import { TEKS_LANJUT, TEKS_LEDEK } from './konten/ledek';
+import { apaEmoji, hapusLapisanLedek, htmlLedek, lapisanLedek, LedekBesar, sasaranLedekBawaan } from './ui/ledek';
 import { simpan } from './penyimpanan';
 import { gerakDikurangi } from './preferensi';
 import { durasi } from './gerak';
@@ -254,6 +256,9 @@ const LABEL_TEMPO: Record<TempoBot, string> = { santai: 'santai', normal: 'norma
 /** Batas waktu tombol "Mengirim…" sebelum bisa ditekan lagi (kalau server tidak menjawab). */
 const BATAS_KIRIM_MS = 6000;
 
+/** Tombol ledekan dikunci sebentar sesudah mengirim (meja membuang emote/ledekan < 1,2 detik). */
+const JEDA_LEDEK_MS = 1300;
+
 /**
  * Batas waktu kunci bar aksi sesudah aksi giliran dikirim. Normalnya kunci lepas begitu view
  * berikutnya datang; ini cadangan kalau server menolak (cuma kirim error) atau koneksi lambat.
@@ -339,9 +344,6 @@ export function teksInfoKaldu(v: Pick<ViewPemain, 'konfigurasi' | 'riwayat' | 'k
   return h.kaldu && h.cara === 'deckHabis' ? TEKS_KALDU.lagi : TEKS_KALDU.berikutnya;
 }
 
-/** Emote berupa satu emoji (gambar, paling banyak dua code point), bukan celetukan/pesan teks. */
-const apaEmoji = (isi: string) => [...isi].length <= 2 && /^\p{Extended_Pictographic}/u.test(isi);
-
 export class KontrolMeja implements AksiAdegan {
   private info: InfoMeja | null = null;
   private view: ViewPemain | null = null;
@@ -408,7 +410,25 @@ export class KontrolMeja implements AksiAdegan {
   private kalduDipilih: boolean | null = null;
   /** Isi wadah tombol lanjut di modal hasil yang sedang terpasang (ganti hanya kalau berubah). */
   private htmlLanjutTerpasang = '';
+  private htmlLedekTerpasang = '';
   private timerTertunda: ReturnType<typeof setTimeout>[] = [];
+  /**
+   * Jeda lanjut (meja online): waktu lokal saat tombol host terbuka, dihitung dari `info.lanjut.sisaMs`
+   * saat info diterima (jam HP tidak dipakai untuk membandingkan dengan server). Null = tidak terkunci.
+   */
+  private akhirLanjut: number | null = null;
+  /** Kunci lanjut terakhir yang tampil di modal hasil (untuk mengumumkan saat tombol host terbuka). */
+  private lanjutTerkunciTampil = false;
+  /** Hasil putaran (panjang riwayat) yang Siap-nya sudah kutekan. */
+  private siapLanjutDikirim = -1;
+  /** Sasaran ledekan yang kupilih di hasil putaran ini. */
+  private sasaranLedek: { putaran: number; kursi: number } | null = null;
+  /** Ledekan yang sudah kukirim di hasil putaran ini (jatah MAKS_LEDEK_PER_PUTARAN). */
+  private ledekTerkirim = { putaran: -1, jumlah: 0 };
+  /** Tombol ledekan terkunci sampai waktu ini (Date.now()). */
+  private jedaLedekSampai = 0;
+  /** Ledekan untukku: tampil besar, antri, menunggu animasi meja selesai. */
+  private readonly ledekBesar = new LedekBesar(() => this.sedangMemutar || this.animasi);
   /** Sorotan keyboard: id kartu (tangan/pungutan), 'deck', 'buangan', atau null. */
   private fokus: string | null = null;
   private indeksFokus = 0;
@@ -516,6 +536,8 @@ export class KontrolMeja implements AksiAdegan {
     // diputar tidak lagi menyentuh scene/DOM.
     this.pemutar.hentikan();
     bersihkanSorak();
+    this.ledekBesar.hancurkan();
+    hapusLapisanLedek();
     this.timerAksi.forEach((t) => clearTimeout(t));
     this.timerTertunda.forEach((t) => clearTimeout(t));
     clearInterval(this.timerWaktu);
@@ -539,6 +561,8 @@ export class KontrolMeja implements AksiAdegan {
     if (this.hancur) return;
     if (info) {
       this.info = info;
+      // Sisa jeda relatif → waktu lokal, setiap info baru (menyamakan ulang hitung mundur).
+      this.akhirLanjut = info.lanjut ? Date.now() + Math.max(0, info.lanjut.sisaMs) : null;
       this.kirimUlangSiapJokerBilaPerlu();
     }
     if (view) {
@@ -608,6 +632,7 @@ export class KontrolMeja implements AksiAdegan {
           this.render();
         }
         this.lepasEmoteTertunda();
+        this.ledekBesar.berikut();
         // Antrian sudah habis: popup joker yang tadi menunggu animasi boleh muncul sekarang.
         this.bukaJokerBilaPerlu();
       }
@@ -1444,6 +1469,7 @@ export class KontrolMeja implements AksiAdegan {
     if (this.hancur || !this.view || !this.info) return;
     this.perbaruiWaktu();
     this.perbaruiKoneksi();
+    this.detikLanjut();
     if (this.tutorial?.aktif) this.tutorial.perbarui(this.keadaanTutorial(this.statusTombol()));
   }
 
@@ -1910,19 +1936,38 @@ export class KontrolMeja implements AksiAdegan {
     for (const [kursi, isi] of this.emoteTertunda.splice(0)) this.gelembung(kursi, isi);
   }
 
-  private gelembung(kursi: number, isi: string) {
+  /**
+   * Ledekan masuk (hanya di hasil putaran meja online). Untukku: tampil besar di tengah layar, di atas
+   * modal hasil (antri, ketuk untuk menutup). Untuk orang lain: gelembung di kursi pengirimnya dengan
+   * "→ nama sasaran", juga di atas modal. Aplikasi versi lama mengabaikan pesan ini.
+   */
+  terimaLedek(dari: number, ke: number, isi: string) {
+    if (this.hancur || !this.view) return;
+    if (ke === this.saya && dari !== this.saya) {
+      const nama = this.view.pemain[dari]?.nama ?? 'Pemain';
+      this.ledekBesar.tambah(nama, isi, `${this.namaUntukPembaca(dari)} ${TEKS_LEDEK.ngeledekKamu}: ${isi}`);
+      return;
+    }
+    this.gelembung(dari, isi, ke);
+  }
+
+  /** Gelembung emote di kursi `kursi`. `ledekKe`: ledekan ke kursi itu (ditulis "isi → nama", di atas modal). */
+  private gelembung(kursi: number, isi: string, ledekKe?: number) {
     if (this.hancur) return;
     const pos = this.scene.posisiPemain(kursi);
     const dpr = window.devicePixelRatio || 1;
     const el = document.createElement('div');
-    const emoji = apaEmoji(isi);
+    const ledek = ledekKe !== undefined;
+    const namaKe = ledek ? (this.view?.pemain[ledekKe]?.nama ?? 'Pemain') : '';
+    const teks = ledek ? `${isi} → ${namaKe}` : isi;
+    const emoji = !ledek && apaEmoji(isi);
     const milikku = kursi === this.saya;
     // Pesan panjang (diketik sendiri) tampil lebih lama supaya sempat dibaca.
-    const panjang = isi.length > 24;
+    const panjang = teks.length > 24;
     const lama = panjang ? 4500 : 2600;
-    el.className = `gelembung${emoji ? ' emoji' : ''}${milikku ? ' milikku' : ''}${panjang ? ' panjang' : ''}`;
+    el.className = `gelembung${emoji ? ' emoji' : ''}${milikku ? ' milikku' : ''}${panjang ? ' panjang' : ''}${ledek ? ' ledek' : ''}`;
     el.style.animationDuration = `${lama}ms`;
-    el.textContent = isi;
+    el.textContent = teks;
     el.setAttribute('aria-hidden', 'true');
     const x = pos ? pos.x / dpr : window.innerWidth / 2;
     const y = pos ? pos.y / dpr : window.innerHeight / 2;
@@ -1930,11 +1975,15 @@ export class KontrolMeja implements AksiAdegan {
     const tepi = panjang ? Math.min(136, window.innerWidth / 2) : 60;
     el.style.left = `${Math.min(window.innerWidth - tepi, Math.max(tepi, x))}px`;
     el.style.top = `${Math.max(40, y - (milikku ? 70 : 10))}px`;
-    this.akar.appendChild(el);
+    (ledek ? lapisanLedek() : this.akar).appendChild(el);
     if (milikku) bunyi('pop');
     else {
       bunyi('notifikasi');
-      umumkan(`${this.namaUntukPembaca(kursi)}: ${isi}`);
+      umumkan(
+        ledek
+          ? `${this.namaUntukPembaca(kursi)} ${TEKS_LEDEK.ngeledek} ${this.namaUntukPembaca(ledekKe)}: ${isi}`
+          : `${this.namaUntukPembaca(kursi)}: ${isi}`,
+      );
     }
     setTimeout(() => el.remove(), lama);
   }
@@ -1978,22 +2027,122 @@ export class KontrolMeja implements AksiAdegan {
     return 'Mengirim…';
   }
 
-  /** Bagian tombol "Putaran berikutnya" / pilihan pengocok di modal hasil (berubah saat kirim/host berganti). */
+  /**
+   * Bagian tombol "Putaran berikutnya" / pilihan pengocok di modal hasil (berubah saat kirim/host berganti).
+   * Jeda lanjut (meja online): selama terkunci host melihat tombol mati dengan hitung mundur dan siapa
+   * yang belum siap; pemain lain melihat tombol Siap. Angka hitung mundurnya diisi perbaruiHitungLanjut()
+   * (span kosong di sini), jadi HTML ini tidak berubah tiap detik dan fokus tidak terganggu.
+   */
   private htmlLanjutHasil(): string {
     const v = this.view!;
     const info = this.info!;
     const min = Math.min(...v.skor);
     const kandidat = v.skor.map((s, i) => (s === min ? i : -1)).filter((i) => i >= 0);
-    if (info.kursiSaya !== info.host) return '<p class="redup rapat">Menunggu host memulai putaran berikutnya…</p>';
+    const terkunci = this.lanjutTerkunci();
+    if (info.kursiSaya !== info.host) {
+      if (!terkunci) return '<p class="redup rapat">Menunggu host memulai putaran berikutnya…</p>';
+      if (info.lanjut!.siap.includes(this.saya) || this.siapLanjutDikirim === v.riwayat.length) {
+        return `<p class="redup rapat" data-siap-lanjut-terkirim>${esc(TEKS_LANJUT.menungguHost)}</p>`;
+      }
+      return `<p class="redup rapat">${esc(TEKS_LANJUT.ajakSiap)}</p>
+           <button type="button" class="utama" data-siap-lanjut>${esc(TEKS_LANJUT.siap)}</button>`;
+    }
     const sibuk = this.sedangDikirim('kocok');
-    const atribut = sibuk ? ' aria-disabled="true"' : '';
+    const atribut = terkunci ? ' aria-disabled="true" data-terkunci-lanjut' : sibuk ? ' aria-disabled="true"' : '';
+    const hitung = '<span data-hitung-lanjut></span>';
+    const belum = terkunci ? `<p class="redup rapat" data-belum-siap>${esc(`${TEKS_LANJUT.belumSiap} ${daftarNama(this.belumSiapLanjut())}.`)}</p>` : '';
     if (kandidat.length > 1) {
-      return `<p class="redup rapat">Skor terendah sama. Pilih pengocok berikutnya:</p>
+      return `${belum}<p class="redup rapat">Skor terendah sama. Pilih pengocok berikutnya${terkunci ? ` (${hitung})` : ''}:</p>
            <div class="deret">${kandidat.map((i) => `<button type="button" data-kocok="${i}"${atribut}>${esc(v.pemain[i].nama)}</button>`).join('')}<button type="button" class="utama" data-kocok="acak"${atribut}>Acak</button></div>`;
     }
+    if (terkunci) return `${belum}<button type="button" class="utama" data-kocok="acak"${atribut}>${esc(TEKS_LANJUT.tombolTerkunci)} (${hitung})</button>`;
     return `<button type="button" class="utama" data-kocok="acak"${atribut}${sibuk ? ' aria-busy="true"' : ''}>${
       sibuk ? this.labelSibuk('kocok') : `Putaran berikutnya (${esc(v.pemain[kandidat[0]].nama)} ngocok)`
     }</button>`;
+  }
+
+  /** Jeda lanjut masih mengunci tombol host (menurut info terakhir dan jam HP sejak info itu diterima). */
+  private lanjutTerkunci(): boolean {
+    return (
+      this.app.jenis === 'online' &&
+      !!this.info?.lanjut &&
+      this.akhirLanjut !== null &&
+      Date.now() < this.akhirLanjut &&
+      this.view?.status === 'putaranSelesai'
+    );
+  }
+
+  /** Nama pemain manusia lain yang ditunggu jeda lanjut tapi belum menekan Siap (urutan kursi). */
+  private belumSiapLanjut(): string[] {
+    const info = this.info!;
+    const siap = info.lanjut?.siap ?? [];
+    return info.kursi.flatMap((k, i) =>
+      k.jenis === 'manusia' && k.terhubung && i !== info.host && !siap.includes(i) ? [this.view?.pemain[i]?.nama ?? k.nama] : [],
+    );
+  }
+
+  /** Angka hitung mundur jeda lanjut di modal hasil (detik, dibulatkan ke atas, paling kecil 1). */
+  private perbaruiHitungLanjut() {
+    const el = document.querySelectorAll<HTMLElement>('#modal [data-hitung-lanjut]');
+    if (!el.length) return;
+    const n = String(this.akhirLanjut === null ? 1 : Math.max(1, Math.ceil((this.akhirLanjut - Date.now()) / 1000)));
+    el.forEach((x) => {
+      if (x.textContent !== n) x.textContent = n;
+    });
+  }
+
+  /** Detak jeda lanjut: hitung mundur jalan; begitu habis (jam HP), modal hasil membuka tombol host. */
+  private detikLanjut() {
+    if (this.akhirLanjut === null) return;
+    if (Date.now() < this.akhirLanjut) return this.perbaruiHitungLanjut();
+    this.akhirLanjut = null;
+    this.segarkanHasil();
+  }
+
+  /** Perbarui modal hasil putaran kalau sedang terbuka (tanpa membukanya kalau sudah ditutup). */
+  private segarkanHasil() {
+    const v = this.view;
+    if (this.hancur || v?.status !== 'putaranSelesai' || !document.querySelector('#modal [data-hasil]')) return;
+    this.modalHasil(v.riwayat[v.riwayat.length - 1]);
+  }
+
+  /** Manusia lain yang terhubung di meja online: calon sasaran ledekan. Offline/latihan: tidak ada. */
+  private calonLedek(): number[] {
+    const info = this.info;
+    if (!info || this.app.jenis !== 'online' || this.app.tutorial) return [];
+    return info.kursi.flatMap((k, i) => (k.jenis === 'manusia' && k.terhubung && i !== this.saya ? [i] : []));
+  }
+
+  /** Sasaran ledekan sekarang: pilihanku di putaran ini kalau masih ada, selain itu bawaan. */
+  private sasaranLedekKini(h: HasilPutaran, calon: number[]): number | null {
+    const pilih = this.sasaranLedek;
+    if (pilih && pilih.putaran === h.nomor && calon.includes(pilih.kursi)) return pilih.kursi;
+    return sasaranLedekBawaan(h, this.saya, calon);
+  }
+
+  /** Bagian "Ledek" di modal hasil putaran ('' kalau offline atau tidak ada manusia lain). */
+  private htmlLedekHasil(h: HasilPutaran): string {
+    const calon = this.calonLedek();
+    const v = this.view!;
+    return htmlLedek({
+      calon: calon.map((kursi) => ({ kursi, nama: v.pemain[kursi]?.nama ?? 'Pemain' })),
+      sasaran: this.sasaranLedekKini(h, calon),
+      habis: this.ledekTerkirim.putaran === h.nomor && this.ledekTerkirim.jumlah >= MAKS_LEDEK_PER_PUTARAN,
+      jeda: Date.now() < this.jedaLedekSampai,
+    });
+  }
+
+  /** Kirim ledekan ke sasaran yang terpilih. */
+  private kirimLedek(h: HasilPutaran, isi: string) {
+    const ke = this.sasaranLedekKini(h, this.calonLedek());
+    if (ke === null || Date.now() < this.jedaLedekSampai) return;
+    if (this.ledekTerkirim.putaran !== h.nomor) this.ledekTerkirim = { putaran: h.nomor, jumlah: 0 };
+    if (this.ledekTerkirim.jumlah >= MAKS_LEDEK_PER_PUTARAN) return;
+    this.ledekTerkirim.jumlah++;
+    this.jedaLedekSampai = Date.now() + JEDA_LEDEK_MS;
+    this.app.kirim({ t: 'ledek', ke, isi });
+    this.timerTertunda.push(setTimeout(() => this.segarkanHasil(), JEDA_LEDEK_MS + 20));
+    this.segarkanHasil();
   }
 
   /** Pemilih voting di modal hasil: manusia yang masih terhubung (sama dengan hitungan meja). */
@@ -2065,8 +2214,18 @@ export class KontrolMeja implements AksiAdegan {
     const akhiri = this.keadaanAkhiri();
     const kaldu = this.keadaanKaldu();
     const infoKaldu = teksInfoKaldu(this.view!, h);
+    const ledek = this.htmlLedekHasil(h);
+    // Tombol host baru terbuka (jeda habis atau semua siap): kabari pembaca layar sekali.
+    const terkunci = this.lanjutTerkunci();
+    if (this.lanjutTerkunciTampil && !terkunci && this.info?.kursiSaya === this.info?.host) umumkan(TEKS_LANJUT.bisaLanjut);
+    this.lanjutTerkunciTampil = terkunci;
     const ada = document.querySelector<HTMLElement>(`#modal [data-hasil="${h.nomor}"]`)?.closest<HTMLElement>('.dialog');
-    if (ada) return this.perbaruiModalHasil(ada, lanjut, akhiri, kaldu, infoKaldu);
+    if (ada) {
+      this.perbaruiModalHasil(ada, lanjut, akhiri, kaldu, infoKaldu);
+      this.perbaruiLedekHasil(ada, ledek);
+      this.perbaruiHitungLanjut();
+      return;
+    }
 
     const v = this.view!;
     // Pertahankan akordion yang sedang terbuka (modal dibuka lagi dari tombol "Hasil putaran").
@@ -2079,6 +2238,7 @@ export class KontrolMeja implements AksiAdegan {
     const kandidat = v.skor.map((s, i) => (s === min ? i : -1)).filter((i) => i >= 0);
     const arah = `Arah berikutnya: ${h.arahBerikutnya === 1 ? 'searah' : 'berbalik'}${h.cara === 'mentung' ? (h.dibalik ? ' (dibalik)' : ' (lompat, tetap)') : ''}.`;
     this.htmlLanjutTerpasang = lanjut;
+    this.htmlLedekTerpasang = ledek;
     bukaModal(
       `<div data-hasil="${h.nomor}"></div>
        <h2>Hasil putaran ${h.nomor}</h2>
@@ -2087,6 +2247,7 @@ export class KontrolMeja implements AksiAdegan {
        <p class="redup rapat">Diurutkan dari skor tertinggi. Ketuk nama untuk melihat rinciannya.</p>
        ${baris}
        <p class="redup rapat">${arah} Pengocok berikutnya: skor terendah (${kandidat.map((i) => esc(v.pemain[i].nama)).join(', ')}).</p>
+       <div class="wadah-ledek" data-ledek-wadah>${ledek}</div>
        <div class="kaki-dialog aksi-hasil">
          <p class="info-kaldu${infoKaldu ? '' : ' tersembunyi'}" data-info-kaldu>${esc(infoKaldu)}</p>
          <div class="aksi-hasil-lanjut" data-lanjut-wadah>${lanjut}</div>
@@ -2104,8 +2265,25 @@ export class KontrolMeja implements AksiAdegan {
         // Satu pendengar untuk semua tombol: isi tombol boleh diganti tanpa memasang ulang.
         dlg.addEventListener('click', (ev) => {
           const b = (ev.target as HTMLElement).closest<HTMLButtonElement>('button');
-          if (!b || b.disabled || b.getAttribute('aria-disabled') === 'true' || this.hancur) return;
-          if (b.dataset.kocok !== undefined) {
+          if (!b || this.hancur) return;
+          if (b.hasAttribute('data-terkunci-lanjut')) {
+            // Tombol host masih dikunci jeda lanjut: jelaskan, jangan diam saja.
+            toast(TEKS_LANJUT.tunggu);
+            return;
+          }
+          if (b.disabled || b.getAttribute('aria-disabled') === 'true') return;
+          if (b.dataset.ledekKe !== undefined) {
+            bunyi('klik');
+            this.sasaranLedek = { putaran: h.nomor, kursi: Number(b.dataset.ledekKe) };
+            this.segarkanHasil();
+          } else if (b.dataset.ledekIsi !== undefined) {
+            this.kirimLedek(h, b.dataset.ledekIsi);
+          } else if (b.hasAttribute('data-siap-lanjut')) {
+            bunyi('klik');
+            this.siapLanjutDikirim = this.view!.riwayat.length;
+            this.app.kirim({ t: 'siapLanjut' });
+            this.segarkanHasil();
+          } else if (b.dataset.kocok !== undefined) {
             if (this.sedangDikirim('kocok')) return;
             bunyi('klik');
             const k = b.dataset.kocok;
@@ -2136,6 +2314,22 @@ export class KontrolMeja implements AksiAdegan {
         },
       },
     );
+    this.perbaruiHitungLanjut();
+  }
+
+  /** Bagian Ledek di modal hasil yang sudah terbuka: dipasang ulang hanya kalau isinya berubah; fokus dipertahankan. */
+  private perbaruiLedekHasil(dlg: HTMLElement, html: string) {
+    const wadah = dlg.querySelector<HTMLElement>('[data-ledek-wadah]');
+    if (!wadah || html === this.htmlLedekTerpasang) return;
+    this.htmlLedekTerpasang = html;
+    const aktif = document.activeElement;
+    const fokus = aktif instanceof HTMLElement && wadah.contains(aktif) ? { ke: aktif.dataset.ledekKe, isi: aktif.dataset.ledekIsi } : null;
+    wadah.innerHTML = html;
+    if (!fokus) return;
+    const sama = [...wadah.querySelectorAll<HTMLElement>('button')].find(
+      (b) => (fokus.ke !== undefined && b.dataset.ledekKe === fokus.ke) || (fokus.isi !== undefined && b.dataset.ledekIsi === fokus.isi),
+    );
+    (sama ?? wadah.querySelector<HTMLElement>('button') ?? dlg.querySelector<HTMLElement>('[data-tutup]'))?.focus({ preventScroll: true });
   }
 
   /**
@@ -2162,7 +2356,10 @@ export class KontrolMeja implements AksiAdegan {
       this.htmlLanjutTerpasang = lanjut;
       wadah.innerHTML = lanjut;
       if (fokusKocok !== null) {
-        const ganti = wadah.querySelector<HTMLElement>(`[data-kocok="${fokusKocok}"]`) ?? wadah.querySelector<HTMLElement>('button');
+        const ganti =
+          wadah.querySelector<HTMLElement>(`[data-kocok="${fokusKocok}"]`) ??
+          wadah.querySelector<HTMLElement>('button') ??
+          dlg.querySelector<HTMLElement>('[data-tutup]');
         ganti?.focus({ preventScroll: true });
       }
     }

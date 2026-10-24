@@ -193,6 +193,8 @@
   --z-gelembung: 6;
   --z-modal: 10;
   --z-sorak: 15;
+  /* Ledekan di hasil putaran: di atas modal hasil, di bawah dialog (Skor, Bantuan) dan toast. */
+  --z-ledek: 16;
   --z-dialog: 18;
   --z-toast: 20;
   --z-tooltip: 25;

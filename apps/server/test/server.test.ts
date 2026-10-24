@@ -197,7 +197,7 @@ describe('hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 O
         if (!bisa) continue;
         sudah.set(k, daftar.length);
         const { pemain: _, ...aksi } = pilihAksiBot(v, 'normal', rng) as { pemain: number };
-        await k.kirim({ t: 'aksi', aksi });
+        await k.kirim({ t: 'aksi', aksi } as Record<string, unknown>);
       }
       await new Promise((r) => setTimeout(r, 5));
     }
