@@ -23,6 +23,7 @@ import {
   type UrutanPeringkat,
 } from '@remi/meja';
 import { buatPenyimpanKompetisi, SKEMA_KOMPETISI, type PenyimpanKompetisi } from './kompetisi.js';
+import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, type PenyimpanMejaAktif } from './mejaAktif.js';
 
 export interface PermainanTersimpan {
   id: number;
@@ -88,6 +89,8 @@ export interface PenyimpanRiwayat {
   papan(permintaan?: PermintaanPapan): PapanPeringkat;
   /** Kompetisi (#51), di database yang sama. Hasil meja kompetisi dicatat simpan() sekalian. */
   kompetisi: PenyimpanKompetisi;
+  /** Meja online yang masih ada (selamat dari restart/deploy), di database yang sama. Diatur server.ts. */
+  mejaAktif: PenyimpanMejaAktif;
   tutup(): void;
 }
 
@@ -121,6 +124,30 @@ const SKEMA_V0 = `
 `;
 
 /**
+ * SEMENTARA, hanya di branch ini: v3 adalah migrasi usul fitur dari branch `fitur/usul-fitur`
+ * (`SKEMA_USULAN` di apps/server/src/usulan.ts), yang digabung lebih dulu. Isinya disalin persis di
+ * sini supaya nomor versi v4 (meja_aktif) sudah benar dan database yang sempat dibuat branch ini sama
+ * dengan sesudah digabung. Saat fitur/usul-fitur digabung: hapus konstanta ini dan pakai impor
+ * `SKEMA_USULAN` dari './usulan.js'. Isi MIGRASI[2] tidak boleh berubah (dijaga riwayat.test.ts).
+ */
+const SKEMA_USULAN = `
+  CREATE TABLE IF NOT EXISTS usulan (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dibuat_pada INTEGER NOT NULL,
+    nama TEXT NOT NULL,
+    judul TEXT NOT NULL,
+    isi TEXT NOT NULL,
+    jenis TEXT,
+    notion_halaman TEXT,
+    terkirim_pada INTEGER,
+    percobaan INTEGER NOT NULL DEFAULT 0,
+    galat_terakhir TEXT
+  );
+  CREATE INDEX IF NOT EXISTS usulan_belum_terkirim ON usulan (id) WHERE terkirim_pada IS NULL;
+  CREATE INDEX IF NOT EXISTS usulan_dibuat ON usulan (dibuat_pada);
+`;
+
+/**
  * Migrasi skema berurutan; indeks + 1 = nilai `PRAGMA user_version` sesudahnya. **Hanya boleh
  * ditambah di belakang.** Entri yang sudah ada jangan diubah, karena database di server sudah
  * menjalankannya. Kolom baru wajib boleh NULL atau punya DEFAULT, supaya server versi sebelumnya
@@ -138,6 +165,11 @@ export const MIGRASI: readonly string[] = [
    CREATE INDEX IF NOT EXISTS klasemen_kunci ON klasemen (kunci_nama) WHERE bot = 0;`,
   // v2 (23 Okt 2026, keputusan pemilik #51): kompetisi, pesertanya, dan hasil per permainan.
   SKEMA_KOMPETISI,
+  // v3 (24 Okt 2026, keputusan pemilik): usul fitur dari game, diteruskan ke Notion. Tanpa alamat IP.
+  SKEMA_USULAN,
+  // v4 (24 Okt 2026, keputusan pemilik): meja online yang masih ada, supaya selamat dari restart/deploy.
+  // Memuat token pemain: database hanya di volume privat.
+  SKEMA_MEJA_AKTIF,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */
@@ -223,6 +255,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
   migrasiSkema(db, log);
   lengkapiBaris(db, log);
   const kompetisi = buatPenyimpanKompetisi(db);
+  const mejaAktif = buatPenyimpanMejaAktif(db);
 
   const tambahPermainan = db.prepare(
     `INSERT INTO permainan (kode_meja, selesai_pada, alasan, jumlah_putaran, jumlah_pemain, jumlah_deck, jumlah_manusia, mode_kaldu)
@@ -385,6 +418,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
       return { v: 2, urut, saringan, periode, minMain: MIN_MAIN, jumlahPermainan: jumlah, peringkat, belumCukup };
     },
     kompetisi,
+    mejaAktif,
     tutup() {
       if (milikSendiri) db.close();
     },

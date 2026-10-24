@@ -38,6 +38,9 @@ const server = await jalankanServer({
   // ORIGIN_DIIZINKAN: asal tambahan untuk WebSocket, dipisah koma ("https://a.id,b.id"; "*" = semua).
   originDiizinkan: daftarEnv(process.env.ORIGIN_DIIZINKAN),
   healthzDetail: process.env.HEALTHZ_DETAIL === '1' || process.env.HEALTHZ_DETAIL?.toLowerCase() === 'true',
+  // Meja disimpan di database yang sama supaya selamat dari restart/deploy (bawaan nyala).
+  // SIMPAN_MEJA=0 mematikannya (meja kembali hanya di memori; simpanan lama tidak dipulihkan).
+  simpanMeja: !['0', 'false'].includes((process.env.SIMPAN_MEJA ?? '').toLowerCase()),
 });
 log(`Remi Kampung Madya v${VERSI} (${SHA}) jalan di port ${server.port} (statis: ${folderStatis}, database: ${pathDb})`);
 

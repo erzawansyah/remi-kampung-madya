@@ -368,3 +368,78 @@ describe('endpoint peringkat v2', () => {
     expect(r.status).toBe(405);
   });
 });
+
+describe('riwayat SQLite: migrasi v3 (usul fitur) dan v4 (meja aktif)', () => {
+  const kolom = (db: DatabaseSync, tabel: string) =>
+    (db.prepare(`PRAGMA table_info(${tabel})`).all() as { name: string; notnull: number; pk: number }[]).map((k) => [k.name, k.notnull, k.pk]);
+  const indeks = (db: DatabaseSync, tabel: string) =>
+    (db.prepare(`PRAGMA index_list(${tabel})`).all() as { name: string; origin: string }[])
+      .filter((i) => i.origin === 'c')
+      .map((i) => i.name)
+      .sort();
+
+  /** Database sampai versi `v` saja, seperti yang ditinggalkan server versi sebelumnya. */
+  function sampaiVersi(v: number): DatabaseSync {
+    const db = new DatabaseSync(':memory:');
+    db.exec(DDL_V0);
+    for (let i = 0; i < v; i++) db.exec(MIGRASI[i]);
+    db.exec(`PRAGMA user_version = ${v}`);
+    return db;
+  }
+
+  it('v3 persis migrasi usul fitur (fitur/usul-fitur), v4 tabel meja_aktif', () => {
+    expect(MIGRASI).toHaveLength(4);
+    const db = sampaiVersi(4);
+    expect(kolom(db, 'usulan')).toEqual([
+      ['id', 0, 1],
+      ['dibuat_pada', 1, 0],
+      ['nama', 1, 0],
+      ['judul', 1, 0],
+      ['isi', 1, 0],
+      ['jenis', 0, 0],
+      ['notion_halaman', 0, 0],
+      ['terkirim_pada', 0, 0],
+      ['percobaan', 1, 0],
+      ['galat_terakhir', 0, 0],
+    ]);
+    expect(indeks(db, 'usulan')).toEqual(['usulan_belum_terkirim', 'usulan_dibuat']);
+    // Kolom selain kunci dan isi boleh NULL atau punya bawaan (aturan MIGRASI).
+    expect(kolom(db, 'meja_aktif')).toEqual([
+      ['kode', 0, 1],
+      ['data', 1, 0],
+      ['pembuat_jaringan', 0, 0],
+      ['diperbarui_pada', 1, 0],
+    ]);
+    db.close();
+  });
+
+  it('database v2 (rilis kompetisi) dan v3 (sesudah usul fitur) dimigrasi ke v4 tanpa menyentuh isi lama', () => {
+    for (const v of [2, 3]) {
+      const db = sampaiVersi(v);
+      tulisV0(db, 'LAMAA', '2026-10-20T10:00:00.000Z', [['Budi', 10], ['Siti', 0]]);
+      const log: string[] = [];
+      const r = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
+      expect(versiSkema(db)).toBe(4);
+      expect(log).toContain(`skema riwayat dimigrasi v${v} → v4`);
+      expect(r.daftar(10).map((g) => g.kodeMeja)).toEqual(['LAMAA']);
+      expect(r.mejaAktif.semua()).toEqual([]);
+      r.tutup();
+      db.close();
+    }
+  });
+
+  it('mejaAktif: simpan menimpa per kode, semua urut dari yang paling lama diperbarui, hapus', () => {
+    const r = bukaRiwayat(':memory:');
+    r.mejaAktif.simpan('BBBBB', '{"b":1}', null, 20);
+    r.mejaAktif.simpan('AAAAA', '{"a":1}', '1.2.3.4', 10);
+    r.mejaAktif.simpan('BBBBB', '{"b":2}', '5.6.7.8', 5);
+    expect(r.mejaAktif.semua()).toEqual([
+      { kode: 'BBBBB', data: '{"b":2}', pembuatJaringan: '5.6.7.8', diperbaruiPada: 5 },
+      { kode: 'AAAAA', data: '{"a":1}', pembuatJaringan: '1.2.3.4', diperbaruiPada: 10 },
+    ]);
+    r.mejaAktif.hapus('BBBBB');
+    r.mejaAktif.hapus('ZZZZZ');
+    expect(r.mejaAktif.semua().map((b) => b.kode)).toEqual(['AAAAA']);
+    r.tutup();
+  });
+});
