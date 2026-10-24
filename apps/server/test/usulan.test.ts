@@ -293,7 +293,7 @@ describe('pengirim usulan ke Notion', () => {
     const id = u.simpan(usulanBudi, jam.sekarang());
     await p.kirimBaru(id);
     expect(u.ambil(id)).toMatchObject({ percobaan: 1, galatTerakhir: 'HTTP 400 validation_error: ada yang salah', terkirimPada: null });
-    expect(log.at(-1)).toBe(`usulan #${id} gagal dikirim ke Notion (percobaan 1/20, dicoba lagi ±5 menit lagi): HTTP 400 validation_error: ada yang salah`);
+    expect(log.at(-1)).toBe(`usulan #${id} gagal dikirim ke Notion (percobaan 1/20, dicoba lagi dalam ±5 menit): HTTP 400 validation_error: ada yang salah`);
 
     // Putaran pertama (10 detik sesudah jalan) belum waktunya: jeda 5 menit belum lewat.
     await jam.maju(10_000);

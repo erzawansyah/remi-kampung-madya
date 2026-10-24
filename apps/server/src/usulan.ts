@@ -180,7 +180,7 @@ export function jalankanPengirimUsulan(opsi: OpsiPengirimUsulan): PengirimUsulan
         if (percobaan >= MAKS_PERCOBAAN_USULAN) {
           log(`usulan #${u.id} gagal dikirim ke Notion (${galat.message}); berhenti dicoba sesudah ${percobaan} percobaan, tetap tersimpan di database`);
         } else {
-          log(`usulan #${u.id} gagal dikirim ke Notion (percobaan ${percobaan}/${MAKS_PERCOBAAN_USULAN}, dicoba lagi ±${Math.round(jeda / 60_000)} menit lagi): ${galat.message}`);
+          log(`usulan #${u.id} gagal dikirim ke Notion (percobaan ${percobaan}/${MAKS_PERCOBAAN_USULAN}, dicoba lagi dalam ±${Math.round(jeda / 60_000)} menit): ${galat.message}`);
         }
         return !galat.menyeluruh;
       }
