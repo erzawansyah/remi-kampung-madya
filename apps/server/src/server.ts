@@ -16,6 +16,7 @@ import {
   namaLawanAcak,
   penjadwalNyata,
   periksaUsulan,
+  TEKS_LOBI_KOMPETISI_BUBAR,
   validasiPesan,
   type DataMeja,
   type KlasemenKompetisi,
@@ -195,8 +196,6 @@ interface Sambungan {
 export { alamatKlien, alamatLokal, kunciIp, originDiizinkan } from './keamanan.js';
 
 const TEKS_KOMPETISI_TAK_JALAN = 'Kompetisinya sudah selesai atau belum jalan, Bos.';
-/** Pesan `keluar` untuk peserta di lobi meja kompetisi yang kompetisinya sudah berakhir. */
-export const TEKS_LOBI_KOMPETISI_BUBAR = 'Kompetisinya sudah selesai, mejanya dibubarkan. Klasemennya ada di menu Kompetisi, Bos.';
 
 // Tanpa huruf/angka yang mirip (0/O, 1/I/L).
 const HURUF_KODE = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';

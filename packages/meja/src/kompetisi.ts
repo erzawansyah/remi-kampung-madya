@@ -47,6 +47,12 @@ export const BATAS_PUTARAN_KOMPETISI_BAWAAN = 5;
  */
 export const JEDA_MULAI_KOMPETISI_MS = 2_000;
 
+/**
+ * Alasan pesan `keluar` dari server untuk peserta di lobi meja kompetisi yang kompetisinya sudah
+ * berakhir (lobinya dibubarkan). Aplikasi boleh mencocokkannya untuk membuka layar kompetisi itu.
+ */
+export const TEKS_LOBI_KOMPETISI_BUBAR = 'Kompetisinya sudah selesai, mejanya dibubarkan. Klasemennya ada di menu Kompetisi, Bos.';
+
 export const DAFTAR_MASA = ['malam', 'minggu', 'bulan'] as const;
 export type MasaKompetisi = (typeof DAFTAR_MASA)[number];
 

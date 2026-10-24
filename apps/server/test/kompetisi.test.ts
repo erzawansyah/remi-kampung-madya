@@ -11,6 +11,7 @@ import WebSocket from 'ws';
 import { pilihAksiBot, Rng, type ViewPemain } from '@remi/engine';
 import {
   BATAS_PENGAJUAN_MS,
+  TEKS_LOBI_KOMPETISI_BUBAR,
   type InfoMeja,
   type PesanKlien,
   type PesanServer,
@@ -18,7 +19,7 @@ import {
 } from '@remi/meja';
 import type { DetailKompetisi, RingkasanKompetisi } from '../src/kompetisi.js';
 import { bukaRiwayat, type PapanPeringkat, type PenyimpanRiwayat } from '../src/riwayat.js';
-import { jalankanServer, TEKS_LOBI_KOMPETISI_BUBAR, type ServerRemi } from '../src/server.js';
+import { jalankanServer, type ServerRemi } from '../src/server.js';
 
 const JAM = 60 * 60 * 1000;
 // Jauh di masa lalu: kompetisi di jam ini sudah lama selesai menurut jam sungguhan (tes meja WebSocket).
