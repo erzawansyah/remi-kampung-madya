@@ -8,13 +8,28 @@
 // atau peringatan "kartu berbahaya". Contoh joker selalu ditulis "misal joker putaran ini N".
 
 import type { Bunga, Rank } from '@remi/engine';
-import { MAKS_PESAN, MIN_MAIN_KOMPETISI, MIN_PESERTA, TENGGANG_SAMBUNG_MS } from '@remi/meja';
+import {
+  JEDA_LANJUT_MS,
+  MAKS_LEDEK_PER_PUTARAN,
+  MAKS_PESAN,
+  MIN_MAIN_KOMPETISI,
+  MIN_PESERTA,
+  SISA_MIN_SAMBUNG_MS,
+  TENGGANG_SAMBUNG_MS,
+} from '@remi/meja';
 import { TEKS_KALDU } from './kaldu';
 import { TEKS_KOMPETISI } from './kompetisi';
+import { TEKS_KONEKSI } from './koneksi';
+import { TEKS_LANJUT, TEKS_LEDEK } from './ledek';
 import { DAFTAR_LEVEL_WARGA } from './levelWarga';
+import { TEKS_USULAN } from './usulan';
 
 /** Masa tenggang sambung ulang dalam detik (sama dengan yang dipakai meja). */
 const DETIK_TENGGANG = Math.round(TENGGANG_SAMBUNG_MS / 1000);
+/** Sisa waktu paling sedikit untuk yang kembali di gilirannya sendiri (keputusan #57). */
+const DETIK_SISA_MIN = Math.round(SISA_MIN_SAMBUNG_MS / 1000);
+/** Jeda sebelum host bisa memulai putaran berikutnya di meja online (keputusan #54). */
+const DETIK_JEDA_LANJUT = Math.round(JEDA_LANJUT_MS / 1000);
 
 export type KartuContoh = {
   bunga: Bunga;
@@ -787,15 +802,18 @@ export const BAB_BANTUAN: BabBantuan[] = [
         t: 'daftar',
         butir: [
           'Orang baru hanya bisa masuk selama meja masih di lobi.',
-          `Sambungan putus atau halaman ke-refresh? Aplikasi menyambung ulang sendiri. Giliranmu ditunggu ${DETIK_TENGGANG} detik sejak kamu terputus (atau sampai waktu giliran habis, mana yang duluan). Lewat dari itu, warga kedai menjalankan giliranmu sampai kamu kembali.`,
+          `Sambungan putus atau halaman ke-refresh? Aplikasi menyambung ulang sendiri. Giliranmu ditunggu ${DETIK_TENGGANG} detik sejak kamu terputus (atau sampai waktu giliran habis, mana yang duluan). Lewat dari itu, warga kedai menjalankan giliranmu sampai kamu kembali. Kalau kamu kembali waktu masih giliranmu, sisa waktumu paling sedikit ${DETIK_SISA_MIN} detik (sekali per giliran).`,
+          `Sinyal putus-putus? Selama aplikasi menyambung lagi, langkah belum bisa dikirim (muncul "${TEKS_KONEKSI.nyambung}"), tapi kartu yang kamu pilih tetap ada. Kalau muncul "${TEKS_KONEKSI.masihMengirim}", tunggu sebentar: langkahmu dikirim ulang sendiri, atau dikembalikan supaya bisa kamu ulangi. Sesudah tersambung lagi, kejadian yang terlewat tidak diputar ulang, dan kalau warga kedai sempat menjalankan langkahmu, ada kabar singkat. Rinciannya di Log.`,
           'Keluar meja di tengah permainan: kursimu diteruskan warga kedai sampai permainan selesai, dan nggak bisa diambil lagi. Kalau mejanya minimal 2 orang, di peringkat online kamu dihitung juru kunci. Sinyal putus atau aplikasi ketutup nggak dihitung keluar.',
           'Waktu giliran habis: warga kedai menyelesaikan giliranmu.',
-          'Kalau semua pemain manusia terputus, meja menunggu sampai ada yang kembali. Waktu giliran diberi penuh lagi begitu ia tersambung.',
+          'Kalau semua pemain manusia terputus, meja menunggu sampai ada yang kembali. Waktu giliran diberi penuh lagi begitu ia tersambung, dan yang masih terputus dapat waktu tunggu penuh lagi.',
           'Host pergi: tugas host pindah ke pemain manusia lain yang masih terhubung.',
           'Putaran berikutnya dimulai oleh host. Kalau skor terendah sama, host memilih pengocok atau Acak.',
-          'Pengumuman joker menunggu semua pemain menekan OK. Pemain yang terputus tidak ditunggu. Kalau ia kembali sebelum sempat menekan OK, popup joker muncul lagi untuknya.',
+          `Di hasil putaran, tombol host baru aktif ${DETIK_JEDA_LANJUT} detik kemudian, supaya semua sempat melihat kartu. Kalau sudah selesai melihat, tekan ${TEKS_LANJUT.siap}. Begitu yang lain siap semua, host bisa langsung lanjut.`,
+          `Mau ngeledek? Waktu hasil putaran tampil, buka bagian ${TEKS_LEDEK.judul} di bawah rincian skor, pilih orangnya, lalu ketuk ledekannya atau emoji. Ledekanmu muncul besar di layar dia, dan yang kepentung boleh membalas. Paling banyak ${MAKS_LEDEK_PER_PUTARAN} ledekan per putaran. Warga kedai nggak ikut ngeledek.`,
+          'Pengumuman joker menunggu semua pemain menekan OK. Pemain yang terputus tidak ditunggu. Kalau ia kembali sebelum sempat menekan OK, popup joker muncul lagi untuknya saja; meja nggak ikut berhenti, kecuali sedang gilirannya.',
           'Meja tanpa pemain yang terhubung dihapus otomatis: 10 menit kalau masih di lobi, 45 menit kalau permainannya sedang jalan.',
-          'Server sempat mati atau diperbarui? Mejanya tersimpan. Aplikasi menyambung ulang sendiri dan kamu kembali ke kursimu.',
+          'Server sempat mati atau diperbarui? Mejanya tersimpan. Aplikasi menyambung ulang sendiri dan kamu kembali ke kursimu dengan kartu yang sama. Permainan berhenti sebentar sampai ada yang kembali.',
         ],
       },
       {
@@ -830,6 +848,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'paragraf',
         teks: '**Pasang ke layar utama:** game ini bisa dipasang di HP seperti aplikasi. Ketuk "Pasang ke layar utama" di beranda lalu ikuti petunjuknya. Sesudah terpasang, main offline tetap jalan tanpa internet, dan pembaruan masuk sendiri waktu kamu nggak sedang main.',
+      },
+      {
+        t: 'paragraf',
+        teks: `**${TEKS_USULAN.ubin}:** punya ide atau nemu yang aneh? Ketuk 💡 ${TEKS_USULAN.ubin} di beranda (atau di Tentang yang dibuka dari beranda), pilih jenisnya, tulis judul dan ceritanya, lalu kirim atas namamu. Usulanmu dibaca dan ditinjau tiap hari. Kalau sinyal lagi putus, tulisanmu tetap ada dan bisa dikirim lagi.`,
       },
     ],
   },
@@ -898,7 +920,15 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   },
   {
     tanya: 'Internetku putus waktu main online. Kartuku hilang?',
-    jawab: `Tidak. Kartumu tetap di kursimu. Giliranmu ditunggu ${DETIK_TENGGANG} detik, dihitung sejak kamu terputus. Lewat dari itu, warga kedai yang menjalankan giliranmu sampai kamu kembali. Buka lagi aplikasinya, dan kamu kembali ke kursimu.`,
+    jawab: `Tidak. Kartumu tetap di kursimu. Giliranmu ditunggu ${DETIK_TENGGANG} detik, dihitung sejak kamu terputus. Lewat dari itu, warga kedai yang menjalankan giliranmu sampai kamu kembali. Kalau kamu kembali waktu masih giliranmu, sisa waktumu paling sedikit ${DETIK_SISA_MIN} detik. Buka lagi aplikasinya, dan kamu kembali ke kursimu.`,
+  },
+  {
+    tanya: 'Kok host nggak bisa langsung lanjut ke putaran berikutnya?',
+    jawab: `Di meja online, sesudah putaran selesai semua diberi waktu ${DETIK_JEDA_LANJUT} detik buat lihat kartu dan skor. Kalau sudah, tekan ${TEKS_LANJUT.siap}. Begitu yang lain siap semua, host bisa langsung lanjut.`,
+  },
+  {
+    tanya: 'Gimana cara ngeledek?',
+    jawab: `Waktu hasil putaran tampil di meja online, buka bagian ${TEKS_LEDEK.judul} di bawah rincian skor, pilih orangnya, lalu ketuk ledekannya atau emoji. Ledekanmu muncul besar di layar dia. Paling banyak ${MAKS_LEDEK_PER_PUTARAN} ledekan per putaran. Di meja offline dan latihan tidak ada ledekan.`,
   },
   {
     tanya: 'Kok namaku nggak bisa diganti?',

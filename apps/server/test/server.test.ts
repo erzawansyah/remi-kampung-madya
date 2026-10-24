@@ -20,7 +20,9 @@ class Klien {
   async tunggu<T extends PesanServer['t']>(
     t: T,
     syarat: (p: Extract<PesanServer, { t: T }>) => boolean = () => true,
-    ms = 3000,
+    // Batas longgar untuk mesin yang sibuk di suite penuh. Tidak ada test di berkas ini yang
+    // mengandalkan tunggu gagal cepat.
+    ms = 8000,
   ): Promise<Extract<PesanServer, { t: T }>> {
     const mulai = Date.now();
     for (;;) {
@@ -180,6 +182,25 @@ describe('server WebSocket', () => {
 });
 
 describe('hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 Okt 2026)', () => {
+  // Server sendiri dengan batas pesan longgar: putaran di bawah dimainkan secepat view datang, jadi satu
+  // klien bisa mengirim lebih dari 30 pesan per detik. Batas bawaan server membuang kelebihannya diam-diam,
+  // lalu test macet di tengah putaran atau kehilangan putaranBerikut/ledek/siapLanjut sesudahnya. Jeda
+  // lanjut tetap bawaan server (10 detik). Pola yang sama dipakai kompetisi.test.ts.
+  let srv: ServerRemi;
+  beforeAll(async () => {
+    srv = await jalankanServer({
+      port: 0,
+      host: '127.0.0.1',
+      jedaBotMs: 5,
+      log: () => undefined,
+      batasPesanPerDetik: 10_000,
+      putusPesanPerDetik: 20_000,
+    });
+  });
+  afterAll(async () => {
+    await srv.tutup();
+  });
+
   /**
    * Mainkan putaran pertama lewat WebSocket sampai hasilnya tampil. Giliran manusia dipilih bot
    * normal dari view yang diterima tiap klien; warga kedai di kursi 2 dijalankan server.
@@ -208,10 +229,10 @@ describe('hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 O
   }
 
   it('host dikunci sampai Budi Siap; ledekan Ani sampai ke Budi; teks bebas ditolak', async () => {
-    const ani = new Klien(server.port);
+    const ani = new Klien(srv.port);
     await ani.kirim({ t: 'buat', nama: 'Ani', pengaturan: { jumlahPemain: 3, detikGiliran: 0 } });
     const { kode } = await ani.tunggu('masuk');
-    const budi = new Klien(server.port);
+    const budi = new Klien(srv.port);
     await budi.kirim({ t: 'gabung', kode, nama: 'Budi' });
     await budi.tunggu('masuk');
     await ani.kirim({ t: 'aturKursi', kursi: 2, jenis: 'bot' });
@@ -239,9 +260,12 @@ describe('hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 O
     await budi.tunggu('error', (p) => p.pesan === 'Pesan tidak dikenali.');
     expect(ani.pesan.filter((p) => p.t === 'ledek')).toHaveLength(1);
 
-    // Budi siap: kunci lepas, host bisa lanjut.
+    // Budi siap: kunci lepas, host bisa lanjut. Info meja yang dicari harus datang sesudah Siap
+    // dikirim: info lama dari tengah putaran juga `main` tanpa `lanjut`, dan kalau itu yang
+    // tertangkap, putaranBerikut Ani bisa sampai lebih dulu dari Siap Budi lalu ditolak.
+    const sebelumSiap = ani.pesan.length;
     await budi.kirim({ t: 'siapLanjut' });
-    await ani.tunggu('meja', (p) => p.info.status === 'main' && p.info.lanjut === undefined);
+    await ani.tunggu('meja', (p) => ani.pesan.indexOf(p) >= sebelumSiap && p.info.status === 'main' && p.info.lanjut === undefined);
     await ani.kirim({ t: 'putaranBerikut' });
     await ani.tunggu('view', (p) => p.view.status === 'putaranBerjalan' && p.view.putaran!.nomor === 2);
     ani.tutup();
