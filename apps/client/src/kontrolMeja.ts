@@ -736,7 +736,8 @@ export class KontrolMeja implements AksiAdegan {
         (dlg) => {
           const wadah = dlg.querySelector('[data-kartu]')!;
           for (const k of pentungan) wadah.appendChild(gambarKartuKeKanvas(k, lebarPamer));
-          // "Kamu KEPENTUNG" ikut retak (dekoratif, di belakang tulisannya) dan menghantam masuk (CSS).
+          // "Kamu KEPENTUNG" ikut retak (dekoratif, di belakang tulisannya) dan menghantam masuk (CSS,
+          // lamanya dari durasi()).
           const kena = dlg.querySelector<HTMLElement>('[data-kena]');
           if (kena) retakkanStatus(kena, e.id);
           dlg.querySelector('[data-lanjut]')!.addEventListener('click', () => {

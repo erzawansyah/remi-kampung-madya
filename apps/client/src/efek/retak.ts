@@ -8,12 +8,17 @@
 // Pagar:
 // - Hanya dipanggil SESUDAH pentungan terbuka di meja (efek/pemutar.ts). Siapa yang kepentung sudah
 //   publik di saat itu; sebelum dibuka tidak ada efek apa pun di sini.
-// - Lapisan #retak selalu `pointer-events: none`, di bawah modal (--z-retak < --z-modal), dan elemennya
-//   dibuang sesudah pudar: tidak pernah menutupi popup joker, panel mentung, atau tombol mana pun.
+// - Lapisan #retak selalu `pointer-events: none` dan elemennya dibuang sesudah pudar. Ia anak #ui (yang
+//   punya konteks tumpukan sendiri, z --z-ui), dengan z --z-retak DI DALAM #ui: menutupi meja dan bar,
+//   tapi tetap di bawah coach mark tutorial, palet emote, dan gelembung emote/celetukan (juga di #ui), dan
+//   seluruh #ui di bawah modal (popup joker, panel mentung), sorakan, dialog, dan toast. Jadi retakan
+//   tidak pernah menutupi tombol atau tulisan mana pun selain bar meja.
 // - Gerak dikurangi: tanpa sentakan kamera, retakan yang menjalar, dan serpih; retakan diam lalu pudar.
 //   Efek hemat: tanpa kilat, serpih, rona merah, dan rincian kilau kaca.
-// - Semua lama tampil lewat durasi() (ikut preferensi kecepatan). Pembersihan memakai setTimeout (bukan
-//   animationend/requestAnimationFrame), jadi tidak pernah tertahan walau tab di latar belakang.
+// - Semua lama tampil lewat durasi() (ikut preferensi kecepatan), termasuk animasi CSS-nya (kilat,
+//   retakan menjalar, serpih, "Kamu KEPENTUNG" menghantam): JS mengisi variabel CSS --*-lama dari
+//   durasi(). Pembersihan memakai setTimeout (bukan animationend/requestAnimationFrame), jadi tidak
+//   pernah tertahan walau tab di latar belakang.
 
 import { durasi, efekHemat, kurangiGerak } from '../gerak';
 
@@ -241,6 +246,17 @@ export const LAMA_RETAK_KUAT = 2400;
 export const LAMA_RETAK_PANEL = 1900;
 /** Lama dasar (ms) sentakan kamera meja. */
 export const LAMA_SENTAK = 560;
+/** Lama dasar (ms) kilat merah-putih saat pukulan mendarat (CSS --kilat-lama). */
+export const LAMA_KILAT = 380;
+/** Versi pentungan joker (sudah terbuka): kilat berkedip dua kali, sedikit lebih lama. */
+export const LAMA_KILAT_KUAT = 500;
+/** Lama dasar (ms) retakan menjalar dari titik hantam ke seluruh layar (CSS --menjalar-lama). */
+export const LAMA_MENJALAR = 160;
+/** Lama dasar (ms) serpih kaca beterbangan (CSS --serpih-lama), dan jeda acak terlama sebelum lepas. */
+export const LAMA_SERPIH = 800;
+export const JEDA_SERPIH_MAKS = 60;
+/** Lama dasar (ms) "Kamu KEPENTUNG" menghantam masuk lalu bergetar di panel mentung (CSS --hantam-lama). */
+export const LAMA_HANTAM = 600;
 
 /** Timer milik efek retak (dibatalkan bersihkanRetak), dan penutup janji efek yang masih tampil. */
 const timer = new Set<ReturnType<typeof setTimeout>>();
@@ -257,17 +273,24 @@ function nanti(fn: () => void, ms: number) {
   timer.add(t);
 }
 
-/** Wadah semua efek retak, dibuat sekali. Tidak pernah menerima sentuhan. */
+/**
+ * Wadah semua efek retak. Tidak pernah menerima sentuhan. Dipasang di dalam #ui (bukan langsung di body)
+ * supaya z-index-nya dibandingkan dengan isi #ui: di atas bar meja, di bawah coach mark tutorial, palet
+ * emote, dan gelembung emote/celetukan. Tanpa #ui (mis. test) jatuh ke body. #ui yang dikosongkan
+ * (KontrolMeja dihancurkan) ikut membuangnya; panggilan berikutnya membuat wadah baru.
+ */
 function wadah(): HTMLElement {
+  const induk = document.getElementById('ui') ?? document.body;
   let el = document.getElementById('retak');
   if (!el) {
     el = document.createElement('div');
     el.id = 'retak';
     el.setAttribute('aria-hidden', 'true');
-    // Inline juga (bukan hanya di CSS): lapisan ini tidak boleh menahan ketukan walau CSS belum termuat.
+    // Inline juga (bukan hanya di CSS): lapisan ini tidak boleh menahan ketukan walau CSS belum termuat,
+    // dan mengalahkan `#ui > * { pointer-events: auto }`.
     el.style.pointerEvents = 'none';
-    document.body.appendChild(el);
   }
+  if (el.parentElement !== induk) induk.appendChild(el);
   return el;
 }
 
@@ -334,6 +357,10 @@ export function jotos(o: OpsiJotos): Promise<void> {
   const el = document.createElement('div');
   el.className = ['retak-layar', o.kuat ? 'kuat' : '', kurang ? 'diam' : '', hemat ? 'hemat' : ''].filter(Boolean).join(' ');
   el.style.setProperty('--retak-lama', `${lama}ms`);
+  // Animasi CSS di dalamnya juga ikut preferensi kecepatan (meja.css memakai variabel ini).
+  el.style.setProperty('--kilat-lama', `${durasi(o.kuat ? LAMA_KILAT_KUAT : LAMA_KILAT)}ms`);
+  el.style.setProperty('--menjalar-lama', `${durasi(LAMA_MENJALAR)}ms`);
+  el.style.setProperty('--serpih-lama', `${durasi(LAMA_SERPIH)}ms`);
   el.style.setProperty('--retak-x', `${Math.round(t.x)}px`);
   el.style.setProperty('--retak-y', `${Math.round(t.y)}px`);
 
@@ -373,7 +400,7 @@ export function jotos(o: OpsiJotos): Promise<void> {
       s.style.setProperty('--dy', `${Math.round(Math.sin(sudut) * jauh + jauh * 0.35)}px`);
       s.style.setProperty('--putar', `${Math.round((acak() - 0.5) * 720)}deg`);
       s.style.setProperty('--ukuran', `${ukuran}px`);
-      s.style.setProperty('--jeda', `${Math.round(acak() * 60)}ms`);
+      s.style.setProperty('--jeda', `${durasi(acak() * JEDA_SERPIH_MAKS)}ms`);
       s.style.clipPath = `polygon(${Math.round(acak() * 40)}% 0%, 100% ${Math.round(30 + acak() * 50)}%, ${Math.round(acak() * 60)}% 100%)`;
       deret.appendChild(s);
     }
@@ -402,10 +429,14 @@ function sentak(t: { x: number; y: number }, kuat: boolean) {
 }
 
 /**
- * Retakan samar di belakang tulisan "Kamu KEPENTUNG" di panel mentung (dekoratif: tidak digambar saat
- * efek hemat). Kanvasnya di bawah teks (z-index −1 di dalam kotak), tanpa sentuhan dan tanpa label.
+ * "Kamu KEPENTUNG" di panel mentung: lama animasi menghantam masuk (CSS `hantam`, --hantam-lama) ikut
+ * preferensi kecepatan, dan retakan samar di belakang tulisannya (dekoratif: tidak digambar saat efek
+ * hemat). Kanvasnya di bawah teks (z-index −1 di dalam kotak), tanpa sentuhan dan tanpa label.
+ * Dipanggil segera sesudah kotaknya masuk DOM (sebelum frame berikutnya); perubahan animation-duration
+ * juga berlaku untuk animasi CSS yang sudah mulai, jadi tidak ada frame yang memakai lama bawaan.
  */
 export function retakkanStatus(kotak: HTMLElement, benih: number): void {
+  kotak.style.setProperty('--hantam-lama', `${durasi(LAMA_HANTAM)}ms`);
   if (!adaDom() || efekHemat()) return;
   // offsetWidth/Height: ukuran tata letak, tidak terpengaruh animasi skala yang sedang jalan.
   const w = kotak.offsetWidth || 320;

@@ -38,7 +38,9 @@ vi.mock('../src/ui/bantuan', () => ({ bukaBantuan: vi.fn() }));
 vi.mock('../src/ui/tentang', () => ({ bukaTentang: vi.fn() }));
 vi.mock('../src/ui/dom', async (asli) => ({ ...(await asli<typeof import('../src/ui/dom')>()), umumkan: vi.fn() }));
 
+import { LAMA_HANTAM } from '../src/efek/retak';
 import { bunyi, getar } from '../src/efek/suara';
+import { durasi } from '../src/gerak';
 import { tutupDialogTeratas, tutupModal, umumkan } from '../src/ui/dom';
 import {
   geserFokus,
@@ -1056,6 +1058,8 @@ describe('bunyi panel mentung (siapa yang kepentung sudah tampil untuk semua ora
     expect(document.querySelector('#modal .kotak-status')!.textContent).toContain('KEPENTUNG');
     // "Kamu KEPENTUNG" ikut retak: kanvas retakan di belakang tulisannya, tanpa label.
     expect(document.querySelector('#modal [data-kena] canvas.retak-status')?.getAttribute('aria-hidden')).toBe('true');
+    // Lama "menghantam masuk" ikut preferensi kecepatan (CSS --hantam-lama).
+    expect(document.querySelector<HTMLElement>('#modal [data-kena]')!.style.getPropertyValue('--hantam-lama')).toBe(`${durasi(LAMA_HANTAM)}ms`);
     expect(bunyi).toHaveBeenCalledWith('kepentung');
     // Getar kepentung ikut pukulannya (sesaat sesudah pentungan terbuka), tidak diulang di panel.
     await sampai(() => vi.mocked(getar).mock.calls.some(([j]) => j === 'kepentung'));

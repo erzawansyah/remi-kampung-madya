@@ -10,7 +10,10 @@
 //   bergiliran, dengan "buk" pelan ('jotosLain') hanya untuk yang aman.
 // - Preferensi: gerak dikurangi = tanpa sentakan/goyang/serpih, retakan diam lalu pudar; efek hemat =
 //   tanpa kilat dan serpih. Semua lapisan dibuang sendiri sesudah durasi(), dan hentikan() membuangnya.
-// - Lapisan tidak pernah menahan sentuhan dan selalu di bawah modal (popup joker, panel mentung).
+// - Lapisan tidak pernah menahan sentuhan. #retak anak #ui: di atas meja dan bar, di bawah coach mark
+//   tutorial, palet emote, dan gelembung (sama-sama di #ui), dan seluruh #ui di bawah modal (popup joker,
+//   panel mentung), sorakan, dialog, dan toast.
+// - Lama animasi CSS-nya (kilat, retakan menjalar, serpih, "Kamu KEPENTUNG" menghantam) ikut durasi().
 // - Pola retakan deterministik dan sah; resep bunyi 'jotos'/'jotosLain' tidak menjadwalkan nilai yang
 //   ditolak Web Audio (ramp eksponensial ke 0, waktu tidak hingga).
 
@@ -25,7 +28,23 @@ vi.mock('../src/efek/suara', () => ({ bunyi: vi.fn(), getar: vi.fn() }));
 vi.mock('../src/efek/sorak', () => ({ sorak: vi.fn(async () => {}), bersihkanSorak: vi.fn() }));
 
 import { JEDA_JOTOS, JEDA_RETAK_PANEL, PemutarPeristiwa, titikHantam, type KonteksPemutar } from '../src/efek/pemutar';
-import { bersihkanRetak, gambarRetak, kotakSah, LAMA_RETAK, LAMA_RETAK_KUAT, LAMA_SENTAK, polaRetak } from '../src/efek/retak';
+import {
+  bersihkanRetak,
+  gambarRetak,
+  JEDA_SERPIH_MAKS,
+  jotos,
+  kotakSah,
+  LAMA_HANTAM,
+  LAMA_KILAT,
+  LAMA_KILAT_KUAT,
+  LAMA_MENJALAR,
+  LAMA_RETAK,
+  LAMA_RETAK_KUAT,
+  LAMA_SENTAK,
+  LAMA_SERPIH,
+  polaRetak,
+  retakkanStatus,
+} from '../src/efek/retak';
 import { bunyi, getar } from '../src/efek/suara';
 import { durasi } from '../src/gerak';
 import { aturPreferensi } from '../src/preferensi';
@@ -320,18 +339,71 @@ describe('preferensi gerak dan efek', () => {
   });
 });
 
+/** jotos() lalu jalankan timer sampai lapisannya dibuang. */
+async function jotosSelesai(o: Parameters<typeof jotos>[0]) {
+  const selesai = jotos(o);
+  vi.advanceTimersByTime(durasi(LAMA_RETAK_KUAT) + 10);
+  await selesai;
+}
+
 describe('lapisan tidak menutupi jendela', () => {
   // Bukan new URL(..., import.meta.url): di lingkungan happy-dom, URL milik happy-dom (bukan skema file).
   const css = (nama: string) => readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../src/gaya', nama), 'utf8');
   const z = (nama: string) => Number(css('token.css').match(new RegExp(`${nama}:\\s*(-?\\d+)\\s*;`))?.[1]);
 
-  it('#retak di atas meja dan bar, di bawah modal/sorakan/dialog, dan tanpa sentuhan', () => {
-    expect(z('--z-retak')).toBeGreaterThan(z('--z-ui'));
-    for (const atas of ['--z-modal', '--z-sorak', '--z-dialog', '--z-toast']) expect(z('--z-retak')).toBeLessThan(z(atas));
-    const aturan = css('meja.css').match(/#retak \{[^}]*\}/)?.[0] ?? '';
+  it('#retak (di dalam #ui) di atas meja dan bar, di bawah coach mark/palet/gelembung, dan tanpa sentuhan', () => {
+    // #ui punya konteks tumpukan sendiri (fixed + z-index): seluruh isinya, termasuk retakan, di bawah
+    // jendela dan sorakan yang dipasang langsung di body.
+    expect(css('dasar.css')).toMatch(/#ui \{[^}]*position: fixed;[^}]*z-index: var\(--z-ui\);/);
+    for (const atas of ['--z-modal', '--z-sorak', '--z-dialog', '--z-toast']) expect(z('--z-ui')).toBeLessThan(z(atas));
+    expect(z('--z-ui')).toBeGreaterThan(z('--z-meja'));
+    // Di dalam #ui: di atas bar meja (tanpa z-index), di bawah coach mark tutorial (palet − 1), palet emote,
+    // dan gelembung emote/celetukan.
+    expect(z('--z-retak')).toBeGreaterThan(0);
+    expect(css('tutorial.css')).toMatch(/#ui > \.tutorial \{[^}]*z-index: calc\(var\(--z-palet\) - 1\);/);
+    expect(z('--z-retak')).toBeLessThan(z('--z-palet') - 1);
+    expect(z('--z-retak')).toBeLessThan(z('--z-gelembung'));
+    expect(css('meja.css')).toMatch(/\.palet-emote \{[^}]*z-index: var\(--z-palet\);/);
+    expect(css('meja.css')).toMatch(/\.gelembung \{[^}]*z-index: var\(--z-gelembung\);/);
+    const aturan = css('meja.css').match(/#ui > #retak \{[^}]*\}/)?.[0] ?? '';
     expect(aturan).toContain('z-index: var(--z-retak)');
     expect(aturan).toContain('pointer-events: none');
     expect(css('meja.css')).toMatch(/#retak \* \{\s*pointer-events: none;/);
+  });
+
+  it('#retak dipasang di dalam #ui, bersebelahan dengan palet dan gelembung; tanpa #ui jatuh ke body', async () => {
+    // Tanpa #ui (mis. layar lain atau test): langsung di body.
+    await jotosSelesai({ titik: null, benih: 3 });
+    expect(document.getElementById('retak')!.parentElement).toBe(document.body);
+
+    const ui = document.createElement('div');
+    ui.id = 'ui';
+    document.body.appendChild(ui);
+    try {
+      const palet = ui.appendChild(document.createElement('div'));
+      palet.className = 'palet-emote';
+      const gelembung = ui.appendChild(document.createElement('div'));
+      gelembung.className = 'gelembung';
+      void jotos({ titik: null, benih: 4 });
+      // Wadah yang sudah ada di body dipindah ke #ui: satu konteks tumpukan dengan palet dan gelembung.
+      const wadah = document.getElementById('retak')!;
+      expect(document.querySelectorAll('#retak')).toHaveLength(1);
+      expect(wadah.parentElement).toBe(ui);
+      expect(palet.parentElement).toBe(wadah.parentElement);
+      expect(gelembung.parentElement).toBe(wadah.parentElement);
+      expect(wadah.querySelector('.retak-layar')).not.toBeNull();
+      // Tetap tanpa sentuhan walau #ui > * menerima sentuhan.
+      expect(wadah.style.pointerEvents).toBe('none');
+      // #ui dikosongkan (KontrolMeja dihancurkan): pukulan berikutnya membuat wadah baru di #ui.
+      bersihkanRetak();
+      ui.innerHTML = '';
+      void jotos({ titik: null, benih: 5 });
+      expect(document.getElementById('retak')!.parentElement).toBe(ui);
+      expect(lapisanRetak()).toBe(1);
+    } finally {
+      bersihkanRetak();
+      ui.remove();
+    }
   });
 
   it('gerak dikurangi (sistem maupun pilihan pemain) mematikan sentakan, retakan menjalar, dan serpih di CSS juga', () => {
@@ -339,6 +411,78 @@ describe('lapisan tidak menutupi jendela', () => {
     for (const blok of [/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n\}/, /html\[data-gerak='kurang'\] body\.goyang #game,[\s\S]*?\}/]) {
       const isi = gerak.match(blok)?.[0] ?? '';
       for (const sel of ['body.jotos #game', '.serpih', '.retak-kanvas']) expect(isi, sel).toContain(sel);
+    }
+  });
+});
+
+describe('lama animasi CSS ikut preferensi kecepatan (durasi())', () => {
+  const css = (nama: string) => readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../src/gaya', nama), 'utf8');
+  const ms = (el: Element, nama: string) => {
+    const v = (el as HTMLElement).style.getPropertyValue(nama);
+    expect(v, nama).toMatch(/^\d+ms$/);
+    return parseInt(v, 10);
+  };
+
+  for (const kecepatan of ['cepat', 'normal', 'santai'] as const) {
+    for (const kuat of [false, true]) {
+      it(`${kecepatan}${kuat ? ', pentungan joker' : ''}: kilat, retakan menjalar, dan serpih memakai durasi()`, () => {
+        aturPreferensi({ kecepatan });
+        void jotos({ titik: { x: 100, y: 600 }, kuat, benih: 9 });
+        const layar = document.querySelector('.retak-layar')!;
+        expect(ms(layar, '--retak-lama')).toBe(durasi(kuat ? LAMA_RETAK_KUAT : LAMA_RETAK));
+        expect(ms(layar, '--kilat-lama')).toBe(durasi(kuat ? LAMA_KILAT_KUAT : LAMA_KILAT));
+        expect(ms(layar, '--menjalar-lama')).toBe(durasi(LAMA_MENJALAR));
+        expect(ms(layar, '--serpih-lama')).toBe(durasi(LAMA_SERPIH));
+        const serpih = [...layar.querySelectorAll('.serpih')];
+        expect(serpih.length).toBeGreaterThan(0);
+        for (const s of serpih) expect(ms(s, '--jeda')).toBeLessThanOrEqual(durasi(JEDA_SERPIH_MAKS));
+        // Semua animasi di dalamnya selesai sebelum lapisannya dibuang.
+        expect(durasi(LAMA_SERPIH) + durasi(JEDA_SERPIH_MAKS)).toBeLessThan(durasi(LAMA_RETAK));
+      });
+    }
+  }
+
+  it('Cepat lebih singkat dan Santai lebih lama dari Normal', () => {
+    const lama = (kecepatan: 'cepat' | 'normal' | 'santai') => {
+      aturPreferensi({ kecepatan });
+      bersihkanRetak();
+      void jotos({ titik: null, benih: 2 });
+      const layar = document.querySelector('.retak-layar')!;
+      return ['--kilat-lama', '--menjalar-lama', '--serpih-lama'].map((n) => ms(layar, n));
+    };
+    const [cepat, normal, santai] = [lama('cepat'), lama('normal'), lama('santai')];
+    expect(normal).toEqual([LAMA_KILAT, LAMA_MENJALAR, LAMA_SERPIH]);
+    cepat.forEach((v, i) => expect(v).toBeLessThan(normal[i]));
+    santai.forEach((v, i) => expect(v).toBeGreaterThan(normal[i]));
+  });
+
+  for (const efek of ['lengkap', 'hemat'] as const) {
+    it(`"Kamu KEPENTUNG" menghantam selama durasi(LAMA_HANTAM) (efek ${efek})`, () => {
+      for (const kecepatan of ['cepat', 'santai'] as const) {
+        aturPreferensi({ kecepatan, efek });
+        const kotak = document.createElement('div');
+        kotak.className = 'kotak-status merah';
+        document.body.appendChild(kotak);
+        retakkanStatus(kotak, 41);
+        expect(ms(kotak, '--hantam-lama')).toBe(durasi(LAMA_HANTAM));
+        // Retakan di belakang tulisan hanya saat efek lengkap; lama animasinya tetap diatur.
+        expect(!!kotak.querySelector('canvas.retak-status')).toBe(efek === 'lengkap');
+        kotak.remove();
+      }
+    });
+  }
+
+  it('CSS tidak lagi memakai lama tetap untuk animasi kepentung', () => {
+    const meja = css('meja.css');
+    const aturan = (sel: string) => meja.match(new RegExp(`${sel.replace(/[.*]/g, (c) => `\\${c}`)} \\{[^}]*\\}`))?.[0] ?? '';
+    expect(aturan('.retak-kanvas')).toContain('animation: retak-menjalar var(--menjalar-lama, ');
+    expect(aturan('.kilat-jotos')).toContain('animation: kilat-jotos var(--kilat-lama, ');
+    expect(aturan('.retak-layar.kuat .kilat-jotos')).toContain('animation-duration: var(--kilat-lama, ');
+    expect(aturan('.serpih')).toContain('animation: serpih-terbang var(--serpih-lama, ');
+    expect(aturan('.kotak-status.merah')).toContain('animation: hantam var(--hantam-lama, ');
+    expect(aturan('.retak-layar')).toContain('animation: retak-pudar var(--retak-lama, ');
+    for (const sel of ['.retak-kanvas', '.kilat-jotos', '.retak-layar.kuat .kilat-jotos', '.serpih', '.kotak-status.merah']) {
+      expect(aturan(sel), sel).not.toMatch(/\b\d*\.?\d+m?s\b(?![^(]*\))/);
     }
   });
 });

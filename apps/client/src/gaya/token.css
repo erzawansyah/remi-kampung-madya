@@ -189,8 +189,10 @@
   /* ---------- Lapisan (z-index) ---------- */
   --z-meja: 0;
   --z-ui: 1;
-  /* Retakan kepentung (efek/retak.ts): di atas meja dan bar, selalu DI BAWAH modal (popup joker, panel
-     mentung) dan tanpa sentuhan. */
+  /* Retakan kepentung (efek/retak.ts), tanpa sentuhan. #retak anak #ui, jadi angka ini hanya dibandingkan
+     dengan isi #ui (konteks tumpukan sendiri, --z-ui): di atas bar meja (z auto), di bawah coach mark
+     tutorial (--z-palet − 1), palet emote, dan gelembung. Seluruh #ui di bawah modal (popup joker, panel
+     mentung), sorakan, dialog, dan toast. */
   --z-retak: 3;
   --z-palet: 5;
   --z-gelembung: 6;
