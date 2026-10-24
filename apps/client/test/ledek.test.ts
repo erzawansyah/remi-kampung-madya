@@ -172,6 +172,61 @@ describe('LedekBesar (ledekan untukku)', () => {
     l.hancurkan();
   });
 
+  it('tahan (hasil putaran belum tampil, panel mentung terbuka): menunggu tanpa batas waktu', () => {
+    vi.useFakeTimers();
+    let tahan = true;
+    let sibuk = true;
+    const l = new LedekBesar(() => sibuk, () => tahan);
+    l.tambah('Ani', 'Rasain!', 'x');
+    vi.advanceTimersByTime(60_000);
+    expect(tampil()).toBeNull();
+    expect(l.jumlahAntri).toBe(1);
+    // Tahanan lepas tapi animasi masih jalan: batas tunggu animasi baru dihitung dari sekarang.
+    tahan = false;
+    vi.advanceTimersByTime(4_000);
+    expect(tampil()).toBeNull();
+    sibuk = false;
+    vi.advanceTimersByTime(400);
+    expect(tampil()!.querySelector('.ledek-isi')!.textContent).toBe('Rasain!');
+    l.tutup();
+    // Animasi macet sesudah tahanan lepas: tetap tampil sesudah batas tunggunya.
+    tahan = true;
+    sibuk = true;
+    l.tambah('Ani', 'Kok bisa, Bos?', 'y');
+    vi.advanceTimersByTime(30_000);
+    tahan = false;
+    vi.advanceTimersByTime(5_000);
+    expect(tampil()).toBeNull();
+    vi.advanceTimersByTime(1_500);
+    expect(tampil()!.querySelector('.ledek-isi')!.textContent).toBe('Kok bisa, Bos?');
+    l.hancurkan();
+  });
+
+  it('kosongkan (hasil putaran ditinggalkan): yang tampil dan antriannya dibuang, ledekan baru tetap bisa tampil', () => {
+    vi.useFakeTimers();
+    let sibuk = false;
+    const l = new LedekBesar(() => sibuk);
+    l.tambah('Ani', 'a', 'a');
+    l.tambah('Ani', 'b', 'b');
+    l.tambah('Ani', 'c', 'c');
+    l.kosongkan();
+    expect(tampil()).toBeNull();
+    expect(l.jumlahAntri).toBe(0);
+    vi.advanceTimersByTime(10_000);
+    expect(tampil()).toBeNull();
+    // Timer cek "sibuk" yang sedang menunggu juga dibatalkan.
+    sibuk = true;
+    l.tambah('Ani', 'd', 'd');
+    l.kosongkan();
+    sibuk = false;
+    vi.advanceTimersByTime(10_000);
+    expect(tampil()).toBeNull();
+    // Belum dihancurkan: hasil putaran berikutnya tetap bisa menampilkan ledekan.
+    l.tambah('Ani', 'e', 'e');
+    expect(tampil()!.querySelector('.ledek-isi')!.textContent).toBe('e');
+    l.hancurkan();
+  });
+
   it('hancurkan: ledekan yang tampil dan antriannya dibuang, tidak ada yang muncul lagi', () => {
     vi.useFakeTimers();
     const l = new LedekBesar();

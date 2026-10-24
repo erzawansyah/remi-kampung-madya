@@ -103,8 +103,16 @@ export class LedekBesar {
   private timerCek: ReturnType<typeof setTimeout> | null = null;
   private mati = false;
 
-  /** `sibuk`: animasi meja sedang berjalan (panel mentung, kocok); ledekan menunggu sebentar. */
-  constructor(private readonly sibuk: () => boolean = () => false) {}
+  /**
+   * `sibuk`: animasi meja sedang berjalan; ledekan menunggu paling lama TUNGGU_SIBUK_MAKS_MS (cadangan
+   * kalau animasi macet). `tahan`: hasil putaran belum tampil di layar ini, atau ada jendela yang
+   * menunggu pemain (panel mentung, popup joker); ledekan menunggu tanpa batas waktu, karena antriannya
+   * dikosongkan (kosongkan()) begitu hasil putaran ditinggalkan.
+   */
+  constructor(
+    private readonly sibuk: () => boolean = () => false,
+    private readonly tahan: () => boolean = () => false,
+  ) {}
 
   /** Ledekan baru dari `dari` (nama tampilan) dengan `pengumuman` untuk pembaca layar. */
   tambah(dari: string, isi: string, pengumuman: string): void {
@@ -135,7 +143,10 @@ export class LedekBesar {
   /** Coba tampilkan berikutnya (dipanggil juga saat antrian animasi meja habis). */
   berikut(): void {
     if (this.mati || this.el || !this.antrian.length) return;
-    if (this.sibuk() && Date.now() - this.antrian[0].masuk < TUNGGU_SIBUK_MAKS_MS) {
+    const tahan = this.tahan();
+    // Selama ditahan, batas tunggu animasi belum mulai dihitung: dihitung dari saat tahanan lepas.
+    if (tahan) this.antrian[0].masuk = Date.now();
+    if (tahan || (this.sibuk() && Date.now() - this.antrian[0].masuk < TUNGGU_SIBUK_MAKS_MS)) {
       if (!this.timerCek) {
         this.timerCek = setTimeout(() => {
           this.timerCek = null;
@@ -173,8 +184,11 @@ export class LedekBesar {
     }, LAMA_LEDEK_MS);
   }
 
-  hancurkan(): void {
-    this.mati = true;
+  /**
+   * Hasil putaran ditinggalkan (putaran berikutnya mulai, permainan selesai): buang antrian dan ledekan
+   * yang sedang tampil, supaya tidak muncul di atas kocok & bagi atau popup joker putaran baru.
+   */
+  kosongkan(): void {
     this.antrian = [];
     if (this.timer) clearTimeout(this.timer);
     if (this.timerCek) clearTimeout(this.timerCek);
@@ -182,5 +196,10 @@ export class LedekBesar {
     this.timerCek = null;
     this.el?.remove();
     this.el = null;
+  }
+
+  hancurkan(): void {
+    this.mati = true;
+    this.kosongkan();
   }
 }

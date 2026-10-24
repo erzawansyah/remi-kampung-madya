@@ -55,6 +55,7 @@ import {
 } from '../src/kontrolMeja';
 import { TEKS_KALDU } from '../src/konten/kaldu';
 import { TEKS_LEDEK } from '../src/konten/ledek';
+import { LAMA_LEDEK_MS } from '../src/ui/ledek';
 import { KEDAI } from '../src/konten/kedai';
 import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { _setelUlangCache, preferensi } from '../src/preferensi';
@@ -2069,6 +2070,54 @@ describe('jeda lanjut di modal hasil (meja online)', () => {
     expect(dlg.querySelector('[data-siap-lanjut-terkirim]')).not.toBeNull();
   });
 
+  it('Siap hilang di jalan: dikirim ulang sekali per sambungan baru selama meja belum mencatatnya', async () => {
+    let status: StatusKoneksi = 'tersambung';
+    let sambungan = 1;
+    meja = await mejaSiapMentung(undefined, { jenis: 'online', statusKoneksi: () => status, nomorSambungan: () => sambungan });
+    meja.info = { ...meja.info, host: 1, lanjut: { sisaMs: 10_000, siap: [] } };
+    const dlg = await sampaiHasil(meja);
+    const siapTerkirim = () => meja!.terkirim.filter((p) => p.t === 'siapLanjut').length;
+    const infoLanjut = (sisaMs: number, siap: number[]) => meja!.kontrol.perbarui({ ...meja!.info, lanjut: { sisaMs, siap } }, null);
+    dlg.querySelector<HTMLButtonElement>('[data-siap-lanjut]')!.click();
+    expect(siapTerkirim()).toBe(1);
+    // Sambungan yang sama, meja belum sempat mencatat: tidak dikirim ulang.
+    infoLanjut(9_000, []);
+    expect(siapTerkirim()).toBe(1);
+    // Sinyal putus (pesannya hilang): selama putus tidak dikirim.
+    status = 'terputus';
+    infoLanjut(8_000, []);
+    expect(siapTerkirim()).toBe(1);
+    // Tersambung lagi dan meja masih menunggu aku: dikirim ulang, sekali saja di sambungan ini.
+    status = 'tersambung';
+    sambungan = 2;
+    infoLanjut(6_000, []);
+    infoLanjut(5_500, []);
+    expect(siapTerkirim()).toBe(2);
+    expect(dlg.querySelector('[data-siap-lanjut-terkirim]')!.textContent).toBe('Menunggu host…');
+    // Meja sudah mencatat: sambungan baru tidak memicu kirim ulang.
+    sambungan = 3;
+    infoLanjut(5_000, [0]);
+    expect(siapTerkirim()).toBe(2);
+  });
+
+  it('Siap ditekan saat sinyal putus: tombolnya tetap ada supaya bisa ditekan lagi', async () => {
+    let status: StatusKoneksi = 'tersambung';
+    meja = await mejaSiapMentung(undefined, { jenis: 'online', statusKoneksi: () => status, nomorSambungan: () => 1 });
+    meja.info = { ...meja.info, host: 1, lanjut: { sisaMs: 10_000, siap: [] } };
+    const dlg = await sampaiHasil(meja);
+    status = 'terputus';
+    dlg.querySelector<HTMLButtonElement>('[data-siap-lanjut]')!.click();
+    // Aplikasi yang menolak dan memberi tahu ("Sinyalnya lagi putus…"); di HP tombol Siap tetap ada.
+    expect(meja.terkirim.filter((p) => p.t === 'siapLanjut')).toHaveLength(1);
+    expect(dlg.querySelector('[data-siap-lanjut]')).not.toBeNull();
+    expect(dlg.querySelector('[data-siap-lanjut-terkirim]')).toBeNull();
+    // Tersambung lagi: ditekan lagi, kali ini tercatat.
+    status = 'tersambung';
+    dlg.querySelector<HTMLButtonElement>('[data-siap-lanjut]')!.click();
+    expect(meja.terkirim.filter((p) => p.t === 'siapLanjut')).toHaveLength(2);
+    expect(dlg.querySelector('[data-siap-lanjut-terkirim]')).not.toBeNull();
+  });
+
   it('offline: info lanjut (seharusnya tidak pernah ada) diabaikan', async () => {
     meja = await mejaSiapMentung();
     meja.info = { ...meja.info, lanjut: { sisaMs: 10_000, siap: [] } };
@@ -2210,6 +2259,58 @@ describe('ledekan (meja online)', () => {
     const untukPanel = selektorCssLedek().filter((sel) => cocok(panel, sel));
     expect(untukPanel.length).toBeGreaterThan(0);
     expect(untukPanel.filter((sel) => cocok(gelembung, sel))).toEqual([]);
+  });
+
+  it('putaran berikutnya dimulai: ledekan yang masih antri dan gelembung ledekan dibuang, popup joker tidak tertutup', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    kursi2Manusia(meja);
+    await sampaiHasil(meja);
+    meja.kontrol.terimaLedek(1, 0, 'Rasain!');
+    meja.kontrol.terimaLedek(1, 0, 'Makan tuh!');
+    meja.kontrol.terimaLedek(1, 0, 'Kasihan deh.');
+    meja.kontrol.terimaLedek(2, 1, 'Cup cup cup…');
+    expect(lapisan()!.querySelector('.ledek-besar .ledek-isi')!.textContent).toBe('Rasain!');
+    expect(lapisan()!.querySelector('.gelembung')).not.toBeNull();
+    // Aku host: mulai putaran berikutnya.
+    document.querySelector<HTMLButtonElement>('#modal [data-kocok="acak"]')!.click();
+    await sampai(() => meja!.g.status === 'putaranBerjalan');
+    expect(lapisan()!.querySelector('.ledek-besar')).toBeNull();
+    expect(lapisan()!.querySelector('.gelembung')).toBeNull();
+    await sampai(() => !!document.querySelector('#modal [data-joker]'));
+    // Lewat waktu tampil satu ledekan dan jeda cek antrian: tidak ada sisa yang menyusul.
+    await new Promise((r) => setTimeout(r, 600));
+    geser += LAMA_LEDEK_MS;
+    await new Promise((r) => setTimeout(r, 600));
+    expect(lapisan()!.querySelector('.ledek-besar')).toBeNull();
+    expect(document.querySelector('#modal [data-joker]')).not.toBeNull();
+    // Ledekan yang (seharusnya tidak pernah) datang sesudah hasil putaran ditinggalkan diabaikan.
+    meja.kontrol.terimaLedek(1, 0, 'Rasain!');
+    meja.kontrol.terimaLedek(1, 2, 'Rasain!');
+    await new Promise((r) => setTimeout(r, 450));
+    expect(lapisan()!.querySelector('.ledek-besar, .gelembung')).toBeNull();
+  });
+
+  it('ledekan yang datang selagi aku masih di panel mentung baru tampil sesudah hasil putaran terpasang', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    tekan('ArrowRight');
+    tekan(' ');
+    tekan('b');
+    await sampai(() => !!document.querySelector('#modal [data-mentung]'));
+    // Meja sudah di hasil putaran: view susun akhir lain lalu view hasilnya antri di belakang panel
+    // mentung. Pemain 2 (sudah melihat hasilnya) ngeledek aku.
+    meja.kontrol.perbarui(meja.info, meja.view());
+    meja.g = semuaSelesaiSusun(meja.g);
+    meja.kontrol.perbarui(meja.info, meja.view());
+    meja.kontrol.terimaLedek(1, 0, 'Makan tuh!');
+    // Panel mentung menunggu aku menekan Lanjut: ledekan ikut menunggu, walau lewat batas tunggu animasi.
+    geser += 7_000;
+    await new Promise((r) => setTimeout(r, 500));
+    expect(lapisan()?.querySelector('.ledek-besar') ?? null).toBeNull();
+    expect(document.querySelector('#modal [data-mentung]')).not.toBeNull();
+    document.querySelector<HTMLButtonElement>('#modal [data-lanjut]')!.click();
+    await sampai(() => !!document.querySelector('#modal [data-hasil]'));
+    await sampai(() => !!lapisan()?.querySelector('.ledek-besar'));
+    expect(lapisan()!.querySelector('.ledek-besar .ledek-isi')!.textContent).toBe('Makan tuh!');
   });
 
   it('meja dibongkar: lapisan ledekan ikut hilang', async () => {

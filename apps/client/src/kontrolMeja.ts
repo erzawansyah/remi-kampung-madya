@@ -421,14 +421,22 @@ export class KontrolMeja implements AksiAdegan {
   private lanjutTerkunciTampil = false;
   /** Hasil putaran (panjang riwayat) yang Siap-nya sudah kutekan. */
   private siapLanjutDikirim = -1;
+  /** Nomor sambungan tempat siapLanjut terakhir dikirim (lihat kirimUlangSiapLanjutBilaPerlu). */
+  private siapLanjutDiSambungan: number | null = null;
   /** Sasaran ledekan yang kupilih di hasil putaran ini. */
   private sasaranLedek: { putaran: number; kursi: number } | null = null;
   /** Ledekan yang sudah kukirim di hasil putaran ini (jatah MAKS_LEDEK_PER_PUTARAN). */
   private ledekTerkirim = { putaran: -1, jumlah: 0 };
   /** Tombol ledekan terkunci sampai waktu ini (Date.now()). */
   private jedaLedekSampai = 0;
-  /** Ledekan untukku: tampil besar, antri, menunggu animasi meja selesai. */
-  private readonly ledekBesar = new LedekBesar(() => this.sedangMemutar || this.animasi);
+  /**
+   * Ledekan untukku: tampil besar, antri. Menunggu animasi meja selesai, dan baru tampil sesudah hasil
+   * putaran terpasang di layar ini tanpa jendela yang menunggu pemain (panel mentung, popup joker).
+   */
+  private readonly ledekBesar = new LedekBesar(
+    () => this.sedangMemutar || this.animasi,
+    () => this.view?.status !== 'putaranSelesai' || !!document.querySelector('#modal [data-mentung], #modal [data-joker]'),
+  );
   /** Sorotan keyboard: id kartu (tangan/pungutan), 'deck', 'buangan', atau null. */
   private fokus: string | null = null;
   private indeksFokus = 0;
@@ -564,6 +572,7 @@ export class KontrolMeja implements AksiAdegan {
       // Sisa jeda relatif → waktu lokal, setiap info baru (menyamakan ulang hitung mundur).
       this.akhirLanjut = info.lanjut ? Date.now() + Math.max(0, info.lanjut.sisaMs) : null;
       this.kirimUlangSiapJokerBilaPerlu();
+      this.kirimUlangSiapLanjutBilaPerlu();
     }
     if (view) {
       // Jawaban (atau keadaan baru) datang: bar aksi boleh dipakai lagi.
@@ -596,6 +605,11 @@ export class KontrolMeja implements AksiAdegan {
     try {
       while (this.antrian.length && !this.hancur) {
         const v = this.antrian.shift()!;
+        // Hasil putaran ditinggalkan (putaran berikutnya, klasemen akhir): ledekan yang masih antri
+        // atau tampil dibuang sebelum kocok & bagi, supaya tidak menutupi popup joker putaran baru.
+        // Hanya saat berpindah DARI hasil putaran: view susun akhir yang masih antri di depan view
+        // hasilnya tidak membuang ledekan yang sudah masuk untuk hasil itu.
+        if (this.view?.status === 'putaranSelesai' && v.status !== 'putaranSelesai') this.bersihkanLedek();
         // View pertama (baru masuk / sambung ulang): jangan putar ulang kejadian lama, kecuali
         // kocok & bagi putaran yang baru dimulai (supaya putaran 1 juga terlihat dibagi).
         const pertama = this.idPeristiwa < 0 || !this.view;
@@ -915,6 +929,23 @@ export class KontrolMeja implements AksiAdegan {
     if (!perlu) return;
     this.siapJokerDiSambungan = sambungan;
     this.app.kirim({ t: 'siapJoker' });
+  }
+
+  /**
+   * Siap jeda lanjut sudah kutekan, tapi info meja terbaru belum mencatatnya dan sambungannya sudah
+   * berganti (pesannya bisa hilang di sambungan lama): kirim ulang, sekali per sambungan. Tanpa ini
+   * HP-ku menulis "Menunggu host…" sementara host masih menunggu aku sampai jedanya habis. Siap yang
+   * telat diabaikan meja.
+   */
+  private kirimUlangSiapLanjutBilaPerlu() {
+    const info = this.info;
+    const v = this.view;
+    if (this.hancur || this.app.jenis !== 'online' || !info?.lanjut || v?.status !== 'putaranSelesai') return;
+    if (this.siapLanjutDikirim !== v.riwayat.length || info.kursiSaya === info.host || info.lanjut.siap.includes(this.saya)) return;
+    const sambungan = this.sambunganKini();
+    if ((this.app.statusKoneksi?.() ?? 'tersambung') !== 'tersambung' || sambungan === this.siapLanjutDiSambungan) return;
+    this.siapLanjutDiSambungan = sambungan;
+    this.app.kirim({ t: 'siapLanjut' });
   }
 
   private tungguJokerSaya(): boolean {
@@ -1943,12 +1974,22 @@ export class KontrolMeja implements AksiAdegan {
    */
   terimaLedek(dari: number, ke: number, isi: string) {
     if (this.hancur || !this.view) return;
+    // Meja hanya menerima ledekan selama hasil putaran. Keadaan terbaru (yang mungkin masih diantrikan di
+    // belakang animasi akhir putaran) yang dipakai, jadi ledekan yang datang saat aku masih di panel
+    // mentung tetap ditampung; yang datang sesudah hasil ditinggalkan dibuang.
+    if ((this.antrian.at(-1) ?? this.viewTertunda ?? this.view).status !== 'putaranSelesai') return;
     if (ke === this.saya && dari !== this.saya) {
       const nama = this.view.pemain[dari]?.nama ?? 'Pemain';
       this.ledekBesar.tambah(nama, isi, `${this.namaUntukPembaca(dari)} ${TEKS_LEDEK.ngeledekKamu}: ${isi}`);
       return;
     }
     this.gelembung(dari, isi, ke);
+  }
+
+  /** Buang ledekan yang antri/tampil dan gelembung ledekan yang masih melayang (hasil putaran ditinggalkan). */
+  private bersihkanLedek() {
+    this.ledekBesar.kosongkan();
+    document.querySelectorAll('#lapisan-ledek .gelembung').forEach((el) => el.remove());
   }
 
   /** Gelembung emote di kursi `kursi`. `ledekKe`: ledekan ke kursi itu (ditulis "isi → nama", di atas modal). */
@@ -2281,7 +2322,12 @@ export class KontrolMeja implements AksiAdegan {
             this.kirimLedek(h, b.dataset.ledekIsi);
           } else if (b.hasAttribute('data-siap-lanjut')) {
             bunyi('klik');
-            this.siapLanjutDikirim = this.view!.riwayat.length;
+            // Sinyal putus: pesannya tidak berangkat (aplikasi memberi tahu lewat toast "coba lagi"),
+            // jadi tombol Siap dibiarkan supaya bisa ditekan lagi sesudah tersambung.
+            if ((this.app.statusKoneksi?.() ?? 'tersambung') === 'tersambung') {
+              this.siapLanjutDikirim = this.view!.riwayat.length;
+              this.siapLanjutDiSambungan = this.sambunganKini();
+            }
             this.app.kirim({ t: 'siapLanjut' });
             this.segarkanHasil();
           } else if (b.dataset.kocok !== undefined) {
