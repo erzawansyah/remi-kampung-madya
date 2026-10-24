@@ -16,6 +16,9 @@
 //   terakhir" di modal hasil (online n/m, offline langsung berlaku), baris pendek "Putaran berikutnya
 //   kaldu." / "Belum ada yang mentung, kaldu lagi.", lencana ×2 di panel mentung, alasan di klasemen.
 
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buatPermainan,
@@ -1950,6 +1953,17 @@ describe('mode kaldu (#42): teks pendek di meja', () => {
 
 type HasilPutaranUji = Parameters<typeof teksInfoKaldu>[1];
 
+/** Selektor aturan CSS di src/gaya/ yang menyebut "ledek" (tanpa at-rule dan titik keyframe). */
+function selektorCssLedek(): string[] {
+  const folder = join(dirname(fileURLToPath(import.meta.url)), '../src/gaya');
+  return readdirSync(folder)
+    .filter((f) => f.endsWith('.css'))
+    .flatMap((f) => [...readFileSync(join(folder, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{/g)])
+    .flatMap((m) => m[1].split(','))
+    .map((sel) => sel.trim())
+    .filter((sel) => sel.includes('ledek') && !sel.startsWith('@') && !/^(from|to|[\d.]+%)$/.test(sel));
+}
+
 // ---------- hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 Okt 2026) ----------
 
 describe('jeda lanjut di modal hasil (meja online)', () => {
@@ -2073,7 +2087,7 @@ describe('ledekan (meja online)', () => {
   afterEach(() => vi.mocked(Date.now).mockRestore());
 
   const ledekTerkirim = () => meja!.terkirim.filter((p) => p.t === 'ledek');
-  const bagian = () => document.querySelector<HTMLElement>('#modal [data-ledek-wadah] .ledek');
+  const bagian = () => document.querySelector<HTMLElement>('#modal [data-ledek-wadah] .bagian-ledek');
   const tombolIsi = (isi: string) => document.querySelector<HTMLButtonElement>(`#modal [data-ledek-isi="${isi}"]`)!;
   const lapisan = () => document.getElementById('lapisan-ledek');
   /** Kursi 2 (warga kedai di mejaSiapMentung) diganti manusia: dua orang lain di meja. */
@@ -2174,6 +2188,28 @@ describe('ledekan (meja online)', () => {
     meja.kontrol.terimaLedek(0, 1, 'Makan tuh!');
     expect(lapisan()!.querySelector('.gelembung.ledek.milikku')!.textContent).toBe('Makan tuh! → Pemain 2');
     expect(umumkan).not.toHaveBeenCalled();
+  });
+
+  it('gaya bagian Ledek di modal tidak ikut mengenai gelembung ledekan orang lain', async () => {
+    // Dulu bagian Ledek dan gelembung sama-sama berkelas "ledek": panel gelap bagian itu menimpa latar
+    // krem gelembung, jadi tulisan gelap di atas kotak gelap (tidak terbaca bagi orang ketiga).
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    kursi2Manusia(meja);
+    await sampaiHasil(meja);
+    meja.kontrol.terimaLedek(1, 2, 'Rasain!');
+    const gelembung = lapisan()!.querySelector<HTMLElement>('.gelembung')!;
+    expect(gelembung.classList.contains('milikku')).toBe(false);
+    const panel = bagian()!;
+    const cocok = (el: Element, sel: string) => {
+      try {
+        return el.matches(sel);
+      } catch {
+        return false;
+      }
+    };
+    const untukPanel = selektorCssLedek().filter((sel) => cocok(panel, sel));
+    expect(untukPanel.length).toBeGreaterThan(0);
+    expect(untukPanel.filter((sel) => cocok(gelembung, sel))).toEqual([]);
   });
 
   it('meja dibongkar: lapisan ledekan ikut hilang', async () => {

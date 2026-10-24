@@ -882,14 +882,16 @@ html[data-gerak='kurang'] .status-koneksi .titik {
 }
 
 /* ---------- Hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 Okt 2026) ----------
-   .wadah-ledek: bagian "Ledek" di modal hasil (ui/ledek.ts htmlLedek); kosong = disembunyikan.
+   .wadah-ledek > .bagian-ledek: bagian "Ledek" di modal hasil (ui/ledek.ts htmlLedek); kosong = disembunyikan.
+   Namanya sengaja bukan ".ledek": kelas itu dipakai gelembung ledekan (.gelembung.ledek), dan aturan
+   panel ini akan menimpa latar krem gelembungnya.
    #lapisan-ledek: lapisan tetap di atas modal hasil (di bawah dialog dan toast), di luar #ui/#modal
    yang dibuat inert selama ada jendela. Isinya .ledek-besar (ledekan untukku, ketuk untuk menutup)
    dan .gelembung.ledek (ledekan ke orang lain, di kursi pengirimnya). */
 .wadah-ledek:empty {
   display: none;
 }
-.ledek {
+.bagian-ledek {
   display: flex;
   flex-direction: column;
   gap: var(--ruang-2);
@@ -898,7 +900,7 @@ html[data-gerak='kurang'] .status-koneksi .titik {
   border-radius: var(--radius-besar);
   background: rgba(0, 0, 0, 0.18);
 }
-.ledek .judul-ledek {
+.bagian-ledek .judul-ledek {
   margin: 0;
   font-size: var(--teks-lg);
 }

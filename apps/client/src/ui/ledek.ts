@@ -60,7 +60,7 @@ export function htmlLedek(d: DataHtmlLedek): string {
     ? `<p class="redup rapat">${esc(TEKS_LEDEK.habis)}</p>`
     : `<div class="ledek-kata" role="group" aria-label="${esc(TEKS_LEDEK.pilihIsi)}">${DAFTAR_LEDEKAN.map(tombol).join('')}</div>
        <div class="ledek-emoji" role="group" aria-label="Emoji">${EMOJI_LEDEK.map(tombol).join('')}</div>`;
-  return `<section class="ledek" aria-labelledby="judul-ledek">
+  return `<section class="bagian-ledek" aria-labelledby="judul-ledek">
       <h3 id="judul-ledek" class="judul-ledek">${esc(TEKS_LEDEK.judul)}</h3>
       <p class="redup rapat">${esc(TEKS_LEDEK.petunjuk)}</p>
       <div class="ledek-sasaran segmen" role="group" aria-label="${esc(TEKS_LEDEK.pilihSasaran)}">${sasaran}</div>
