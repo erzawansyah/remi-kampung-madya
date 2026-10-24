@@ -225,6 +225,15 @@ export class Meja {
   /** Meja sedang dijeda karena semua manusia terputus (#35); dipakai untuk memberi tenggang baru. */
   private jedaTotal = false;
   /**
+   * Host ditahan untuk meja yang dibuat tanpa satu pun manusia terhubung (dipulihkan server sesudah
+   * restart/deploy): host tidak pindah ke siapa pun yang kembali duluan, sampai host sendiri kembali
+   * atau masa tenggang sambung ulang habis sejak manusia pertama kembali (`sampai`, null = belum ada
+   * yang kembali). Meniru jeda putus server (keputusan 7.6, 24 Okt 2026): sambung ulang singkat tidak
+   * memindahkan host, dan saat deploy semua orang menyambung ulang hampir bersamaan. Tidak disimpan.
+   */
+  private tahanHost: { sampai: number | null } | null = null;
+  private timerTahanHost: unknown = null;
+  /**
    * Jadwal langkah warga kedai berikutnya. Disimpan supaya jeda mikirnya tidak diundi ulang setiap
    * ada perubahan lain (sambung ulang, aksi manusia di susun akhir): sisa waktunya yang dipakai.
    */
@@ -265,6 +274,7 @@ export class Meja {
     this.d.kursi.forEach((k, i) => {
       if (k.jenis === 'manusia' && !k.terhubung) this.putusSejak.set(i, sekarang);
     });
+    if (this.d.kursi[this.d.host]?.jenis === 'manusia' && this.jumlahManusiaTerhubung === 0) this.tahanHost = { sampai: null };
     this.jadwalkan();
   }
 
@@ -320,6 +330,15 @@ export class Meja {
 
   get jumlahManusiaTerhubung(): number {
     return this.d.kursi.filter((k) => k.jenis === 'manusia' && k.terhubung).length;
+  }
+
+  /**
+   * Masih ada kursi manusia (terhubung atau tidak), yaitu pemain yang memegang token dan bisa kembali.
+   * False sesudah semua manusia menekan Keluar (kursinya diteruskan warga kedai): tidak ada yang bisa
+   * menyambung ulang ke meja ini lagi.
+   */
+  get adaKursiManusia(): boolean {
+    return this.d.kursi.some((k) => k.jenis === 'manusia');
   }
 
   get publik(): boolean {
@@ -835,11 +854,13 @@ export class Meja {
     if (this.timerTenggang !== null) this.penjadwal.batal(this.timerTenggang);
     if (this.timerPulih !== null) this.penjadwal.batal(this.timerPulih);
     if (this.timerJokerSambung !== null) this.penjadwal.batal(this.timerJokerSambung);
+    if (this.timerTahanHost !== null) this.penjadwal.batal(this.timerTahanHost);
     this.timerBot = null;
     this.timerGiliran = null;
     this.timerTenggang = null;
     this.timerPulih = null;
     this.timerJokerSambung = null;
+    this.timerTahanHost = null;
   }
 
   /**
@@ -906,6 +927,15 @@ export class Meja {
       this.jedaTotal = false;
       this.d.kursi.forEach((k, i) => {
         if (k.jenis === 'manusia' && !k.terhubung) this.putusSejak.set(i, sekarang);
+      });
+    }
+    // Host yang ditahan sesudah pemulihan: begitu batasnya lewat, host pindah seperti biasa.
+    const sampaiHost = this.tahanHost?.sampai;
+    if (sampaiHost != null && this.jumlahManusiaTerhubung > 0) {
+      this.timerTahanHost = this.pasangTimer(Math.max(0, sampaiHost - sekarang), 'batas tahan host', () => {
+        this.timerTahanHost = null;
+        this.perbaruiHost();
+        this.berubah();
       });
     }
     if (!g || !kunci) {
@@ -1112,9 +1142,27 @@ export class Meja {
 
   private perbaruiHost(): void {
     const h = this.d.kursi[this.d.host];
-    if (h?.jenis === 'manusia' && h.terhubung) return;
+    if (h?.jenis === 'manusia' && h.terhubung) {
+      this.tahanHost = null;
+      return;
+    }
+    if (this.tahanHost && h?.jenis === 'manusia' && this.hostMasihDitahan(this.tahanHost)) return;
+    this.tahanHost = null;
     const baru = this.d.kursi.findIndex((k) => k.jenis === 'manusia' && k.terhubung);
     if (baru >= 0) this.d.host = baru;
+  }
+
+  /**
+   * Host meja yang dipulihkan masih ditahan? Batasnya dihitung sejak manusia pertama kembali: selama
+   * masa tenggang sambung ulang (bawaan 20 detik, sama dengan tunggu giliran kursi yang belum kembali).
+   */
+  private hostMasihDitahan(t: { sampai: number | null }): boolean {
+    const sekarang = this.penjadwal.sekarang();
+    if (t.sampai === null) {
+      if (this.jumlahManusiaTerhubung === 0) return true;
+      t.sampai = sekarang + Math.max(0, this.opsi.tenggangSambungMs ?? TENGGANG_SAMBUNG_MS);
+    }
+    return sekarang < t.sampai;
   }
 
   /** Setelah setiap perubahan: atur timer, kirim info ke semua, beri tahu penyimpan. */
@@ -1178,7 +1226,8 @@ export class Meja {
  * suaranya di voting akhiri/kaldu dicabut. Meja yang dibuat dari data ini dijeda (#35) sampai ada yang
  * kembali; saat itu kursi lain yang masih terputus mendapat masa tenggang penuh, dan yang belum sempat
  * melihat joker putaran ini ditanya ulang sendiri saat kembali (#34, diubah 24 Okt 2026). Host tidak
- * diubah di sini (pindah ke manusia pertama yang kembali kalau host belum kembali, seperti biasa).
+ * diubah di sini, dan meja yang dibuat dari data ini menahannya (lihat `Meja.tahanHost`): host baru
+ * pindah kalau ia belum kembali sampai masa tenggang habis sejak manusia pertama kembali.
  * Mengembalikan salinan; `data` tidak diubah.
  */
 export function dataMejaDipulihkan(data: DataMeja): DataMeja {

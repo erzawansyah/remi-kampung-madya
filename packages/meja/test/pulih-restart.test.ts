@@ -97,7 +97,7 @@ describe('dataMejaDipulihkan', () => {
     expect(surat.info('host').menungguJoker).toEqual([]);
   });
 
-  it('host tetap host kalau ia yang kembali duluan; kalau orang lain duluan, host pindah seperti biasa', () => {
+  it('host tetap host kalau ia yang kembali duluan', () => {
     const { meja } = mejaJalan();
     siapSemua(meja);
     const d = meja.data;
@@ -106,8 +106,74 @@ describe('dataMejaDipulihkan', () => {
     a.meja.masuk('host', 'Budi');
     a.meja.masuk('p2', 'Siti');
     expect(a.meja.data.host).toBe(0);
+    a.jam.maju(10 * 60_000);
+    expect(a.meja.data.host).toBe(0);
+  });
+
+  it('orang lain kembali duluan: host ditahan selama tenggang (dihitung sejak orang pertama kembali), baru sesudahnya pindah', () => {
+    // Saat deploy semua orang menyambung ulang hampir bersamaan; siapa yang duluan tidak boleh menentukan host.
+    const { meja } = mejaJalan({}, 2);
+    siapSemua(meja);
+    const d = meja.data;
+    meja.hentikan();
     const b = pulihkan(d);
+    // Server baru jalan, tapi orang pertama baru kembali 2 menit kemudian.
+    b.jam.maju(120_000);
     b.meja.masuk('p2', 'Siti');
+    expect(b.meja.data.host).toBe(0);
+    expect(b.surat.info('p2').host).toBe(0);
+    // Selama ditahan, yang kembali duluan tidak bisa memakai hak host.
+    b.meja.terima('p2', { t: 'pengaturan', pengaturan: { tempoBot: 'cepat' } });
+    expect(b.surat.errors('p2')).toEqual(['Cuma host yang bisa melakukan ini.']);
+    b.jam.maju(TENGGANG_SAMBUNG_MS - 1);
+    expect(b.meja.data.host).toBe(0);
+    b.jam.maju(1);
     expect(b.meja.data.host).toBe(1);
+    // Kabar host baru langsung disiarkan, tanpa menunggu perubahan lain.
+    expect(b.surat.info('p2').host).toBe(1);
+    // Host lama kembali sesudahnya: host tidak direbut balik.
+    b.meja.masuk('host', 'Budi');
+    expect(b.meja.data.host).toBe(1);
+  });
+
+  it('host lama kembali selama ditahan: tetap host, tidak pindah sesudah tenggang', () => {
+    const { meja } = mejaJalan();
+    siapSemua(meja);
+    const c = pulihkan(meja.data);
+    meja.hentikan();
+    c.meja.masuk('p2', 'Siti');
+    c.jam.maju(TENGGANG_SAMBUNG_MS / 2);
+    c.meja.masuk('host', 'Budi');
+    expect(c.meja.data.host).toBe(0);
+    c.jam.maju(TENGGANG_SAMBUNG_MS);
+    expect(c.meja.data.host).toBe(0);
+    // Sesudahnya aturan host biasa: host pergi sungguhan = pindah ke yang masih terhubung.
+    c.meja.terputus('host');
+    expect(c.meja.data.host).toBe(1);
+  });
+
+  it('lobi publik yang dipulihkan: orang asing yang masuk duluan tidak langsung jadi host', () => {
+    const ctx = siapkan({ namaLawan: ['Warga A'] });
+    const meja = Meja.buat(ctx.opsi, 'host', 'Budi', { jumlahPemain: 4, publik: true });
+    meja.masuk('p2', 'Siti');
+    const d = meja.data;
+    meja.hentikan();
+    const { meja: lanjut, surat, jam } = pulihkan(d);
+    lanjut.masuk('asing', 'Tamu');
+    expect(lanjut.data.host).toBe(0);
+    lanjut.terima('asing', { t: 'aturKursi', kursi: 1, jenis: 'kosong' });
+    expect(surat.errors('asing')).toEqual(['Cuma host yang bisa melakukan ini.']);
+    expect(lanjut.data.kursi[1]).toMatchObject({ jenis: 'manusia', pemainId: 'p2' });
+    lanjut.masuk('p2', 'Siti');
+    jam.maju(TENGGANG_SAMBUNG_MS);
+    // Host belum kembali sampai tenggang habis: pindah ke kursi manusia terhubung yang paling depan.
+    expect(lanjut.data.host).toBe(1);
+  });
+
+  it('meja yang dibuat biasa (host terhubung) tidak menahan host: host yang terputus langsung diganti', () => {
+    const { meja } = mejaJalan();
+    siapSemua(meja);
+    meja.terputus('host');
+    expect(meja.data.host).toBe(1);
   });
 });
