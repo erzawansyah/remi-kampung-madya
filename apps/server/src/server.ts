@@ -294,6 +294,13 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   const log = opsi.log ?? ((...x: unknown[]) => console.log(new Date().toISOString(), ...x));
   const daftarMeja = new Map<string, Meja>();
   const kosongSejak = new Map<string, number>();
+  /**
+   * Simpanan permainan meja kompetisi yang ditinggal yang dibuang saat server mulai, tapi yang keluarnya
+   * gagal dicatat (galat database). Simpanannya tetap di database; dicoba lagi tiap detak pembersih dan
+   * saat server dimatikan, dan selama menunggu ikut `mejaMain` kompetisinya (juara ditahan sampai nilai 0
+   * mereka tercatat). Kode mejanya tidak dipakai meja baru.
+   */
+  const ditinggalTertunda = new Map<string, { kompetisi: string; data: DataMeja; waktu: number }>();
   const sambunganPemain = new Map<string, Sambungan>();
   const semuaSambungan = new Set<Sambungan>();
   /** Pemain yang sambungannya tertutup tapi belum dikabarkan terputus ke meja (jeda JEDA_PUTUS_MS). */
@@ -362,6 +369,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     mejaMain: (kode) => {
       let n = 0;
       for (const m of daftarMeja.values()) if (m.kompetisi === kode && m.status === 'main') n++;
+      for (const t of ditinggalTertunda.values()) if (t.kompetisi === kode) n++;
       return n;
     },
     mejaMenunggu: (kode) =>
@@ -386,12 +394,16 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
 
   /**
    * Tulis keadaan meja ke database sekarang. Yang tidak akan dipulihkan juga tidak disimpan (dibuang):
-   * permainan yang sudah selesai, dan meja tanpa kursi manusia (tidak ada yang bisa kembali).
+   * permainan yang sudah selesai, dan meja tanpa kursi manusia (tidak ada yang bisa kembali). Kecuali
+   * permainan meja kompetisi yang ditinggal yang keluarnya belum tercatat (galat database saat Keluar
+   * terakhir): simpanannya tetap ditulis, supaya server yang mulai lagi membuangnya lewat jalur yang
+   * mencatat yang keluar. Begitu tercatat, simpanannya dibuang bersama catatannya (simpanDitinggal).
    */
   const tulisMeja = (kode: string, data: DataMeja) => {
     if (!simpananMeja) return;
     try {
-      if (data.game?.status === 'selesai' || !data.kursi.some((k) => k.jenis === 'manusia')) simpananMeja.hapus(kode);
+      if (data.game?.status === 'selesai' || (!data.kursi.some((k) => k.jenis === 'manusia') && !ringkasanDitinggal(data, 0)))
+        simpananMeja.hapus(kode);
       else simpananMeja.simpan(kode, JSON.stringify(data), pembuatMeja.get(kode) ?? null, penjadwalDasar.sekarang());
     } catch (e) {
       log(`galat menyimpan meja ${kode}`, e);
@@ -543,8 +555,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
 
   /**
    * Meja kompetisi yang semua pesertanya sudah menekan Keluar: tidak bisa didatangi dan tidak akan
-   * selesai (#35). Yang keluar dicatat dulu, baru mejanya dihapus (gagal = meja dibiarkan dan tetap
-   * menahan juara; pembersih mencoba lagi tiap 30 detik), lalu juara yang menunggu meja ini ditetapkan.
+   * selesai (#35). Yang keluar dicatat dulu, baru mejanya dihapus (gagal = meja dan simpanannya
+   * dibiarkan, tetap menahan juara; pembersih mencoba lagi tiap 30 detik, server yang mulai lagi juga),
+   * lalu juara yang menunggu meja ini ditetapkan.
    */
   const tutupMejaDitinggal = (kode: string) => {
     const meja = daftarMeja.get(kode);
@@ -556,16 +569,25 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
 
   /**
    * Sesudah pesan Keluar di meja kompetisi yang sedang main: kalau tidak ada kursi manusia lagi,
-   * permainannya ditinggal (dicatat dan ditutup sekarang); kalau masih ada, tanda keluar langsung ditulis
-   * ke simpanan (tanpa jeda simpan), supaya server yang mati mendadak tidak memulihkan yang keluar
-   * sebagai pemain yang bertahan.
+   * permainannya ditinggal (dicatat dan ditutup sekarang). Meja yang masih ada (masih ada yang bertahan,
+   * atau pencatatannya gagal) langsung ditulis ke simpanan (tanpa jeda simpan), supaya server yang mati
+   * mendadak tidak memulihkan yang keluar sebagai pemain yang bertahan, dan yang belum tercatat dicatat
+   * saat server mulai lagi.
    */
   const sesudahKeluar = (meja: Meja) => {
     if (!meja.kompetisi || meja.status !== 'main' || daftarMeja.get(meja.kode) !== meja) return;
-    if (!meja.adaKursiManusia) return tutupMejaDitinggal(meja.kode);
-    if (simpananMeja) {
+    if (!meja.adaKursiManusia) tutupMejaDitinggal(meja.kode);
+    if (simpananMeja && daftarMeja.get(meja.kode) === meja) {
       batalSimpan(meja.kode);
       tulisMeja(meja.kode, meja.data);
+    }
+  };
+
+  /** Coba lagi mencatat simpanan permainan ditinggal yang gagal dicatat saat server mulai (ditinggalTertunda). */
+  const catatDitinggalTertunda = () => {
+    for (const [kode, t] of [...ditinggalTertunda]) {
+      // Berhasil = catatan dan pembuangan simpanannya sudah satu transaksi (simpanDitinggal).
+      if (catatPermainanDitinggal(kode, t.data, t.waktu)) ditinggalTertunda.delete(kode);
     }
   };
 
@@ -887,7 +909,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     for (;;) {
       const b = randomBytes(5);
       const kode = [...b].map((x) => HURUF_KODE[x % HURUF_KODE.length]).join('');
-      if (!daftarMeja.has(kode)) return kode;
+      if (!daftarMeja.has(kode) && !ditinggalTertunda.has(kode)) return kode;
     }
   };
 
@@ -1247,6 +1269,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         log('galat ping sambungan', e);
       }
     }
+    // Simpanan permainan ditinggal yang gagal dicatat saat server mulai: dicoba lagi sebelum juara ditetapkan.
+    catatDitinggalTertunda();
     // Kompetisi yang masanya baru habis: lobinya dibubarkan, juaranya ditetapkan kalau mejanya sudah selesai semua.
     bubarkanLobiKompetisi();
     tetapkanJuara();
@@ -1354,11 +1378,15 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       }
       log(`simpanan meja ${b.kode} dibuang: ${alasan}`);
       // Permainan meja kompetisi yang tidak akan pernah selesai: yang keluar dicatat 0 dulu (simpanannya
-      // ikut dibuang di transaksi yang sama). Gagal = simpanannya dibiarkan, dicoba lagi saat server
-      // mulai berikutnya. Juara tidak ditetapkan di sini: meja lain kompetisi yang sama mungkin belum
-      // dipulihkan (detak pembersih dan pembacaan API yang menetapkannya).
+      // ikut dibuang di transaksi yang sama). Gagal = simpanannya dibiarkan dan dicoba lagi tiap detak
+      // pembersih (ditinggalTertunda, juaranya ditahan sampai tercatat). Juara tidak ditetapkan di sini:
+      // meja lain kompetisi yang sama mungkin belum dipulihkan (detak pembersih dan pembacaan API yang
+      // menetapkannya).
       const d = bacaDataMeja(b.data, b.kode);
-      if (typeof d !== 'string' && !catatPermainanDitinggal(b.kode, d, b.diperbaruiPada)) continue;
+      if (typeof d !== 'string' && !catatPermainanDitinggal(b.kode, d, b.diperbaruiPada)) {
+        if (d.kompetisi) ditinggalTertunda.set(b.kode, { kompetisi: d.kompetisi.kode, data: d, waktu: b.diperbaruiPada });
+        continue;
+      }
       try {
         simpananMeja.hapus(b.kode);
       } catch (e) {
@@ -1404,10 +1432,11 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         clearInterval(timerBersih);
         clearInterval(timerTulisKompetisi);
         for (const pemainId of [...putusTertunda.keys()]) batalPutusTertunda(pemainId);
-        // Meja kompetisi yang semua pesertanya sudah keluar tapi belum tercatat (galat database saat
-        // Keluar terakhir): coba sekali lagi. Simpanannya sudah tidak ada (tanpa kursi manusia), jadi
-        // sesudah restart tidak ada lagi yang bisa mencatatnya. Juara tidak ditetapkan (tahanJuara).
+        // Permainan ditinggal yang belum tercatat (galat database saat Keluar terakhir atau saat server
+        // mulai): coba sekali lagi. Yang masih gagal simpanannya tetap ada, jadi dicatat saat server mulai
+        // lagi. Juara tidak ditetapkan (tahanJuara).
         for (const [kode, m] of [...daftarMeja]) if (ditinggalSemua(m)) tutupMejaDitinggal(kode);
+        catatDitinggalTertunda();
         // Perubahan yang belum tersimpan ditulis sekarang; simpanan meja di database tidak dibuang,
         // supaya meja dipulihkan saat server jalan lagi (restart/deploy). Jangan taruh `await` apa pun
         // di depannya: sejak `menutup`, perubahan meja tidak dijadwalkan simpan lagi, jadi perubahan

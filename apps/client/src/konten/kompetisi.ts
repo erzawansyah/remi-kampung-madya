@@ -76,6 +76,11 @@ export const TEKS_KOMPETISI = {
   keluarMeja: 'Di kompetisi nilaimu 0 untuk permainan ini.',
   /** Konfirmasi keluar sesudah klasemen akhir meja kompetisi. */
   keluarSelesai: 'Permainannya sudah selesai. Meja kompetisi cuma sekali main.',
+  /**
+   * Toast saat meja kompetisi yang sedang tampil sudah tidak ada di server (sebabnya tidak diketahui,
+   * kompetisinya bisa masih jalan); aplikasi lalu membuka detail kompetisinya.
+   */
+  mejaHilang: 'Mejanya sudah bubar, Bos. Balik ke layar Kompetisi ya.',
   /** Klasemen akhir meja kompetisi: ganti tombol Main lagi. */
   kembaliKompetisi: 'Kembali ke kompetisi',
   /** Judul bagian hasil kompetisi di klasemen akhir (diikuti nama kompetisinya). */

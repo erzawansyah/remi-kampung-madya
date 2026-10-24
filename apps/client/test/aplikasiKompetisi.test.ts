@@ -19,6 +19,7 @@ import {
   type InfoMeja,
 } from '@remi/meja';
 import type { AppUntukMeja, PesanHasilKompetisi } from '../src/kontrolMeja';
+import { TEKS_KOMPETISI } from '../src/konten/kompetisi';
 import { WsPalsu } from './bantu';
 
 vi.mock('virtual:pwa-register', () => ({ registerSW: vi.fn(() => vi.fn(async () => {})) }));
@@ -343,16 +344,19 @@ describe('Aplikasi: duduk dari detail kompetisi', () => {
 });
 
 // Meja kompetisi yang sudah tidak ada di server (lobi dibubarkan selagi HP terkunci, simpanannya dibuang
-// saat server mulai ulang, atau ditutup karena semua pesertanya keluar): ke detail kompetisinya, seperti
-// pesan keluar {kompetisi} dari server. Meja biasa tetap ke beranda.
+// saat server mulai ulang, atau dihapus karena lama kosong): ke detail kompetisinya, seperti pesan keluar
+// {kompetisi} dari server. Sebabnya tidak diketahui (kompetisinya bisa masih jalan), jadi toastnya netral,
+// bukan "Kompetisinya sudah selesai". Meja biasa tetap ke beranda.
 describe('Aplikasi: meja kompetisi yang sudah hilang', () => {
   for (const status of ['lobi', 'main'] as const) {
-    it(`${status === 'lobi' ? 'lobi' : 'meja'} kompetisi tampil, server menjawab "Meja nggak ketemu": toast, sesi dihapus, detail kompetisinya terbuka`, async () => {
+    it(`${status === 'lobi' ? 'lobi' : 'meja'} kompetisi tampil, server menjawab "Meja nggak ketemu": toast netral, sesi dihapus, detail kompetisinya terbuka`, async () => {
       const { ws } = await diMejaKompetisi({ status });
       const url = pasangFetch();
       ws.kirimDariServer({ t: 'error', pesan: 'Meja MJKOM nggak ketemu.' });
       await vi.advanceTimersByTimeAsync(0);
-      expect(toastTeks()).toContain(TEKS_LOBI_KOMPETISI_BUBAR);
+      expect(toastTeks()).toContain(TEKS_KOMPETISI.mejaHilang);
+      expect(toastTeks()).not.toContain(TEKS_LOBI_KOMPETISI_BUBAR);
+      expect(toastTeks().some((t) => t.includes('sudah selesai'))).toBe(false);
       expect(toastTeks()).not.toContain('Mejanya sudah bubar, Bos. Balik ke beranda ya.');
       expect(localStorage.getItem(KUNCI_SESI)).toBeNull();
       expect(url).toContain('/api/kompetisi/KOMPA');
@@ -369,6 +373,7 @@ describe('Aplikasi: meja kompetisi yang sudah hilang', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(toastTeks()).toContain('Mejanya sudah bubar, Bos. Balik ke beranda ya.');
     expect(toastTeks()).not.toContain(TEKS_LOBI_KOMPETISI_BUBAR);
+    expect(toastTeks()).not.toContain(TEKS_KOMPETISI.mejaHilang);
     expect(localStorage.getItem(KUNCI_SESI)).toBeNull();
     expect(url.some((u) => u.startsWith('/api/kompetisi'))).toBe(false);
     expect(document.querySelector('#ui .layar.beranda')).not.toBeNull();

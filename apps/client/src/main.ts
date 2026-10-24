@@ -19,6 +19,7 @@ import {
   type StatusKoneksi,
 } from './koneksi';
 import { TEKS_KONEKSI, teksDijalankanWarga } from './konten/koneksi';
+import { TEKS_KOMPETISI } from './konten/kompetisi';
 import { catatanDariView, kunciPermainan, simpan } from './penyimpanan';
 import { bangunkanGame, buatGame, tidurkanGame, type PenampungGame } from './game/game';
 import { KontrolMeja, masihGiliranku, type AppUntukMeja, type PesanHasilKompetisi } from './kontrolMeja';
@@ -636,9 +637,10 @@ class Aplikasi implements AppUntukMeja {
           if (this.layar === 'lobi' || this.layar === 'meja') {
             // Meja kompetisi (lobi dibubarkan selagi HP terkunci, simpanannya dibuang saat server mulai
             // ulang, atau dihapus karena lama kosong): ke detail kompetisinya, seperti pesan keluar
-            // {kompetisi} dari server.
+            // {kompetisi} dari server. Sebabnya tidak diketahui (kompetisinya bisa saja masih jalan), jadi
+            // teksnya netral, bukan TEKS_LOBI_KOMPETISI_BUBAR.
             const kompetisi = this.info?.kompetisi?.kode;
-            toast(kompetisi ? TEKS_LOBI_KOMPETISI_BUBAR : 'Mejanya sudah bubar, Bos. Balik ke beranda ya.', true);
+            toast(kompetisi ? TEKS_KOMPETISI.mejaHilang : 'Mejanya sudah bubar, Bos. Balik ke beranda ya.', true);
             return this.keluarMeja(true, kompetisi);
           }
         }
