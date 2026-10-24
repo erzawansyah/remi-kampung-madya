@@ -790,7 +790,7 @@ describe('#52/#53: alasan penolakan nutup dari mesin aturan', () => {
     return m;
   }
 
-  /** Contoh pemilik (#53), 2 deck, joker 3: Ani membuang 8 Love deck kedua, aku memegang 7-8-9 Love + J-Q-K Wajik. */
+  /** Contoh pemilik (#53; nama Ani dan Budi dari pengembang), 2 deck, joker 3: Ani membuang 8 Love deck kedua, aku memegang 7-8-9 Love + J-Q-K Wajik. */
   const contohAniBudi: Omit<Skenario, 'giliran'> = {
     rankJoker: 3,
     konfigurasi: { duaDeckUntukEmpat: true },

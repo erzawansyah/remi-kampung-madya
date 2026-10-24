@@ -704,7 +704,7 @@ describe('#53 (2 deck): pentungan tidak boleh kembaran kartu yang dipungut', () 
   }
 
   /**
-   * Contoh pemilik (24 Okt 2026), joker 3: Budi memegang 7-8-9 Love dan J-Q-K Wajik. Ani (tepat sebelum
+   * Contoh pemilik (24 Okt 2026; nama Ani dan Budi dari pengembang, lihat docs #53), joker 3: Budi memegang 7-8-9 Love dan J-Q-K Wajik. Ani (tepat sebelum
    * Budi) membuang 8 Love dari deck satunya. Budi mungut 8 Love itu untuk 7-8-9 Love, menurunkan J-Q-K
    * Wajik, lalu mau mentung pakai 8 Love miliknya sendiri: tidak boleh.
    */
