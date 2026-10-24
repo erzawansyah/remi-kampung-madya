@@ -1642,7 +1642,7 @@ describe('meja kompetisi (#51 versi 2)', () => {
     expect(vi.mocked(umumkan)).toHaveBeenCalledWith(`${TEKS_KOMPETISI.judulHasil}: +10,0 · rata-rata 5,8 · naik ke peringkat 2 (dari 4)`);
   });
 
-  it('hasil putaran: baris "mulai sendiri dalam N detik" untuk semua; voting akhiri menghitung peserta yang terputus', async () => {
+  it('hasil putaran: baris "mulai sendiri dalam N detik" untuk semua', async () => {
     meja = await mejaSiapMentung(undefined, { jenis: 'online' });
     meja.info = {
       ...meja.info,
@@ -1652,12 +1652,63 @@ describe('meja kompetisi (#51 versi 2)', () => {
     };
     const dlg = await sampaiHasil(meja);
     expect(dlg.querySelector('[data-lanjut-otomatis]')!.textContent).toBe(`${TEKS_KOMPETISI.lanjutOtomatis} 40 detik.`);
-    // Pemilih meja kompetisi: semua peserta yang belum keluar (Pemain 3 terputus tetap dihitung).
-    expect(dlg.querySelector('[data-akhiri]')!.textContent).toBe('Akhiri permainan (0/4)');
     // Info tanpa lanjutOtomatis: barisnya hilang.
     meja.info = { ...meja.info, lanjutOtomatis: undefined };
     meja.kontrol.perbarui(meja.info, null);
     expect(document.querySelector('#modal [data-lanjut-otomatis]')).toBeNull();
+  });
+
+  /** Meja mode kaldu (batas putaran 3), aku tinggal mentung; `info` mengatur kursi dan kompetisi. */
+  async function mejaKalduOnline(info: Partial<InfoMeja>): Promise<MejaUji> {
+    const g = skenario({
+      modeKaldu: true,
+      konfigurasi: { batasPutaran: 3 },
+      rankJoker: 2,
+      tangan: [['5 love', '6 love', '9 waru'], ['3 waru', '4 waru', '5 waru'], ['3 love', '4 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+      buangan: [['7 love', 1]],
+      giliran: 0,
+    });
+    const m = new MejaUji(
+      g,
+      {
+        kursi: g.pemain.map((p) => ({ jenis: 'manusia', nama: p.nama, terhubung: true, level: 'normal' })),
+        setujuKaldu: [],
+        ...info,
+      },
+      { jenis: 'online', statusKoneksi: () => 'tersambung', nomorSambungan: () => 1, siapKirim: () => true },
+    );
+    m.app.kirim({ t: 'aksi', aksi: { jenis: 'mulung', jumlah: 1, kartuJadi: [spek('5 love', '6 love', '7 love')] } });
+    await sampai(() => m.g.putaran!.tahap === 'main' && !!m.tombol('buang'));
+    return m;
+  }
+
+  // Keputusan pemilik 24 Okt 2026 "Matikan voting di meja kompetisi".
+  it('hasil putaran meja kompetisi: tanpa Akhiri permainan dan Putaran terakhir, juga sesudah info diperbarui', async () => {
+    const m = (meja = await mejaKalduOnline({ kompetisi: KOMPETISI_UJI, lanjutOtomatis: { sisaMs: 40_000 } }));
+    const dlg = await sampaiHasil(m);
+    expect(dlg.querySelector('[data-akhiri]')).toBeNull();
+    expect(dlg.querySelector('[data-kaldu]')).toBeNull();
+    // Yang tersisa di deret: Lihat meja saja; tombol lanjut host tetap ada.
+    expect([...dlg.querySelectorAll('[data-deret-voting] button')].map((b) => b.textContent)).toEqual(['Lihat meja']);
+    expect(dlg.querySelector('[data-lanjut-wadah] button')).not.toBeNull();
+    expect(dlg.textContent).not.toMatch(/Akhiri permainan|Putaran terakhir/);
+    // Info baru (ada yang terputus, atau suara lama dari server) tidak memunculkan tombolnya.
+    m.info = { ...m.info, setujuAkhiri: [1], setujuKaldu: [1], kursi: m.info.kursi.map((k, i) => ({ ...k, terhubung: i !== 3 })) };
+    m.kontrol.perbarui(m.info, null);
+    const lagi = document.querySelector('#modal [data-hasil]')!.closest('.dialog')!;
+    expect(lagi.querySelector('[data-akhiri]')).toBeNull();
+    expect(lagi.querySelector('[data-kaldu]')).toBeNull();
+    expect(m.terkirim.some((p) => p.t === 'akhiri' || p.t === 'putaranTerakhir')).toBe(false);
+  });
+
+  it('meja online biasa dengan mode kaldu: Akhiri permainan dan Putaran terakhir tetap ada (#36)', async () => {
+    const m = (meja = await mejaKalduOnline({}));
+    m.info = { ...m.info, kursi: m.info.kursi.map((k, i) => ({ ...k, jenis: i < 2 ? 'manusia' : 'bot' })) };
+    const dlg = await sampaiHasil(m);
+    expect(dlg.querySelector('[data-akhiri]')!.textContent).toBe('Akhiri permainan (0/2)');
+    expect(dlg.querySelector('[data-kaldu]')!.textContent).toBe(`${TEKS_KALDU.tombol} (0/2)`);
+    dlg.querySelector<HTMLButtonElement>('[data-akhiri]')!.click();
+    expect(m.terkirim.some((p) => p.t === 'akhiri' && p.setuju)).toBe(true);
   });
 
   it('meja online biasa: tanpa baris mulai sendiri, voting hanya menghitung yang terhubung', async () => {
@@ -1678,9 +1729,49 @@ describe('meja kompetisi (#51 versi 2)', () => {
     expect(dlg.querySelector('[data-hasil-kompetisi]')).toBeNull();
   });
 
+  // Keputusan pemilik 24 Okt 2026 "Yang keluar tak dihitung": tinggal satu yang bertahan.
+  const tidakDihitung: PesanHasilKompetisi = {
+    t: 'kompetisiHasil',
+    kompetisi: KOMPETISI_UJI,
+    minMain: 3,
+    jumlahPeringkat: 0,
+    pemain: [],
+    tidakDihitung: 'keluar',
+  };
+
+  it('permainan yang tidak dihitung (datang sebelum klasemen tampil): satu kalimat ramah, tanpa nilai', async () => {
+    meja = await mejaKompetisiSiapMentung();
+    meja.kontrol.terimaHasilKompetisi(tidakDihitung);
+    vi.mocked(umumkan).mockClear();
+    const dlg = await sampaiHasil(meja, '[data-selesai]');
+    // Pengumuman klasemen akhir ikut menyebut kalimatnya (pesan ini datang sebelum klasemen tampil).
+    const pengumuman = vi.mocked(umumkan).mock.calls.map(([t]) => t).filter((t) => t.includes('Selamat, kamu juara!') || t.startsWith('Permainan selesai.'));
+    expect(pengumuman).toEqual([`Selamat, kamu juara! ${TEKS_KOMPETISI.tidakDihitungKeluar}`]);
+    const bagian = dlg.querySelector('[data-hasil-kompetisi]')!;
+    expect(bagian.textContent!.trim()).toBe(TEKS_KOMPETISI.tidakDihitungKeluar);
+    expect(TEKS_KOMPETISI.tidakDihitungKeluar).toBe('Hampir semua pemain keluar, jadi permainan ini tidak dihitung untukmu. Yang keluar tetap dapat nilai 0.');
+    expect(bagian.querySelectorAll('li')).toHaveLength(0);
+    expect(bagian.querySelector('.judul-hasil-kompetisi')).toBeNull();
+    expect(bagian.querySelector('[data-tidak-dihitung]')).not.toBeNull();
+    // Tombol Kembali ke kompetisi tetap ada.
+    expect(dlg.querySelector('[data-a="kompetisi"]')).not.toBeNull();
+  });
+
+  it('permainan yang tidak dihitung (datang sesudah klasemen tampil): diisi di tempat dan diumumkan', async () => {
+    meja = await mejaKompetisiSiapMentung();
+    const dlg = await sampaiHasil(meja, '[data-selesai]');
+    const bagian = dlg.querySelector('[data-hasil-kompetisi]')!;
+    expect(bagian.innerHTML).toBe('');
+    vi.mocked(umumkan).mockClear();
+    meja.kontrol.terimaHasilKompetisi(tidakDihitung);
+    expect(bagian.textContent!.trim()).toBe(TEKS_KOMPETISI.tidakDihitungKeluar);
+    expect(vi.mocked(umumkan)).toHaveBeenCalledWith(TEKS_KOMPETISI.tidakDihitungKeluar);
+  });
+
   it('htmlHasilKompetisi: kosong tanpa pesan; urutan aku dulu lalu kursi', () => {
     const g = skenario({ rankJoker: 2, tangan: [['5 love'], ['6 love'], ['7 love']], giliran: 0 });
     expect(htmlHasilKompetisi(null, 0)).toBe('');
+    expect(htmlHasilKompetisi({ ...hasilKompetisiUji(g), pemain: [] }, 0)).toBe('');
     const el = document.createElement('div');
     el.innerHTML = htmlHasilKompetisi(hasilKompetisiUji(g), 2);
     expect([...el.querySelectorAll('li b')].map((b) => b.textContent)).toEqual([g.pemain[2]!.nama, g.pemain[0]!.nama, g.pemain[1]!.nama]);
@@ -1774,6 +1865,29 @@ describe('konfirmasi keluar meja', () => {
     const d = document.querySelector<HTMLElement>('.dialog.konfirmasi')!;
     expect(d.querySelector('p')!.textContent).toBe(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true }).pesan);
     expect(d.querySelector('p')!.textContent).toContain('juru kunci');
+    d.querySelector<HTMLElement>('[data-tidak]')!.click();
+    await tunggu();
+    expect(meja.terkirim.some((p) => p.t === 'keluar')).toBe(false);
+  });
+
+  // Keputusan pemilik 24 Okt 2026: yang keluar selalu dicatat 0, juga kalau sesudah aku keluar tinggal satu.
+  it('menu meja kompetisi → Keluar meja: nilai 0 selalu disebut, juga kalau sesudah aku keluar tinggal satu yang bertahan', async () => {
+    meja = await mejaKompetisiSiapMentung();
+    const bukaKonfirmasi = () => {
+      meja!.akar.querySelector<HTMLElement>('[data-a="menu"]')!.click();
+      document.querySelector<HTMLElement>('#modal [data-m="keluar"]')!.click();
+      return document.querySelector<HTMLElement>('.dialog.konfirmasi')!;
+    };
+    let d = bukaKonfirmasi();
+    expect(d.querySelector('p')!.textContent).toContain(TEKS_KOMPETISI.keluarMeja);
+    d.querySelector<HTMLElement>('[data-tidak]')!.click();
+    await tunggu();
+    // Dua lawan sudah keluar (kursinya diteruskan warga kedai): sesudah aku keluar tinggal satu.
+    meja.info = { ...meja.info, kursi: meja.info.kursi.map((k, i) => ({ ...k, jenis: i === 1 || i === 2 ? 'bot' : 'manusia' })) };
+    meja.kontrol.perbarui(meja.info, null);
+    d = bukaKonfirmasi();
+    expect(d.querySelector('p')!.textContent).toBe(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true, kompetisi: true }).pesan);
+    expect(d.querySelector('p')!.textContent).toContain(TEKS_KOMPETISI.keluarMeja);
     d.querySelector<HTMLElement>('[data-tidak]')!.click();
     await tunggu();
     expect(meja.terkirim.some((p) => p.t === 'keluar')).toBe(false);

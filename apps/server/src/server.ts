@@ -16,6 +16,7 @@ import {
   namaLawanAcak,
   penjadwalNyata,
   periksaUsulan,
+  permainanKompetisiDihitung,
   rapikanPengaturanKompetisi,
   TEKS_KURSI_KOMPETISI_LEPAS,
   TEKS_LOBI_KOMPETISI_BUBAR,
@@ -512,19 +513,29 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
    */
   const kabarHasilKompetisi = (kodeMeja: string, r: RingkasanAkhir, id: number, sebelum: KlasemenKompetisi | null) => {
     const penyimpan = opsi.riwayat?.kompetisi;
-    if (!penyimpan || !r.kompetisi) return;
+    const kode = r.kompetisi;
+    if (!penyimpan || !kode) return;
     try {
-      const sesudah = penyimpan.klasemen(r.kompetisi);
+      const sesudah = penyimpan.klasemen(kode);
+      const dasar = (k: KlasemenKompetisi) => ({
+        t: 'kompetisiHasil' as const,
+        kompetisi: { kode, nama: penyimpan.untukMeja(kode, jam())?.nama ?? '' },
+        minMain: MIN_MAIN_KOMPETISI,
+        jumlahPeringkat: k.peringkat.length,
+      });
+      let pesan: PesanServer | null = null;
       if (!sebelum || !sesudah || penyimpan.jumlahHasil(id) === 0) {
-        log(`permainan meja ${kodeMeja} tidak dihitung di kompetisi ${r.kompetisi}`);
+        // Mulai sesudah kompetisi berakhir, atau juaranya sudah ditetapkan: tidak dikabarkan.
+        log(`permainan meja ${kodeMeja} tidak dihitung di kompetisi ${kode}`);
+      } else if (!permainanKompetisiDihitung(r.pemain)) {
+        // Hampir semua keluar (keputusan 24 Okt 2026): hanya yang keluar yang dicatat (0). Yang bertahan
+        // dikabari satu baris di klasemen akhir.
+        log(`permainan meja ${kodeMeja} hanya mencatat yang keluar di kompetisi ${kode}`);
+        pesan = { ...dasar(sesudah), pemain: [], tidakDihitung: 'keluar' };
       } else {
-        const pesan: PesanServer = {
-          t: 'kompetisiHasil',
-          kompetisi: { kode: r.kompetisi, nama: penyimpan.untukMeja(r.kompetisi, jam())?.nama ?? '' },
-          minMain: MIN_MAIN_KOMPETISI,
-          jumlahPeringkat: sesudah.peringkat.length,
-          pemain: hasilKompetisiMeja(r.pemain, sebelum, sesudah),
-        };
+        pesan = { ...dasar(sesudah), pemain: hasilKompetisiMeja(r.pemain, sebelum, sesudah) };
+      }
+      if (pesan) {
         hasilKompetisiTerakhir.set(kodeMeja, pesan);
         daftarMeja.get(kodeMeja)?.kabariManusia(pesan);
       }

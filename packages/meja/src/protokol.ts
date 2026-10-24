@@ -277,7 +277,7 @@ export interface HasilKompetisiKursi {
   nama: string;
   /** Nilai permainan ini, 0–10 (keluar di tengah permainan = 0). */
   nilai: number;
-  /** Peserta ini keluar di tengah permainan (juru kunci). */
+  /** Peserta ini keluar di tengah permainan (nilai 0, tidak dihitung dikalahkan untuk yang lain). */
   keluar: boolean;
   /** Rata-rata nilai sesudah permainan ini, 0–10. */
   rataNilai: number;
@@ -362,7 +362,10 @@ export type PesanServer =
   /**
    * Meja kompetisi (#51 versi 2): hasil permainan yang baru selesai sudah tercatat di kompetisi.
    * Dikirim server ke kursi manusia yang terhubung di meja itu (dan sekali lagi ke yang tersambung
-   * kembali selama klasemen akhir masih tampil). Tidak dikirim kalau permainannya tidak dihitung.
+   * kembali selama klasemen akhir masih tampil). Permainan yang tidak dihitung untuk yang bertahan
+   * karena kurang dari dua kursi bertahan sampai akhir (keputusan pemilik 24 Okt 2026; yang keluar
+   * tetap dicatat 0) tetap dikabarkan, dengan `tidakDihitung: 'keluar'` dan `pemain` kosong. Alasan
+   * tidak dihitung yang lain tidak dikirim.
    * Aplikasi lama mengabaikannya.
    */
   | {
@@ -372,6 +375,11 @@ export type PesanServer =
       minMain: number;
       /** Banyaknya peserta di klasemen (sudah ≥ minMain kali main) sesudah permainan ini. */
       jumlahPeringkat: number;
-      /** Satu per kursi peserta meja ini, urut kursi. */
+      /** Satu per kursi peserta meja ini, urut kursi. Kosong kalau `tidakDihitung`. */
       pemain: HasilKompetisiKursi[];
+      /**
+       * Ada kalau permainan ini tidak dihitung untuk yang bertahan: 'keluar' = yang bertahan sampai
+       * akhir kurang dari MIN_BERTAHAN_KOMPETISI (hampir semua pemain keluar; yang keluar dicatat 0).
+       */
+      tidakDihitung?: 'keluar';
     };

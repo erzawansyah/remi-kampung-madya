@@ -38,7 +38,13 @@ import {
   type StatusMeja,
 } from './protokol.js';
 import { gayaKursi } from './gayaWarga.js';
-import { DETIK_GILIRAN_KOMPETISI_BAWAAN, JEDA_MULAI_KOMPETISI_MS, ubahanTerkunci, type PengaturanKompetisi } from './kompetisi.js';
+import {
+  DETIK_GILIRAN_KOMPETISI_BAWAAN,
+  JEDA_MULAI_KOMPETISI_MS,
+  TEKS_TANPA_VOTING_KOMPETISI,
+  ubahanTerkunci,
+  type PengaturanKompetisi,
+} from './kompetisi.js';
 import { isiLedek, kunciNama, rapikanLevel, rapikanNama } from './validasi.js';
 
 export interface Penjadwal {
@@ -342,6 +348,12 @@ export class Meja {
         : data.kursi.map((_, i) => i).filter((i) => !menungguJoker.includes(i)),
     };
     this.aturSetujuKaldu(Array.isArray(data.setujuKaldu) ? data.setujuKaldu.filter((i) => Number.isInteger(i)) : []);
+    // Meja kompetisi tidak punya voting akhiri maupun kaldu (keputusan pemilik 24 Okt 2026): suara dari
+    // simpanan build pra-rilis dibuang.
+    if (this.d.kompetisi) {
+      this.d.setujuAkhiri = [];
+      this.aturSetujuKaldu([]);
+    }
     this.penjadwal = opsi.penjadwal ?? penjadwalNyata;
     const sekarang = this.penjadwal.sekarang();
     this.d.kursi.forEach((k, i) => {
@@ -802,6 +814,9 @@ export class Meja {
   }
 
   private akhiri(kursi: number, setuju: boolean): void {
+    // Meja kompetisi (keputusan pemilik 24 Okt 2026): tidak ada voting akhiri, permainan jalan sampai
+    // batas putaran yang dikunci kompetisi.
+    if (this.d.kompetisi) galat(TEKS_TANPA_VOTING_KOMPETISI);
     if (this.d.game?.status !== 'putaranSelesai') galat('Permainan cuma bisa diakhiri di antara putaran.');
     const set = new Set(this.d.setujuAkhiri);
     if (setuju) set.add(kursi);
@@ -811,25 +826,24 @@ export class Meja {
     this.berubah();
   }
 
-  /**
-   * Pemilih voting akhiri dan voting kaldu: manusia yang masih terhubung (#36). Meja kompetisi (#51
-   * versi 2, tafsiran pengembang): semua kursi peserta yang belum keluar, termasuk yang sedang
-   * terputus, supaya batas putaran yang dikunci kompetisi tidak bisa dipotong selagi lawan terputus.
-   * Yang keluar kursinya sudah jadi warga kedai, jadi tidak ikut memilih.
-   */
+  /** Pemilih voting akhiri dan voting kaldu: manusia yang masih terhubung (#36). */
   private pemilihVoting(): number[] {
-    const kompetisi = !!this.d.kompetisi;
-    return this.d.kursi.flatMap((k, i) => (k.jenis === 'manusia' && (k.terhubung || kompetisi) ? [i] : []));
+    return this.d.kursi.flatMap((k, i) => (k.jenis === 'manusia' && k.terhubung ? [i] : []));
   }
 
   /**
    * Akhiri permainan kalau semua pemilih (pemilihVoting) sudah setuju (minimal satu suara dan satu
    * pemilih; meja tanpa manusia terhubung tidak pernah diakhiri sendiri). Dipanggil saat ada yang
-   * memilih, dan saat pemilih berkurang (terputus/keluar). True = permainan diakhiri.
+   * memilih, dan saat pemilih berkurang (terputus/keluar). True = permainan diakhiri. Meja kompetisi
+   * tidak punya voting akhiri: suara yang terbawa dari simpanan lama dibuang, tidak pernah berlaku.
    */
   private cekVotingAkhiri(): boolean {
     const g = this.d.game;
-    if (g?.status !== 'putaranSelesai' || !this.d.setujuAkhiri.length || this.jumlahManusiaTerhubung === 0) return false;
+    if (this.d.kompetisi) {
+      if (this.d.setujuAkhiri.length) this.d.setujuAkhiri = [];
+      return false;
+    }
+    if (g?.status !== 'putaranSelesai' || !this.d.setujuAkhiri.length) return false;
     const pemilih = this.pemilihVoting();
     if (!pemilih.length || !pemilih.every((i) => this.d.setujuAkhiri.includes(i))) return false;
     this.d.setujuAkhiri = [];
@@ -840,9 +854,11 @@ export class Meja {
   /**
    * Mode kaldu (#42): setuju/batal "putaran berikutnya terakhir". Sama seperti voting akhiri: hanya di
    * antara putaran, berlaku kalau semua manusia yang masih terhubung setuju (meja offline dengan satu
-   * manusia: langsung berlaku).
+   * manusia: langsung berlaku). Meja kompetisi tidak punya voting ini (keputusan pemilik 24 Okt 2026):
+   * putaran kaldu mulai sendiri di batas putaran.
    */
   private putaranTerakhir(kursi: number, setuju: boolean): void {
+    if (this.d.kompetisi) galat(TEKS_TANPA_VOTING_KOMPETISI);
     const g = this.d.game;
     if (g?.status !== 'putaranSelesai') galat('Putaran terakhir cuma bisa diminta di antara putaran.');
     if (g.konfigurasi.modeKaldu !== true) galat('Meja ini nggak pakai mode kaldu.');
@@ -863,12 +879,12 @@ export class Meja {
     const g = this.d.game;
     const setuju = this.d.setujuKaldu ?? [];
     if (g?.status !== 'putaranSelesai' || !setuju.length) return false;
-    if (g.konfigurasi.modeKaldu !== true || putaranBerikutKaldu(g)) {
-      // Suara yang sudah tidak berarti (misalnya dari simpanan rusak): dibuang.
+    if (g.konfigurasi.modeKaldu !== true || putaranBerikutKaldu(g) || this.d.kompetisi) {
+      // Suara yang sudah tidak berarti (misalnya dari simpanan rusak, atau meja kompetisi yang tidak
+      // punya voting ini): dibuang.
       this.aturSetujuKaldu([]);
       return false;
     }
-    if (this.jumlahManusiaTerhubung === 0) return false;
     const pemilih = this.pemilihVoting();
     if (!pemilih.length || !pemilih.every((i) => setuju.includes(i))) return false;
     this.aturSetujuKaldu([]);

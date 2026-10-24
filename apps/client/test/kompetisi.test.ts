@@ -9,6 +9,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   Meja,
+  kursiDicatatKompetisi,
+  nilaiKompetisi,
+  permainanKompetisiDihitung,
+  teksNilai,
   PENGATURAN_KOMPETISI_BAWAAN,
   PILIHAN_BATAS_PUTARAN_KOMPETISI,
   PILIHAN_DETIK_GILIRAN_KOMPETISI,
@@ -17,6 +21,8 @@ import {
   type InfoMeja,
   type PesanServer,
 } from '@remi/meja';
+import { BAB_BANTUAN } from '../src/konten/bantuan';
+import { TEKS_KALDU } from '../src/konten/kaldu';
 import { simpan } from '../src/penyimpanan';
 import { tutupSemuaJendela } from '../src/ui/dom';
 import { htmlKlasemen, htmlPiala, keteranganWaktu, POLLING_DETAIL_MS, renderKompetisi, ringkasAturan, type AksiKompetisi } from '../src/ui/kompetisi';
@@ -190,6 +196,28 @@ describe('teks kompetisi', () => {
       expect(t).not.toMatch(/\bpoin\b/i);
       expect(t).not.toMatch(/kode meja/i);
     }
+  });
+
+  // Keputusan pemilik 24 Okt 2026: yang keluar tak dihitung, dan meja kompetisi tanpa voting.
+  it('cara hitung dan Bantuan: contoh "1 yang keluar" sama dengan aturan; tinggal satu = yang keluar saja dicatat; tanpa voting', () => {
+    const contoh = nilaiKompetisi([
+      { nama: 'A', bot: false, skor: 90 },
+      { nama: 'B', bot: false, skor: 40 },
+      { nama: 'Kabur', bot: false, skor: 300, keluar: true },
+      { nama: 'C', bot: false, skor: -10 },
+    ]).map((v) => teksNilai(v.nilai).replace(',0', ''));
+    expect(contoh).toEqual(['10', '5', '0', '0']);
+    expect(TEKS_KOMPETISI.caraHitung).toContain(`(meja 4 orang dengan 1 yang keluar: ${contoh[0]}; ${contoh[1]}; ${contoh[3]})`);
+    expect(TEKS_KOMPETISI.caraHitung).toContain('cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0');
+    expect(permainanKompetisiDihitung([{ keluar: true }, {}, { keluar: true }, { keluar: true }])).toBe(false);
+    expect(kursiDicatatKompetisi([{ keluar: true }, {}, { keluar: true }, { keluar: true }])).toEqual([true, false, true, true]);
+    const online = JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'online'));
+    expect(online).toContain(`Meja 4 orang dengan 1 yang keluar: juara ${contoh[0]}; kedua ${contoh[1]}; ketiga ${contoh[3]}.`);
+    expect(online).toContain('Kalau cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0.');
+    expect(online).toContain(`Di meja kompetisi tidak ada Akhiri permainan maupun ${TEKS_KALDU.tombol}`);
+    // Kalimat lama (voting akhiri butuh semua peserta) tidak ada lagi.
+    expect(online).not.toContain('termasuk yang sedang terputus');
+    expect(JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'akhir-permainan'))).toContain('Di meja kompetisi tidak ada sepakat berhenti.');
   });
 
   it('ringkasan aturan memuat pemain per meja dan batas putaran; keterangan waktu sesuai status', () => {
@@ -638,6 +666,7 @@ describe('lobi meja kompetisi', () => {
     expect(opsiKonfirmasiKeluar({ asal: 'lobi', offline: false }).pesan).toContain('kode meja');
   });
 
+  // Keputusan pemilik 24 Okt 2026: yang keluar selalu dicatat 0, jadi kalimatnya selalu ada di meja kompetisi.
   it('konfirmasi keluar di tengah permainan menyebut nilai 0; sesudah selesai tanpa ajakan main lagi', () => {
     const o = opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true, kompetisi: true });
     expect(o.pesan).toContain(TEKS_KOMPETISI.keluarMeja);

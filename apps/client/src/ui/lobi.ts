@@ -57,7 +57,10 @@ export interface KeadaanKeluar {
    * tengah permainan dihitung juru kunci, jadi pemain diberi tahu.
    */
   masukPeringkat?: boolean;
-  /** Meja kompetisi (#51): keluar di tengah permainan = nilai 0; di lobi, duduk lagi lewat layar Kompetisi. */
+  /**
+   * Meja kompetisi (#51): keluar di tengah permainan = nilai 0, selalu dicatat (keputusan pemilik 24
+   * Okt 2026); di lobi, duduk lagi lewat layar Kompetisi.
+   */
   kompetisi?: boolean;
 }
 

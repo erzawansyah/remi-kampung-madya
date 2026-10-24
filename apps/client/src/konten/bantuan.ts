@@ -665,7 +665,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'daftar',
         butir: [
-          'Sepakat berhenti: di antara putaran, semua pemain manusia yang terhubung setuju mengakhiri permainan.',
+          'Sepakat berhenti: di antara putaran, semua pemain manusia yang terhubung setuju mengakhiri permainan. Di meja kompetisi tidak ada sepakat berhenti.',
           'Batas putaran: permainan selesai setelah jumlah putaran tertentu.',
           'Batas skor atas: ada pemain yang skor totalnya mencapai batas itu atau lebih.',
           'Batas skor bawah: ada pemain yang skor totalnya turun sampai batas itu atau lebih rendah.',
@@ -693,7 +693,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Putaran kaldu mulai di putaran ke-N kalau batas putaran diisi N, atau di putaran sesudah semua pemain setuju "putaran berikutnya terakhir" (di antara putaran).',
           'Putaran kaldu yang ditutup mentung mengakhiri permainan.',
           'Deck habis dan belum ada yang mentung? Kaldu lagi: putaran berikutnya juga putaran kaldu, sampai ada yang mentung. Pengocoknya tetap yang skornya paling rendah.',
-          'Di mode kaldu batas skor tidak dipakai, dan batas putaran cuma menandai mulainya kaldu. "Akhiri permainan" tetap bisa di antara putaran.',
+          'Di mode kaldu batas skor tidak dipakai, dan batas putaran cuma menandai mulainya kaldu. "Akhiri permainan" tetap bisa di antara putaran, kecuali di meja kompetisi.',
         ],
       },
       {
@@ -813,11 +813,12 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'daftar',
         butir: [
-          'Nilai tiap permainan 0 sampai 10, dari banyaknya peserta di meja itu yang kalah skor darimu. Meja 4 orang: juara 10; kedua 6,7; ketiga 3,3; juru kunci 0. Skor sama tidak saling mengalahkan. Keluar di tengah permainan = 0.',
+          'Nilai tiap permainan 0 sampai 10, dari banyaknya peserta di meja itu yang kalah skor darimu. Meja 4 orang: juara 10; kedua 6,7; ketiga 3,3; juru kunci 0. Skor sama tidak saling mengalahkan.',
+          'Keluar di tengah permainan = 0, dan yang keluar tidak dihitung sebagai lawan: nilai yang lain dihitung dari peserta yang bertahan sampai akhir saja. Meja 4 orang dengan 1 yang keluar: juara 10; kedua 5; ketiga 0. Kalau cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0.',
           `Klasemen diurutkan dari rata-rata nilai per permainan, dan kamu masuk klasemen sesudah ${MIN_MAIN_KOMPETISI} kali main. Rata-rata sama: yang lebih sering main di atas, lalu rata-rata skor akhir.`,
           'Permainan yang sudah mulai sebelum kompetisi berakhir tetap dihitung. Juaranya diumumkan sesudah meja terakhir selesai, lalu dapat 🏆 di samping namanya, juga di Riwayat & peringkat.',
           `Meja kompetisi lakennya biru dan bar atasnya menulis nama kompetisi. Sesudah permainan selesai, klasemen akhir menampilkan nilai tiap peserta dan naik-turun peringkatnya. Tombol ${TEKS_KOMPETISI.kembaliKompetisi} membawamu ke daftar meja lagi.`,
-          'Meja kompetisi selalu punya batas waktu per giliran. Di hasil putaran, kalau host belum memulai putaran berikutnya, putarannya mulai sendiri sebentar kemudian. Akhiri permainan di meja kompetisi baru berlaku kalau semua peserta yang masih di meja setuju, termasuk yang sedang terputus.',
+          `Meja kompetisi selalu punya batas waktu per giliran. Di hasil putaran, kalau host belum memulai putaran berikutnya, putarannya mulai sendiri sebentar kemudian. Di meja kompetisi tidak ada Akhiri permainan maupun ${TEKS_KALDU.tombol}: permainan selesai sendiri di batas putaran (atau batas skor kalau diisi), dan kalau mode kaldu dipakai, putaran kaldu mulai sendiri di batas putaran.`,
           'Kompetisi bisa disudahi lebih awal kalau lebih dari separuh peserta setuju.',
           'Tiket peserta tersimpan di HP yang dipakai waktu ikut serta, jadi main kompetisi dari HP itu.',
         ],
