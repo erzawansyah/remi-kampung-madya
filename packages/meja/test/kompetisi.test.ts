@@ -326,6 +326,44 @@ describe('yang keluar tak dihitung (keputusan pemilik 24 Okt 2026)', () => {
     expect(hasil.find((h) => h.peserta === 1)).toMatchObject({ dikalahkan: 0, lawan: 1 });
   });
 
+  // Celah yang diketahui (tinjauan 24 Okt 2026, menunggu keputusan pemilik; docs #51 "Sisa celah"):
+  // keluar yang membuat yang bertahan tinggal satu menghapus permainan itu untuk siapa pun, termasuk
+  // kekalahan yang keluar. Test ini mengunci perilaku sekarang supaya perubahannya disengaja.
+  it('celah yang diketahui: yang kalah di meja 2 orang lalu keluar tidak tercatat main sama sekali', () => {
+    // Ani lawan Budi, Cici, dan Dodi (yang tiga ini main jujur), semuanya di meja 2 orang.
+    const empat = ['Ani', 'Budi', 'Cici', 'Dodi'].map((nama, i) => ({ id: i + 1, nama }));
+    const lawan = [2, 3, 4];
+    const sesama: Kursi[][] = [
+      [{ peserta: 2, skor: 50 }, { peserta: 3, skor: -50 }],
+      [{ peserta: 3, skor: 50 }, { peserta: 4, skor: -50 }],
+      [{ peserta: 4, skor: 50 }, { peserta: 2, skor: -50 }],
+      [{ peserta: 2, skor: -50 }, { peserta: 3, skor: 50 }],
+      [{ peserta: 3, skor: -50 }, { peserta: 4, skor: 50 }],
+      [{ peserta: 4, skor: -50 }, { peserta: 2, skor: 50 }],
+    ];
+    const menang = lawan.map((l): Kursi[] => [{ peserta: 1, skor: 100 }, { peserta: l, skor: -100 }]);
+    const ani = (keluar: boolean) =>
+      hitungKlasemenKompetisi(
+        empat,
+        catat(...menang, ...lawan.map((l): Kursi[] => [{ peserta: 1, skor: -100, keluar }, { peserta: l, skor: 100 }]), ...sesama),
+      );
+    // Ani keluar setiap kali kalah: hanya tiga kemenangannya yang tercatat.
+    const curang = ani(true);
+    expect(curang.peringkat.map((b) => [b.nama, b.peringkat, b.main, teksNilai(b.rataNilai), b.keluar])).toEqual([
+      ['Ani', 1, 3, '10,0', 0],
+      ['Budi', 2, 5, '4,0', 0],
+      ['Cici', 2, 5, '4,0', 0],
+      ['Dodi', 2, 5, '4,0', 0],
+    ]);
+    // Main jujur sampai habis: semuanya 5,0.
+    expect(ani(false).peringkat.map((b) => [b.nama, b.main, teksNilai(b.rataNilai)])).toEqual([
+      ['Ani', 6, '5,0'],
+      ['Budi', 6, '5,0'],
+      ['Cici', 6, '5,0'],
+      ['Dodi', 6, '5,0'],
+    ]);
+  });
+
   it('isi pesan kompetisiHasil dengan yang keluar: nilai 0 (keluar), yang lain dibagi yang bertahan', () => {
     const pemain = [
       { kursi: 0, nama: 'Ani', bot: false, skor: 80, peserta: 1 },

@@ -55,7 +55,7 @@ import {
   tanda,
   teksCaraSelesai,
 } from './ui/rincianSkor';
-import { mejaMasukPeringkat, opsiKonfirmasiKeluar } from './ui/lobi';
+import { keluarKompetisiTercatat, mejaMasukPeringkat, opsiKonfirmasiKeluar } from './ui/lobi';
 import { ATRIBUT_LUAR, KEDAI, TAUTAN_KEDAI } from './konten/kedai';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang } from './ui/jendelaMalas';
@@ -3102,12 +3102,23 @@ export class KontrolMeja implements AksiAdegan {
       if (menang) getar('menang');
       const hasil = menang ? 'Selamat, kamu juara!' : `Permainan selesai. Kamu peringkat ${peringkat[v.saya]}.`;
       const tutup = penutup.selesai ? ` ${teksPengumuman(TEKS_TUTORIAL.selesai.judul, TEKS_TUTORIAL.selesai.teks)}` : '';
-      const h = kompetisi ? this.hasilKompetisi?.pemain.find((p) => p.kursi === v.saya) : undefined;
-      const nilai = h ? ` ${TEKS_KOMPETISI.judulHasil}: ${teksHasilKompetisi(h, this.hasilKompetisi!.minMain, this.hasilKompetisi!.jumlahPeringkat)}.` : '';
-      umumkan(hasil + nilai + tutup);
+      umumkan(hasil + (kompetisi ? this.pengumumanHasilKompetisi(v.saya) : '') + tutup);
     }
     // Penutup latihan sudah tampil: baru sekarang tutorial dianggap tuntas (tidak ditawarkan lagi).
     if (penutup.selesai) this.tutorial?.tuntaskan();
+  }
+
+  /**
+   * Bagian hasil kompetisi di pengumuman klasemen akhir (pesannya datang sebelum klasemen tampil):
+   * baris milikku, atau kalimat "tidak masuk klasemen" kalau tinggal satu yang bertahan (keputusan
+   * pemilik 24 Okt 2026). Diawali spasi; '' kalau belum ada pesannya atau tidak ada baris milikku.
+   */
+  private pengumumanHasilKompetisi(saya: number): string {
+    const h = this.hasilKompetisi;
+    if (!h) return '';
+    if (h.tidakDihitung === 'keluar') return ` ${TEKS_KOMPETISI.tidakDihitungKeluar}`;
+    const milikku = h.pemain.find((p) => p.kursi === saya);
+    return milikku ? ` ${TEKS_KOMPETISI.judulHasil}: ${teksHasilKompetisi(milikku, h.minMain, h.jumlahPeringkat)}.` : '';
   }
 
   /**
@@ -3240,6 +3251,7 @@ export class KontrolMeja implements AksiAdegan {
                   selesai: this.view?.status === 'selesai',
                   masukPeringkat: mejaMasukPeringkat(this.info),
                   kompetisi: !!this.info?.kompetisi,
+                  kompetisiTercatat: keluarKompetisiTercatat(this.info),
                 }),
               ).then((ya) => {
                 if (!ya || this.hancur) return;

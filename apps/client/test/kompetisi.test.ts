@@ -25,7 +25,7 @@ import { TEKS_KALDU } from '../src/konten/kaldu';
 import { simpan } from '../src/penyimpanan';
 import { tutupSemuaJendela } from '../src/ui/dom';
 import { htmlKlasemen, htmlPiala, keteranganWaktu, POLLING_DETAIL_MS, renderKompetisi, ringkasAturan, type AksiKompetisi } from '../src/ui/kompetisi';
-import { opsiKonfirmasiKeluar, renderLobi, teksStatusLobiKompetisi } from '../src/ui/lobi';
+import { keluarKompetisiTercatat, opsiKonfirmasiKeluar, renderLobi, teksStatusLobiKompetisi } from '../src/ui/lobi';
 import { TEKS_KOMPETISI, teksHasilKompetisi, teksMenungguMeja, teksMenungguPeserta, teksPeringkatKompetisi, teksPiala } from '../src/konten/kompetisi';
 
 const akar = () => document.getElementById('ui')!;
@@ -665,12 +665,40 @@ describe('lobi meja kompetisi', () => {
   });
 
   it('konfirmasi keluar di tengah permainan menyebut nilai 0; sesudah selesai tanpa ajakan main lagi', () => {
-    const o = opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true, kompetisi: true });
+    const o = opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true, kompetisi: true, kompetisiTercatat: true });
     expect(o.pesan).toContain(TEKS_KOMPETISI.keluarMeja);
     expect(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true }).pesan).not.toContain(TEKS_KOMPETISI.keluarMeja);
     const selesai = opsiKonfirmasiKeluar({ asal: 'meja', offline: false, selesai: true, kompetisi: true });
     expect(selesai.pesan).toBe(TEKS_KOMPETISI.keluarSelesai);
     expect(selesai.pesan).not.toMatch(/main lagi/i);
+  });
+
+  // Keputusan pemilik 24 Okt 2026: kalau sesudah aku keluar tinggal satu yang bertahan, permainan itu
+  // tidak dihitung untuk siapa pun, jadi nilai 0 tidak tercatat dan jangan dijanjikan.
+  it('konfirmasi keluar di meja kompetisi yang tidak akan dihitung: tanpa janji nilai 0, tanpa menyebut batal', () => {
+    const o = opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true, kompetisi: true, kompetisiTercatat: false });
+    expect(o.pesan).not.toContain(TEKS_KOMPETISI.keluarMeja);
+    expect(o.pesan).not.toMatch(/nilai|klasemen|batal|tidak (masuk|dihitung)/i);
+    expect(o.pesan).toContain('Kursimu diteruskan warga kedai');
+  });
+
+  it('keluarKompetisiTercatat: yang bertahan sesudah aku keluar = kursi manusia selain aku, paling sedikit 2', () => {
+    const info = (kursiSaya: number | null, ...jenis: ('manusia' | 'bot')[]) => ({
+      kursiSaya,
+      kursi: jenis.map((j) => ({ jenis: j, nama: 'x', terhubung: true, level: 'normal' as const })),
+    });
+    // Meja 4 orang utuh: sesudah aku keluar masih 3 yang bertahan.
+    expect(keluarKompetisiTercatat(info(0, 'manusia', 'manusia', 'manusia', 'manusia'))).toBe(true);
+    // Satu sudah keluar (diteruskan warga kedai): masih 2 yang bertahan.
+    expect(keluarKompetisiTercatat(info(2, 'manusia', 'bot', 'manusia', 'manusia'))).toBe(true);
+    // Dua sudah keluar: sesudah aku tinggal satu.
+    expect(keluarKompetisiTercatat(info(0, 'manusia', 'bot', 'bot', 'manusia'))).toBe(false);
+    // Meja 2 orang: selalu tinggal satu.
+    expect(keluarKompetisiTercatat(info(1, 'manusia', 'manusia'))).toBe(false);
+    expect(keluarKompetisiTercatat(null)).toBe(false);
+    // Sama dengan aturan di @remi/meja.
+    expect(permainanKompetisiDihitung([{ keluar: true }, { keluar: false }, { keluar: false }])).toBe(true);
+    expect(permainanKompetisiDihitung([{ keluar: true }, { keluar: false }])).toBe(false);
   });
 });
 

@@ -79,7 +79,7 @@ import { TEKS_KONEKSI, teksDijalankanWarga, teksMentungTerlewat } from '../src/k
 import { KEDAI } from '../src/konten/kedai';
 import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { _setelUlangCache, preferensi } from '../src/preferensi';
-import { mejaMasukPeringkat, opsiKonfirmasiKeluar } from '../src/ui/lobi';
+import { keluarKompetisiTercatat, mejaMasukPeringkat, opsiKonfirmasiKeluar } from '../src/ui/lobi';
 import type { MejaScene, ModelMeja } from '../src/game/MejaScene';
 import type { PesanKeMeja, StatusKoneksi } from '../src/koneksi';
 
@@ -1742,7 +1742,11 @@ describe('meja kompetisi (#51 versi 2)', () => {
   it('permainan yang tidak dihitung (datang sebelum klasemen tampil): satu kalimat ramah, tanpa nilai', async () => {
     meja = await mejaKompetisiSiapMentung();
     meja.kontrol.terimaHasilKompetisi(tidakDihitung);
+    vi.mocked(umumkan).mockClear();
     const dlg = await sampaiHasil(meja, '[data-selesai]');
+    // Pengumuman klasemen akhir ikut menyebut kalimatnya (pesan ini datang sebelum klasemen tampil).
+    const pengumuman = vi.mocked(umumkan).mock.calls.map(([t]) => t).filter((t) => t.includes('Selamat, kamu juara!') || t.startsWith('Permainan selesai.'));
+    expect(pengumuman).toEqual([`Selamat, kamu juara! ${TEKS_KOMPETISI.tidakDihitungKeluar}`]);
     const bagian = dlg.querySelector('[data-hasil-kompetisi]')!;
     expect(bagian.textContent!.trim()).toBe('Permainan ini tidak masuk klasemen karena hampir semua pemain keluar.');
     expect(TEKS_KOMPETISI.tidakDihitungKeluar).toBe('Permainan ini tidak masuk klasemen karena hampir semua pemain keluar.');
@@ -1861,6 +1865,32 @@ describe('konfirmasi keluar meja', () => {
     const d = document.querySelector<HTMLElement>('.dialog.konfirmasi')!;
     expect(d.querySelector('p')!.textContent).toBe(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true }).pesan);
     expect(d.querySelector('p')!.textContent).toContain('juru kunci');
+    d.querySelector<HTMLElement>('[data-tidak]')!.click();
+    await tunggu();
+    expect(meja.terkirim.some((p) => p.t === 'keluar')).toBe(false);
+  });
+
+  // Keputusan pemilik 24 Okt 2026: nilai 0 hanya disebut kalau permainannya tetap dihitung sesudah aku keluar.
+  it('menu meja kompetisi → Keluar meja: nilai 0 disebut hanya kalau masih ada 2 yang bertahan sesudah aku keluar', async () => {
+    meja = await mejaKompetisiSiapMentung();
+    const bukaKonfirmasi = () => {
+      meja!.akar.querySelector<HTMLElement>('[data-a="menu"]')!.click();
+      document.querySelector<HTMLElement>('#modal [data-m="keluar"]')!.click();
+      return document.querySelector<HTMLElement>('.dialog.konfirmasi')!;
+    };
+    let d = bukaKonfirmasi();
+    expect(keluarKompetisiTercatat(meja.info)).toBe(true);
+    expect(d.querySelector('p')!.textContent).toContain(TEKS_KOMPETISI.keluarMeja);
+    d.querySelector<HTMLElement>('[data-tidak]')!.click();
+    await tunggu();
+    // Dua lawan sudah keluar (kursinya diteruskan warga kedai): sesudah aku keluar tinggal satu.
+    meja.info = { ...meja.info, kursi: meja.info.kursi.map((k, i) => ({ ...k, jenis: i === 1 || i === 2 ? 'bot' : 'manusia' })) };
+    meja.kontrol.perbarui(meja.info, null);
+    d = bukaKonfirmasi();
+    expect(d.querySelector('p')!.textContent).toBe(
+      opsiKonfirmasiKeluar({ asal: 'meja', offline: false, masukPeringkat: true, kompetisi: true, kompetisiTercatat: false }).pesan,
+    );
+    expect(d.querySelector('p')!.textContent).not.toContain(TEKS_KOMPETISI.keluarMeja);
     d.querySelector<HTMLElement>('[data-tidak]')!.click();
     await tunggu();
     expect(meja.terkirim.some((p) => p.t === 'keluar')).toBe(false);

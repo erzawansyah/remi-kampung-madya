@@ -8,7 +8,7 @@
 // mulai sendiri begitu semua kursi terisi peserta yang tersambung), aturannya ditampilkan sebagai teks.
 
 import type { LevelBot } from '@remi/engine';
-import type { InfoKursi, InfoMeja, PengaturanMeja, PesanKlien } from '@remi/meja';
+import { permainanKompetisiDihitung, type InfoKursi, type InfoMeja, type PengaturanMeja, type PesanKlien } from '@remi/meja';
 import { TEKS_KALDU } from '../konten/kaldu';
 import { TEKS_KOMPETISI, teksMenungguPeserta } from '../konten/kompetisi';
 import { DAFTAR_LEVEL_WARGA, infoLevel, labelLevelKecil } from '../konten/levelWarga';
@@ -59,11 +59,27 @@ export interface KeadaanKeluar {
   masukPeringkat?: boolean;
   /** Meja kompetisi (#51): keluar di tengah permainan = nilai 0; di lobi, duduk lagi lewat layar Kompetisi. */
   kompetisi?: boolean;
+  /**
+   * Meja kompetisi yang tetap dihitung kalau aku keluar sekarang (`keluarKompetisiTercatat`): hanya
+   * dengan ini konfirmasi di tengah permainan menyebut nilai 0. Kalau sesudah aku keluar tinggal satu
+   * yang bertahan, permainannya tidak dihitung untuk siapa pun (keputusan pemilik 24 Okt 2026), jadi
+   * nilai 0 jangan dijanjikan. Kalimatnya juga tidak menyebut bahwa keluar membatalkan permainan.
+   */
+  kompetisiTercatat?: boolean;
 }
 
 /** Ada minimal 2 kursi manusia (yang keluar sudah jadi warga kedai): permainannya masuk peringkat online. */
 export const mejaMasukPeringkat = (info: Pick<InfoMeja, 'kursi'> | null | undefined): boolean =>
   (info?.kursi.filter((k) => k.jenis === 'manusia').length ?? 0) >= 2;
+
+/**
+ * Meja kompetisi: kalau aku keluar sekarang, permainan ini tetap masuk klasemen (aturannya
+ * `permainanKompetisiDihitung` di @remi/meja), jadi nilaiku 0 tercatat. Kursi yang sudah keluar
+ * diteruskan warga kedai, dan meja kompetisi tidak punya warga kedai lain, jadi yang bertahan =
+ * kursi manusia selain aku. Bisa berubah kalau sesudahnya ada lagi yang keluar.
+ */
+export const keluarKompetisiTercatat = (info: Pick<InfoMeja, 'kursi' | 'kursiSaya'> | null | undefined): boolean =>
+  !!info?.kursi.length && permainanKompetisiDihitung(info.kursi.map((k, i) => ({ keluar: k.jenis !== 'manusia' || i === info.kursiSaya })));
 
 /**
  * Teks konfirmasi keluar meja. Satu sumber untuk semua jalur supaya pemain selalu membaca hal
@@ -105,7 +121,7 @@ export function opsiKonfirmasiKeluar(k: KeadaanKeluar): OpsiKonfirmasi {
     judul: 'Keluar dari meja?',
     pesan: `Kursimu diteruskan warga kedai sampai permainan selesai, dan kamu nggak bisa balik ke kursi ini lagi.${
       k.masukPeringkat ? ' Di peringkat online kamu dihitung juru kunci.' : ''
-    }${k.kompetisi ? ` ${TEKS_KOMPETISI.keluarMeja}` : ''}`,
+    }${k.kompetisi && k.kompetisiTercatat ? ` ${TEKS_KOMPETISI.keluarMeja}` : ''}`,
     ya: 'Keluar',
     tidak: 'Tetap di sini',
     bahaya: true,
