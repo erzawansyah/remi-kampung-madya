@@ -4,6 +4,7 @@
 import { DAFTAR_LEVEL_BOT, type LevelBot, type SpesifikasiKartuJadi } from '@remi/engine';
 import {
   DAFTAR_EMOTE,
+  DAFTAR_LEDEKAN,
   EMOTE_LAMA,
   MAKS_PESAN,
   MAKS_TIKET,
@@ -190,6 +191,16 @@ export function validasiTiket(x: unknown): TiketKompetisi | null {
   return { kode: x.kode.trim().toUpperCase(), token: x.token };
 }
 
+/**
+ * Isi ledekan yang sah: salah satu DAFTAR_LEDEKAN atau DAFTAR_EMOTE, apa adanya; emote versi lama
+ * (EMOTE_LAMA) diganti padanannya. Selain itu null: ledekan tidak menerima teks bebas.
+ */
+export function isiLedek(x: unknown): string | null {
+  if (typeof x !== 'string') return null;
+  if ((DAFTAR_LEDEKAN as readonly string[]).includes(x) || (DAFTAR_EMOTE as readonly string[]).includes(x)) return x;
+  return EMOTE_LAMA.get(x) ?? null;
+}
+
 /** Ubah data mentah (hasil JSON.parse) menjadi PesanKlien yang sah, atau null. */
 export function validasiPesan(x: unknown): PesanKlien | null {
   if (!isObj(x) || typeof x.t !== 'string') return null;
@@ -216,6 +227,7 @@ export function validasiPesan(x: unknown): PesanKlien | null {
     case 'keluar':
     case 'mainLagi':
     case 'siapJoker':
+    case 'siapLanjut':
     case 'ping':
       return { t: x.t };
     case 'aturKursi':
@@ -246,6 +258,12 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       if (x.isi.length > BATAS_PESAN_MENTAH) return null;
       const isi = rapikanPesan(x.isi);
       return isi ? { t: 'emote', isi } : null;
+    }
+    case 'ledek': {
+      // Kursi 0..5 (meja paling banyak 6 pemain); sah tidaknya sasaran diputuskan meja.
+      if (!isInt(x.ke) || x.ke < 0 || x.ke > 5) return null;
+      const isi = isiLedek(x.isi);
+      return isi ? { t: 'ledek', ke: x.ke, isi } : null;
     }
     default:
       return null;

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
+import { pilihAksiBot, Rng } from '@remi/engine';
 import { NAMA_LAWAN_BAWAAN, type PesanKlien, type PesanServer } from '@remi/meja';
 import { jalankanServer, type ServerRemi } from '../src/server.js';
 
@@ -173,4 +174,74 @@ describe('server WebSocket', () => {
     lama.tutup();
     baru.tutup();
   });
+});
+
+describe('hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 Okt 2026)', () => {
+  /**
+   * Mainkan putaran pertama lewat WebSocket sampai hasilnya tampil. Giliran manusia dipilih bot
+   * normal dari view yang diterima tiap klien; warga kedai di kursi 2 dijalankan server.
+   */
+  async function sampaiHasil(klien: Klien[]): Promise<void> {
+    const rng = new Rng(7);
+    const sudah = new Map<Klien, number>();
+    for (let i = 0; i < 3000; i++) {
+      for (const k of klien) {
+        const daftar = k.pesan.filter((p): p is Extract<PesanServer, { t: 'view' }> => p.t === 'view');
+        const v = daftar.at(-1)?.view;
+        if (!v) continue;
+        if (v.status === 'putaranSelesai') return;
+        // Satu aksi per view: view berikutnya datang sesudah aksi (atau aksi orang lain) diterapkan.
+        if (sudah.get(k) === daftar.length) continue;
+        const bisa =
+          v.status === 'susunAkhir' ? !v.putaran!.selesaiSusun[v.saya!] : v.status === 'putaranBerjalan' && v.putaran!.giliran === v.saya;
+        if (!bisa) continue;
+        sudah.set(k, daftar.length);
+        const { pemain: _, ...aksi } = pilihAksiBot(v, 'normal', rng) as { pemain: number };
+        await k.kirim({ t: 'aksi', aksi });
+      }
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    throw new Error('putaran tidak selesai');
+  }
+
+  it('host dikunci sampai Budi Siap; ledekan Ani sampai ke Budi; teks bebas ditolak', async () => {
+    const ani = new Klien(server.port);
+    await ani.kirim({ t: 'buat', nama: 'Ani', pengaturan: { jumlahPemain: 3, detikGiliran: 0 } });
+    const { kode } = await ani.tunggu('masuk');
+    const budi = new Klien(server.port);
+    await budi.kirim({ t: 'gabung', kode, nama: 'Budi' });
+    await budi.tunggu('masuk');
+    await ani.kirim({ t: 'aturKursi', kursi: 2, jenis: 'bot' });
+    await ani.tunggu('meja', (p) => p.info.kursi[2].jenis === 'bot');
+    await ani.kirim({ t: 'mulai', pengocok: 0 });
+    await ani.tunggu('meja', (p) => p.info.status === 'main');
+    await ani.kirim({ t: 'siapJoker' });
+    await budi.kirim({ t: 'siapJoker' });
+    await ani.tunggu('meja', (p) => p.info.status === 'main' && p.info.menungguJoker.length === 0);
+    await sampaiHasil([ani, budi]);
+
+    // Bawaan server: jeda 10 detik, sisa waktu relatif.
+    const info = (await ani.tunggu('meja', (p) => p.info.lanjut !== undefined)).info;
+    expect(info.lanjut!.sisaMs).toBeGreaterThan(5_000);
+    expect(info.lanjut!.sisaMs).toBeLessThanOrEqual(10_000);
+    expect(info.lanjut!.siap).toEqual([]);
+    await ani.kirim({ t: 'putaranBerikut' });
+    await ani.tunggu('error', (p) => p.pesan === 'Tunggu sebentar, yang lain masih lihat kartu.');
+
+    // Ledekan: diteruskan ke semua manusia, apa adanya.
+    await ani.kirim({ t: 'ledek', ke: 1, isi: 'Makan tuh!' });
+    expect(await budi.tunggu('ledek')).toEqual({ t: 'ledek', dari: 0, ke: 1, isi: 'Makan tuh!' });
+    expect(await ani.tunggu('ledek')).toEqual({ t: 'ledek', dari: 0, ke: 1, isi: 'Makan tuh!' });
+    await budi.kirim({ t: 'ledek', ke: 0, isi: 'ledekan karangan sendiri' } as Record<string, unknown>);
+    await budi.tunggu('error', (p) => p.pesan === 'Pesan tidak dikenali.');
+    expect(ani.pesan.filter((p) => p.t === 'ledek')).toHaveLength(1);
+
+    // Budi siap: kunci lepas, host bisa lanjut.
+    await budi.kirim({ t: 'siapLanjut' });
+    await ani.tunggu('meja', (p) => p.info.status === 'main' && p.info.lanjut === undefined);
+    await ani.kirim({ t: 'putaranBerikut' });
+    await ani.tunggu('view', (p) => p.view.status === 'putaranBerjalan' && p.view.putaran!.nomor === 2);
+    ani.tutup();
+    budi.tutup();
+  }, 20_000);
 });
