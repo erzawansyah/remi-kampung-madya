@@ -10,6 +10,7 @@ import {
   isJokerHidup,
   migrasiState,
   pilihAksiBot,
+  pungutanBerlaku,
   putaranBerikutKaldu,
   Rng,
   terapkanAksi,
@@ -1083,7 +1084,7 @@ function aksiAman(view: ViewPemain): Aksi {
               punyaKartuJadi: p.kartuJadi[saya].length > 0,
               sumberAmbil,
               kartuId: kartu.id,
-              pungutan: p.pungutan,
+              pungutan: pungutanBerlaku(p),
               ctx,
               asJokerBolehDibuangTanpaJadi: view.konfigurasi.asJokerBolehDibuangTanpaJadi,
             });

@@ -11,6 +11,7 @@ import {
   namaKartu,
   namaRank,
   opsiPeranJoker,
+  pungutanBerlaku,
   putaranBerikutKaldu,
   validasiBuang,
   validasiKartuJadi,
@@ -1190,7 +1191,7 @@ export class KontrolMeja implements AksiAdegan {
       const mode = this.view!.status === 'susunAkhir' ? 'akhir' : p.sumberAmbil!;
       // Pungutan giliran ini (info publik di view): kembarannya tidak boleh tersisa sendirian (#53).
       const cek = coba(() =>
-        validasiTurunkan(this.tanganServer(), [spek], p.kartuJadi[this.saya].length > 0, mode, this.ctx(), p.pungutan),
+        validasiTurunkan(this.tanganServer(), [spek], p.kartuJadi[this.saya].length > 0, mode, this.ctx(), pungutanBerlaku(p)),
       );
       if (!cek.ok) return this.tolak(cek.pesan, 'tangan');
       this.kirimAksi({ jenis: 'turunkan', kartuJadi: [spek] });
@@ -1284,7 +1285,7 @@ export class KontrolMeja implements AksiAdegan {
           sumberAmbil: pp.sumberAmbil!,
           kartuId,
           ...(kartuIdLain.length ? { kartuIdLain } : {}),
-          pungutan: pp.pungutan,
+          pungutan: pungutanBerlaku(pp),
           ctx: this.ctx(),
           asJokerBolehDibuangTanpaJadi: v!.konfigurasi.asJokerBolehDibuangTanpaJadi,
         }),

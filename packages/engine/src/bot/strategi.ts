@@ -8,8 +8,8 @@
 // Arena: selalu menurunkan kartu jadi rugi 17–67 poin per putaran dibanding menahannya.
 // Mentung pakai beberapa joker hidup sekaligus (#41) dipakai kalau sisa tangan bisa habis jadi kartu jadi;
 // paling banyak 2 joker (#52). Pentungan tidak pernah kembaran kartu yang dipungut giliran itu (#53): rencana
-// mentung, buangan, dan turunkan memakai pungutan giliran itu (ViewPutaran.pungutan, atau kartu yang diambil
-// cara mulung yang sedang dinilai) lewat validator yang sama dengan mesin.
+// mentung, buangan, dan turunkan memakai pungutan giliran itu (pungutanBerlaku(view.putaran), atau kartu yang
+// diambil cara mulung yang sedang dinilai) lewat validator yang sama dengan mesin.
 // Putaran kaldu (#42): pentungan dikali dua, jadi kesiapan mentung, bahaya kepentung, dan pilihan cara
 // mentung ditimbang dua kali lipat (Penilai.pengali); bagian nilai lain tetap. Arena mini kaldu 16 Okt 2026
 // (150 seed, 2/3/4/4d pemain, dengan vs tanpa pengali): selisihnya di dalam selang kepercayaan di semua
@@ -29,6 +29,7 @@ import {
   kembaranPungutan,
   MAKS_KARTU_NUTUP,
   maksimalMulung,
+  pungutanBerlaku,
   validasiBuang,
   validasiMulung,
   validasiTurunkan,
@@ -556,9 +557,9 @@ function turunkanSekarang(nl: Penilai, tangan: readonly Kartu[], sumberAmbil: 'd
   for (let mask = 1; mask < 1 << m.length; mask++) {
     const pilih = m.filter((_, i) => mask & (1 << i));
     const spek = keSpesifikasi(pilih, tangan, nl.ctx);
-    const v = spek && coba(() => validasiTurunkan(tangan, spek, nl.punyaJadi, sumberAmbil, nl.ctx, nl.p.pungutan));
+    const v = spek && coba(() => validasiTurunkan(tangan, spek, nl.punyaJadi, sumberAmbil, nl.ctx, pungutanBerlaku(nl.p)));
     if (!v) continue;
-    const b = pilihBuang(nl, v.sisaTangan, true, sumberAmbil, nl.p.pungutan);
+    const b = pilihBuang(nl, v.sisaTangan, true, sumberAmbil, pungutanBerlaku(nl.p));
     if (!b) continue;
     // Jangan sampai tinggal 1 kartu sesudah buang: tangan 1 kartu tidak bisa mulung/mentung lagi (#30).
     const kunci = v.sisaTangan.length - 1 === 1 ? -1000 : 0;
@@ -580,9 +581,9 @@ function turunkanDemiAs(
   let terbaik: { spek: SpesifikasiKartuJadi[]; nilai: number } | null = null;
   for (const m of r.susunan) {
     const spek = keSpesifikasi([m], tangan, nl.ctx);
-    const v = spek && coba(() => validasiTurunkan(tangan, spek, false, sumberAmbil, nl.ctx, nl.p.pungutan));
+    const v = spek && coba(() => validasiTurunkan(tangan, spek, false, sumberAmbil, nl.ctx, pungutanBerlaku(nl.p)));
     if (!v) continue;
-    const b = pilihBuang(nl, v.sisaTangan, true, sumberAmbil, nl.p.pungutan);
+    const b = pilihBuang(nl, v.sisaTangan, true, sumberAmbil, pungutanBerlaku(nl.p));
     if (!b) continue;
     const nilai = b.nilai + v.kartuJadi.reduce((s, kj) => s + kj.kartu.reduce((a, d) => a + NILAI_TIPE[tipeKartu(d.sebagai)], 0), 0);
     if (nilai > nilaiSekarang && (!terbaik || nilai > terbaik.nilai)) terbaik = { spek: spek!, nilai };
@@ -783,7 +784,7 @@ export function aksiKuat(view: ViewPemain, par: ParamStrategi, gaya: KonteksGaya
 
   // Tahap main. Giliran mulung: mentung kalau tangan bisa habis.
   if (p.sumberAmbil === 'buangan') {
-    const r = rencanaMentung(nl, tangan, p.pungutan);
+    const r = rencanaMentung(nl, tangan, pungutanBerlaku(p));
     if (r) {
       if (r.spek.length === 0) {
         const [pertama, ...lain] = r.sisa;
@@ -799,7 +800,7 @@ export function aksiKuat(view: ViewPemain, par: ParamStrategi, gaya: KonteksGaya
     const r = nl.susun.cari(isiDari(tangan, nl.ctx), nl.punyaJadi, { catat: true });
     gaya.pesimis = perkiraanPesimis(gaya, r ? r.sisa.length : tangan.length);
   }
-  const calon = calonBuang(nl, tangan, nl.punyaJadi, p.sumberAmbil!, p.pungutan);
+  const calon = calonBuang(nl, tangan, nl.punyaJadi, p.sumberAmbil!, pungutanBerlaku(p));
   const b = terbaikDari(calon);
   // As baru boleh dibuang setelah punya kartu jadi di meja. Kalau membuang As (atau joker As)
   // lebih menguntungkan, turunkan dulu satu kartu jadi yang dipegang.
@@ -821,7 +822,7 @@ export function aksiKuat(view: ViewPemain, par: ParamStrategi, gaya: KonteksGaya
   // Tidak ada kartu yang sah dibuang (misalnya tangan As semua sebelum punya kartu jadi): turunkan dulu.
   const r = nl.susun.cari(isiDari(tangan, nl.ctx), nl.punyaJadi, { catat: true });
   const spek = r && keSpesifikasi(r.susunan, tangan, nl.ctx);
-  if (spek?.length && coba(() => validasiTurunkan(tangan, spek, nl.punyaJadi, p.sumberAmbil!, nl.ctx, p.pungutan))) {
+  if (spek?.length && coba(() => validasiTurunkan(tangan, spek, nl.punyaJadi, p.sumberAmbil!, nl.ctx, pungutanBerlaku(p)))) {
     return { jenis: 'turunkan', pemain: saya, kartuJadi: spek };
   }
   return null;

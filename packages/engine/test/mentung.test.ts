@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { buatDeck, kembaranPungutan, MAKS_KARTU_NUTUP, terapkan, terapkanAksi, validasiBuang, type GameState } from '../src/index.js';
+import {
+  buatDeck,
+  DAFTAR_LEVEL_BOT,
+  kembaranPungutan,
+  MAKS_KARTU_NUTUP,
+  migrasiState,
+  periksaInvarian,
+  pilihAksiBot,
+  pungutanBerlaku,
+  Rng,
+  terapkan,
+  terapkanAksi,
+  validasiBuang,
+  viewUntuk,
+  type GameState,
+} from '../src/index.js';
 import { ctx, id, kartu, kartuJadi, semuaSelesaiSusun, skenario, spek, type ItemTeks } from './bantu.js';
 
 // Pemain 1..4 = indeks 0..3, urutan 1→2→3→4 (arah 1). Giliran pemain 4.
@@ -821,6 +836,59 @@ describe('#53 (2 deck): pentungan tidak boleh kembaran kartu yang dipungut', () 
           asJokerBolehDibuangTanpaJadi: false,
         }),
       ).toThrow(PESAN);
+    });
+  });
+
+  describe('simpanan dari sebelum #53: kartu terakhir sudah kembaran pungutan', () => {
+    /** Contoh Ani dan Budi versi aturan lama: Budi sudah menurunkan J-Q-K Wajik, tinggal 8 Love miliknya. */
+    const warisan = (): GameState => {
+      const h0 = mulungAksi(contohAniBudi(), 1, 1, ['7 love', '8 love#1', '9 love']);
+      if (!h0.ok) throw new Error(h0.error.pesan);
+      const g: GameState = JSON.parse(JSON.stringify(h0.state));
+      const p = g.putaran!;
+      p.tangan[1] = [kartu('8 love')];
+      p.kartuJadi[1].push(kartuJadi(1, ctx(3), 'J wajik', 'Q wajik', 'K wajik'));
+      return g;
+    };
+
+    it('migrasiState menandai giliran itu, hanya di view pemain yang giliran; giliran ditutup dengan aturan lama', () => {
+      const g = migrasiState(warisan());
+      expect(periksaInvarian(g)).toEqual([]);
+      expect(g.putaran!.kembaranWarisan).toBe(true);
+      expect(pungutanBerlaku(g.putaran!)).toEqual([]);
+      expect(g.putaran!.pungutan.map((e) => e.kartu.id)).toEqual([id('8 love#1')]);
+      expect(migrasiState(g)).toEqual(g);
+      expect(viewUntuk(g, 1).putaran!.kembaranWarisan).toBe(true);
+      for (const lain of [0, 2, 3, null]) expect(JSON.stringify(viewUntuk(g, lain))).not.toContain('kembaranWarisan');
+      // Mentung pakai 8 Love seperti dulu: Ani tetap kepentung (dihitung dari pungutan asli), penanda hilang.
+      const sesudah = terapkan(g, { jenis: 'buang', pemain: 1, kartuId: id('8 love') });
+      expect(sesudah.status).toBe('susunAkhir');
+      expect(sesudah.putaran!.mentung).toMatchObject({ pemain: 1, kepentung: [0] });
+      expect(sesudah.putaran!).not.toHaveProperty('kembaranWarisan');
+      expect(periksaInvarian(sesudah)).toEqual([]);
+    });
+
+    it('semua level warga kedai menemukan aksi sah (dulu galat terus)', () => {
+      const g = migrasiState(warisan());
+      for (const level of DAFTAR_LEVEL_BOT) {
+        const aksi = pilihAksiBot(viewUntuk(g, 1), level, new Rng(1));
+        expect(aksi, level).toEqual({ jenis: 'buang', pemain: 1, kartuId: id('8 love') });
+        expect(terapkanAksi(g, aksi).ok, level).toBe(true);
+      }
+    });
+
+    it('state lain tidak pernah ditandai', () => {
+      // Sesudah mulung (tangan masih empat kartu), contoh kartu pungutan sebagai pentungan, dan 1 deck.
+      const h0 = mulungAksi(contohAniBudi(), 1, 1, ['7 love', '8 love#1', '9 love']);
+      if (!h0.ok) throw new Error(h0.error.pesan);
+      const tanpa = (g: GameState) => expect(migrasiState(g).putaran!).not.toHaveProperty('kembaranWarisan');
+      tanpa(h0.state);
+      tanpa(contohAniBudi());
+      const satuDeck = skenario({ rankJoker: 9, giliran: 3, tangan: [['2 waru'], ['3 waru'], ['4 waru'], ['5 love', '6 love', '8 kriting']], buangan: [['4 love', 2]] });
+      tanpa(terapkan(satuDeck, { jenis: 'mulung', pemain: 3, jumlah: 1, kartuJadi: [spek('4 love', '5 love', '6 love')] }));
+      // Sudah susun akhir: tidak ada giliran yang perlu ditutup.
+      const g = migrasiState(warisan());
+      tanpa(terapkan(g, { jenis: 'buang', pemain: 1, kartuId: id('8 love') }));
     });
   });
 

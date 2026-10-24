@@ -19,6 +19,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buatPermainan,
+  migrasiState,
   namaKartu,
   namaRank,
   terapkanAksi,
@@ -856,7 +857,8 @@ describe('#52/#53: alasan penolakan nutup dari mesin aturan', () => {
     expect(m.g.putaran!.mentung).toBeNull();
   });
 
-  it('#53: kartu terakhir kembaran pungutan (state dibuat langsung): bukan penanda mentung, tombol mati dengan alasan dari mesin', async () => {
+  /** Contoh Ani dan Budi sesudah turunkan J-Q-K Wajik (aturan lama): kartu terakhirku 8 Love, kembaran pungutan. */
+  function kartuTerakhirKembaran(): GameState {
     const h = terapkanAksi(skenario({ ...contohAniBudi, giliran: 0 }), {
       jenis: 'mulung',
       pemain: 0,
@@ -869,7 +871,24 @@ describe('#52/#53: alasan penolakan nutup dari mesin aturan', () => {
     g.putaran!.tangan[0] = g.putaran!.tangan[0].filter((k) => k.id === id('8 love'));
     g.putaran!.kartuJadi[0].push(kartuJadi(0, ctx(3), 'J wajik', 'Q wajik', 'K wajik'));
     g.peristiwa = [];
-    const m = (meja = new MejaUji(g));
+    return g;
+  }
+
+  it('#53: simpanan dari sebelum aturan ini (lewat migrasiState): giliran itu bisa ditutup dengan mentung seperti dulu', async () => {
+    const m = (meja = new MejaUji(migrasiState(kartuTerakhirKembaran())));
+    await tunggu();
+    expect(m.petunjuk()).toBe('Tinggal satu kartu: buang untuk mentung!');
+    pilih(m, '8 love');
+    expect(buang(m).textContent).toContain('Mentung pakai 8♥!');
+    expect(buang(m).getAttribute('aria-disabled')).toBe('false');
+    buang(m).click();
+    await tunggu();
+    expect(m.aksi.at(-1)).toEqual({ jenis: 'buang', kartuId: id('8 love') });
+    expect(m.g.putaran!.mentung).toMatchObject({ pemain: 0, kepentung: [3] });
+  });
+
+  it('#53: kartu terakhir kembaran pungutan (state dibuat langsung): bukan penanda mentung, tombol mati dengan alasan dari mesin', async () => {
+    const m = (meja = new MejaUji(kartuTerakhirKembaran()));
     await tunggu();
     expect(m.petunjuk()).not.toBe('Tinggal satu kartu: buang untuk mentung!');
     expect(buang(m).textContent).not.toContain('mentung');

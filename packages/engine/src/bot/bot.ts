@@ -12,6 +12,7 @@ import {
 } from '../kartuJadi.js';
 import {
   maksimalMulung,
+  pungutanBerlaku,
   validasiBuang,
   validasiMulung,
   validasiTurunkan,
@@ -152,7 +153,7 @@ function buangSah(view: ViewPemain): Kartu[] {
         punyaKartuJadi: p.kartuJadi[saya].length > 0,
         sumberAmbil: p.sumberAmbil!,
         kartuId: k.id,
-        pungutan: p.pungutan,
+        pungutan: pungutanBerlaku(p),
         ctx: ctxDari(p),
         asJokerBolehDibuangTanpaJadi: view.konfigurasi.asJokerBolehDibuangTanpaJadi,
       }),
@@ -204,7 +205,7 @@ function aksiMudah(view: ViewPemain, p: ViewPutaran, saya: number, rng: Rng): Ak
   const ctx = ctxDari(p);
   if (rng.next() < 0.5) {
     const kandidat = cariKandidatKartuJadi(tangan, ctx).filter((k) =>
-      coba(() => validasiTurunkan(tangan, [k], p.kartuJadi[saya].length > 0, p.sumberAmbil!, ctx, p.pungutan)),
+      coba(() => validasiTurunkan(tangan, [k], p.kartuJadi[saya].length > 0, p.sumberAmbil!, ctx, pungutanBerlaku(p))),
     );
     if (kandidat.length) return { jenis: 'turunkan', pemain: saya, kartuJadi: [rng.pick(kandidat)] };
   }
@@ -244,7 +245,7 @@ function aksiNormal(view: ViewPemain, p: ViewPutaran, saya: number, kg: KonteksG
   }
 
   const tangan = p.tangan[saya]!;
-  const rencana = rencanaTurunkan(tangan, p.kartuJadi[saya].length > 0, p.sumberAmbil!, ctx, p.pungutan);
+  const rencana = rencanaTurunkan(tangan, p.kartuJadi[saya].length > 0, p.sumberAmbil!, ctx, pungutanBerlaku(p));
   if (rencana.length) return { jenis: 'turunkan', pemain: saya, kartuJadi: rencana };
 
   const sah = buangSah(view);

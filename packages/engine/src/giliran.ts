@@ -29,6 +29,20 @@ export function kembaranPungutan(kartu: Kartu, pungutan: readonly EntriBuangan[]
   return pungutan.some((e) => e.kartu.id !== kartu.id && e.kartu.rank === kartu.rank && e.kartu.bunga === kartu.bunga);
 }
 
+/**
+ * Pungutan giliran ini yang dipakai larangan kembaran (#53) di tahap main: argumen `pungutan` untuk
+ * validasiBuang/validasiTurunkan dari StatePutaran maupun ViewPutaran. Biasanya sama dengan `p.pungutan`.
+ * Satu-satunya pengecualian: simpanan dari sebelum #53 yang berhenti tepat saat kartu terakhir di tangan
+ * kembaran pungutan (`kembaranWarisan`, ditandai migrasiState). State itu tidak punya aksi sah dengan
+ * aturan baru, jadi giliran itu ditutup dengan aturan lama. Kepentung tetap dihitung dari `p.pungutan`.
+ */
+export function pungutanBerlaku(p: {
+  readonly pungutan: readonly EntriBuangan[];
+  readonly kembaranWarisan?: true;
+}): readonly EntriBuangan[] {
+  return p.kembaranWarisan ? [] : p.pungutan;
+}
+
 export interface HasilTurunkan {
   kartuJadi: HasilValidasiKartuJadi[];
   sisaTangan: Kartu[];
@@ -44,8 +58,8 @@ export interface HasilTurunkan {
  *   jadi tanpa syarat ini giliran macet tanpa aksi sah.
  * - Mode 'akhir' (fase susun akhir setelah deck habis): tidak ada buang, jadi tangan boleh habis.
  *
- * @param pungutan kartu yang dipungut giliran ini (`StatePutaran.pungutan`; saat mulung: kartu yang
- *   diambil). Kosong untuk giliran ambil deck dan susun akhir.
+ * @param pungutan kartu yang dipungut giliran ini (`pungutanBerlaku(p)` dari StatePutaran/ViewPutaran; saat
+ *   mulung: kartu yang diambil). Kosong untuk giliran ambil deck dan susun akhir.
  */
 export function validasiTurunkan(
   tersedia: readonly Kartu[],
@@ -158,7 +172,7 @@ export interface InputBuang {
    * kartu seluruhnya, #52). Kosong/tidak ada = satu kartu.
    */
   kartuIdLain?: readonly string[];
-  /** Kartu yang dipungut giliran ini (`StatePutaran.pungutan`/`ViewPutaran.pungutan`); kosong kalau ambil deck. */
+  /** Kartu yang dipungut giliran ini (`pungutanBerlaku(p)` dari StatePutaran/ViewPutaran); kosong kalau ambil deck. */
   pungutan: readonly EntriBuangan[];
   ctx: KonteksJoker;
   asJokerBolehDibuangTanpaJadi: boolean;

@@ -30,6 +30,7 @@ import {
   isAngka,
   isJokerHidup,
   isLondo,
+  pungutanBerlaku,
   validasiBuang,
   type Aksi,
   type Arah,
@@ -177,7 +178,7 @@ function sahDibuang(g: GameState, pemain: number, k: Kartu, ctx: KonteksJoker): 
       punyaKartuJadi: p.kartuJadi[pemain].length > 0,
       sumberAmbil: p.sumberAmbil!,
       kartuId: k.id,
-      pungutan: p.pungutan,
+      pungutan: pungutanBerlaku(p),
       ctx,
       asJokerBolehDibuangTanpaJadi: g.konfigurasi.asJokerBolehDibuangTanpaJadi,
     });
