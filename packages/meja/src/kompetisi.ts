@@ -17,6 +17,8 @@
 //   "Yang keluar tak dihitung"). Kalau yang bertahan kurang dari MIN_BERTAHAN_KOMPETISI, permainan itu
 //   tidak dihitung untuk yang bertahan, tapi yang keluar tetap dicatat 0 dan 1× main (keputusan
 //   pemilik 24 Okt 2026, "Yang keluar selalu dicatat 0"): keluar tidak pernah lebih untung daripada kalah.
+//   Permainan yang tidak pernah selesai (ditinggal) hanya mencatat yang keluar (0, 1× main), saat
+//   permainannya ditinggal.
 // - Klasemen: rata-rata nilai per permainan, minimal MIN_MAIN_KOMPETISI kali main; seri = lebih
 //   sering main, lalu rata-rata skor akhir, lalu abjad.
 // - Permainan dihitung kalau dimulai selagi kompetisi berjalan (walau selesai sesudahnya).
@@ -251,9 +253,13 @@ export function permainanKompetisiDihitung(pemain: readonly Pick<KursiPeringkat,
  * Kursi mana yang hasilnya dicatat di kompetisi (urutan sama dengan masukan): yang keluar selalu
  * (nilai 0, 1× main), yang bertahan hanya kalau permainannya dihitung (`permainanKompetisiDihitung`).
  * Keputusan pemilik 24 Okt 2026 "Yang keluar selalu dicatat 0".
+ *
+ * `ditinggal` = permainannya tidak akan pernah selesai (semua peserta menekan Keluar, mejanya dihapus
+ * karena lama kosong, atau simpanannya dibuang). Yang dicatat hanya yang keluar; yang bertahan tidak
+ * pernah, juga kalau mereka dua orang atau lebih (terputus bukan keluar, #45).
  */
-export function kursiDicatatKompetisi(pemain: readonly Pick<KursiPeringkat, 'keluar'>[]): boolean[] {
-  const dihitung = permainanKompetisiDihitung(pemain);
+export function kursiDicatatKompetisi(pemain: readonly Pick<KursiPeringkat, 'keluar'>[], ditinggal = false): boolean[] {
+  const dihitung = !ditinggal && permainanKompetisiDihitung(pemain);
   return pemain.map((p) => dihitung || !!p.keluar);
 }
 

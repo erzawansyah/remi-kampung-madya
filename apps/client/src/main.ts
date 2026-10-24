@@ -19,6 +19,7 @@ import {
   type StatusKoneksi,
 } from './koneksi';
 import { TEKS_KONEKSI, teksDijalankanWarga } from './konten/koneksi';
+import { TEKS_KOMPETISI } from './konten/kompetisi';
 import { catatanDariView, kunciPermainan, simpan } from './penyimpanan';
 import { bangunkanGame, buatGame, tidurkanGame, type PenampungGame } from './game/game';
 import { KontrolMeja, masihGiliranku, type AppUntukMeja, type PesanHasilKompetisi } from './kontrolMeja';
@@ -634,8 +635,13 @@ class Aplikasi implements AppUntukMeja {
           }
           // Meja hilang (mis. server baru dinyalakan ulang) padahal layar lobi/meja masih tampil.
           if (this.layar === 'lobi' || this.layar === 'meja') {
-            toast('Mejanya sudah bubar, Bos. Balik ke beranda ya.', true);
-            return this.keluarMeja();
+            // Meja kompetisi (lobi dibubarkan selagi HP terkunci, simpanannya dibuang saat server mulai
+            // ulang, atau dihapus karena lama kosong): ke detail kompetisinya, seperti pesan keluar
+            // {kompetisi} dari server. Sebabnya tidak diketahui (kompetisinya bisa saja masih jalan), jadi
+            // teksnya netral, bukan TEKS_LOBI_KOMPETISI_BUBAR.
+            const kompetisi = this.info?.kompetisi?.kode;
+            toast(kompetisi ? TEKS_KOMPETISI.mejaHilang : 'Mejanya sudah bubar, Bos. Balik ke beranda ya.', true);
+            return this.keluarMeja(true, kompetisi);
           }
         }
         // Meja: aksi atau tombol yang menunggu jawaban sudah dijawab (ditolak), kuncinya lepas sekarang.

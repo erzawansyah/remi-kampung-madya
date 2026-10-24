@@ -10,6 +10,9 @@
 // lewat `KeadaanMejaKompetisi` saat membaca detail/daftar dan saat menetapkan juara: juara (dan
 // piala) baru ditetapkan sesudah kompetisi berakhir DAN tidak ada lagi meja kompetisinya yang sedang
 // main, karena permainan yang dimulai sebelum kompetisi berakhir tetap dihitung.
+//
+// Permainan meja kompetisi yang ditinggal (tidak pernah selesai) hanya mencatat yang keluar (nilai 0,
+// 1× main) di tabel sendiri (hasil_kompetisi_ditinggal, migrasi v5), di luar permainan/klasemen.
 
 import { createHash, randomBytes } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
@@ -158,6 +161,16 @@ export interface PenyimpanKompetisi {
    * dua kursi bertahan sampai akhir (`kursiDicatatKompetisi`). Mengembalikan banyaknya baris hasil.
    */
   catatHasil(permainanId: number, r: RingkasanAkhir): number;
+  /**
+   * Catat permainan meja kompetisi yang DITINGGAL (tidak pernah selesai; `ringkasanDitinggal`): hanya
+   * yang keluar, nilai 0 dan 1× main (`kursiDicatatKompetisi(…, true)`), keputusan pemilik 24 Okt 2026
+   * "Yang keluar selalu dicatat 0". Syaratnya sama dengan catatHasil (dimulai selagi kompetisinya
+   * berjalan, juara belum ditetapkan). Idempoten per meja + waktu mulai + peserta, dan tidak mencatat
+   * apa pun kalau permainan meja itu ternyata sudah selesai (klasemen akhirnya sudah tersimpan).
+   * Mengembalikan banyaknya baris yang benar-benar ditambahkan. Dipanggil riwayat.simpanDitinggal di
+   * dalam transaksinya.
+   */
+  catatDitinggal(r: RingkasanAkhir): number;
   /** Banyaknya baris hasil kompetisi untuk satu permainan (0 = tidak dicatat untuk siapa pun). */
   jumlahHasil(permainanId: number): number;
   /**
@@ -217,6 +230,26 @@ export const SKEMA_KOMPETISI = `
     PRIMARY KEY (kompetisi, kunci_nama)
   );
   CREATE INDEX IF NOT EXISTS juara_kompetisi_kunci ON juara_kompetisi (kunci_nama);
+`;
+
+/**
+ * Migrasi v5 (24 Okt 2026, "Yang keluar selalu dicatat 0"): nilai 0 yang keluar dari permainan meja
+ * kompetisi yang ditinggal (tidak pernah selesai). Terpisah dari permainan/klasemen, jadi Riwayat dan
+ * leaderboard umum tidak berubah. Setiap baris adalah yang keluar (dikalahkan 0, juara 0, keluar 1).
+ * `lawan` = banyaknya kursi yang bertahan, `skor` = skor saat ditinggal (dibatasi skor terendah di
+ * meja, seperti leaderboard) untuk pemisah seri rata-rata skor.
+ */
+export const SKEMA_HASIL_DITINGGAL = `
+  CREATE TABLE IF NOT EXISTS hasil_kompetisi_ditinggal (
+    kode_meja TEXT NOT NULL,
+    mulai_pada INTEGER NOT NULL,
+    peserta_id INTEGER NOT NULL REFERENCES peserta_kompetisi(id) ON DELETE CASCADE,
+    lawan INTEGER NOT NULL,
+    skor INTEGER NOT NULL,
+    dicatat_pada INTEGER NOT NULL,
+    PRIMARY KEY (kode_meja, mulai_pada, peserta_id)
+  );
+  CREATE INDEX IF NOT EXISTS hasil_kompetisi_ditinggal_peserta ON hasil_kompetisi_ditinggal (peserta_id);
 `;
 
 /**
@@ -304,10 +337,20 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
   const tambahHasil = db.prepare(
     'INSERT OR IGNORE INTO hasil_kompetisi (permainan_id, peserta_id, dikalahkan, lawan, skor, juara, keluar) VALUES (?, ?, ?, ?, ?, ?, ?)',
   );
+  const tambahDitinggal = db.prepare(
+    'INSERT OR IGNORE INTO hasil_kompetisi_ditinggal (kode_meja, mulai_pada, peserta_id, lawan, skor, dicatat_pada) VALUES (?, ?, ?, ?, ?, ?)',
+  );
+  const adaDitinggal = db.prepare('SELECT 1 FROM hasil_kompetisi_ditinggal WHERE kode_meja = ? AND mulai_pada = ? LIMIT 1');
+  // Klasemen akhir meja ini yang selesai sesudah permainannya dimulai (tabel permainan, riwayat.ts).
+  const sudahSelesai = db.prepare('SELECT 1 FROM permainan WHERE kode_meja = ? AND selesai_pada >= ? LIMIT 1');
+  // Hasil permainan yang selesai dan yang ditinggal (yang keluar saja: dikalahkan 0, juara 0, keluar 1).
+  // `permainan` = kunci satu permainan, untuk menghitung banyaknya permainan.
   const hasilKompetisi = db.prepare(`
-    SELECT h.permainan_id, h.peserta_id, h.dikalahkan, h.lawan, h.skor, h.juara, h.keluar
-    FROM hasil_kompetisi h JOIN peserta_kompetisi p ON p.id = h.peserta_id
-    WHERE p.kompetisi = ?
+    SELECT 'p:' || h.permainan_id AS permainan, h.peserta_id, h.dikalahkan, h.lawan, h.skor, h.juara, h.keluar
+      FROM hasil_kompetisi h JOIN peserta_kompetisi p ON p.id = h.peserta_id WHERE p.kompetisi = :kode
+    UNION ALL
+    SELECT 'd:' || d.kode_meja || ':' || d.mulai_pada, d.peserta_id, 0, d.lawan, d.skor, 0, 1
+      FROM hasil_kompetisi_ditinggal d JOIN peserta_kompetisi p ON p.id = d.peserta_id WHERE p.kompetisi = :kode
   `);
   const hitungHasil = db.prepare('SELECT COUNT(*) AS n FROM hasil_kompetisi WHERE permainan_id = ?');
   const pengajuanDanBerjalan = db.prepare(`
@@ -348,6 +391,17 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
   };
 
   const baca = (kode: string) => ambil.get(kode.trim().toUpperCase()) as BarisKompetisiDb | undefined;
+
+  /**
+   * Hasil permainan ini boleh dicatat di kompetisinya: kompetisinya ada, juaranya belum ditetapkan
+   * (sesudah itu hasil tidak berubah lagi), dan permainannya DIMULAI selagi kompetisi berjalan (versi 2),
+   * walau selesai (atau ditinggal) sesudahnya.
+   */
+  const layak = (r: RingkasanAkhir): boolean => {
+    if (!r.kompetisi) return false;
+    const b = baca(r.kompetisi);
+    return !!b && b.juara_pada === null && berjalanPada(waktu(b), r.mulaiPada ?? r.selesaiPada);
+  };
   const batasAju = (sekarang: number) => sekarang - 24 * 60 * 60 * 1000;
 
   const buatKode = () => {
@@ -364,8 +418,8 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
       nama: String(p.nama),
       setuju: Number(p.setuju_tutup) === 1,
     }));
-    const hasil = (hasilKompetisi.all(kode) as Record<string, number>[]).map((h) => ({
-      permainan: Number(h.permainan_id),
+    const hasil = (hasilKompetisi.all({ kode }) as Record<string, number | string>[]).map((h) => ({
+      permainan: String(h.permainan),
       peserta: Number(h.peserta_id),
       dikalahkan: Number(h.dikalahkan),
       lawan: Number(h.lawan),
@@ -558,12 +612,10 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
     },
 
     catatHasil(permainanId, r) {
-      if (!r.kompetisi) return 0;
-      const b = baca(r.kompetisi);
-      // Juara sudah ditetapkan: hasil tidak berubah lagi.
-      if (!b || b.juara_pada !== null) return 0;
-      // Dihitung kalau permainannya dimulai selagi kompetisi berjalan (versi 2), walau selesai sesudahnya.
-      if (!berjalanPada(waktu(b), r.mulaiPada ?? r.selesaiPada)) return 0;
+      if (!layak(r)) return 0;
+      // Permainan yang sudah dicatat sebagai ditinggal tidak dicatat lagi. Seharusnya tidak pernah
+      // terjadi: permainan yang ditinggal dibuang bersama simpanannya, jadi tidak bisa selesai lagi.
+      if (adaDitinggal.get(r.kode, r.mulaiPada ?? 0)) return 0;
       // Yang keluar selalu dicatat 0 dan 1× main; yang bertahan hanya kalau paling sedikit dua kursi
       // bertahan sampai akhir (keputusan pemilik 24 Okt 2026). Yang keluar tidak dihitung dikalahkan
       // untuk yang lain; skor efektifnya sama dengan leaderboard (#45, skor terendah di meja) untuk
@@ -585,6 +637,32 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
       } catch (e) {
         db.exec('ROLLBACK TO hasil_kompetisi');
         db.exec('RELEASE hasil_kompetisi');
+        throw e;
+      }
+    },
+
+    catatDitinggal(r) {
+      if (!layak(r)) return 0;
+      // Permainan yang ternyata sudah selesai (klasemen akhirnya tercatat, yang keluar sudah dicatat
+      // catatHasil) tidak dicatat lagi sebagai ditinggal. Bisa terjadi kalau simpanan sebelum selesai
+      // tertinggal (galat database saat membuangnya) lalu dipulihkan atau dibuang sesudah restart.
+      if (sudahSelesai.get(r.kode, new Date(r.mulaiPada ?? 0).toISOString())) return 0;
+      // Hanya yang keluar (nilai 0, 1× main); yang bertahan tidak pernah (terputus bukan keluar, #45).
+      const dicatat = kursiDicatatKompetisi(r.pemain, true);
+      const nilai = nilaiKompetisi(r.pemain);
+      const efektif = nilaiEfektif(r.pemain);
+      db.exec('SAVEPOINT hasil_ditinggal');
+      try {
+        let n = 0;
+        r.pemain.forEach((p, i) => {
+          if (p.peserta === undefined || !dicatat[i]) return;
+          n += Number(tambahDitinggal.run(r.kode, r.mulaiPada ?? 0, p.peserta, nilai[i].lawan, efektif[i].skor, r.selesaiPada).changes);
+        });
+        db.exec('RELEASE hasil_ditinggal');
+        return n;
+      } catch (e) {
+        db.exec('ROLLBACK TO hasil_ditinggal');
+        db.exec('RELEASE hasil_ditinggal');
         throw e;
       }
     },
