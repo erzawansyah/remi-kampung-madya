@@ -179,6 +179,32 @@ export function idAcak(): string {
   return [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 
+/** sessionStorage: penanda tab ini (lihat idInstansTab). */
+const KUNCI_ID_INSTANS = 'remi.idInstans';
+/** Cadangan kalau sessionStorage tidak bisa dipakai: tetap sama selama halaman ini hidup. */
+let idInstansCadangan: string | null = null;
+
+/**
+ * Penanda tab/jendela PWA ini, untuk SesiOnline.pemegang. Disimpan di sessionStorage, jadi tetap sama
+ * sesudah tab yang sama dimuat ulang (termasuk muat ulang otomatis pembaruan PWA saat tab tersembunyi),
+ * dan beda untuk tab lain. Kalau tidak, halaman yang baru dimuat ulang mengira sesinya milik tab lain dan
+ * tidak menyambung lagi selama tersembunyi (server mencatatnya terputus: host dan voting pindah).
+ * sessionStorage tidak bisa dipakai: id acak sekali per halaman (muat ulang dianggap tab lain).
+ * Tab hasil "Duplikat" mewarisi sessionStorage, jadi id-nya sama dengan tab asalnya: keduanya dianggap
+ * satu pemegang (sama seperti sebelum ada penanda ini).
+ */
+export function idInstansTab(): string {
+  try {
+    const ada = sessionStorage.getItem(KUNCI_ID_INSTANS);
+    if (ada && /^[0-9a-f]{32}$/.test(ada)) return (idInstansCadangan = ada);
+    const baru = idAcak();
+    sessionStorage.setItem(KUNCI_ID_INSTANS, baru);
+    return (idInstansCadangan = baru);
+  } catch {
+    return (idInstansCadangan ??= idAcak());
+  }
+}
+
 interface Pensiun {
   ws: WebSocket;
   timer: ReturnType<typeof setTimeout>;
@@ -186,8 +212,8 @@ interface Pensiun {
 
 export class KoneksiOnline implements Koneksi {
   readonly jenis = 'online';
-  /** Penanda instans aplikasi ini (tab/PWA) di sesi tersimpan; lihat SesiOnline.pemegang. */
-  readonly idInstans = idAcak();
+  /** Penanda tab/PWA ini di sesi tersimpan (lihat SesiOnline.pemegang, idInstansTab). */
+  readonly idInstans = idInstansTab();
   private ws: WebSocket | null = null;
   private antrian: Antri[] = [];
   private pendengar: ((p: PesanDariMeja) => void)[] = [];

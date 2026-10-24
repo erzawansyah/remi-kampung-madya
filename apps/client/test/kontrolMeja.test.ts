@@ -17,8 +17,11 @@
 //   kaldu." / "Belum ada yang mentung, kaldu lagi.", lencana ×2 di panel mentung, alasan di klasemen;
 // - koneksi putus-putus: aksi ditolak di depan saat sambungan belum siap (pilihan dan draf mulung utuh),
 //   kunci aksi tidak lepas diam-diam ("Masih mengirim…" + periksa sambungan, lepas oleh view/error/status),
-//   view susulan sesudah sambung ulang tidak diputar ulang (mentung terlewat cukup sorakan), siapJoker
-//   tidak menjawab popup putaran baru, id aksi + kirim ulang sekali, dan bar waktu dengan jam server.
+//   view susulan sesudah sambung ulang tidak diputar ulang (mentung terlewat cukup sorakan; kocok & bagi
+//   yang sudah dilihat juga tidak), siapJoker tidak menjawab popup putaran baru, aksi yang ditolak karena
+//   keadaan meja dari socket baru belum datang memeriksa sambungan, id aksi + kirim ulang sekali (kiriman
+//   ulang yang hanya dijawab aksiDiterima melepas kunci dan mengembalikan pilihan), dan bar waktu dengan
+//   jam server.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -2137,6 +2140,32 @@ describe('sambungan belum siap: aksi ditolak di depan, pilihan aman (langkah 3)'
     expect(m.g.putaran!.tahap).toBe('main');
   });
 
+  it('socket baru terbuka tapi keadaan meja darinya belum datang: aksi yang ditolak memeriksa sambungan sekarang', () => {
+    const periksa = vi.fn();
+    const { m, s } = mejaOnline(giliranMain(), {}, { periksaKoneksi: periksa });
+    meja = m;
+    const kartu = m.g.putaran!.tangan[0].find((k) => k.rank !== 1)!;
+    m.kontrol.ketukKartu(kartu.id);
+    // Terputus: ketukan tidak memaksa sambung ulang (koneksi sendiri yang mengatur jadwalnya).
+    putus(m, s);
+    m.tombol('buang')!.click();
+    expect(periksa).not.toHaveBeenCalled();
+    // Tersambung lagi, 'gabung' belum dijawab (socket baru bisa saja mati lagi): tiap aksi yang ditolak
+    // meminta cek cepat, jangan menunggu watchdog 20 dtk.
+    sambungLagi(m, s);
+    m.tombol('buang')!.click();
+    expect(periksa).toHaveBeenCalledTimes(1);
+    expect(m.kontrol.lepasKeBuangan(kartu.id)).toBe(false);
+    expect(periksa).toHaveBeenCalledTimes(2);
+    expect(pesanAksi(m)).toEqual([]);
+    // View sambungan baru datang: pilihan masih utuh, aksi jalan, tidak ada pemeriksaan tambahan.
+    m.kontrol.perbarui(m.info, m.view());
+    expect(m.sp.model()!.dipilih.has(kartu.id)).toBe(true);
+    m.tombol('buang')!.click();
+    expect(pesanAksi(m)).toHaveLength(1);
+    expect(periksa).toHaveBeenCalledTimes(2);
+  });
+
   it('seret ke buangan saat putus: kartu kembali (false) tanpa menimpa pilihan', () => {
     const { m, s } = mejaOnline(giliranMain());
     meja = m;
@@ -2287,6 +2316,66 @@ describe('sesudah sambung ulang: susulan tidak diputar ulang (langkah 5)', () =>
     expect(mentungTerlewat(lama2, { riwayat: [h(1, 'deckHabis'), h(2, 'mentung')], peristiwa: [e(9, 2)] } as unknown as ViewPemain, 9)).toEqual([]);
   });
 
+  it('sambung ulang cepat selagi popup joker masih terbuka: kocok & bagi yang sudah dilihat tidak diputar ulang', async () => {
+    const { m, s } = mejaOnline(permainanGiliranku(), { menungguJoker: [0] });
+    meja = m;
+    await sampai(() => !!document.querySelector('#modal [data-joker]'));
+    const bagi = () => m.sp.panggil.filter((n) => n === 'bagiKartu').length;
+    expect(bagi()).toBe(1);
+    putus(m, s);
+    sambungLagi(m, s);
+    // Urutan dari server sesudah 'gabung': info meja (masih menunggu jokerku), lalu view yang sama.
+    m.kontrol.perbarui({ ...m.info, menungguJoker: [0] }, null);
+    m.kontrol.perbarui(null, m.view());
+    await tunggu();
+    await tunggu();
+    expect(bagi()).toBe(1);
+    expect(document.querySelector('#modal [data-joker]')).not.toBeNull();
+    // Tidak ada kartu yang disembunyikan untuk dibagi ulang.
+    expect(m.sp.model()!.disembunyikan.size).toBe(0);
+  });
+
+  it('OK joker hilang bersama socket lama: siapJoker dikirim ulang sekali, kocok & bagi tidak diputar ulang', async () => {
+    const { m, s } = mejaOnline(permainanGiliranku(), { menungguJoker: [0] });
+    meja = m;
+    await sampai(() => !!document.querySelector('#modal [data-joker]'));
+    m.diam = true;
+    document.querySelector<HTMLButtonElement>('#modal [data-ok]')!.click();
+    const siap = () => m.terkirim.filter((p) => p.t === 'siapJoker');
+    expect(siap()).toHaveLength(1);
+    const bagi = () => m.sp.panggil.filter((n) => n === 'bagiKartu').length;
+    expect(bagi()).toBe(1);
+    putus(m, s);
+    sambungLagi(m, s);
+    m.kontrol.perbarui({ ...m.info, menungguJoker: [0] }, null);
+    m.kontrol.perbarui(null, m.view());
+    await tunggu();
+    await tunggu();
+    expect(siap()).toEqual([
+      { t: 'siapJoker', putaran: 1 },
+      { t: 'siapJoker', putaran: 1 },
+    ]);
+    expect(bagi()).toBe(1);
+  });
+
+  it('putaran baru dimulai selama putus: pembagian yang terlewat tetap diputar', async () => {
+    const g1 = permainanGiliranku();
+    const { m, s } = mejaOnline(g1, { menungguJoker: [0] });
+    meja = m;
+    await sampai(() => !!document.querySelector('#modal [data-joker]'));
+    document.querySelector<HTMLButtonElement>('#modal [data-ok]')!.click();
+    const bagi = () => m.sp.panggil.filter((n) => n === 'bagiKartu').length;
+    expect(bagi()).toBe(1);
+    m.diam = true;
+    putus(m, s);
+    m.g = mainkanSampaiPutaranBerikut(g1);
+    sambungLagi(m, s);
+    m.info = { ...m.info, menungguJoker: [0] };
+    m.kontrol.perbarui(m.info, null);
+    m.kontrol.perbarui(null, m.view());
+    await sampai(() => bagi() === 2);
+  });
+
   it('joker: OK di putaran N, putus, putaran N+1 dimulai: siapJoker tidak dikirim untuk putaran baru dan popup N+1 tampil', async () => {
     const g1 = permainanGiliranku();
     const { m, s } = mejaOnline(g1, { menungguJoker: [0] });
@@ -2404,6 +2493,41 @@ describe('id aksi, konfirmasi, kirim ulang aman (langkah 6)', () => {
     m.kontrol.perbarui(m.info, m.view());
     expect(pesanAksi(m)).toHaveLength(1);
     expect(m.petunjuk()).not.toBe(TEKS_KONEKSI.belumSampai);
+  });
+
+  it('kiriman ulang yang hanya dijawab aksiDiterima (id sudah pernah diproses): kunci lepas sekarang, pilihan kembali', () => {
+    vi.useFakeTimers();
+    try {
+      const { m, kartu, id } = buangHilang(true);
+      m.kontrol.perbarui(m.info, m.view());
+      expect(pesanAksi(m)).toHaveLength(2);
+      expect(m.kontrol.sedangMengirim()).toBe(true);
+      // Server baru: id ini sudah ada di catatannya (dulu ditolak, error-nya hilang bersama socket lama), jadi
+      // tidak diterapkan lagi dan tidak ada view maupun error, hanya aksiDiterima.
+      m.kontrol.aksiDiterima(id!);
+      expect(m.kontrol.sedangMengirim()).toBe(false);
+      expect(m.tombol('buang')!.getAttribute('aria-disabled')).toBe('false');
+      expect(m.sp.model()!.dipilih.has(kartu.id)).toBe(true);
+      expect(m.petunjuk()).toBe(TEKS_KONEKSI.belumSampai);
+      // Tidak menunggu cadangan 10 dtk, dan cadangannya tidak mengubah apa-apa lagi.
+      vi.advanceTimersByTime(10_000);
+      expect(m.petunjuk()).toBe(TEKS_KONEKSI.belumSampai);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('aksiDiterima sesudah view jawabannya (urutan biasa dari server): tidak ada yang dikembalikan', () => {
+    const { m } = mejaOnline(giliranMain());
+    meja = m;
+    const kartu = m.g.putaran!.tangan[0].find((k) => k.rank !== 1 && k.rank !== m.g.putaran!.rankJoker)!;
+    m.kontrol.ketukKartu(kartu.id);
+    tekan('b');
+    expect(m.kontrol.sedangMengirim()).toBe(false);
+    m.kontrol.aksiDiterima(pesanAksi(m)[0].id!);
+    expect(m.petunjuk()).not.toBe(TEKS_KONEKSI.belumSampai);
+    expect(m.sp.model()!.dipilih.size).toBe(0);
+    expect(m.g.putaran!.tangan[0].some((k) => k.id === kartu.id)).toBe(false);
   });
 
   it('draf mulung yang tidak sampai dikembalikan utuh (tinggal Konfirmasi lagi)', () => {

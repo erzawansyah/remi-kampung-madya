@@ -702,11 +702,24 @@ export class KontrolMeja implements AksiAdegan {
     }
   }
 
-  /** Server baru mengonfirmasi aksi ber-id sudah diproses (diterapkan atau ditolak). */
+  /**
+   * Server baru mengonfirmasi aksi ber-id sudah diproses (diterapkan atau ditolak). Jawabannya (view, atau
+   * error kalau ditolak) dikirim server LEBIH DULU dan masing-masing sudah melepas kunci. Kunci yang masih
+   * terpasang untuk aksi ini berarti tidak ada jawaban lain: id-nya sudah pernah diproses (kiriman ulang
+   * sesudah sambung ulang, yang dulu ditolak dan error-nya hilang bersama sambungan lama). Kunci dilepas
+   * sekarang, dan kalau keadaan giliranku masih sama, pilihan/draf mulung dikembalikan supaya pemain
+   * mengulang, bukan menunggu cadangan 10 dtk dengan pilihan yang sudah hilang.
+   */
   aksiDiterima(id: string) {
     if (this.hancur) return;
     this.serverKonfirmasi = true;
-    if (this.aksiTertunda?.id === id) this.aksiTertunda = null;
+    const a = this.aksiTertunda;
+    if (a?.id !== id) return;
+    this.aksiTertunda = null;
+    if (!this.kunciKirim) return;
+    this.lepasKunciKirim();
+    if (jejakGiliran(this.viewTerbaru ?? this.view) === a.jejak) this.kembalikanPilihan(a);
+    else this.lepasKunciTanpaJawaban();
   }
 
   /** Kartu hasil seret menunggu di titik lepas selama ini benar (lihat MejaScene.BATAS_LEPAS). */
@@ -745,7 +758,10 @@ export class KontrolMeja implements AksiAdegan {
         const susulan = !!this.view && this.idPeristiwa >= 0 && (nomor !== this.nomorTampil || lanjutan.length > BATAS_PERISTIWA_SATU_VIEW);
         const pertama = this.idPeristiwa < 0 || !this.view || susulan;
         if (susulan) this.kabarMentungTerlewat(v);
-        const awal = pertama && this.info ? peristiwaAwalPerluDiputar(v, this.info.menungguJoker) : null;
+        // Kocok & bagi yang sudah pernah tampil di HP ini (sambung ulang cepat selagi popup joker masih
+        // menunggu) tidak diputar lagi: hanya pembagian yang terlewat (keputusan 5.1).
+        const calonAwal = pertama && this.info ? peristiwaAwalPerluDiputar(v, this.info.menungguJoker) : null;
+        const awal = calonAwal && calonAwal.id > this.idPeristiwa ? calonAwal : null;
         const baru = pertama ? (awal ? [awal] : []) : lanjutan;
         if (baru.length) {
           this.animasi = true;
@@ -1263,6 +1279,19 @@ export class KontrolMeja implements AksiAdegan {
     bunyi('tolak');
     getar('tolak');
     umumkan(alasan);
+    this.periksaBilaTertahan(alasan);
+  }
+
+  /**
+   * Aksi ditolak karena sambungan belum siap padahal statusnya tersambung: socket baru sudah terbuka, tapi
+   * keadaan meja darinya belum datang ('gabung' tak berjawab). Periksa sekarang (cek cepat: 5 dtk tanpa
+   * kabar = sambung ulang), jangan menunggu watchdog 20 dtk sementara jam giliran jalan. Hanya saat pemain
+   * bertindak, supaya jaringan yang sekadar lambat tidak disambung ulang terus tanpa sebab.
+   */
+  private periksaBilaTertahan(alasan: string) {
+    if (alasan === TEKS_KONEKSI.nyambung && this.app.jenis === 'online' && this.app.statusKoneksi?.() === 'tersambung') {
+      this.app.periksaKoneksi?.();
+    }
   }
 
   /** Sasaran goyang untuk tombol yang ditolak. */
@@ -1407,6 +1436,11 @@ export class KontrolMeja implements AksiAdegan {
       return;
     }
     this.aksiTertunda = null;
+    this.kembalikanPilihan(a);
+  }
+
+  /** Aksi tertunda tidak diterapkan: pilihan kartu dan draf mulung saat dikirim dikembalikan, pemain diminta mengulang. */
+  private kembalikanPilihan(a: AksiTertunda) {
     this.dipilih = new Set(a.pilihan);
     if (a.mulung) {
       this.mulung = a.mulung;
@@ -2304,6 +2338,7 @@ export class KontrolMeja implements AksiAdegan {
     toast(alasan, true, 3500);
     bunyi('tolak');
     getar('tolak');
+    this.periksaBilaTertahan(alasan);
     return true;
   }
 

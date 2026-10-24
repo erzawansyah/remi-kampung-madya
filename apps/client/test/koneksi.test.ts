@@ -6,7 +6,7 @@
 import { pilihAksiBot, Rng, type ViewPemain } from '@remi/engine';
 import type { PesanKlien } from '@remi/meja';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KoneksiOffline, KoneksiOnline, type OpsiKoneksiOnline, type PesanDariMeja, type StatusKoneksi } from '../src/koneksi';
+import { idInstansTab, KoneksiOffline, KoneksiOnline, type OpsiKoneksiOnline, type PesanDariMeja, type StatusKoneksi } from '../src/koneksi';
 import { pasangLocalStorageRusak, WsPalsu } from './bantu';
 
 const KUNCI_OFFLINE = 'remi.mejaOffline';
@@ -48,6 +48,8 @@ const microtask = () => vi.advanceTimersByTimeAsync(0);
 beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
+  // Penanda tab (idInstansTab) di sessionStorage: tiap test mulai sebagai tab yang baru dibuka.
+  sessionStorage.clear();
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
 });
 
@@ -957,12 +959,15 @@ describe('KoneksiOnline: pemulihan sesi (langkah 4)', () => {
 
   describe('dua instans aplikasi (tab/PWA) dengan sesi yang sama', () => {
     async function duaInstans() {
-      // A masuk duluan, lalu B masuk ke meja yang sama dan jadi pemegang sesi.
+      // A masuk duluan, lalu B (tab lain: sessionStorage-nya sendiri, kosong) masuk ke meja yang sama dan
+      // jadi pemegang sesi.
       const a = baru();
       const wsA = WsPalsu.terakhir();
       wsA.buka();
       wsA.kirimDariServer({ t: 'masuk', kode: 'MADYA', token: 'tok', kursi: 0 });
+      sessionStorage.clear();
       const b = baru();
+      expect(b.idInstans).not.toBe(a.idInstans);
       const wsB = WsPalsu.terakhir();
       wsB.buka();
       wsB.kirimDariServer({ t: 'masuk', kode: 'MADYA', token: 'tok', kursi: 0 });
@@ -998,6 +1003,39 @@ describe('KoneksiOnline: pemulihan sesi (langkah 4)', () => {
       expect(WsPalsu.semua.length).toBe(n + 1);
     });
 
+    it('tab yang sama dimuat ulang selagi tersembunyi (pembaruan PWA): halaman baru langsung kembali ke meja', async () => {
+      const lama = baru();
+      const ws = WsPalsu.terakhir();
+      ws.buka();
+      ws.kirimDariServer({ t: 'masuk', kode: 'MADYA', token: 'tok', kursi: 0 });
+      expect(JSON.parse(localStorage.getItem(KUNCI_SESI)!).pemegang).toBe(lama.idInstans);
+      aturTerlihat('hidden');
+      // Halaman lama ditutup (muat ulang), lalu halaman baru di tab yang sama melanjutkan sesi (main.ts).
+      lama.tutup();
+      const n = WsPalsu.semua.length;
+      const k = baru({ lanjutSesi: true });
+      expect(k.idInstans).toBe(lama.idInstans);
+      expect(WsPalsu.semua.length).toBe(n + 1);
+      WsPalsu.terakhir().buka();
+      expect(WsPalsu.terakhir().terkirim[0]).toMatchObject({ t: 'gabung', kode: 'MADYA', token: 'tok' });
+    });
+
+    it('tab lain yang dimuat ulang selagi tersembunyi tetap mengalah ke pemegang sampai terlihat', async () => {
+      const { a, b } = await duaInstans();
+      expect(JSON.parse(localStorage.getItem(KUNCI_SESI)!).pemegang).toBe(b.idInstans);
+      aturTerlihat('hidden');
+      // Tab A (sessionStorage-nya sendiri) dimuat ulang selagi tersembunyi.
+      a.tutup();
+      sessionStorage.setItem('remi.idInstans', a.idInstans);
+      const n = WsPalsu.semua.length;
+      const a2 = baru({ lanjutSesi: true });
+      expect(a2.idInstans).toBe(a.idInstans);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(WsPalsu.semua.length).toBe(n);
+      aturTerlihat('visible');
+      expect(WsPalsu.semua.length).toBe(n + 1);
+    });
+
     it('sesi lama tanpa penanda pemegang tetap disambung walau tersembunyi', async () => {
       localStorage.setItem(KUNCI_SESI, JSON.stringify({ kode: 'MADYA', token: 'tok' }));
       aturTerlihat('hidden');
@@ -1006,6 +1044,39 @@ describe('KoneksiOnline: pemulihan sesi (langkah 4)', () => {
       WsPalsu.terakhir().buka();
       expect(WsPalsu.terakhir().terkirim[0]).toMatchObject({ t: 'gabung', kode: 'MADYA' });
     });
+  });
+});
+
+describe('idInstansTab: penanda tab untuk pemegang sesi', () => {
+  it('sama selama tab yang sama (juga sesudah muat ulang), beda untuk tab lain', () => {
+    const satu = idInstansTab();
+    expect(satu).toMatch(/^[0-9a-f]{32}$/);
+    expect(idInstansTab()).toBe(satu);
+    expect(sessionStorage.getItem('remi.idInstans')).toBe(satu);
+    // Tab lain: sessionStorage-nya sendiri (kosong).
+    sessionStorage.clear();
+    expect(idInstansTab()).not.toBe(satu);
+  });
+
+  it('isi sessionStorage yang rusak diganti id baru', () => {
+    sessionStorage.setItem('remi.idInstans', '<script>');
+    const id = idInstansTab();
+    expect(id).toMatch(/^[0-9a-f]{32}$/);
+    expect(sessionStorage.getItem('remi.idInstans')).toBe(id);
+  });
+
+  it('sessionStorage tidak bisa dipakai: id tetap sama selama halaman ini hidup', () => {
+    vi.stubGlobal('sessionStorage', {
+      getItem: () => {
+        throw new DOMException('diblokir', 'SecurityError');
+      },
+      setItem: () => {
+        throw new DOMException('diblokir', 'SecurityError');
+      },
+    });
+    const satu = idInstansTab();
+    expect(satu).toMatch(/^[0-9a-f]{32}$/);
+    expect(idInstansTab()).toBe(satu);
   });
 });
 

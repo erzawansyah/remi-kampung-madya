@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 // Node ≥ 25 punya localStorage bawaan yang kosong tanpa --localstorage-file dan menutupi
@@ -8,6 +9,13 @@ const matikanWebStorageNode = process.allowedNodeEnvironmentFlags.has('--experim
   : [];
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      // Modul virtual vite-plugin-pwa hanya ada saat client di-build/dijalankan lewat Vite. Test yang
+      // menyalakan main.ts (aplikasiKoneksi.test.ts) memakai pengganti ini.
+      'virtual:pwa-register': fileURLToPath(new URL('./apps/client/test/tiruan/pwaRegister.ts', import.meta.url)),
+    },
+  },
   test: {
     include: ['packages/*/test/**/*.test.ts', 'apps/*/test/**/*.test.ts'],
     // Environment bawaan tetap node (engine, meja, server: cepat, tanpa DOM).
