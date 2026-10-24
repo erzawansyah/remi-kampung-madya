@@ -910,3 +910,25 @@ table.skor tr.redup td {
   flex-direction: column;
   gap: var(--ruang-2);
 }
+
+/* ---------- Dialog Usul fitur (ui/usulan.ts) ----------
+   Dibuka dari ubin menu beranda (.nav-lebar) dan dari Tentang di beranda; tidak pernah di meja.
+   .form-usulan: isian bersusun · .usulan-hitung: penghitung huruf · .usulan-galat: pesan tolak */
+.dialog.usulan .form-usulan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-3);
+}
+.dialog.usulan textarea {
+  min-height: 8.5em;
+  line-height: var(--baris-normal);
+  resize: vertical;
+}
+.usulan-hitung {
+  align-self: flex-end;
+}
+.dialog.usulan .usulan-galat {
+  margin: 0;
+  color: var(--negatif);
+  font-weight: 600;
+}

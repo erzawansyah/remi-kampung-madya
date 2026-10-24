@@ -38,6 +38,7 @@ import { renderRiwayat } from './ui/riwayat';
 import { renderKompetisi } from './ui/kompetisi';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang, siapkanJendelaMalas } from './ui/jendelaMalas';
+import { bukaUsulan } from './ui/usulan';
 import {
   adaJendelaTerbuka,
   dialogTerbuka,
@@ -652,7 +653,9 @@ class Aplikasi implements AppUntukMeja {
             // Gerbang yang sama dengan tombol latihan di beranda: simpanan offline tidak hilang diam-diam.
             bolehLatihan: () => konfirmasiTimpaSimpanan('Latihan pakai slot simpanan yang sama.'),
           }),
-        tentang: () => bukaTentang(),
+        // Dari beranda, Tentang ikut menawarkan Usul fitur (dari menu ☰ meja tidak).
+        tentang: () => bukaTentang({ usulFitur: () => bukaUsulan() }),
+        usulFitur: () => bukaUsulan(),
         pasangAplikasi: this.tawaranPasang(),
         muatUlang: this.pembaruan.tombol(),
       },
