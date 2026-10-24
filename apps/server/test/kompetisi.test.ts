@@ -820,6 +820,28 @@ describe('permainan meja kompetisi yang ditinggal (penyimpan)', () => {
     r.tutup();
   });
 
+  it('permainan yang sudah selesai (klasemen akhirnya tersimpan) tidak dicatat lagi sebagai ditinggal; simpanannya tetap dibuang', () => {
+    const r = bukaRiwayat(':memory:');
+    const { kode, id } = kompetisiJalan(r);
+    const t = T0 + JAM;
+    const pemain: [string, number, number, boolean?][] = [['Ani', id('Ani'), 10], ['Budi', id('Budi'), -10, true]];
+    // Selesai lewat jalur biasa: Budi (keluar) dicatat 0, Ani yang bertahan sendirian tidak.
+    expect(r.kompetisi.jumlahHasil(r.simpan(ringkasan(kode, t + 20, pemain, t)))).toBe(1);
+    const sebelum = baris(r, kode);
+    expect(sebelum.per.Budi).toMatchObject({ main: 1, keluar: 1 });
+    // Simpanan sebelum selesai yang tertinggal (galat database saat membuangnya), lalu dipulihkan dan
+    // dihapus pembersih atau dibuang saat server mulai: tidak dicatat lagi, simpanannya tetap dibuang.
+    r.mejaAktif.simpan('MEJAA', '{}', null, t + 10);
+    expect(r.simpanDitinggal(ditinggal(kode, t + 30, pemain, t))).toBe(0);
+    expect(r.mejaAktif.semua()).toEqual([]);
+    expect(baris(r, kode)).toEqual(sebelum);
+    expect(r.kompetisi.detail(kode, T0 + 2 * JAM)!.jumlahPermainan).toBe(1);
+    // Permainan di meja berkode sama yang selesai SEBELUM permainan ini dimulai tidak menghalangi.
+    expect(r.simpanDitinggal(ditinggal(kode, t + 60, pemain, t + 25))).toBe(1);
+    expect(baris(r, kode).per.Budi).toMatchObject({ main: 2, keluar: 2 });
+    r.tutup();
+  });
+
   it('galat database: semuanya dibatalkan, simpanan mejanya tetap ada', () => {
     const r = bukaRiwayat(':memory:');
     const { kode, id } = kompetisiJalan(r);

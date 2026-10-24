@@ -1437,6 +1437,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         // lagi. Juara tidak ditetapkan (tahanJuara).
         for (const [kode, m] of [...daftarMeja]) if (ditinggalSemua(m)) tutupMejaDitinggal(kode);
         catatDitinggalTertunda();
+        // Tanpa simpanan meja (SIMPAN_MEJA=0) tidak ada yang dipulihkan: permainan meja kompetisi yang
+        // sedang main ditinggal sekarang, jadi yang keluar dicatat 0 dulu (yang bertahan tidak, #45).
+        if (!simpananMeja) for (const [kode, m] of daftarMeja) if (m.kompetisi && m.status === 'main') catatPermainanDitinggal(kode, m.data);
         // Perubahan yang belum tersimpan ditulis sekarang; simpanan meja di database tidak dibuang,
         // supaya meja dipulihkan saat server jalan lagi (restart/deploy). Jangan taruh `await` apa pun
         // di depannya: sejak `menutup`, perubahan meja tidak dijadwalkan simpan lagi, jadi perubahan

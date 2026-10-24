@@ -165,8 +165,10 @@ export interface PenyimpanKompetisi {
    * Catat permainan meja kompetisi yang DITINGGAL (tidak pernah selesai; `ringkasanDitinggal`): hanya
    * yang keluar, nilai 0 dan 1× main (`kursiDicatatKompetisi(…, true)`), keputusan pemilik 24 Okt 2026
    * "Yang keluar selalu dicatat 0". Syaratnya sama dengan catatHasil (dimulai selagi kompetisinya
-   * berjalan, juara belum ditetapkan). Idempoten per meja + waktu mulai + peserta. Mengembalikan
-   * banyaknya baris yang benar-benar ditambahkan. Dipanggil riwayat.simpanDitinggal di dalam transaksinya.
+   * berjalan, juara belum ditetapkan). Idempoten per meja + waktu mulai + peserta, dan tidak mencatat
+   * apa pun kalau permainan meja itu ternyata sudah selesai (klasemen akhirnya sudah tersimpan).
+   * Mengembalikan banyaknya baris yang benar-benar ditambahkan. Dipanggil riwayat.simpanDitinggal di
+   * dalam transaksinya.
    */
   catatDitinggal(r: RingkasanAkhir): number;
   /** Banyaknya baris hasil kompetisi untuk satu permainan (0 = tidak dicatat untuk siapa pun). */
@@ -339,6 +341,8 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
     'INSERT OR IGNORE INTO hasil_kompetisi_ditinggal (kode_meja, mulai_pada, peserta_id, lawan, skor, dicatat_pada) VALUES (?, ?, ?, ?, ?, ?)',
   );
   const adaDitinggal = db.prepare('SELECT 1 FROM hasil_kompetisi_ditinggal WHERE kode_meja = ? AND mulai_pada = ? LIMIT 1');
+  // Klasemen akhir meja ini yang selesai sesudah permainannya dimulai (tabel permainan, riwayat.ts).
+  const sudahSelesai = db.prepare('SELECT 1 FROM permainan WHERE kode_meja = ? AND selesai_pada >= ? LIMIT 1');
   // Hasil permainan yang selesai dan yang ditinggal (yang keluar saja: dikalahkan 0, juara 0, keluar 1).
   // `permainan` = kunci satu permainan, untuk menghitung banyaknya permainan.
   const hasilKompetisi = db.prepare(`
@@ -639,6 +643,10 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
 
     catatDitinggal(r) {
       if (!layak(r)) return 0;
+      // Permainan yang ternyata sudah selesai (klasemen akhirnya tercatat, yang keluar sudah dicatat
+      // catatHasil) tidak dicatat lagi sebagai ditinggal. Bisa terjadi kalau simpanan sebelum selesai
+      // tertinggal (galat database saat membuangnya) lalu dipulihkan atau dibuang sesudah restart.
+      if (sudahSelesai.get(r.kode, new Date(r.mulaiPada ?? 0).toISOString())) return 0;
       // Hanya yang keluar (nilai 0, 1× main); yang bertahan tidak pernah (terputus bukan keluar, #45).
       const dicatat = kursiDicatatKompetisi(r.pemain, true);
       const nilai = nilaiKompetisi(r.pemain);

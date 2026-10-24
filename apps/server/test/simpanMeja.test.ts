@@ -26,6 +26,19 @@ import {
   type ServerRemi,
 } from '../src/server.js';
 
+// Kode meja bisa dipaksa (test kode yang dipesan): randomBytes(5) mengambil dari antrian ini dulu.
+// Antrian kosong (semua test lain) = randomBytes asli.
+const kodePaksa = vi.hoisted(() => [] as string[]);
+vi.mock('node:crypto', async (asli) => {
+  const m = await asli<typeof import('node:crypto')>();
+  const huruf = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const randomBytes = (n: number, ...lain: unknown[]) => {
+    const kode = n === 5 && lain.length === 0 ? kodePaksa.shift() : undefined;
+    return kode ? Buffer.from([...kode].map((h) => huruf.indexOf(h))) : (m.randomBytes as (...x: unknown[]) => Buffer)(n, ...lain);
+  };
+  return { ...m, randomBytes };
+});
+
 const tunggu = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Penjadwal palsu: waktu hanya maju saat diminta (meja, jeda putus, dan jeda simpan memakainya). */
@@ -96,6 +109,7 @@ afterEach(async () => {
     c.db?.close();
   }
   vi.restoreAllMocks();
+  kodePaksa.length = 0;
 });
 afterAll(() => rmSync(folder, { recursive: true, force: true }));
 
@@ -1087,6 +1101,111 @@ describe('meja kompetisi yang ditinggal: pembersih, restart, dan simpanan yang d
       await tungguPesan(k, (p) => p.t === 'keluar');
     }
     expect(await healthz(s.server.port)).toMatchObject({ meja: 0, mejaMain: 0 });
+  });
+
+  it('kode simpanan yang menunggu dicatat (galat database saat server mulai) tidak dipakai meja baru', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const path = dbBaru();
+    const jam = new JamUji();
+    const s1 = await nyalakan(path, { penjadwal: jam, jedaMulaiKompetisiMs: 20 });
+    const { kode, tiket } = kompetisiUji(s1.riwayat, jam);
+    const m = await mejaKompetisi(s1.server.port, jam, kode, tiket);
+    await bKeluarAHilang(s1, jam, m);
+    await s1.matikan();
+    const db = new DatabaseSync(path);
+    db.prepare('UPDATE meja_aktif SET diperbarui_pada = ?').run(jam.sekarang() - UMUR_MAKS_SIMPANAN_MEJA_MS - 1);
+    db.exec("CREATE TRIGGER gagal_ditinggal BEFORE INSERT ON hasil_kompetisi_ditinggal BEGIN SELECT RAISE(ABORT, 'disk penuh'); END;");
+    db.close();
+
+    const s2 = await nyalakan(path, { penjadwal: jam });
+    expect(s2.server.jumlahMeja()).toBe(0);
+    const simpananLama = barisMeja(s2.riwayat, m.kodeMeja)!.data;
+    // Kode pertama yang diundi untuk meja baru = kode simpanan yang menunggu dicatat: dilewati.
+    kodePaksa.push(m.kodeMeja, 'BARUU');
+    const e = await klien(s2.server.port);
+    e.kirim({ t: 'buat', nama: 'Eka' });
+    expect((await tungguPesan(e, (p) => p.t === 'masuk')).kode).toBe('BARUU');
+    expect(kodePaksa).toEqual([]);
+    jam.maju(JEDA_SIMPAN_MEJA_MS);
+    // Simpanan yang menunggu dicatat tidak tertimpa meja baru.
+    expect(barisMeja(s2.riwayat, m.kodeMeja)!.data).toBe(simpananLama);
+
+    // Databasenya pulih: simpanan lama dicatat lalu dibuang, simpanan meja baru tetap ada.
+    s2.db.exec('DROP TRIGGER gagal_ditinggal');
+    detak();
+    expect(jumlahDitinggal(s2.db)).toBe(1);
+    expect(klasemen(s2.riwayat, kode).Budi).toMatchObject({ main: 1, keluar: 1 });
+    expect(s2.riwayat.mejaAktif.semua().map((b) => b.kode)).toEqual(['BARUU']);
+    e.ws.close();
+  });
+
+  it('simpanan sebelum selesai yang tertinggal (galat database saat membuangnya) lalu dipulihkan: yang keluar tidak dicatat dua kali', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const path = dbBaru();
+    const jam = new JamUji();
+    const s1 = await nyalakan(path, { penjadwal: jam, jedaMulaiKompetisiMs: 20 });
+    const { kode, tiket } = kompetisiUji(s1.riwayat, jam, { batasPutaran: 1, detikGiliran: 5 });
+    const m = await mejaKompetisi(s1.server.port, jam, kode, tiket);
+    m.b.kirim({ t: 'keluar' });
+    await tungguPesan(m.b, (p) => p.t === 'keluar');
+    // Membuang simpanan saat permainannya selesai gagal sekali (database sibuk).
+    vi.spyOn(s1.riwayat.mejaAktif, 'hapus').mockImplementationOnce(() => {
+      throw new Error('database terkunci');
+    });
+    for (let i = 0; i < 2000 && mejaTerakhir(m.a).status !== 'selesai'; i++) {
+      jam.maju(8_000);
+      await tunggu(1);
+    }
+    await tungguPesan(m.a, (p) => p.t === 'meja' && info(p).status === 'selesai');
+    expect(s1.log).toContain(`galat menyimpan meja ${m.kodeMeja} database terkunci`);
+    // Jalur biasa: Budi (keluar) dicatat 0, Ani yang bertahan sendirian tidak.
+    expect(klasemen(s1.riwayat, kode).Budi).toMatchObject({ main: 1, keluar: 1 });
+    expect(s1.riwayat.mejaAktif.semua().map((b) => b.kode)).toEqual([m.kodeMeja]);
+    m.a.ws.close();
+    await s1.matikan();
+
+    // Simpanan sebelum selesai dipulihkan; Ani tidak kembali, pembersih menghapusnya 45 menit kemudian.
+    const s2 = await nyalakan(path, { penjadwal: jam });
+    expect(s2.server.jumlahMeja()).toBe(1);
+    detak();
+    jam.maju(BAWAAN_HAPUS_MEJA_MAIN_KOSONG_MS);
+    detak();
+    expect(s2.server.jumlahMeja()).toBe(0);
+    expect(s2.log).toContain(`permainan meja ${m.kodeMeja} ditinggal: tidak ada yang dicatat di kompetisi ${kode}`);
+    expect(jumlahDitinggal(s2.db)).toBe(0);
+    expect(klasemen(s2.riwayat, kode).Budi).toMatchObject({ main: 1, keluar: 1 });
+    expect(s2.riwayat.kompetisi.detail(kode, jam.sekarang())!.jumlahPermainan).toBe(1);
+    expect(s2.riwayat.mejaAktif.semua()).toEqual([]);
+  }, 30_000);
+
+  it('tanpa simpanan meja (simpanMeja: false): server dimatikan = permainannya ditinggal, yang keluar dicatat 0, yang bertahan tidak', async () => {
+    const path = dbBaru();
+    const jam = new JamUji();
+    const s1 = await nyalakan(path, { penjadwal: jam, jedaMulaiKompetisiMs: 20, simpanMeja: false });
+    const { kode, tiket } = kompetisiUji(s1.riwayat, jam);
+    const m = await mejaKompetisi(s1.server.port, jam, kode, tiket);
+    await bKeluarAHilang(s1, jam, m);
+    // Kompetisinya disudahi selagi meja ini masih main: juara menunggu.
+    for (const nama of ['Ani', 'Budi', 'Cici']) s1.riwayat.kompetisi.setujuTutup(kode, tiket[nama], true, jam.sekarang());
+    expect(jumlahDitinggal(s1.db)).toBe(0);
+    await s1.matikan();
+    expect(s1.log).toContain(`permainan meja ${m.kodeMeja} ditinggal: 1 yang keluar dicatat 0 di kompetisi ${kode}`);
+    // Juara tidak ditetapkan saat server dimatikan.
+    expect(s1.log.some((l) => l.includes('juara kompetisi'))).toBe(false);
+
+    const s2 = await nyalakan(path, { penjadwal: jam, simpanMeja: false });
+    expect(s2.server.jumlahMeja()).toBe(0);
+    expect(jumlahDitinggal(s2.db)).toBe(1);
+    const per = klasemen(s2.riwayat, kode);
+    expect(per.Budi).toMatchObject({ main: 1, keluar: 1, rataNilai: 0 });
+    expect(per.Ani).toMatchObject({ main: 0 });
+    expect(juaraPada(s2.db, kode)).toBeNull();
+    // Tidak ada meja yang main lagi: juara ditetapkan saat detailnya dibaca, dengan nilai 0 Budi.
+    expect(await detailApi(s2.server.port, kode)).toMatchObject({ mejaMain: 0 });
+    expect(juaraPada(s2.db, kode)).not.toBeNull();
+    await s2.matikan();
+    const s3 = await nyalakan(path, { penjadwal: jam, simpanMeja: false });
+    expect(jumlahDitinggal(s3.db)).toBe(1);
   });
 });
 
