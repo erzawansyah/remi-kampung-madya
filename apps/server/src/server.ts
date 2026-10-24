@@ -1028,7 +1028,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         clearInterval(timerTulisKompetisi);
         for (const pemainId of [...putusTertunda.keys()]) batalPutusTertunda(pemainId);
         // Perubahan yang belum tersimpan ditulis sekarang; simpanan meja di database tidak dibuang,
-        // supaya meja dipulihkan saat server jalan lagi (restart/deploy).
+        // supaya meja dipulihkan saat server jalan lagi (restart/deploy). Jangan taruh `await` apa pun
+        // di depannya: sejak `menutup`, perubahan meja tidak dijadwalkan simpan lagi, jadi perubahan
+        // selama menunggu (misalnya langkah warga kedai) bisa hilang.
         simpanSemuaSekarang();
         for (const kode of [...daftarMeja.keys()]) hapusMeja(kode, false);
         // 1001 "going away": client tahu server pergi (bukan ditolak) dan bisa mencoba lagi nanti.

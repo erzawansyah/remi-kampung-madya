@@ -129,6 +129,9 @@ const SKEMA_V0 = `
  * sini supaya nomor versi v4 (meja_aktif) sudah benar dan database yang sempat dibuat branch ini sama
  * dengan sesudah digabung. Saat fitur/usul-fitur digabung: hapus konstanta ini dan pakai impor
  * `SKEMA_USULAN` dari './usulan.js'. Isi MIGRASI[2] tidak boleh berubah (dijaga riwayat.test.ts).
+ * Ubah juga `apps/server/test/usulan.test.ts` dari branch itu (tidak konflik di git, tapi gagal):
+ * ia mengunci `MIGRASI.length` 3, `user_version` 3, dan log `v2 → v3`. Ganti dengan
+ * `MIGRASI[2]` = `SKEMA_USULAN`, `user_version` = `MIGRASI.length`, dan log `v2 → v${MIGRASI.length}`.
  */
 const SKEMA_USULAN = `
   CREATE TABLE IF NOT EXISTS usulan (
