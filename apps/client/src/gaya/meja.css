@@ -795,6 +795,12 @@ details.akordion.saya > summary .nama-skor b {
 .teks-hasil-kompetisi {
   color: var(--teks-redup);
 }
+/* Permainan yang tidak masuk klasemen (hampir semua keluar): satu kalimat saja. */
+.tidak-dihitung-kompetisi {
+  margin: 0;
+  font-size: var(--teks-sm);
+  color: var(--teks);
+}
 /* Bar atas meja kompetisi: lencana nama kompetisi (ganti "Meja KODE"). */
 .bar-atas .info > .lencana-kompetisi-atas {
   color: var(--teks-emas);

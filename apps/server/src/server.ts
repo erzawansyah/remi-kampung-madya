@@ -16,6 +16,7 @@ import {
   namaLawanAcak,
   penjadwalNyata,
   periksaUsulan,
+  permainanKompetisiDihitung,
   rapikanPengaturanKompetisi,
   TEKS_KURSI_KOMPETISI_LEPAS,
   TEKS_LOBI_KOMPETISI_BUBAR,
@@ -512,19 +513,26 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
    */
   const kabarHasilKompetisi = (kodeMeja: string, r: RingkasanAkhir, id: number, sebelum: KlasemenKompetisi | null) => {
     const penyimpan = opsi.riwayat?.kompetisi;
-    if (!penyimpan || !r.kompetisi) return;
+    const kode = r.kompetisi;
+    if (!penyimpan || !kode) return;
     try {
-      const sesudah = penyimpan.klasemen(r.kompetisi);
+      const sesudah = penyimpan.klasemen(kode);
+      const dasar = (k: KlasemenKompetisi) => ({
+        t: 'kompetisiHasil' as const,
+        kompetisi: { kode, nama: penyimpan.untukMeja(kode, jam())?.nama ?? '' },
+        minMain: MIN_MAIN_KOMPETISI,
+        jumlahPeringkat: k.peringkat.length,
+      });
+      let pesan: PesanServer | null = null;
       if (!sebelum || !sesudah || penyimpan.jumlahHasil(id) === 0) {
-        log(`permainan meja ${kodeMeja} tidak dihitung di kompetisi ${r.kompetisi}`);
+        log(`permainan meja ${kodeMeja} tidak dihitung di kompetisi ${kode}`);
+        // Hampir semua keluar (keputusan 24 Okt 2026): yang bertahan tetap dikabari, satu baris di
+        // klasemen akhir. Alasan lain (mulai sesudah berakhir, juara sudah ditetapkan) tidak dikabarkan.
+        if (sesudah && !permainanKompetisiDihitung(r.pemain)) pesan = { ...dasar(sesudah), pemain: [], tidakDihitung: 'keluar' };
       } else {
-        const pesan: PesanServer = {
-          t: 'kompetisiHasil',
-          kompetisi: { kode: r.kompetisi, nama: penyimpan.untukMeja(r.kompetisi, jam())?.nama ?? '' },
-          minMain: MIN_MAIN_KOMPETISI,
-          jumlahPeringkat: sesudah.peringkat.length,
-          pemain: hasilKompetisiMeja(r.pemain, sebelum, sesudah),
-        };
+        pesan = { ...dasar(sesudah), pemain: hasilKompetisiMeja(r.pemain, sebelum, sesudah) };
+      }
+      if (pesan) {
         hasilKompetisiTerakhir.set(kodeMeja, pesan);
         daftarMeja.get(kodeMeja)?.kabariManusia(pesan);
       }

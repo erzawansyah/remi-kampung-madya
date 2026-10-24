@@ -5,17 +5,19 @@
 // waktu mulai dicatat, ringkasan akhir dengan id peserta).
 
 import { describe, expect, it } from 'vitest';
-import { Rng } from '@remi/engine';
+import { Rng, putaranBerikutKaldu } from '@remi/engine';
 import {
   BATAS_PENGAJUAN_MS,
   BATAS_PUTARAN_KOMPETISI_BAWAAN,
   DETIK_GILIRAN_KOMPETISI_BAWAAN,
   JEDA_MULAI_KOMPETISI_MS,
+  MIN_BERTAHAN_KOMPETISI,
   MIN_MAIN_KOMPETISI,
   Meja,
   PENGATURAN_KOMPETISI_BAWAAN,
   PILIHAN_BATAS_PUTARAN_KOMPETISI,
   PILIHAN_DETIK_GILIRAN_KOMPETISI,
+  TEKS_TANPA_VOTING_KOMPETISI,
   TENGGANG_SAMBUNG_MS,
   akhirKompetisi,
   berjalanPada,
@@ -24,6 +26,7 @@ import {
   hitungKlasemenKompetisi,
   juaraKompetisi,
   nilaiKompetisi,
+  permainanKompetisiDihitung,
   rapikanNamaKompetisi,
   rapikanPengaturanKompetisi,
   statusKompetisi,
@@ -111,20 +114,51 @@ describe('nilai per permainan (0–10)', () => {
     expect(nilai([60, 50, 40, 30, 20, 10])).toEqual([10, 8, 6, 4, 2, 0]);
   });
 
-  it('yang keluar di tengah permainan juru kunci: nilai 0, dikalahkan semua yang bertahan', () => {
-    const v = nilaiKompetisi([
-      { nama: 'Kabur', bot: false, keluar: true, skor: 300 },
-      { nama: 'B', bot: false, skor: 10 },
-      { nama: 'C', bot: false, skor: -50 },
-    ]);
-    expect(v.map((x) => x.nilai)).toEqual([0, 10, 5]);
-    expect(
-      nilaiKompetisi([
-        { nama: 'Kabur1', bot: false, keluar: true, skor: 300 },
-        { nama: 'Kabur2', bot: false, keluar: true, skor: -300 },
-        { nama: 'C', bot: false, skor: -50 },
-      ]).map((x) => x.nilai),
-    ).toEqual([0, 0, 10]);
+  // Keputusan pemilik 24 Okt 2026 "Yang keluar tak dihitung": yang keluar tetap 0, tapi tidak
+  // dihitung "dikalahkan" untuk siapa pun; yang lain hanya dibandingkan dengan yang bertahan.
+  const kursi = (...x: [string, number, boolean?][]) => x.map(([nama, skor, keluar]) => ({ nama, bot: false, skor, ...(keluar ? { keluar } : {}) }));
+
+  it('meja 4 orang, 1 keluar: nilai dibagi (yang bertahan − 1), yang keluar 0 dan tidak dihitung dikalahkan', () => {
+    // Skor yang keluar tinggi atau rendah tidak berpengaruh ke nilai siapa pun.
+    for (const skorKabur of [300, -500]) {
+      const pemain = kursi(['Kabur', skorKabur, true], ['A', 50], ['B', 10], ['C', -20]);
+      const v = nilaiKompetisi(pemain);
+      expect(v.map((x) => [x.dikalahkan, x.lawan])).toEqual([[0, 3], [2, 2], [1, 2], [0, 2]]);
+      expect(v.map((x) => x.nilai)).toEqual([0, 10, 5, 0]);
+      expect(permainanKompetisiDihitung(pemain)).toBe(true);
+    }
+  });
+
+  it('meja 4 orang, 2 keluar: yang bertahan cuma saling dibandingkan (10 dan 0; seri 0 dan 0)', () => {
+    const v = nilaiKompetisi(kursi(['A', -400], ['Kabur1', 900, true], ['B', -450], ['Kabur2', -900, true]));
+    expect(v.map((x) => [x.dikalahkan, x.lawan])).toEqual([[1, 1], [0, 2], [0, 1], [0, 2]]);
+    expect(v.map((x) => x.nilai)).toEqual([10, 0, 0, 0]);
+    expect(nilaiKompetisi(kursi(['A', 0], ['B', 0], ['K1', 0, true], ['K2', 0, true])).map((x) => x.nilai)).toEqual([0, 0, 0, 0]);
+    expect(permainanKompetisiDihitung(kursi(['A', 0], ['B', 0], ['K1', 0, true], ['K2', 0, true]))).toBe(true);
+  });
+
+  it('meja 4 orang, 3 keluar (atau semua): permainan tidak dihitung untuk siapa pun, termasuk yang bertahan', () => {
+    const tiga = kursi(['K1', 100, true], ['Tinggal', -300], ['K2', 50, true], ['K3', -900, true]);
+    expect(permainanKompetisiDihitung(tiga)).toBe(false);
+    expect(nilaiKompetisi(tiga).map((x) => x.nilai)).toEqual([0, 0, 0, 0]);
+    const semua = kursi(['K1', 100, true], ['K2', 50, true], ['K3', -900, true], ['K4', 0, true]);
+    expect(permainanKompetisiDihitung(semua)).toBe(false);
+    // Meja 2 orang: satu keluar = tinggal satu yang bertahan.
+    expect(permainanKompetisiDihitung(kursi(['A', -10], ['B', 10, true]))).toBe(false);
+    expect(permainanKompetisiDihitung(kursi(['A', -10], ['B', 10]))).toBe(true);
+    expect(MIN_BERTAHAN_KOMPETISI).toBe(2);
+    // Pesan kompetisiHasil untuk permainan yang tidak dihitung: kosong.
+    const k = hitungKlasemenKompetisi([{ id: 1, nama: 'Tinggal' }], []);
+    expect(hasilKompetisiMeja(tiga.map((p, i) => ({ ...p, kursi: i, peserta: i + 1 })), k, k)).toEqual([]);
+  });
+
+  it('seri di antara yang bertahan tetap tidak saling mengalahkan; yang keluar tidak ikut seri', () => {
+    const v = nilaiKompetisi(kursi(['A', 50], ['B', 50], ['Kabur', 50, true], ['C', 0]));
+    expect(v.map((x) => [x.dikalahkan, x.lawan])).toEqual([[1, 2], [1, 2], [0, 3], [0, 2]]);
+    expect(v.map((x) => x.nilai)).toEqual([5, 5, 0, 0]);
+    // Meja 6 orang, 1 keluar: pembaginya 4.
+    const enam = nilaiKompetisi(kursi(['A', 60], ['B', 50], ['K', 999, true], ['C', 40], ['D', 40], ['E', 10]));
+    expect(enam.map((x) => x.nilai)).toEqual([10, 7.5, 0, 2.5, 2.5, 0]);
   });
 
   it('teks nilai: satu desimal dengan koma, setengah dibulatkan ke atas', () => {
@@ -236,6 +270,76 @@ describe('klasemen kompetisi', () => {
       ['Ani', 1],
       ['Cici', 2],
       ['Budi', 3],
+    ]);
+  });
+});
+
+describe('yang keluar tak dihitung (keputusan pemilik 24 Okt 2026)', () => {
+  const peserta = ['Ani', 'Budi', 'Cici', 'Boneka1', 'Boneka2', 'Boneka3'].map((nama, i) => ({ id: i + 1, nama }));
+  type Kursi = { peserta: number; skor: number; keluar?: boolean };
+  /** Seperti server (catatHasil): permainan yang tidak dihitung tidak menghasilkan baris apa pun. */
+  const catat = (...permainan: Kursi[][]): HasilKompetisi[] =>
+    permainan.flatMap((meja) => {
+      const pemain = meja.map((k) => ({ nama: String(k.peserta), bot: false, skor: k.skor, ...(k.keluar ? { keluar: true } : {}) }));
+      if (!permainanKompetisiDihitung(pemain)) return [];
+      const nilai = nilaiKompetisi(pemain);
+      return meja.map((k, i) => ({ peserta: k.peserta, dikalahkan: nilai[i].dikalahkan, lawan: nilai[i].lawan, skor: k.skor, juara: false, keluar: !!k.keluar }));
+    });
+
+  it('skenario boneka: duduk dengan boneka yang langsung keluar tidak menghasilkan permainan yang dihitung', () => {
+    const budi = [
+      ...Array.from({ length: 4 }, () => [{ peserta: 2, skor: 100 }, { peserta: 3, skor: 50 }, { peserta: 4, skor: 0 }, { peserta: 5, skor: -50 }]),
+      [{ peserta: 3, skor: 100 }, { peserta: 2, skor: 50 }, { peserta: 4, skor: 0 }, { peserta: 5, skor: -50 }],
+    ];
+    const hasil = catat(
+      // Ani di meja 2 orang dengan satu boneka yang keluar, tiga kali.
+      ...Array.from({ length: 3 }, () => [{ peserta: 1, skor: -500 }, { peserta: 4, skor: 0, keluar: true }]),
+      // Ani di meja 4 orang dengan tiga boneka yang keluar.
+      [{ peserta: 1, skor: -500 }, { peserta: 4, skor: 0, keluar: true }, { peserta: 5, skor: 0, keluar: true }, { peserta: 6, skor: 0, keluar: true }],
+      ...budi,
+    );
+    expect(hasil.filter((h) => h.peserta === 1)).toEqual([]);
+    const k = hitungKlasemenKompetisi(peserta, hasil);
+    // Budi: 4× 10 dan 1× 6,67 = 9,33, peringkat 1. Ani tidak pernah masuk klasemen.
+    expect(k.peringkat.map((b) => [b.nama, b.peringkat, teksNilai(b.rataNilai)])).toEqual([
+      ['Budi', 1, '9,3'],
+      ['Cici', 2, '7,3'],
+      ['Boneka1', 3, '3,3'],
+      ['Boneka2', 4, '0,0'],
+    ]);
+    expect(k.belumCukup.find((b) => b.nama === 'Ani')).toMatchObject({ main: 0, peringkat: null });
+  });
+
+  it('boneka yang keluar di meja dengan lawan sungguhan tidak menaikkan nilai: yang dihitung hanya lawan yang bertahan', () => {
+    const hasil = catat(
+      ...Array.from({ length: 3 }, () => [
+        { peserta: 1, skor: -500 },
+        { peserta: 4, skor: 0, keluar: true },
+        { peserta: 3, skor: 200 },
+        { peserta: 5, skor: 0, keluar: true },
+      ]),
+    );
+    const k = hitungKlasemenKompetisi(peserta, hasil);
+    expect(k.peringkat[0]).toMatchObject({ nama: 'Cici', peringkat: 1, rataNilai: 10 });
+    expect(k.peringkat.find((b) => b.nama === 'Ani')).toMatchObject({ main: 3, rataNilai: 0 });
+    // Dulu (yang keluar dikalahkan semua yang bertahan) Ani dapat 6,7 per permainan.
+    expect(hasil.find((h) => h.peserta === 1)).toMatchObject({ dikalahkan: 0, lawan: 1 });
+  });
+
+  it('isi pesan kompetisiHasil dengan yang keluar: nilai 0 (keluar), yang lain dibagi yang bertahan', () => {
+    const pemain = [
+      { kursi: 0, nama: 'Ani', bot: false, skor: 80, peserta: 1 },
+      { kursi: 1, nama: 'Boneka1', bot: false, skor: 120, keluar: true, peserta: 4 },
+      { kursi: 2, nama: 'Budi', bot: false, skor: 20, peserta: 2 },
+      { kursi: 3, nama: 'Cici', bot: false, skor: -30, peserta: 3 },
+    ];
+    const sebelum = hitungKlasemenKompetisi(peserta, []);
+    const sesudah = hitungKlasemenKompetisi(peserta, catat(pemain.map((p) => ({ peserta: p.peserta, skor: p.skor, keluar: p.keluar }))));
+    expect(hasilKompetisiMeja(pemain, sebelum, sesudah).map((h) => [h.nama, h.nilai, h.keluar, h.main])).toEqual([
+      ['Ani', 10, false, 1],
+      ['Boneka1', 0, true, 1],
+      ['Budi', 5, false, 1],
+      ['Cici', 0, false, 1],
     ]);
   });
 });
@@ -529,16 +633,16 @@ describe('meja kompetisi', () => {
     meja.terima('budi', { t: 'siapLanjut' });
     jam.maju(39_999);
     expect(meja.data.game?.status).toBe('putaranSelesai');
-    // Budi bukan host: tidak bisa memulai sendiri, dan voting akhiri butuh suara host.
+    // Budi bukan host: tidak bisa memulai sendiri, dan meja kompetisi tidak punya voting akhiri.
     meja.terima('budi', { t: 'putaranBerikut' });
     expect(surat.errors('budi').at(-1)).toMatch(/Cuma host/);
     meja.terima('budi', { t: 'akhiri', setuju: true });
+    expect(surat.errors('budi').at(-1)).toBe(TEKS_TANPA_VOTING_KOMPETISI);
     expect(meja.status).toBe('main');
     jam.maju(1);
     expect(meja.data.game?.status).toBe('putaranBerjalan');
     expect(meja.data.game?.putaran?.nomor).toBe(2);
     expect(surat.info('host').lanjutOtomatis).toBeUndefined();
-    // Suara akhiri yang belum lolos ikut hilang di putaran baru.
     expect(meja.data.setujuAkhiri).toEqual([]);
     expect(galat).toEqual([]);
   });
@@ -586,62 +690,96 @@ describe('meja kompetisi', () => {
     expect(meja.data.game?.putaran?.nomor).toBe(2);
   });
 
-  it('voting akhiri di meja kompetisi butuh suara semua peserta yang belum keluar, termasuk yang terputus', () => {
-    const ctx = buatMeja(
-      { jedaLanjutMs: 10_000 },
-      { ...KOMPETISI, pengaturan: { ...KOMPETISI.pengaturan, jumlahPemain: 3, batasPutaran: 5, detikGiliran: 30 } },
-    );
-    const { meja, surat, jam } = ctx;
-    meja.masuk('budi', 'Budi', 2);
-    meja.masuk('cici', 'Cici', 3);
-    jam.maju(JEDA_MULAI_KOMPETISI_MS);
-    siapSemua(meja);
-    const rng = new Rng(9);
-    for (let i = 0; i < 20000 && meja.data.game?.status !== 'putaranSelesai'; i++) {
-      if (aksiManusia(meja, surat, 'host', rng) || aksiManusia(meja, surat, 'budi', rng) || aksiManusia(meja, surat, 'cici', rng)) continue;
-      jam.langkah();
+  // Keputusan pemilik 24 Okt 2026 "Matikan voting di meja kompetisi".
+  it('meja kompetisi tanpa voting: Akhiri permainan dan Putaran terakhir ditolak, juga saat semua setuju', () => {
+    const { meja, surat, galat } = sampaiHasilPutaran({}, { modeKaldu: true, batasPutaran: 3, batasSkorAtas: null, batasSkorBawah: null });
+    expect(TEKS_TANPA_VOTING_KOMPETISI).toBe('Di meja kompetisi permainan jalan sampai batas putaran, Bos.');
+    for (const id of ['host', 'budi']) {
+      meja.terima(id, { t: 'akhiri', setuju: true });
+      expect(surat.errors(id).at(-1)).toBe(TEKS_TANPA_VOTING_KOMPETISI);
+      meja.terima(id, { t: 'putaranTerakhir', setuju: true });
+      expect(surat.errors(id).at(-1)).toBe(TEKS_TANPA_VOTING_KOMPETISI);
+      // Membatalkan juga ditolak dengan pesan yang sama (tidak ada voting sama sekali).
+      meja.terima(id, { t: 'akhiri', setuju: false });
+      expect(surat.errors(id).at(-1)).toBe(TEKS_TANPA_VOTING_KOMPETISI);
     }
+    expect(meja.status).toBe('main');
     expect(meja.data.game?.status).toBe('putaranSelesai');
-    // Budi dan Cici terputus sebentar; Ani sendirian tidak bisa memotong batas putaran.
-    meja.terputus('budi');
-    meja.terputus('cici');
-    meja.terima('host', { t: 'akhiri', setuju: true });
-    expect(meja.status).toBe('main');
-    expect(surat.info('host').setujuAkhiri).toEqual([0]);
-    // Yang kembali dan ikut setuju: baru berlaku kalau semua peserta (Cici juga) setuju.
-    meja.terhubung('budi');
-    meja.terima('budi', { t: 'akhiri', setuju: true });
-    expect(meja.status).toBe('main');
-    // Cici keluar (juru kunci, kursinya warga kedai): tidak ikut memilih lagi, jadi voting lolos.
-    meja.tinggalkan('cici');
-    expect(meja.status).toBe('selesai');
-  });
-
-  it('voting putaran terakhir (kaldu) di meja kompetisi: aturan pemilih sama dengan akhiri', () => {
-    const { meja, surat } = sampaiHasilPutaran({}, { modeKaldu: true, batasSkorAtas: null, batasSkorBawah: null });
-    meja.terputus('budi');
-    meja.terima('host', { t: 'putaranTerakhir', setuju: true });
-    expect(surat.info('host').setujuKaldu).toEqual([0]);
     expect(meja.data.game?.kalduDiminta).toBeFalsy();
-    meja.terhubung('budi');
-    meja.terima('budi', { t: 'putaranTerakhir', setuju: true });
-    expect(meja.data.game?.kalduDiminta).toBe(true);
-  });
-
-  it('meja biasa: voting akhiri tetap cukup suara manusia yang terhubung (#36)', () => {
-    const ctx = siapkan();
-    const meja = Meja.buat(ctx.opsi, 'host', 'Ani', { jumlahPemain: 2, batasPutaran: 5 });
-    meja.masuk('budi', 'Budi');
-    meja.terima('host', { t: 'mulai' });
-    siapSemua(meja);
-    const rng = new Rng(3);
-    for (let i = 0; i < 20000 && meja.data.game?.status !== 'putaranSelesai'; i++) {
-      if (aksiManusia(meja, ctx.surat, 'host', rng) || aksiManusia(meja, ctx.surat, 'budi', rng)) continue;
-      ctx.jam.langkah();
-    }
+    expect(meja.data.setujuAkhiri).toEqual([]);
+    expect(meja.data.setujuKaldu).toBeUndefined();
+    expect(surat.info('host').setujuAkhiri).toEqual([]);
+    expect(surat.info('host').setujuKaldu).toEqual([]);
+    // Satu-satunya yang terhubung pun tidak bisa mengakhiri sendiri (dulu meja biasa: langsung berlaku).
     meja.terputus('budi');
     meja.terima('host', { t: 'akhiri', setuju: true });
-    expect(meja.status).toBe('selesai');
+    expect(meja.status).toBe('main');
+    expect(galat).toEqual([]);
+  });
+
+  it('meja kompetisi: penolakan juga selama putaran berjalan; kaldu tetap mulai sendiri di batas putaran', () => {
+    const { meja, surat, jam } = sampaiHasilPutaran({}, { modeKaldu: true, batasPutaran: 2, batasSkorAtas: null, batasSkorBawah: null });
+    expect(putaranBerikutKaldu(meja.data.game!)).toBe(true);
+    jam.maju(10_000);
+    meja.terima('host', { t: 'putaranBerikut' });
+    expect(meja.data.game?.status).toBe('putaranBerjalan');
+    expect(meja.data.game?.putaran?.kaldu).toBe(true);
+    meja.terima('budi', { t: 'akhiri', setuju: true });
+    expect(surat.errors('budi').at(-1)).toBe(TEKS_TANPA_VOTING_KOMPETISI);
+    meja.terima('budi', { t: 'putaranTerakhir', setuju: true });
+    expect(surat.errors('budi').at(-1)).toBe(TEKS_TANPA_VOTING_KOMPETISI);
+  });
+
+  it('meja kompetisi dari simpanan lama yang membawa suara voting: suaranya dibuang, tidak pernah berlaku', () => {
+    const a = sampaiHasilPutaran({}, { modeKaldu: true, batasSkorAtas: null, batasSkorBawah: null });
+    const data = dataMejaDipulihkan(a.meja.data);
+    a.meja.hentikan();
+    data.setujuAkhiri = [0, 1];
+    data.setujuKaldu = [0, 1];
+    const ctx = siapkan({ jedaLanjutMs: 10_000 });
+    const meja = new Meja(ctx.opsi, data);
+    meja.terhubung('host');
+    meja.terhubung('budi');
+    expect(meja.status).toBe('main');
+    expect(meja.data.game?.status).toBe('putaranSelesai');
+    expect(meja.data.game?.kalduDiminta).toBeFalsy();
+    expect(meja.data.setujuAkhiri).toEqual([]);
+    expect(meja.data.setujuKaldu).toBeUndefined();
+  });
+
+  it('meja biasa: voting akhiri dan kaldu tidak berubah, cukup suara manusia yang terhubung (#36)', () => {
+    const mejaBiasa = (pengaturan: Record<string, unknown> = {}) => {
+      const ctx = siapkan();
+      const meja = Meja.buat(ctx.opsi, 'host', 'Ani', { jumlahPemain: 3, batasPutaran: 5, ...pengaturan });
+      meja.masuk('budi', 'Budi');
+      meja.masuk('cici', 'Cici');
+      meja.terima('host', { t: 'mulai' });
+      siapSemua(meja);
+      const rng = new Rng(3);
+      for (let i = 0; i < 20000 && meja.data.game?.status !== 'putaranSelesai'; i++) {
+        if (aksiManusia(meja, ctx.surat, 'host', rng) || aksiManusia(meja, ctx.surat, 'budi', rng) || aksiManusia(meja, ctx.surat, 'cici', rng)) continue;
+        ctx.jam.langkah();
+      }
+      expect(meja.data.game?.status).toBe('putaranSelesai');
+      return { meja, surat: ctx.surat };
+    };
+    // Akhiri: Ani dan Budi setuju, Cici belum; Cici terputus = pemilih berkurang, voting lolos.
+    const a = mejaBiasa();
+    a.meja.terima('host', { t: 'akhiri', setuju: true });
+    a.meja.terima('budi', { t: 'akhiri', setuju: true });
+    expect(a.meja.status).toBe('main');
+    expect(a.surat.info('host').setujuAkhiri).toEqual([0, 1]);
+    a.meja.terputus('cici');
+    expect(a.meja.status).toBe('selesai');
+    expect(a.meja.data.game?.alasanSelesai).toBe('sepakat');
+    // Kaldu: aturan pemilih sama.
+    const k = mejaBiasa({ modeKaldu: true, batasSkorAtas: null, batasSkorBawah: null });
+    k.meja.terputus('budi');
+    k.meja.terima('host', { t: 'putaranTerakhir', setuju: true });
+    expect(k.meja.data.game?.kalduDiminta).toBeFalsy();
+    k.meja.terima('cici', { t: 'putaranTerakhir', setuju: true });
+    expect(k.meja.data.game?.kalduDiminta).toBe(true);
+    expect(k.surat.errors('host')).toEqual([]);
   });
 
   it('main sampai selesai: ringkasan akhir membawa kompetisi, waktu mulai, dan id peserta; Main lagi ditolak', () => {

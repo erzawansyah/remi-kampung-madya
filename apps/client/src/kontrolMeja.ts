@@ -100,9 +100,11 @@ export type PesanHasilKompetisi = Extract<PesanServer, { t: 'kompetisiHasil' }>;
 
 /**
  * Bagian "Nilai kompetisi" di klasemen akhir meja kompetisi: satu baris per peserta di meja ini, aku
- * duluan. Isinya dari server (pesan kompetisiHasil); '' kalau belum ada.
+ * duluan. Isinya dari server (pesan kompetisiHasil); '' kalau belum ada. Permainan yang tidak masuk
+ * klasemen karena hampir semua pemain keluar (keputusan pemilik 24 Okt 2026): satu kalimat saja.
  */
 export function htmlHasilKompetisi(h: PesanHasilKompetisi | null, saya: number | null): string {
+  if (h?.tidakDihitung === 'keluar') return `<p class="tidak-dihitung-kompetisi" data-tidak-dihitung>${esc(TEKS_KOMPETISI.tidakDihitungKeluar)}</p>`;
   if (!h || !h.pemain.length) return '';
   const urut = [...h.pemain].sort((a, b) => Number(b.kursi === saya) - Number(a.kursi === saya) || a.kursi - b.kursi);
   return `<h3 class="judul-hasil-kompetisi"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.judulHasil)} · ${esc(h.kompetisi.nama)}</h3>
@@ -2395,6 +2397,7 @@ export class KontrolMeja implements AksiAdegan {
     const wadah = document.querySelector<HTMLElement>('#modal [data-hasil-kompetisi]');
     if (!wadah || !this.selesaiDitampilkan) return;
     wadah.innerHTML = htmlHasilKompetisi(h, this.view?.saya ?? null);
+    if (h.tidakDihitung === 'keluar') return umumkan(TEKS_KOMPETISI.tidakDihitungKeluar);
     const milikku = h.pemain.find((p) => p.kursi === this.view?.saya);
     if (milikku) umumkan(`${TEKS_KOMPETISI.judulHasil}: ${teksHasilKompetisi(milikku, h.minMain, h.jumlahPeringkat)}`);
   }
@@ -2680,17 +2683,26 @@ export class KontrolMeja implements AksiAdegan {
     this.segarkanHasil();
   }
 
-  /**
-   * Pemilih voting di modal hasil, sama dengan hitungan meja: manusia yang masih terhubung. Meja
-   * kompetisi (#51 versi 2): semua kursi peserta yang belum keluar, termasuk yang terputus.
-   */
+  /** Pemilih voting di modal hasil, sama dengan hitungan meja: manusia yang masih terhubung (#36). */
   private jumlahPemilih(): number {
-    const kompetisi = this.app.jenis === 'online' && !!this.info!.kompetisi;
-    return this.info!.kursi.filter((k) => k.jenis === 'manusia' && (k.terhubung || kompetisi)).length;
+    return this.info!.kursi.filter((k) => k.jenis === 'manusia' && k.terhubung).length;
   }
 
-  /** Keadaan tombol "Akhiri permainan" (voting) di modal hasil. */
-  private keadaanAkhiri(): KeadaanVoting {
+  /**
+   * Meja kompetisi (keputusan pemilik 24 Okt 2026): tanpa "Akhiri permainan" dan "Putaran terakhir",
+   * permainan jalan sampai batas putaran. Meja menolak keduanya; tombolnya tidak ditampilkan.
+   */
+  private tanpaVoting(): boolean {
+    return this.app.jenis === 'online' && !!this.info?.kompetisi;
+  }
+
+  /** Keadaan tombol "Akhiri permainan" (voting) di modal hasil. Null di meja kompetisi (tanpa voting). */
+  private keadaanAkhiri(): KeadaanVoting | null {
+    if (this.tanpaVoting()) {
+      this.akhiriDiminta = null;
+      this.tertunda.delete('akhiri');
+      return null;
+    }
     const info = this.info!;
     const setuju = info.setujuAkhiri.length;
     const manusia = this.jumlahPemilih();
@@ -2710,12 +2722,13 @@ export class KontrolMeja implements AksiAdegan {
   /**
    * Mode kaldu (#42): tombol voting "Putaran terakhir" di modal hasil, meniru "Akhiri permainan"
    * (hitungan n/m kalau ada lebih dari satu orang; offline dan meja satu orang langsung berlaku).
-   * Null kalau mejanya tidak memakai mode kaldu atau putaran berikutnya sudah pasti kaldu.
+   * Null kalau mejanya tidak memakai mode kaldu, putaran berikutnya sudah pasti kaldu, atau mejanya
+   * meja kompetisi (kaldu mulai sendiri di batas putaran, tanpa voting).
    */
   private keadaanKaldu(): KeadaanVoting | null {
     const v = this.view!;
     const info = this.info!;
-    if (v.konfigurasi.modeKaldu !== true || putaranBerikutKaldu(v)) {
+    if (v.konfigurasi.modeKaldu !== true || putaranBerikutKaldu(v) || this.tanpaVoting()) {
       this.kalduDipilih = null;
       this.tertunda.delete('kaldu');
       return null;
@@ -2793,7 +2806,7 @@ export class KontrolMeja implements AksiAdegan {
          <div class="deret" data-deret-voting>
            <button type="button" data-tutup>Lihat meja</button>
            ${kaldu ? this.htmlTombolVoting('kaldu', kaldu, false) : ''}
-           ${this.htmlTombolVoting('akhiri', akhiri, akhiri.setuju)}
+           ${akhiri ? this.htmlTombolVoting('akhiri', akhiri, akhiri.setuju) : ''}
          </div>
        </div>`,
       (dlg) => {
@@ -2836,7 +2849,7 @@ export class KontrolMeja implements AksiAdegan {
             this.tandaiKirim('kocok', b, dlg.querySelectorAll<HTMLButtonElement>('[data-kocok]'));
             this.app.kirim({ t: 'putaranBerikut', pengocok: k === 'acak' ? undefined : Number(k) });
           } else if (b.hasAttribute('data-akhiri')) {
-            if (this.sedangDikirim('akhiri') || this.tolakJendela()) return;
+            if (this.tanpaVoting() || this.sedangDikirim('akhiri') || this.tolakJendela()) return;
             bunyi('klik');
             const setuju = !(this.info?.setujuAkhiri.includes(this.saya) ?? false);
             this.akhiriDiminta = setuju;
@@ -2844,7 +2857,7 @@ export class KontrolMeja implements AksiAdegan {
             this.app.kirim({ t: 'akhiri', setuju });
           } else if (b.hasAttribute('data-kaldu')) {
             // Mode kaldu (#42): setuju/batal "putaran berikutnya terakhir". Offline langsung berlaku.
-            if (this.sedangDikirim('kaldu') || this.tolakJendela()) return;
+            if (this.tanpaVoting() || this.sedangDikirim('kaldu') || this.tolakJendela()) return;
             bunyi('klik');
             const setuju = !(this.info?.setujuKaldu?.includes(this.saya) ?? false);
             this.kalduDipilih = setuju;
@@ -2894,7 +2907,7 @@ export class KontrolMeja implements AksiAdegan {
   }
 
   /** Perbarui tombol modal hasil yang sudah terbuka tanpa menggambar ulang dialognya. */
-  private perbaruiModalHasil(dlg: HTMLElement, lanjut: string, akhiri: KeadaanVoting, kaldu: KeadaanVoting | null, infoKaldu: string) {
+  private perbaruiModalHasil(dlg: HTMLElement, lanjut: string, akhiri: KeadaanVoting | null, kaldu: KeadaanVoting | null, infoKaldu: string) {
     const wadah = dlg.querySelector<HTMLElement>('[data-lanjut-wadah]');
     if (wadah && lanjut !== this.htmlLanjutTerpasang) {
       const aktif = document.activeElement;
@@ -2914,18 +2927,24 @@ export class KontrolMeja implements AksiAdegan {
       if (info.textContent !== infoKaldu) info.textContent = infoKaldu;
       info.classList.toggle('tersembunyi', !infoKaldu);
     }
-    const b = dlg.querySelector<HTMLButtonElement>('[data-akhiri]');
-    if (!b) return;
-    this.perbaruiTombolVoting(b, akhiri, akhiri.setuju);
-    // Tombol "Putaran terakhir" (mode kaldu) hilang begitu putaran berikutnya pasti kaldu.
-    const bk = dlg.querySelector<HTMLButtonElement>('[data-kaldu]');
-    if (bk && !kaldu) {
-      // Fokus jangan lepas ke <body>: pindah ke tombol lanjut (atau "Lihat meja").
-      const berfokus = bk === document.activeElement;
-      bk.remove();
+    // Tombol voting yang tidak berlaku lagi dibuang (misalnya "Putaran terakhir" begitu putaran
+    // berikutnya pasti kaldu). Fokus jangan lepas ke <body>: pindah ke tombol lanjut (atau "Lihat meja").
+    const buang = (el: HTMLButtonElement) => {
+      const berfokus = el === document.activeElement;
+      el.remove();
       if (berfokus) (dlg.querySelector<HTMLElement>('[data-lanjut-wadah] button') ?? dlg.querySelector<HTMLElement>('[data-tutup]'))?.focus({ preventScroll: true });
-    } else if (bk && kaldu) this.perbaruiTombolVoting(bk, kaldu, false);
-    else if (!bk && kaldu) b.insertAdjacentHTML('beforebegin', this.htmlTombolVoting('kaldu', kaldu, false));
+    };
+    const b = dlg.querySelector<HTMLButtonElement>('[data-akhiri]');
+    if (b && akhiri) this.perbaruiTombolVoting(b, akhiri, akhiri.setuju);
+    else if (b) buang(b);
+    const bk = dlg.querySelector<HTMLButtonElement>('[data-kaldu]');
+    if (bk && !kaldu) buang(bk);
+    else if (bk && kaldu) this.perbaruiTombolVoting(bk, kaldu, false);
+    else if (!bk && kaldu) {
+      const tempat = dlg.querySelector<HTMLButtonElement>('[data-akhiri]');
+      if (tempat) tempat.insertAdjacentHTML('beforebegin', this.htmlTombolVoting('kaldu', kaldu, false));
+      else dlg.querySelector('[data-deret-voting]')?.insertAdjacentHTML('beforeend', this.htmlTombolVoting('kaldu', kaldu, false));
+    }
   }
 
   /** Teks dan atribut sibuk satu tombol voting di modal hasil yang sudah terbuka. */

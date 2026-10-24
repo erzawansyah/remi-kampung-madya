@@ -50,7 +50,7 @@ export const TEKS_KOMPETISI = {
   judulKlasemen: 'Klasemen',
   judulBelumCukup: `Belum ${MIN_MAIN_KOMPETISI}× main`,
   klasemenKosong: 'Belum ada permainan kompetisi.',
-  caraHitung: `Tiap permainan di meja kompetisi dapat nilai 0 sampai ${NILAI_MAKS}: banyaknya peserta lain di meja itu yang kalah skor darimu, dibagi (jumlah kursi − 1), dikali ${NILAI_MAKS}. Meja 4 orang: juara 10; kedua 6,7; ketiga 3,3; juru kunci 0. Skor sama tidak saling mengalahkan, dan keluar di tengah permainan = 0. Klasemen diurutkan dari rata-rata nilai per permainan; masuk klasemen sesudah ${MIN_MAIN_KOMPETISI}× main. Rata-rata sama: yang lebih sering main di atas, lalu rata-rata skor akhir.`,
+  caraHitung: `Tiap permainan di meja kompetisi dapat nilai 0 sampai ${NILAI_MAKS}: banyaknya peserta lain di meja itu yang kalah skor darimu, dibagi (jumlah kursi − 1), dikali ${NILAI_MAKS}. Meja 4 orang: juara 10; kedua 6,7; ketiga 3,3; juru kunci 0. Skor sama tidak saling mengalahkan. Keluar di tengah permainan = 0, dan yang keluar tidak dihitung sebagai lawan: nilai yang lain dihitung dari peserta yang bertahan sampai akhir saja (meja 4 orang dengan 1 yang keluar: 10; 5; 0). Kalau cuma satu yang bertahan, permainan itu tidak masuk klasemen. Klasemen diurutkan dari rata-rata nilai per permainan; masuk klasemen sesudah ${MIN_MAIN_KOMPETISI}× main. Rata-rata sama: yang lebih sering main di atas, lalu rata-rata skor akhir.`,
   juara: 'Juara',
   /** Status 'selesai' karena masanya habis, tapi masih ada meja yang main: juara belum diumumkan. */
   lencanaMenunggu: 'waktu habis',
@@ -75,11 +75,13 @@ export const TEKS_KOMPETISI = {
   /** Ditambahkan ke konfirmasi keluar di tengah permainan. */
   keluarMeja: 'Di kompetisi nilaimu 0 untuk permainan ini.',
   /** Konfirmasi keluar sesudah klasemen akhir meja kompetisi. */
-  keluarSelesai: 'Permainannya sudah selesai dan nilainya sudah masuk kompetisi. Meja kompetisi cuma sekali main.',
+  keluarSelesai: 'Permainannya sudah selesai. Meja kompetisi cuma sekali main.',
   /** Klasemen akhir meja kompetisi: ganti tombol Main lagi. */
   kembaliKompetisi: 'Kembali ke kompetisi',
   /** Judul bagian hasil kompetisi di klasemen akhir (diikuti nama kompetisinya). */
   judulHasil: 'Nilai kompetisi',
+  /** Klasemen akhir meja kompetisi yang tinggal satu (atau nol) peserta bertahan sampai akhir. */
+  tidakDihitungKeluar: 'Permainan ini tidak masuk klasemen karena hampir semua pemain keluar.',
   /** Hasil putaran meja kompetisi: diikuti hitung mundur detik. */
   lanjutOtomatis: 'Kalau host belum mulai, putaran berikutnya mulai sendiri dalam',
   /** Waktu per giliran di formulir pengajuan: wajib ada di kompetisi. */
