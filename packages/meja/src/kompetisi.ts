@@ -13,9 +13,10 @@
 // - Nilai satu permainan, skala 0–10 = banyaknya kursi lain yang kamu kalahkan ÷ (jumlah kursi − 1)
 //   × 10 (meja 4 orang: 10; 6,67; 3,33; 0). Skor sama tidak saling mengalahkan.
 // - Yang keluar di tengah permainan nilainya 0 dan tidak dihitung "dikalahkan" untuk siapa pun: kursi
-//   lain hanya dibandingkan dengan kursi yang bertahan sampai akhir. Kalau yang bertahan kurang dari
-//   MIN_BERTAHAN_KOMPETISI, permainan itu tidak masuk klasemen sama sekali (keputusan pemilik 24 Okt
-//   2026, "Yang keluar tak dihitung").
+//   lain hanya dibandingkan dengan kursi yang bertahan sampai akhir (keputusan pemilik 24 Okt 2026,
+//   "Yang keluar tak dihitung"). Kalau yang bertahan kurang dari MIN_BERTAHAN_KOMPETISI, permainan itu
+//   tidak dihitung untuk yang bertahan, tapi yang keluar tetap dicatat 0 dan 1× main (keputusan
+//   pemilik 24 Okt 2026, "Yang keluar selalu dicatat 0"): keluar tidak pernah lebih untung daripada kalah.
 // - Klasemen: rata-rata nilai per permainan, minimal MIN_MAIN_KOMPETISI kali main; seri = lebih
 //   sering main, lalu rata-rata skor akhir, lalu abjad.
 // - Permainan dihitung kalau dimulai selagi kompetisi berjalan (walau selesai sesudahnya).
@@ -38,8 +39,9 @@ export const MAKS_PESERTA = 100;
 /** Nilai satu permainan paling tinggi (mengalahkan semua kursi lain di meja itu). */
 export const NILAI_MAKS = 10;
 /**
- * Kursi yang bertahan sampai akhir (tidak keluar) paling sedikit sekian supaya permainan masuk
- * klasemen (keputusan pemilik 24 Okt 2026). Kurang dari itu = hampir semua keluar, tidak dihitung.
+ * Kursi yang bertahan sampai akhir (tidak keluar) paling sedikit sekian supaya permainan dihitung
+ * untuk yang bertahan (keputusan pemilik 24 Okt 2026). Kurang dari itu = hampir semua keluar: yang
+ * bertahan tidak dicatat, yang keluar tetap dicatat 0.
  */
 export const MIN_BERTAHAN_KOMPETISI = 2;
 
@@ -236,12 +238,23 @@ export interface NilaiKompetisi {
 }
 
 /**
- * Permainan kompetisi dihitung (masuk klasemen) kalau paling sedikit MIN_BERTAHAN_KOMPETISI kursi
- * bertahan sampai akhir. Kalau tinggal satu (atau tidak ada) yang bertahan, permainan itu tidak
- * dihitung untuk siapa pun, termasuk yang bertahan (keputusan pemilik 24 Okt 2026).
+ * Permainan kompetisi dihitung untuk yang bertahan kalau paling sedikit MIN_BERTAHAN_KOMPETISI kursi
+ * bertahan sampai akhir. Kalau tinggal satu (atau tidak ada) yang bertahan, nilainya tidak dicatat
+ * untuk yang bertahan; yang keluar tetap dicatat 0 (`kursiDicatatKompetisi`, keputusan pemilik 24 Okt
+ * 2026).
  */
 export function permainanKompetisiDihitung(pemain: readonly Pick<KursiPeringkat, 'keluar'>[]): boolean {
   return pemain.filter((p) => !p.keluar).length >= MIN_BERTAHAN_KOMPETISI;
+}
+
+/**
+ * Kursi mana yang hasilnya dicatat di kompetisi (urutan sama dengan masukan): yang keluar selalu
+ * (nilai 0, 1× main), yang bertahan hanya kalau permainannya dihitung (`permainanKompetisiDihitung`).
+ * Keputusan pemilik 24 Okt 2026 "Yang keluar selalu dicatat 0".
+ */
+export function kursiDicatatKompetisi(pemain: readonly Pick<KursiPeringkat, 'keluar'>[]): boolean[] {
+  const dihitung = permainanKompetisiDihitung(pemain);
+  return pemain.map((p) => dihitung || !!p.keluar);
 }
 
 /**
@@ -250,8 +263,8 @@ export function permainanKompetisiDihitung(pemain: readonly Pick<KursiPeringkat,
  * - Yang keluar di tengah permainan: nilai 0, dan tidak dihitung "dikalahkan" untuk siapa pun.
  * - Yang bertahan: banyaknya kursi lain yang bertahan dengan skor lebih rendah ÷ (banyaknya yang
  *   bertahan − 1) × 10. Skor sama = tidak saling mengalahkan.
- * Kalau permainannya tidak dihitung (permainanKompetisiDihitung false), semua nilainya 0; pemanggil
- * jangan mencatatnya.
+ * Kalau permainannya tidak dihitung (permainanKompetisiDihitung false), semua nilainya 0; yang
+ * dicatat hanya kursi yang keluar (`kursiDicatatKompetisi`).
  */
 export function nilaiKompetisi(pemain: readonly KursiPeringkat[]): NilaiKompetisi[] {
   const bertahan = pemain.filter((p) => !p.keluar).length;
@@ -392,7 +405,8 @@ export interface KursiHasilKompetisi extends KursiPeringkat {
  * Isi pesan `kompetisiHasil` untuk satu permainan yang baru dicatat: nilai tiap kursi peserta,
  * rata-rata dan banyak main sesudahnya, serta peringkat klasemen sebelum dan sesudah permainan itu
  * (null = belum masuk klasemen). Urut kursi. Kursi tanpa peserta dilewati. Permainan yang tidak
- * dihitung (permainanKompetisiDihitung false) = daftar kosong.
+ * dihitung untuk yang bertahan (permainanKompetisiDihitung false) = daftar kosong: yang menerima
+ * pesannya hanya yang bertahan, dan nilai 0 yang keluar tidak perlu dikabarkan ke meja.
  */
 export function hasilKompetisiMeja(
   pemain: readonly KursiHasilKompetisi[],

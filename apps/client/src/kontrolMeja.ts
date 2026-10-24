@@ -55,7 +55,7 @@ import {
   tanda,
   teksCaraSelesai,
 } from './ui/rincianSkor';
-import { keluarKompetisiTercatat, mejaMasukPeringkat, opsiKonfirmasiKeluar } from './ui/lobi';
+import { mejaMasukPeringkat, opsiKonfirmasiKeluar } from './ui/lobi';
 import { ATRIBUT_LUAR, KEDAI, TAUTAN_KEDAI } from './konten/kedai';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang } from './ui/jendelaMalas';
@@ -100,8 +100,9 @@ export type PesanHasilKompetisi = Extract<PesanServer, { t: 'kompetisiHasil' }>;
 
 /**
  * Bagian "Nilai kompetisi" di klasemen akhir meja kompetisi: satu baris per peserta di meja ini, aku
- * duluan. Isinya dari server (pesan kompetisiHasil); '' kalau belum ada. Permainan yang tidak masuk
- * klasemen karena hampir semua pemain keluar (keputusan pemilik 24 Okt 2026): satu kalimat saja.
+ * duluan. Isinya dari server (pesan kompetisiHasil); '' kalau belum ada. Permainan yang tidak dihitung
+ * untuk yang bertahan karena hampir semua pemain keluar (keputusan pemilik 24 Okt 2026; yang keluar
+ * tetap dicatat 0): satu kalimat saja.
  */
 export function htmlHasilKompetisi(h: PesanHasilKompetisi | null, saya: number | null): string {
   if (h?.tidakDihitung === 'keluar') return `<p class="tidak-dihitung-kompetisi" data-tidak-dihitung>${esc(TEKS_KOMPETISI.tidakDihitungKeluar)}</p>`;
@@ -3110,7 +3111,7 @@ export class KontrolMeja implements AksiAdegan {
 
   /**
    * Bagian hasil kompetisi di pengumuman klasemen akhir (pesannya datang sebelum klasemen tampil):
-   * baris milikku, atau kalimat "tidak masuk klasemen" kalau tinggal satu yang bertahan (keputusan
+   * baris milikku, atau kalimat "tidak dihitung untukmu" kalau tinggal satu yang bertahan (keputusan
    * pemilik 24 Okt 2026). Diawali spasi; '' kalau belum ada pesannya atau tidak ada baris milikku.
    */
   private pengumumanHasilKompetisi(saya: number): string {
@@ -3251,7 +3252,6 @@ export class KontrolMeja implements AksiAdegan {
                   selesai: this.view?.status === 'selesai',
                   masukPeringkat: mejaMasukPeringkat(this.info),
                   kompetisi: !!this.info?.kompetisi,
-                  kompetisiTercatat: keluarKompetisiTercatat(this.info),
                 }),
               ).then((ya) => {
                 if (!ya || this.hancur) return;

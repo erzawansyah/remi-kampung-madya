@@ -46,7 +46,7 @@ import {
   tundaPasang,
   type CaraPasang,
 } from './pasangAplikasi';
-import { keluarKompetisiTercatat, mejaMasukPeringkat, opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
+import { mejaMasukPeringkat, opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
 import { renderRiwayat } from './ui/riwayat';
 import { renderKompetisi } from './ui/kompetisi';
 import { bukaPengaturan } from './ui/pengaturan';
@@ -461,7 +461,6 @@ class Aplikasi implements AppUntukMeja {
         selesai: asal === 'meja' && this.view?.status === 'selesai',
         masukPeringkat: asal === 'meja' && !offline && mejaMasukPeringkat(this.info),
         kompetisi: !offline && !!this.info?.kompetisi,
-        kompetisiTercatat: asal === 'meja' && !offline && keluarKompetisiTercatat(this.info),
       }),
     );
     // Layar sudah berganti selagi dialog terbuka (mis. host memulai permainan dari lobi):

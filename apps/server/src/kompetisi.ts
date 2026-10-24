@@ -24,9 +24,9 @@ import {
   isMasa,
   juaraKompetisi,
   kunciNama,
+  kursiDicatatKompetisi,
   nilaiEfektif,
   nilaiKompetisi,
-  permainanKompetisiDihitung,
   rapikanNama,
   rapikanNamaKompetisi,
   rapikanPengaturanKompetisi,
@@ -153,12 +153,12 @@ export interface PenyimpanKompetisi {
   klasemen(kode: string): KlasemenKompetisi | null;
   /**
    * Catat hasil satu permainan meja kompetisi (dipanggil riwayat.simpan di dalam transaksinya).
-   * Hanya kalau permainannya DIMULAI selagi kompetisinya berjalan (`RingkasanAkhir.mulaiPada`),
-   * juaranya belum ditetapkan, dan paling sedikit dua kursi bertahan sampai akhir
-   * (`permainanKompetisiDihitung`). Mengembalikan banyaknya baris hasil.
+   * Hanya kalau permainannya DIMULAI selagi kompetisinya berjalan (`RingkasanAkhir.mulaiPada`) dan
+   * juaranya belum ditetapkan. Yang keluar selalu dicatat 0; yang bertahan hanya kalau paling sedikit
+   * dua kursi bertahan sampai akhir (`kursiDicatatKompetisi`). Mengembalikan banyaknya baris hasil.
    */
   catatHasil(permainanId: number, r: RingkasanAkhir): number;
-  /** Banyaknya baris hasil kompetisi untuk satu permainan (0 = tidak dihitung). */
+  /** Banyaknya baris hasil kompetisi untuk satu permainan (0 = tidak dicatat untuk siapa pun). */
   jumlahHasil(permainanId: number): number;
   /**
    * Tetapkan juara kompetisi yang sudah berakhir dan tidak punya meja yang masih main. Sekali
@@ -564,10 +564,11 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
       if (!b || b.juara_pada !== null) return 0;
       // Dihitung kalau permainannya dimulai selagi kompetisi berjalan (versi 2), walau selesai sesudahnya.
       if (!berjalanPada(waktu(b), r.mulaiPada ?? r.selesaiPada)) return 0;
-      // Kurang dari dua kursi bertahan sampai akhir: tidak dihitung untuk siapa pun (keputusan 24 Okt 2026).
-      if (!permainanKompetisiDihitung(r.pemain)) return 0;
-      // Yang keluar nilainya 0 dan tidak dihitung dikalahkan untuk yang lain; skor efektifnya sama
-      // dengan leaderboard (#45, skor terendah di meja) untuk rata-rata skor.
+      // Yang keluar selalu dicatat 0 dan 1× main; yang bertahan hanya kalau paling sedikit dua kursi
+      // bertahan sampai akhir (keputusan pemilik 24 Okt 2026). Yang keluar tidak dihitung dikalahkan
+      // untuk yang lain; skor efektifnya sama dengan leaderboard (#45, skor terendah di meja) untuk
+      // rata-rata skor.
+      const dicatat = kursiDicatatKompetisi(r.pemain);
       const nilai = nilaiKompetisi(r.pemain);
       const efektif = nilaiEfektif(r.pemain);
       // Satu permainan dicatat utuh atau tidak sama sekali (savepoint di dalam transaksi riwayat).
@@ -575,7 +576,7 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
       try {
         let n = 0;
         r.pemain.forEach((p, i) => {
-          if (p.peserta === undefined) return;
+          if (p.peserta === undefined || !dicatat[i]) return;
           tambahHasil.run(permainanId, p.peserta, nilai[i].dikalahkan, nilai[i].lawan, efektif[i].skor, efektif[i].juara ? 1 : 0, p.keluar ? 1 : 0);
           n++;
         });

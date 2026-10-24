@@ -525,10 +525,13 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       });
       let pesan: PesanServer | null = null;
       if (!sebelum || !sesudah || penyimpan.jumlahHasil(id) === 0) {
+        // Mulai sesudah kompetisi berakhir, atau juaranya sudah ditetapkan: tidak dikabarkan.
         log(`permainan meja ${kodeMeja} tidak dihitung di kompetisi ${kode}`);
-        // Hampir semua keluar (keputusan 24 Okt 2026): yang bertahan tetap dikabari, satu baris di
-        // klasemen akhir. Alasan lain (mulai sesudah berakhir, juara sudah ditetapkan) tidak dikabarkan.
-        if (sesudah && !permainanKompetisiDihitung(r.pemain)) pesan = { ...dasar(sesudah), pemain: [], tidakDihitung: 'keluar' };
+      } else if (!permainanKompetisiDihitung(r.pemain)) {
+        // Hampir semua keluar (keputusan 24 Okt 2026): hanya yang keluar yang dicatat (0). Yang bertahan
+        // dikabari satu baris di klasemen akhir.
+        log(`permainan meja ${kodeMeja} hanya mencatat yang keluar di kompetisi ${kode}`);
+        pesan = { ...dasar(sesudah), pemain: [], tidakDihitung: 'keluar' };
       } else {
         pesan = { ...dasar(sesudah), pemain: hasilKompetisiMeja(r.pemain, sebelum, sesudah) };
       }

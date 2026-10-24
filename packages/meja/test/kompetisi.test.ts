@@ -25,6 +25,7 @@ import {
   hasilKompetisiMeja,
   hitungKlasemenKompetisi,
   juaraKompetisi,
+  kursiDicatatKompetisi,
   nilaiKompetisi,
   permainanKompetisiDihitung,
   rapikanNamaKompetisi,
@@ -137,15 +138,21 @@ describe('nilai per permainan (0–10)', () => {
     expect(permainanKompetisiDihitung(kursi(['A', 0], ['B', 0], ['K1', 0, true], ['K2', 0, true]))).toBe(true);
   });
 
-  it('meja 4 orang, 3 keluar (atau semua): permainan tidak dihitung untuk siapa pun, termasuk yang bertahan', () => {
+  it('meja 4 orang, 3 keluar (atau semua): tidak dihitung untuk yang bertahan, yang keluar tetap dicatat 0', () => {
     const tiga = kursi(['K1', 100, true], ['Tinggal', -300], ['K2', 50, true], ['K3', -900, true]);
     expect(permainanKompetisiDihitung(tiga)).toBe(false);
     expect(nilaiKompetisi(tiga).map((x) => x.nilai)).toEqual([0, 0, 0, 0]);
+    expect(kursiDicatatKompetisi(tiga)).toEqual([true, false, true, true]);
     const semua = kursi(['K1', 100, true], ['K2', 50, true], ['K3', -900, true], ['K4', 0, true]);
     expect(permainanKompetisiDihitung(semua)).toBe(false);
-    // Meja 2 orang: satu keluar = tinggal satu yang bertahan.
+    expect(kursiDicatatKompetisi(semua)).toEqual([true, true, true, true]);
+    expect(nilaiKompetisi(semua).map((x) => [x.dikalahkan, x.lawan, x.nilai])).toEqual([[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]);
+    // Meja 2 orang: satu keluar = tinggal satu yang bertahan; yang keluar saja yang dicatat.
     expect(permainanKompetisiDihitung(kursi(['A', -10], ['B', 10, true]))).toBe(false);
+    expect(kursiDicatatKompetisi(kursi(['A', -10], ['B', 10, true]))).toEqual([false, true]);
     expect(permainanKompetisiDihitung(kursi(['A', -10], ['B', 10]))).toBe(true);
+    // Permainan yang dihitung: semua kursi dicatat, termasuk yang keluar.
+    expect(kursiDicatatKompetisi(kursi(['A', 0], ['B', 0], ['K1', 0, true]))).toEqual([true, true, true]);
     expect(MIN_BERTAHAN_KOMPETISI).toBe(2);
     // Pesan kompetisiHasil untuk permainan yang tidak dihitung: kosong.
     const k = hitungKlasemenKompetisi([{ id: 1, nama: 'Tinggal' }], []);
@@ -274,19 +281,24 @@ describe('klasemen kompetisi', () => {
   });
 });
 
-describe('yang keluar tak dihitung (keputusan pemilik 24 Okt 2026)', () => {
+describe('yang keluar tak dihitung dan selalu dicatat 0 (keputusan pemilik 24 Okt 2026)', () => {
   const peserta = ['Ani', 'Budi', 'Cici', 'Boneka1', 'Boneka2', 'Boneka3'].map((nama, i) => ({ id: i + 1, nama }));
   type Kursi = { peserta: number; skor: number; keluar?: boolean };
-  /** Seperti server (catatHasil): permainan yang tidak dihitung tidak menghasilkan baris apa pun. */
+  /**
+   * Seperti server (catatHasil): yang keluar selalu dicatat 0; di permainan yang tidak dihitung
+   * (kurang dari dua yang bertahan) yang bertahan tidak dicatat.
+   */
   const catat = (...permainan: Kursi[][]): HasilKompetisi[] =>
     permainan.flatMap((meja) => {
       const pemain = meja.map((k) => ({ nama: String(k.peserta), bot: false, skor: k.skor, ...(k.keluar ? { keluar: true } : {}) }));
-      if (!permainanKompetisiDihitung(pemain)) return [];
+      const dicatat = kursiDicatatKompetisi(pemain);
       const nilai = nilaiKompetisi(pemain);
-      return meja.map((k, i) => ({ peserta: k.peserta, dikalahkan: nilai[i].dikalahkan, lawan: nilai[i].lawan, skor: k.skor, juara: false, keluar: !!k.keluar }));
+      return meja.flatMap((k, i) =>
+        dicatat[i] ? [{ peserta: k.peserta, dikalahkan: nilai[i].dikalahkan, lawan: nilai[i].lawan, skor: k.skor, juara: false, keluar: !!k.keluar }] : [],
+      );
     });
 
-  it('skenario boneka: duduk dengan boneka yang langsung keluar tidak menghasilkan permainan yang dihitung', () => {
+  it('skenario boneka: duduk dengan boneka yang langsung keluar tidak menghasilkan nilai untuk Ani; bonekanya dapat 0', () => {
     const budi = [
       ...Array.from({ length: 4 }, () => [{ peserta: 2, skor: 100 }, { peserta: 3, skor: 50 }, { peserta: 4, skor: 0 }, { peserta: 5, skor: -50 }]),
       [{ peserta: 3, skor: 100 }, { peserta: 2, skor: 50 }, { peserta: 4, skor: 0 }, { peserta: 5, skor: -50 }],
@@ -300,14 +312,18 @@ describe('yang keluar tak dihitung (keputusan pemilik 24 Okt 2026)', () => {
     );
     expect(hasil.filter((h) => h.peserta === 1)).toEqual([]);
     const k = hitungKlasemenKompetisi(peserta, hasil);
-    // Budi: 4× 10 dan 1× 6,67 = 9,33, peringkat 1. Ani tidak pernah masuk klasemen.
-    expect(k.peringkat.map((b) => [b.nama, b.peringkat, teksNilai(b.rataNilai)])).toEqual([
-      ['Budi', 1, '9,3'],
-      ['Cici', 2, '7,3'],
-      ['Boneka1', 3, '3,3'],
-      ['Boneka2', 4, '0,0'],
+    // Budi: 4× 10 dan 1× 6,67 = 9,33, peringkat 1. Ani tidak pernah masuk klasemen. Boneka1 keluar
+    // empat kali (4× 0) dan main lima kali di meja Budi (5× 3,33): 16,67 ÷ 9 = 1,85.
+    expect(k.peringkat.map((b) => [b.nama, b.peringkat, b.main, teksNilai(b.rataNilai)])).toEqual([
+      ['Budi', 1, 5, '9,3'],
+      ['Cici', 2, 5, '7,3'],
+      ['Boneka1', 3, 9, '1,9'],
+      ['Boneka2', 4, 6, '0,0'],
     ]);
     expect(k.belumCukup.find((b) => b.nama === 'Ani')).toMatchObject({ main: 0, peringkat: null });
+    expect(k.belumCukup.find((b) => b.nama === 'Boneka3')).toMatchObject({ main: 1, peringkat: null });
+    // Semua baris boneka yang keluar bernilai 0.
+    expect(hasil.filter((h) => h.keluar).every((h) => h.dikalahkan === 0)).toBe(true);
   });
 
   it('boneka yang keluar di meja dengan lawan sungguhan tidak menaikkan nilai: yang dihitung hanya lawan yang bertahan', () => {
@@ -326,10 +342,10 @@ describe('yang keluar tak dihitung (keputusan pemilik 24 Okt 2026)', () => {
     expect(hasil.find((h) => h.peserta === 1)).toMatchObject({ dikalahkan: 0, lawan: 1 });
   });
 
-  // Celah yang diketahui (tinjauan 24 Okt 2026, menunggu keputusan pemilik; docs #51 "Sisa celah"):
-  // keluar yang membuat yang bertahan tinggal satu menghapus permainan itu untuk siapa pun, termasuk
-  // kekalahan yang keluar. Test ini mengunci perilaku sekarang supaya perubahannya disengaja.
-  it('celah yang diketahui: yang kalah di meja 2 orang lalu keluar tidak tercatat main sama sekali', () => {
+  // Keluar menjelang kalah (tinjauan 24 Okt 2026; pemilik memutuskan "Yang keluar selalu dicatat 0"):
+  // yang keluar dapat 0, sama dengan kalah. Sisanya (docs #51 "Sisa celah"): di meja 2 orang
+  // kemenangan lawannya juga tidak tercatat, karena yang keluar tidak dihitung dikalahkan.
+  it('keluar menjelang kalah di meja 2 orang: yang keluar tetap tercatat 0, kemenangan lawannya tidak tercatat', () => {
     // Ani lawan Budi, Cici, dan Dodi (yang tiga ini main jujur), semuanya di meja 2 orang.
     const empat = ['Ani', 'Budi', 'Cici', 'Dodi'].map((nama, i) => ({ id: i + 1, nama }));
     const lawan = [2, 3, 4];
@@ -347,10 +363,11 @@ describe('yang keluar tak dihitung (keputusan pemilik 24 Okt 2026)', () => {
         empat,
         catat(...menang, ...lawan.map((l): Kursi[] => [{ peserta: 1, skor: -100, keluar }, { peserta: l, skor: 100 }]), ...sesama),
       );
-    // Ani keluar setiap kali kalah: hanya tiga kemenangannya yang tercatat.
+    // Ani keluar setiap kali kalah: tiga kemenangan (10) dan tiga kali keluar (0), sama dengan main
+    // jujur. Lawannya kehilangan kemenangan atas Ani (permainan itu tidak dihitung untuk mereka).
     const curang = ani(true);
     expect(curang.peringkat.map((b) => [b.nama, b.peringkat, b.main, teksNilai(b.rataNilai), b.keluar])).toEqual([
-      ['Ani', 1, 3, '10,0', 0],
+      ['Ani', 1, 6, '5,0', 3],
       ['Budi', 2, 5, '4,0', 0],
       ['Cici', 2, 5, '4,0', 0],
       ['Dodi', 2, 5, '4,0', 0],

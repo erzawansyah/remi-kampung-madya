@@ -362,9 +362,10 @@ export type PesanServer =
   /**
    * Meja kompetisi (#51 versi 2): hasil permainan yang baru selesai sudah tercatat di kompetisi.
    * Dikirim server ke kursi manusia yang terhubung di meja itu (dan sekali lagi ke yang tersambung
-   * kembali selama klasemen akhir masih tampil). Permainan yang tidak dihitung karena kurang dari
-   * dua kursi bertahan sampai akhir (keputusan pemilik 24 Okt 2026) tetap dikabarkan, dengan
-   * `tidakDihitung: 'keluar'` dan `pemain` kosong. Alasan tidak dihitung yang lain tidak dikirim.
+   * kembali selama klasemen akhir masih tampil). Permainan yang tidak dihitung untuk yang bertahan
+   * karena kurang dari dua kursi bertahan sampai akhir (keputusan pemilik 24 Okt 2026; yang keluar
+   * tetap dicatat 0) tetap dikabarkan, dengan `tidakDihitung: 'keluar'` dan `pemain` kosong. Alasan
+   * tidak dihitung yang lain tidak dikirim.
    * Aplikasi lama mengabaikannya.
    */
   | {
@@ -377,8 +378,8 @@ export type PesanServer =
       /** Satu per kursi peserta meja ini, urut kursi. Kosong kalau `tidakDihitung`. */
       pemain: HasilKompetisiKursi[];
       /**
-       * Ada kalau permainan ini tidak masuk klasemen: 'keluar' = yang bertahan sampai akhir kurang
-       * dari MIN_BERTAHAN_KOMPETISI (hampir semua pemain keluar).
+       * Ada kalau permainan ini tidak dihitung untuk yang bertahan: 'keluar' = yang bertahan sampai
+       * akhir kurang dari MIN_BERTAHAN_KOMPETISI (hampir semua pemain keluar; yang keluar dicatat 0).
        */
       tidakDihitung?: 'keluar';
     };

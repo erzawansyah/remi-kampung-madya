@@ -164,7 +164,7 @@ describe('penyimpan kompetisi', () => {
     r.tutup();
   });
 
-  it('yang keluar tak dihitung: tinggal satu (atau nol) yang bertahan = permainan tidak dicatat untuk siapa pun', () => {
+  it('yang keluar tak dihitung: tinggal satu (atau nol) yang bertahan = tidak dicatat untuk yang bertahan, yang keluar tetap 0', () => {
     const r = bukaRiwayat(':memory:');
     const { kode, id } = kompetisiJalan(r);
     const t = T0 + JAM;
@@ -176,14 +176,17 @@ describe('penyimpan kompetisi', () => {
     const semua = r.simpan(ringkasan(kode, t + 4, empat(['Ani', 'Budi', 'Cici', 'Dodi'])));
     // Meja 2 orang yang satunya keluar.
     const berdua = r.simpan(ringkasan(kode, t + 5, [['Ani', id('Ani'), -500], ['Budi', id('Budi'), 0, true]]));
-    expect([satu, dua, tiga, semua, berdua].map((x) => r.kompetisi.jumlahHasil(x))).toEqual([4, 4, 0, 0, 0]);
+    // Yang keluar selalu dicatat (keputusan pemilik 24 Okt 2026); yang bertahan sendirian tidak.
+    expect([satu, dua, tiga, semua, berdua].map((x) => r.kompetisi.jumlahHasil(x))).toEqual([4, 4, 3, 4, 1]);
     // Permainan yang tidak dihitung tetap masuk riwayat biasa.
     expect(r.daftar(10)).toHaveLength(5);
     const d = r.kompetisi.detail(kode, t + 6)!;
-    expect(d.jumlahPermainan).toBe(2);
-    // 1 keluar: Budi 10 (2 dari 2), Cici 5, Dodi 0. 2 keluar: Cici 10, Dodi 0. Yang keluar 0.
+    expect(d.jumlahPermainan).toBe(5);
+    // 1 keluar: Budi 10 (2 dari 2), Cici 5, Dodi 0. 2 keluar: Cici 10, Dodi 0. Yang keluar 0, juga di
+    // permainan "tiga", "semua", dan "berdua"; Dodi (tiga) dan Ani (berdua) yang bertahan sendirian
+    // tidak dicatat.
     const nilai = Object.fromEntries([...d.peringkat, ...d.belumCukup].map((b) => [b.nama, [b.main, b.totalNilai, b.keluar]]));
-    expect(nilai).toEqual({ Ani: [2, 0, 2], Budi: [2, 10, 1], Cici: [2, 15, 0], Dodi: [2, 0, 0] });
+    expect(nilai).toEqual({ Ani: [4, 0, 4], Budi: [5, 10, 4], Cici: [4, 15, 2], Dodi: [3, 0, 1] });
     r.tutup();
   });
 
@@ -579,7 +582,7 @@ describe('API dan meja kompetisi', () => {
     for (const k of [ani, budi2, pengintip]) k.tutup();
   });
 
-  it('yang bertahan tinggal satu: permainan tidak dihitung, kompetisiHasil dengan tidakDihitung tanpa nilai', async () => {
+  it('yang bertahan tinggal satu: tidak dihitung untuk yang bertahan, yang keluar dicatat 0, kompetisiHasil dengan tidakDihitung', async () => {
     const { kode, tiket } = kompetisiSekarang({ jumlahPemain: 2, batasPutaran: 1 });
     const ani = new Klien(server.port);
     await ani.kirim({ t: 'buat', nama: 'Ani', kompetisi: { kode, token: tiket.Ani } });
@@ -601,9 +604,12 @@ describe('API dan meja kompetisi', () => {
       pemain: [],
       tidakDihitung: 'keluar',
     });
+    // Yang keluar selalu dicatat 0 dan 1× main (keputusan pemilik 24 Okt 2026); Ani tidak dicatat.
     const d = await detail(kode);
-    expect(d.jumlahPermainan).toBe(0);
-    expect([...d.peringkat, ...d.belumCukup].every((b) => b.main === 0)).toBe(true);
+    expect(d.jumlahPermainan).toBe(1);
+    const baris = [...d.peringkat, ...d.belumCukup];
+    expect(baris.find((b) => b.nama === 'Budi')).toMatchObject({ main: 1, keluar: 1, rataNilai: 0 });
+    expect(baris.find((b) => b.nama === 'Ani')).toMatchObject({ main: 0 });
     // Tersambung kembali selagi klasemen akhir tampil: kabar yang sama dikirim lagi.
     ani.tutup();
     const ani2 = new Klien(server.port);
