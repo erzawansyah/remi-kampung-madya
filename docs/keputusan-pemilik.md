@@ -323,7 +323,7 @@ Sisi server sudah ditangani lebih dulu (Okt 2026, `apps/server`): callback timer
 
 ## 40. Angka joker tidak boleh sama dengan putaran sebelumnya
 
-**Diputuskan pemilik (16 Okt 2026), diterapkan.** Aturan baru; tercatat di CHANGELOG `[Belum dirilis]`.
+**Diputuskan pemilik (16 Okt 2026), diterapkan.** Aturan baru; tercatat di CHANGELOG `[0.3.0]`.
 
 **Keputusan pemilik (16 Okt 2026):** angka joker tidak boleh sama dengan angka joker **putaran tepat sebelumnya**. Kalau kartu yang dibuka angkanya sama, kartu itu dianulir (disisihkan, lalu diselipkan kembali ke deck secara acak) dan kartu berikutnya dibuka, sampai angkanya beda. Hanya dibandingkan dengan putaran tepat sebelumnya: putaran 3 boleh sama dengan putaran 1. Berlaku di semua meja (bukan opsi). **Tidak ada penjelasan anulir di popup joker**: popup tetap hanya menampilkan kartu joker yang berlaku.
 
@@ -344,7 +344,7 @@ Tanpa anulir, pemakaian RNG dan urutan deck sama persis dengan sebelum aturan in
 
 **Diubah #52 (24 Okt 2026):** nutup paling banyak pakai **2 kartu**. Bagian di bawah yang menyebut 3 joker = 750 atau "j turun sampai 2" adalah catatan saat #41 diterapkan; sekarang 3 joker atau lebih tidak bisa nutup (lihat [#52](#k52)). Pentungan juga tidak boleh kembaran kartu yang dipungut giliran itu ([#53](#k53)).
 
-**Diputuskan pemilik (16 Okt 2026), diterapkan** di engine, validasi pesan meja, warga kedai Jago/Suhu, dan meja (client: tombol, seret, animasi, panel mentung, rincian skor). Aturan baru; tercatat di CHANGELOG `[Belum dirilis]`.
+**Diputuskan pemilik (16 Okt 2026), diterapkan** di engine, validasi pesan meja, warga kedai Jago/Suhu, dan meja (client: tombol, seret, animasi, panel mentung, rincian skor). Aturan baru; tercatat di CHANGELOG `[0.3.0]`.
 
 **Keputusan pemilik (16 Okt 2026):** mentung dengan 2 kartu atau lebih hanya boleh kalau **semuanya joker hidup**. Joker mati dihitung kartu biasa (tidak boleh ikut). Nilainya **250 per joker** (2 joker = 500, 3 joker = 750, dan seterusnya).
 
@@ -377,7 +377,7 @@ Tanpa anulir, pemakaian RNG dan urutan deck sama persis dengan sebelum aturan in
 
 ## 42. Mode kaldu
 
-**Diputuskan pemilik (16 Okt 2026), diterapkan** di engine, meja, server, warga kedai Jago/Suhu, dan aplikasi (kotak centang Atur meja/lobi, tombol voting, dan teks pendek di meja). Aturan baru; tercatat di CHANGELOG `[Belum dirilis]`. Pemilik minta teks di dalam permainan sesingkat mungkin: penjelasan lengkap hanya di Bantuan.
+**Diputuskan pemilik (16 Okt 2026), diterapkan** di engine, meja, server, warga kedai Jago/Suhu, dan aplikasi (kotak centang Atur meja/lobi, tombol voting, dan teks pendek di meja). Aturan baru; tercatat di CHANGELOG `[0.3.0]`. Pemilik minta teks di dalam permainan sesingkat mungkin: penjelasan lengkap hanya di Bantuan.
 
 **Keputusan pemilik (16 Okt 2026):** opsi meja **Mode kaldu**. Di putaran terakhir, nilai pentungan dikali dua untuk yang mentung **dan** yang kepentung. Putaran terakhir = putaran ke-N kalau batas putaran diisi, atau sesudah voting **"putaran berikutnya terakhir"**. Putaran kaldu yang habis tanpa mentung (deck habis) diikuti putaran kaldu lagi, sampai ada yang mentung. Voting "Akhiri permainan" tetap ada sebagai jalan keluar.
 
@@ -502,7 +502,7 @@ Tanpa anulir, pemakaian RNG dan urutan deck sama persis dengan sebelum aturan in
 
 ## 47. Gaya main warga kedai per persona
 
-**Diputuskan, diterapkan (17 Okt 2026, belum dirilis).** Lapisan gaya di engine (`packages/engine/src/bot/gaya.ts`) angkanya disetel di arena (lihat [hasil penyetelan](#k47-arena)), dan meja memakai gaya sesuai nama warga kedai (`packages/meja/src/gayaWarga.ts`, lihat [penerapan di meja](#k47-meja)).
+**Diputuskan, diterapkan (17 Okt 2026, rilis 0.3.0).** Lapisan gaya di engine (`packages/engine/src/bot/gaya.ts`) angkanya disetel di arena (lihat [hasil penyetelan](#k47-arena)), dan meja memakai gaya sesuai nama warga kedai (`packages/meja/src/gayaWarga.ts`, lihat [penerapan di meja](#k47-meja)).
 
 **Keputusan pemilik (16 Okt 2026):** warga kedai gampang dibaca, bahkan level Suhu (Londo dan As selalu dibuang di awal). Setiap persona (nama warga kedai) mendapat **gaya main** sendiri, terpisah dari level. Gaya **tidak ditampilkan** ke pemain: tidak ada di UI, Bantuan, protokol, maupun CHANGELOG bagian pemain (cukup ditulis umum, tanpa nama). Pemetaan nama ke gaya di bawah disetujui, ditambah **satu kelompok yang gayanya berubah-ubah** tiap putaran. "Ngurutin" = membuang kartu yang menyambung buangan pemain sebelumnya.
 

@@ -6,6 +6,8 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.5.0] - 2026-10-24
+
 Kompetisi, meja online yang lebih tahan sinyal putus-putus dan pembaruan server, jeda dan ledekan di hasil putaran, kepentung yang terasa kayak ketonjok, dan Usul fitur. **Ada aturan main yang berubah** (keputusan pemilik 24 Okt 2026): nutup paling banyak pakai 2 kartu (#52), dan di permainan 2 deck pentungan tidak boleh kembaran kartu yang barusan dipungut (#53). Rinciannya di bagian Diubah.
 
 ### Untuk pemain
