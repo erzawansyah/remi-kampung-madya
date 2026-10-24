@@ -772,6 +772,7 @@ describe('#41: nutup pakai beberapa joker', () => {
 
 describe('#52/#53: alasan penolakan nutup dari mesin aturan', () => {
   const PESAN_KEBANYAKAN = 'Nutup paling banyak pakai 2 kartu, Bos.';
+  const PESAN_SATU = 'Buangnya satu kartu aja, Bos. Lebih dari satu cuma boleh buat nutup, dan semua sisa kartumu harus ikut dibuang.';
   const PESAN_KEMBARAN = 'Nggak bisa mentung pakai kembaran kartu yang barusan kamu pungut, Bos.';
   const PESAN_SISA_KEMBARAN =
     'Kartu terakhirmu nanti kembaran kartu yang barusan kamu pungut, jadi nggak bisa buat mentung. Sisakan minimal dua kartu: satu dibuang, satu tetap di tangan.';
@@ -820,6 +821,21 @@ describe('#52/#53: alasan penolakan nutup dari mesin aturan', () => {
     expect(m.aksi.at(-1)).toEqual({ jenis: 'buang', kartuId: id('7 wajik') });
     expect(m.g.putaran!.jokerDibuang[0]).toBe(1);
     expect(m.g.putaran!.mentung).toBeNull();
+  });
+
+  it('#52: tiga kartu dipilih dari tangan yang lebih besar (mau turunkan): alasan Buang tetap "buang satu kartu", bukan pesan jumlah nutup', async () => {
+    const m = (meja = await mejaSesudahMulung(
+      { rankJoker: 7, tangan: [['5 love', '6 love', 'J kriting', 'Q kriting', 'K kriting', '2 wajik'], ...lawan], buangan: [['4 love', 3]] },
+      ['4 love', '5 love', '6 love'],
+    ));
+    pilih(m, 'J kriting', 'Q kriting', 'K kriting');
+    expect(m.tombol('turunkan')!.getAttribute('aria-disabled')).toBe('false');
+    expect(buang(m).textContent).toContain('Buang 3 kartu');
+    expect(buang(m).getAttribute('aria-disabled')).toBe('true');
+    expect(buang(m).dataset.alasan).toBe(PESAN_SATU);
+    buang(m).click();
+    expect(m.petunjuk()).toBe(PESAN_SATU);
+    expect(m.aksi.filter((a) => a.jenis === 'buang')).toEqual([]);
   });
 
   it('#53 contoh Ani dan Budi: turunkan J-Q-K Wajik yang menyisakan 8 Love sendirian ditolak, 8 Love tetap bisa dibuang biasa', async () => {

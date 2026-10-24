@@ -166,12 +166,12 @@ describe('fuzz #41/#52/#53: buang beberapa kartu acak', () => {
         ? 'KARTU_TIDAK_ADA'
         : new Set(ids).size !== ids.length
           ? 'KARTU_DOBEL'
-          : ids.length > 2
-            ? 'NUTUP_KEBANYAKAN'
-            : ids.length !== tangan.length
-              ? 'BUANG_SATU_KARTU'
-              : p.sumberAmbil !== 'buangan'
-                ? 'NUTUP_TANPA_MULUNG'
+          : ids.length !== tangan.length
+            ? 'BUANG_SATU_KARTU'
+            : p.sumberAmbil !== 'buangan'
+              ? 'NUTUP_TANPA_MULUNG'
+              : ids.length > 2
+                ? 'NUTUP_KEBANYAKAN'
                 : ids.some(kembaranPungutan)
                   ? 'PENTUNGAN_KEMBARAN'
                   : !ids.every(hidup)
@@ -206,9 +206,9 @@ describe('fuzz #41/#52/#53: buang beberapa kartu acak', () => {
     for (const k of [
       'KARTU_TIDAK_ADA',
       'KARTU_DOBEL',
-      'NUTUP_KEBANYAKAN',
       'BUANG_SATU_KARTU',
       'NUTUP_TANPA_MULUNG',
+      'NUTUP_KEBANYAKAN',
       'PENTUNGAN_KEMBARAN',
       'PENTUNGAN_BUKAN_JOKER',
       'SISAKAN_KARTU (mulung)',

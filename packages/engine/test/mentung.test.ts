@@ -621,14 +621,43 @@ describe('#52: nutup paling banyak pakai 2 kartu', () => {
     harusDitolakAksi(h0.state, buangBeberapa(h0.state, 3, '7 waru', '7 kriting', '7 wajik', '7 waru#1'), 'NUTUP_KEBANYAKAN', PESAN);
   });
 
-  it('urutan: jumlah diperiksa sesudah kartu ada dan tidak dobel, sebelum syarat lain (juga untuk kartu biasa)', () => {
+  it('urutan: jumlah diperiksa sesudah kartu ada, tidak dobel, semua sisa tangan, dan sesudah mulung; sebelum syarat joker', () => {
     const g = tigaJoker();
     harusDitolakAksi(g, buangBeberapa(g, 3, '7 waru', '7 kriting', '7 waru'), 'KARTU_DOBEL');
     harusDitolakAksi(g, buangBeberapa(g, 3, '7 waru', '7 kriting', '7 love'), 'KARTU_TIDAK_ADA');
-    // Tiga kartu biasa dari tangan lima kartu, sesudah ambil deck: tetap pesan jumlah, bukan joker/mulung.
-    const s = skenario({ rankJoker: 7, giliran: 0, tangan: [['2 love', '9 waru', 'K kriting', '3 wajik'], ['2 waru']], deck: ['9 love', '5 kriting'] });
+    // Tiga kartu dari tangan tujuh kartu sesudah ambil deck (misalnya J-Q-K yang mau diturunkan, lalu
+    // tombol Buang tersentuh): pesan "buang satu kartu" seperti dua kartu, bukan pesan jumlah nutup.
+    const s = skenario({
+      rankJoker: 7,
+      giliran: 0,
+      tangan: [['2 love', '9 waru', 'J kriting', 'Q kriting', 'K kriting', '3 wajik'], ['2 waru']],
+      deck: ['9 love', '5 kriting'],
+    });
     const g2 = terapkan(s, { jenis: 'ambilDeck', pemain: 0 });
-    harusDitolakAksi(g2, buangBeberapa(g2, 0, '2 love', '9 waru', 'K kriting'), 'NUTUP_KEBANYAKAN', PESAN);
+    const PESAN_SATU =
+      'Buangnya satu kartu aja, Bos. Lebih dari satu cuma boleh buat nutup, dan semua sisa kartumu harus ikut dibuang.';
+    harusDitolakAksi(g2, buangBeberapa(g2, 0, 'J kriting', 'Q kriting', 'K kriting'), 'BUANG_SATU_KARTU', PESAN_SATU);
+    harusDitolakAksi(g2, buangBeberapa(g2, 0, 'J kriting', 'Q kriting'), 'BUANG_SATU_KARTU', PESAN_SATU);
+    // Seluruh tangan tiga kartu sesudah ambil deck: syarat mulung lebih dulu (urutan sama dengan sebelum #52).
+    const s3 = skenario({ rankJoker: 7, giliran: 0, tangan: [['7 waru', '7 kriting'], ['2 waru']], deck: ['9 love', '7 wajik'] });
+    const g3 = terapkan(s3, { jenis: 'ambilDeck', pemain: 0 });
+    harusDitolakAksi(g3, buangBeberapa(g3, 0, '7 waru', '7 kriting', '7 wajik'), 'NUTUP_TANPA_MULUNG');
+    // Tiga kartu biasa (seluruh tangan) sesudah mulung: pesan jumlah, bukan pesan joker.
+    const h4 = mulungAksi(
+      skenario({
+        rankJoker: 7,
+        giliran: 3,
+        tangan: [['2 waru'], ['3 waru'], ['4 waru'], ['5 love', '6 love', '9 waru', 'K kriting', '2 love']],
+        buangan: [['4 love', 2]],
+      }),
+      3,
+      1,
+      ['4 love', '5 love', '6 love'],
+    );
+    if (!h4.ok) throw new Error(h4.error.pesan);
+    const h = buangBeberapa(h4.state, 3, '9 waru', 'K kriting', '2 love');
+    harusDitolakAksi(h4.state, h, 'NUTUP_KEBANYAKAN', PESAN);
+    expect(!h.ok && h.error.pesan.toLowerCase()).not.toContain('joker');
   });
 
   it('nggak bisa nutup: buang satu joker seperti biasa (−25, jadi joker mati), giliran pindah', () => {

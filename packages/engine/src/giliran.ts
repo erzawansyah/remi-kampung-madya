@@ -193,9 +193,9 @@ function cekAsBolehDibuang(kartu: Kartu, input: InputBuang): void {
  * kembaran kartu yang dipungut giliran ini, #53). Buang biasa (bukan mentung) kembaran tetap boleh.
  *
  * Beberapa kartu (keputusan #41, paling banyak 2 sejak #52) hanya sah untuk nutup pakai dua joker. Urutan
- * pemeriksaannya sengaja struktur dulu (kartu ada, tidak dobel, paling banyak 2, semua sisa tangan ikut,
- * giliran diawali mulung, bukan kembaran pungutan), baru status joker, jadi penolakan tidak pernah bilang
- * apa-apa soal joker sebelum syarat lain terpenuhi.
+ * pemeriksaannya sengaja struktur dulu (kartu ada, tidak dobel, semua sisa tangan ikut, giliran diawali
+ * mulung, paling banyak 2, bukan kembaran pungutan), baru status joker, jadi penolakan tidak pernah bilang
+ * apa-apa soal joker sebelum syarat lain terpenuhi. Urutan empat cek pertama sama dengan sebelum #52.
  */
 export function validasiBuang(input: InputBuang): HasilBuang {
   const lain = input.kartuIdLain ?? [];
@@ -228,18 +228,20 @@ function validasiBuangBeberapa(input: InputBuang, lain: readonly string[]): Hasi
     if (sudah.has(k.id)) langgar('KARTU_DOBEL', `${namaKartu(k)} kepilih dua kali.`);
     sudah.add(k.id);
   }
-  // 3) Keputusan #52: paling banyak 2 kartu. Tangan 3+ joker tidak bisa nutup di giliran itu; buang satu
-  //    kartu seperti biasa (joker hidup yang dibuang begitu kena −25 dan jadi joker mati).
-  if (dipilih.length > MAKS_KARTU_NUTUP) langgar('NUTUP_KEBANYAKAN', PESAN_NUTUP_KEBANYAKAN);
-  // 4) Semua sisa tangan ikut dibuang (tangan jadi kosong).
+  // 3) Semua sisa tangan ikut dibuang (tangan jadi kosong).
   if (dipilih.length !== input.tangan.length) {
     langgar(
       'BUANG_SATU_KARTU',
       'Buangnya satu kartu aja, Bos. Lebih dari satu cuma boleh buat nutup, dan semua sisa kartumu harus ikut dibuang.',
     );
   }
-  // 5) Nutup hanya sesudah mulung.
+  // 4) Nutup hanya sesudah mulung.
   if (input.sumberAmbil !== 'buangan') langgar('NUTUP_TANPA_MULUNG', PESAN_NUTUP_TANPA_MULUNG);
+  // 5) Keputusan #52: paling banyak 2 kartu. Baru diperiksa sesudah syarat 1–4, jadi hanya kena kalau pemain
+  //    memang mencoba nutup pakai seluruh sisa tangannya sesudah mulung; memilih 3 kartu dari tangan yang
+  //    lebih besar tetap dapat pesan "buang satu kartu". Tangan 3+ joker tidak bisa nutup di giliran itu:
+  //    buang satu kartu seperti biasa (joker hidup yang dibuang begitu kena −25 dan jadi joker mati).
+  if (dipilih.length > MAKS_KARTU_NUTUP) langgar('NUTUP_KEBANYAKAN', PESAN_NUTUP_KEBANYAKAN);
   // 6) Keputusan #53: tidak ada pentungan yang kembaran kartu pungutan giliran ini (info publik).
   if (dipilih.some((k) => kembaranPungutan(k, input.pungutan))) langgar('PENTUNGAN_KEMBARAN', PESAN_PENTUNGAN_KEMBARAN);
   // 7) Semuanya joker hidup. Joker yang sudah pernah dibuang (joker mati) dihitung kartu biasa.
