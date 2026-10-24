@@ -11,6 +11,7 @@ import { TEKS_NAMA } from '../src/konten/nama';
 import * as KOMPETISI from '../src/konten/kompetisi';
 import { TEKS_USULAN } from '../src/konten/usulan';
 import { TEKS_LANJUT, TEKS_LEDEK } from '../src/konten/ledek';
+import { TEKS_KONEKSI, teksDijalankanWarga, teksMentungTerlewat } from '../src/konten/koneksi';
 
 // Penjaga gaya teks (antislop) untuk konten yang dibaca pemain: Bantuan, tutorial, info kedai,
 // dan emote/celetukan. Yang dijaga hanya pola formulaik yang jelas (negasi kontras, klise promosi,
@@ -51,6 +52,17 @@ const sumber: [string, string[]][] = [
   ['Usul fitur', [...semuaTeks(TEKS_USULAN), ...semuaTeks(PESAN_USULAN)]],
   // Hasil putaran online (24 Okt 2026): jeda lanjut, tombol Siap, dan ledekan.
   ['Jeda lanjut dan ledekan', [...DAFTAR_LEDEKAN, ...semuaTeks(TEKS_LANJUT), ...semuaTeks(TEKS_LEDEK)]],
+  // Kabar koneksi di meja online (perbaikan koneksi putus-putus).
+  [
+    'Koneksi',
+    [
+      ...semuaTeks(TEKS_KONEKSI),
+      teksDijalankanWarga(2, false),
+      teksDijalankanWarga(1, true),
+      ...semuaTeks(teksMentungTerlewat('Siti', true)),
+      ...semuaTeks(teksMentungTerlewat('Kamu', false)),
+    ],
+  ],
 ];
 
 describe('antislop: teks pemain', () => {

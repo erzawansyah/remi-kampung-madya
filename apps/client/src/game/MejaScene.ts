@@ -99,12 +99,23 @@ export interface AksiAdegan {
    * - true/void: aksi dikirim, kartu menunggu di titik lepas sampai peristiwa 'buang' diputar.
    */
   lepasKeBuangan(id: string): 'abaikan' | boolean | void;
+  /**
+   * Aksi terakhir masih dikirim (bar aksi terkunci menunggu jawaban). Selama itu kartu yang dilepas di
+   * buangan tetap menunggu di titik lepas, tidak dikembalikan ke tangan seolah-olah ditolak.
+   */
+  sedangMengirim?(): boolean;
 }
 
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const KUNCI_TITIK = 'kilau-titik';
-/** Batas tunggu kartu yang dilepas di buangan sebelum dikembalikan ke tangan (ms). */
+/**
+ * Batas tunggu kartu yang dilepas di buangan sebelum dikembalikan ke tangan (ms). Selama aksinya masih
+ * dikirim (AksiAdegan.sedangMengirim, kunci bar aksi), kartu tetap menunggu (dicek tiap CEK_LEPAS_MS),
+ * paling lama BATAS_LEPAS_MAKS (cadangan; kunci bar aksi sendiri lepas paling lambat 10 dtk).
+ */
 const BATAS_LEPAS = 2500;
+const CEK_LEPAS_MS = 250;
+const BATAS_LEPAS_MAKS = 12_000;
 
 /** Efek sesaat pada kartu (ditween terpisah supaya tidak ikut terhenti saat kartu digerakkan). */
 interface EfekKartu {
@@ -804,7 +815,18 @@ export class MejaScene extends Phaser.Scene {
       o.dikunci = 'lepas';
       const sudut = (acakId(id, 3) - 0.5) * 8;
       this.tweens.add({ targets: o, skala: 1, tinggi: 0.35, sudut, duration: durasi(DURASI.mendarat), ease: EASE.keluar });
-      const timer = setTimeout(() => this.kembalikan(id, false), BATAS_LEPAS);
+      const mulai = Date.now();
+      const tunggu = () => {
+        const l = this.lepas.get(id);
+        if (!l) return;
+        // Aksinya masih dikirim (sinyal lambat): kartu jangan balik ke tangan seolah-olah ditolak.
+        if (this.aksi?.sedangMengirim?.() && Date.now() - mulai < BATAS_LEPAS_MAKS) {
+          l.timer = setTimeout(tunggu, CEK_LEPAS_MS);
+          return;
+        }
+        this.kembalikan(id, false);
+      };
+      const timer = setTimeout(tunggu, BATAS_LEPAS);
       this.lepas.set(id, { o, titik: { x: o.x, y: o.y, w: o.w, sudut }, timer });
       bunyi('letak');
       const hasil = this.aksi?.lepasKeBuangan(id);

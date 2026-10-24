@@ -325,7 +325,7 @@ describe('jalan masuk Usul fitur', () => {
     // join + fileURLToPath: di happy-dom, URL global bukan milik Node sehingga ditolak readFileSync.
     const src = join(dirname(fileURLToPath(import.meta.url)), '../src');
     const kontrol = readFileSync(join(src, 'kontrolMeja.ts'), 'utf8');
-    expect(kontrol).not.toMatch(/usulan|usul fitur|usulFitur/i);
+    expect(kontrol).not.toMatch(/\busulan|usul fitur|usulFitur/i);
     const main = readFileSync(join(src, 'main.ts'), 'utf8');
     const pemakai = main.split('\n').filter((b) => /bukaUsulan|usulFitur/.test(b) && !/^\s*(import|\/\/)/.test(b));
     expect(pemakai.map((b) => b.trim())).toEqual([

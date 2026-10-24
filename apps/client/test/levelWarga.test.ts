@@ -178,7 +178,7 @@ describe('simpanan pengaturan offline', () => {
 describe('meja offline: level warga kedai', () => {
   const infoPertama = async (k: KoneksiOffline): Promise<InfoMeja> => {
     let info: InfoMeja | null = null;
-    k.saatPesan((p: PesanServer) => {
+    k.saatPesan((p) => {
       if (p.t === 'meja') info = p.info;
     });
     await vi.advanceTimersByTimeAsync(0);

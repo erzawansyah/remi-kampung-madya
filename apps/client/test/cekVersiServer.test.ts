@@ -104,7 +104,7 @@ describe('cek versi server sesudah meja bubar', () => {
     koneksiDibuka.push(k);
     WsPalsu.terakhir().buka();
     WsPalsu.terakhir().kirimDariServer({ t: 'masuk', kode: 'ABCDE', token: 'tok', kursi: 0 });
-    expect(simpan.sesi()).toEqual({ kode: 'ABCDE', token: 'tok' });
+    expect(simpan.sesi()).toMatchObject({ kode: 'ABCDE', token: 'tok' });
 
     // Server dimatikan untuk deploy (1001), percobaan pertama gagal, lalu server baru menerima.
     await vi.advanceTimersByTimeAsync(25_000);

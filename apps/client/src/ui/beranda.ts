@@ -18,6 +18,7 @@ import { htmlTautanKedai, KEDAI } from '../konten/kedai';
 import { TEKS_TAWARAN } from '../konten/pasang';
 import { TEKS_KALDU } from '../konten/kaldu';
 import { TEKS_KOMPETISI } from '../konten/kompetisi';
+import { TEKS_KONEKSI } from '../konten/koneksi';
 import { TEKS_NAMA } from '../konten/nama';
 import { TEKS_USULAN } from '../konten/usulan';
 import { DAFTAR_LEVEL_WARGA, LEVEL_WARGA, labelLevelKecil } from '../konten/levelWarga';
@@ -29,7 +30,7 @@ import { bacaIsianBatas, htmlIsianBatas, pasangIsianBatas } from './batasSkor';
 import { esc, konfirmasi, toast } from './dom';
 
 /** Keadaan main online yang ditampilkan di beranda. */
-export type StatusOnline = 'siap' | 'offline' | 'menyambung' | 'tersambung' | 'gagal';
+export type StatusOnline = 'siap' | 'offline' | 'menyambung' | 'melanjutkan' | 'tersambung' | 'gagal';
 
 export interface AksiBeranda {
   buatMeja(nama: string): void;
@@ -105,6 +106,8 @@ const TEKS_STATUS: Record<StatusOnline, string> = {
   siap: '',
   offline: 'Kamu lagi offline',
   menyambung: 'Menyambung…',
+  // Aplikasi dibuka ulang di tengah permainan online: sesi meja terakhir disambung lagi terus.
+  melanjutkan: TEKS_KONEKSI.lanjutSesi,
   tersambung: 'Tersambung',
   gagal: 'Server belum bisa dihubungi',
 };

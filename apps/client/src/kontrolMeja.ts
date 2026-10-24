@@ -27,8 +27,8 @@ import {
   type ViewPemain,
   berikutnya,
 } from '@remi/engine';
-import { DAFTAR_EMOTE, MAKS_LEDEK_PER_PUTARAN, MAKS_PESAN, rapikanPesan, type InfoMeja, type PesanKlien, type TempoBot } from '@remi/meja';
-import { KabarKoneksi, type Kabar, type StatusKoneksi } from './koneksi';
+import { DAFTAR_EMOTE, MAKS_LEDEK_PER_PUTARAN, MAKS_PESAN, rapikanPesan, type AksiKlien, type InfoMeja, type TempoBot } from '@remi/meja';
+import { idAcak, KabarKoneksi, type Kabar, type PesanKeMeja, type StatusKoneksi } from './koneksi';
 import type { AksiAdegan, KotakLayar, MejaScene, ModelMeja } from './game/MejaScene';
 import { gambarKartuKeKanvas } from './game/kartuGrafisGambar';
 import { PENANDA_WARGA_KEDAI } from './game/tataMeja';
@@ -55,17 +55,18 @@ import { TEKS_TUTORIAL } from './konten/tutorial';
 import { TEKS_KALDU } from './konten/kaldu';
 import { TEKS_LANJUT, TEKS_LEDEK } from './konten/ledek';
 import { apaEmoji, hapusLapisanLedek, htmlLedek, lapisanLedek, LedekBesar, sasaranLedekBawaan } from './ui/ledek';
+import { TEKS_KONEKSI, teksMentungTerlewat } from './konten/koneksi';
 import { simpan } from './penyimpanan';
 import { gerakDikurangi } from './preferensi';
 import { durasi } from './gerak';
 import { PemutarPeristiwa, labelKartu } from './efek/pemutar';
 import { retakkanStatus } from './efek/retak';
-import { bersihkanSorak } from './efek/sorak';
+import { bersihkanSorak, sorak } from './efek/sorak';
 import { bunyi, getar } from './efek/suara';
 
 export interface AppUntukMeja {
   readonly jenis: 'online' | 'offline';
-  kirim(p: PesanKlien): void;
+  kirim(p: PesanKeMeja): void;
   keluarMeja(): void;
   mainLagiOffline(): void;
   /** Permainan latihan dengan panduan (tutorial coach mark). */
@@ -74,6 +75,36 @@ export interface AppUntukMeja {
   statusKoneksi?(): StatusKoneksi;
   /** Nomor sambungan online: naik setiap kali tersambung (lagi) ke server. Offline: tidak ada (0). */
   nomorSambungan?(): number;
+  /** Pesan yang dikirim sekarang langsung berangkat (online: socket terbuka). Tidak ada = selalu. */
+  siapKirim?(): boolean;
+  /** Minta sambungan diperiksa sekarang (aksi lama tak berjawab): socket mati cepat ketahuan. */
+  periksaKoneksi?(): void;
+  /** Selisih jam server − jam HP (ms) untuk bar waktu giliran. Tidak ada = 0. */
+  selisihJam?(): number;
+}
+
+/** Aksi online yang sudah dikirim tapi belum dipastikan sampai (lihat KontrolMeja.nilaiAksiTertunda). */
+interface AksiTertunda {
+  id: string;
+  aksi: AksiKlien;
+  waktu: number;
+  /** jejakGiliran() view terbaru saat dikirim. */
+  jejak: string;
+  /** Nomor sambungan saat (terakhir) dikirim. */
+  nomor: number;
+  dikirimUlang: boolean;
+  /** Pilihan kartu dan draf mulung saat dikirim, untuk dikembalikan kalau langkahnya tidak sampai. */
+  pilihan: string[];
+  mulung: Mulung | null;
+}
+
+/** Bar aksi dikunci sesudah aksi dikirim, sampai ada jawaban (lihat KontrolMeja.pasangKunciKirim). */
+interface KunciKirim {
+  nomor: number;
+  status: StatusKoneksi;
+  /** 3 dtk lewat tanpa jawaban: "Masih mengirim…", sambungan sedang dicek. */
+  lama: boolean;
+  timer: ReturnType<typeof setTimeout>[];
 }
 
 interface Mulung {
@@ -255,17 +286,30 @@ const PENGUMUMAN_KONEKSI: Record<Kabar, string> = {
 
 const LABEL_TEMPO: Record<TempoBot, string> = { santai: 'santai', normal: 'normal', cepat: 'cepat' };
 
-/** Batas waktu tombol "Mengirim…" sebelum bisa ditekan lagi (kalau server tidak menjawab). */
-const BATAS_KIRIM_MS = 6000;
+/**
+ * Cadangan akhir tombol "Mengirim…" di jendela (kocok, akhiri, kaldu) sebelum bisa ditekan lagi. Biasanya
+ * lepas lebih dulu: jawaban datang, server menolak (error), atau sambungannya putus/berganti.
+ */
+const BATAS_KIRIM_MS = 10_000;
 
 /** Tombol ledekan dikunci sebentar sesudah mengirim (meja membuang emote/ledekan < 1,2 detik). */
 const JEDA_LEDEK_MS = 1300;
 
 /**
- * Batas waktu kunci bar aksi sesudah aksi giliran dikirim. Normalnya kunci lepas begitu view
- * berikutnya datang; ini cadangan kalau server menolak (cuma kirim error) atau koneksi lambat.
+ * Aksi giliran (atau tombol jendela) yang belum dijawab selama ini: tombol tetap dikunci ("Masih
+ * mengirim…") dan sambungan diperiksa sekarang juga (socket mati ketahuan ≤ 5 dtk kemudian). Kunci tidak
+ * lepas diam-diam: hanya karena jawaban (view), penolakan (error), sambungan berubah, atau BATAS_KUNCI_MS.
  */
 const BATAS_AKSI_MS = 3000;
+/** Cadangan akhir kunci bar aksi (setiap tunggu punya batas, lihat AGENTS.md). */
+const BATAS_KUNCI_MS = 10_000;
+/** Aksi yang tidak sampai karena sinyal putus dikirim ulang (sekali) hanya kalau umurnya paling lama ini. */
+const UMUR_KIRIM_ULANG_MS = 30_000;
+/**
+ * Satu aksi melahirkan paling banyak tiga peristiwa. View yang membawa lebih banyak peristiwa baru berarti
+ * ada view yang terlewat (cadangan penanda sambung ulang, selain nomor sambungan).
+ */
+const BATAS_PERISTIWA_SATU_VIEW = 3;
 
 /** Cadangan animasi kocok & bagi: kalau frame berhenti, antrian tetap jalan (bagiKartu sendiri ±6 dtk). */
 const BATAS_BAGI_MS = 8000;
@@ -298,6 +342,7 @@ export function peristiwaAwalPerluDiputar(v: ViewPemain, menungguJoker: readonly
  * jadi siapJoker dikirim ulang, sekali per sambungan, supaya meja tidak tertahan sampai batas waktu.
  */
 export function perluKirimUlangSiapJoker(k: {
+  /** View TERBARU yang diterima (bukan yang sedang tampil: antrian animasi bisa tertinggal). */
   view: ViewPemain | null;
   menungguJoker: readonly number[];
   /** Putaran yang popup jokernya sudah kutekan OK (-1 = belum ada). */
@@ -306,16 +351,75 @@ export function perluKirimUlangSiapJoker(k: {
   /** Nomor sambungan sekarang dan nomor sambungan tempat siapJoker terakhir dikirim. */
   sambungan: number;
   sambunganTerkirim: number | null;
+  /**
+   * Nomor sambungan tempat `view` diterima. Selama view dari sambungan sekarang belum datang, jangan kirim:
+   * putaran bisa sudah berganti selama putus (siapJoker itu akan menjawab popup putaran baru yang belum
+   * pernah dilihat). Tidak diisi = tidak diperiksa.
+   */
+  sambunganView?: number;
 }): boolean {
   const v = k.view;
   const p = v?.putaran;
   if (!v || !p || v.saya === null || v.status !== 'putaranBerjalan') return false;
+  if (k.sambunganView !== undefined && k.sambunganView !== k.sambungan) return false;
   return (
     p.nomor === k.jokerDiOk &&
     k.menungguJoker.includes(v.saya) &&
     k.status === 'tersambung' &&
     k.sambungan !== k.sambunganTerkirim
   );
+}
+
+/**
+ * Giliran (atau susun akhir) masih milikku dan tidak sedang dijalankan warga kedai: kabar "warga kedai
+ * sudah mulai giliranmu, lanjutkan dari sini" (lihat teksDijalankanWarga).
+ */
+export function masihGiliranku(v: ViewPemain, info: Pick<InfoMeja, 'diambilAlihBot'> | null): boolean {
+  const p = v.putaran;
+  if (!p || v.saya === null || info?.diambilAlihBot) return false;
+  if (v.status === 'putaranBerjalan') return p.giliran === v.saya;
+  return v.status === 'susunAkhir' && !p.selesaiSusun[v.saya];
+}
+
+/**
+ * Sidik keadaan giliranku di sebuah view: setiap aksiku yang diterapkan mengubahnya (ambil/mulung: tahap
+ * dan tangan; turunkan: tangan dan kartu jadi; buang: tangan dan giliran; selesaiSusun: selesaiSusun),
+ * sedangkan aksi yang ditolak tidak. Jadi sidik yang sama sesudah sambung ulang = aksi terakhirku belum
+ * diterapkan (dan keadaannya masih sama persis, jadi aman diulang).
+ */
+export function jejakGiliran(v: ViewPemain | null): string {
+  if (!v || v.saya === null) return '';
+  const p = v.putaran;
+  if (!p) return v.status;
+  const tangan = (p.tangan[v.saya] ?? []).map((k) => k.id).sort().join(',');
+  return [v.status, p.nomor, p.giliran, p.tahap, p.selesaiSusun[v.saya] ? 1 : 0, p.kartuJadi[v.saya]?.length ?? 0, tangan].join('|');
+}
+
+/**
+ * Mentung yang terlewat di antara view `lama` (tampil terakhir, id peristiwa `idLama`) dan `baru` (view
+ * susulan sesudah sambung ulang): dari peristiwa mentung yang belum diputar, ditambah hasil putaran baru
+ * yang ditutup mentung tapi peristiwanya sudah tergeser keluar dari jendela peristiwa view.
+ * Hanya info publik (siapa mentung, siapa kepentung).
+ */
+export function mentungTerlewat(
+  lama: Pick<ViewPemain, 'riwayat' | 'peristiwa' | 'putaran'> | null,
+  baru: Pick<ViewPemain, 'riwayat' | 'peristiwa'>,
+  idLama: number,
+): { putaran: number; pemain: number; kepentung: number[] }[] {
+  const hasil = new Map<number, { putaran: number; pemain: number; kepentung: number[] }>();
+  for (const e of baru.peristiwa) {
+    if (e.id > idLama && e.jenis === 'mentung') hasil.set(e.putaran, { putaran: e.putaran, pemain: e.pemain, kepentung: [...e.kepentung] });
+  }
+  // Mentung yang sudah sempat kulihat (lalu putus di susun akhir) bukan terlewat.
+  const sudahDilihat = new Set((lama?.peristiwa ?? []).filter((e) => e.jenis === 'mentung' && e.id <= idLama).map((e) => e.putaran));
+  if (lama?.putaran?.mentung) sudahDilihat.add(lama.putaran.nomor);
+  const nomorLama = lama?.riwayat.at(-1)?.nomor ?? 0;
+  for (const h of baru.riwayat) {
+    if (h.nomor > nomorLama && h.cara === 'mentung' && h.pementung !== null && !hasil.has(h.nomor) && !sudahDilihat.has(h.nomor)) {
+      hasil.set(h.nomor, { putaran: h.nomor, pemain: h.pementung, kepentung: [...h.kepentung] });
+    }
+  }
+  return [...hasil.values()].sort((a, b) => a.putaran - b.putaran);
 }
 
 /**
@@ -361,8 +465,17 @@ export class KontrolMeja implements AksiAdegan {
   private kunciPilih = '';
   /** Giliran di view yang terakhir ditampilkan (pilihan dilepas saat giliranku berakhir). */
   private giliranLalu: number | null = null;
-  /** Aksi giliran baru dikirim dan view jawabannya belum datang: bar aksi dikunci (anti-dobel). */
-  private menungguJawaban: ReturnType<typeof setTimeout> | null = null;
+  /** Aksi giliran baru dikirim dan jawabannya belum datang: bar aksi dikunci (anti-dobel). */
+  private kunciKirim: KunciKirim | null = null;
+  /** Aksi online terakhir yang belum dipastikan sampai (id + keadaan saat dikirim). */
+  private aksiTertunda: AksiTertunda | null = null;
+  /** Server sudah pernah menjawab `aksiDiterima` (server baru: aman mengirim ulang dengan id yang sama). */
+  private serverKonfirmasi = false;
+  /** View terakhir yang DITERIMA (bisa belum tampil) dan nomor sambungan tempat ia diterima. */
+  private viewTerbaru: ViewPemain | null = null;
+  private sambunganView = -1;
+  /** Nomor sambungan view yang sedang tampil (view dari sambungan lain = susulan, lihat putarAntrian). */
+  private nomorTampil = 0;
   /** Teks petunjuk yang terakhir diukur (cek terpotong hanya saat teksnya berganti). */
   private petunjukTerukur = '';
   private kunciUmum = '';
@@ -378,8 +491,11 @@ export class KontrolMeja implements AksiAdegan {
   private readonly elTombol: HTMLElement;
   private htmlLangkah = '';
   private htmlTombol = '';
-  /** View yang belum ditampilkan; diputar berurutan supaya animasi tiap kejadian sempat terlihat. */
-  private antrian: ViewPemain[] = [];
+  /**
+   * View yang belum ditampilkan; diputar berurutan supaya animasi tiap kejadian sempat terlihat. `nomor` =
+   * nomor sambungan saat view itu DITERIMA (bukan saat diputar).
+   */
+  private antrian: { v: ViewPemain; nomor: number }[] = [];
   private sedangMemutar = false;
   private idPeristiwa = -1;
   private pemutar: PemutarPeristiwa;
@@ -388,6 +504,8 @@ export class KontrolMeja implements AksiAdegan {
   private disembunyikan = new Set<string>();
   /** View yang kejadiannya sedang diputar (belum tampil). */
   private viewTertunda: ViewPemain | null = null;
+  /** Nomor sambungan tempat viewTertunda diterima. */
+  private nomorTertunda = 0;
   /** Sedang memutar animasi kejadian: tombol aksi dikunci supaya tidak menekan keadaan lama. */
   private animasi = false;
   private timerAksi = new Map<number, ReturnType<typeof setTimeout>>();
@@ -405,8 +523,8 @@ export class KontrolMeja implements AksiAdegan {
   private timerJoker: ReturnType<typeof setTimeout> | null = null;
   /** Nomor putaran yang hasilnya sudah dianimasikan (gambar ulang karena voting tidak mengulang). */
   private hasilDianimasikan = -1;
-  /** Pesan dari tombol jendela yang baru dikirim (cegah kirim ganda): kunci → waktu kirim. */
-  private tertunda = new Map<string, number>();
+  /** Pesan dari tombol jendela yang baru dikirim (cegah kirim ganda): kunci → kapan dan lewat sambungan mana. */
+  private tertunda = new Map<string, { waktu: number; nomor: number; status: StatusKoneksi }>();
   private akhiriDiminta: boolean | null = null;
   /** Suara "Putaran terakhir" (mode kaldu) yang baru dikirim dan belum terlihat di info meja. */
   private kalduDipilih: boolean | null = null;
@@ -553,7 +671,9 @@ export class KontrolMeja implements AksiAdegan {
     clearInterval(this.timerWaktu);
     if (this.timerDetak) clearInterval(this.timerDetak);
     if (this.timerJoker) clearTimeout(this.timerJoker);
-    if (this.menungguJawaban) clearTimeout(this.menungguJawaban);
+    this.kunciKirim?.timer.forEach((t) => clearTimeout(t));
+    this.kunciKirim = null;
+    this.aksiTertunda = null;
     document.removeEventListener('keydown', this.saatTombol);
     document.removeEventListener('pointerdown', this.saatSentuh, true);
     this.pengamatUkuran?.disconnect();
@@ -577,11 +697,69 @@ export class KontrolMeja implements AksiAdegan {
       this.kirimUlangSiapLanjutBilaPerlu();
     }
     if (view) {
+      const nomor = this.sambunganKini();
+      this.viewTerbaru = view;
+      this.sambunganView = nomor;
       // Jawaban (atau keadaan baru) datang: bar aksi boleh dipakai lagi.
       this.lepasKunciKirim();
-      this.antrian.push(view);
+      this.nilaiAksiTertunda(view);
+      this.antrian.push({ v: view, nomor });
+      // Sesudah view diterima (bukan menunggu antrian animasi habis): siapJoker yang hilang dikirim ulang.
+      this.kirimUlangSiapJokerBilaPerlu();
       void this.putarAntrian();
     } else if (!this.sedangMemutar) this.tampilkan();
+  }
+
+  /**
+   * Status atau nomor sambungan berubah (main.ts memanggilnya; detik() juga memeriksa sebagai cadangan).
+   * Kunci aksi yang dikirim lewat sambungan lama dilepas (jawabannya tidak akan datang lewat sambungan
+   * baru), tombol jendela yang menunggu dipulihkan, dan tombol aksi ikut status sambungan.
+   */
+  koneksiBerubah() {
+    if (this.hancur) return;
+    this.cekKunciKoneksi();
+    this.render();
+  }
+
+  /**
+   * Pesan 'error' datang: kunci aksi dan tombol jendela yang menunggu dilepas. `dariServer` false = pesan
+   * "sinyal putus" dari koneksi sendiri (pesannya tidak berangkat), jadi aksi yang belum dipastikan sampai
+   * tetap diingat untuk dinilai sesudah sambung ulang.
+   */
+  saatError(dariServer = true) {
+    if (this.hancur) return;
+    if (dariServer) this.aksiTertunda = null;
+    if (this.kunciKirim) this.lepasKunciTanpaJawaban();
+    if (this.tertunda.size) {
+      this.tertunda.clear();
+      this.akhiriDiminta = this.kalduDipilih = null;
+      this.segarkanModalHasil();
+    }
+  }
+
+  /**
+   * Server baru mengonfirmasi aksi ber-id sudah diproses (diterapkan atau ditolak). Jawabannya (view, atau
+   * error kalau ditolak) dikirim server LEBIH DULU dan masing-masing sudah melepas kunci. Kunci yang masih
+   * terpasang untuk aksi ini berarti tidak ada jawaban lain: id-nya sudah pernah diproses (kiriman ulang
+   * sesudah sambung ulang, yang dulu ditolak dan error-nya hilang bersama sambungan lama). Kunci dilepas
+   * sekarang, dan kalau keadaan giliranku masih sama, pilihan/draf mulung dikembalikan supaya pemain
+   * mengulang, bukan menunggu cadangan 10 dtk dengan pilihan yang sudah hilang.
+   */
+  aksiDiterima(id: string) {
+    if (this.hancur) return;
+    this.serverKonfirmasi = true;
+    const a = this.aksiTertunda;
+    if (a?.id !== id) return;
+    this.aksiTertunda = null;
+    if (!this.kunciKirim) return;
+    this.lepasKunciKirim();
+    if (jejakGiliran(this.viewTerbaru ?? this.view) === a.jejak) this.kembalikanPilihan(a);
+    else this.lepasKunciTanpaJawaban();
+  }
+
+  /** Kartu hasil seret menunggu di titik lepas selama ini benar (lihat MejaScene.BATAS_LEPAS). */
+  sedangMengirim(): boolean {
+    return !!this.kunciKirim;
   }
 
   /**
@@ -606,22 +784,31 @@ export class KontrolMeja implements AksiAdegan {
     this.sedangMemutar = true;
     try {
       while (this.antrian.length && !this.hancur) {
-        const v = this.antrian.shift()!;
+        const { v, nomor } = this.antrian.shift()!;
         // Hasil putaran ditinggalkan (putaran berikutnya, klasemen akhir): ledekan yang masih antri
         // atau tampil dibuang sebelum kocok & bagi, supaya tidak menutupi popup joker putaran baru.
         // Hanya saat berpindah DARI hasil putaran: view susun akhir yang masih antri di depan view
         // hasilnya tidak membuang ledekan yang sudah masuk untuk hasil itu.
         if (this.view?.status === 'putaranSelesai' && v.status !== 'putaranSelesai') this.bersihkanLedek();
-        // View pertama (baru masuk / sambung ulang): jangan putar ulang kejadian lama, kecuali
-        // kocok & bagi putaran yang baru dimulai (supaya putaran 1 juga terlihat dibagi).
-        const pertama = this.idPeristiwa < 0 || !this.view;
-        const awal = pertama && this.info ? peristiwaAwalPerluDiputar(v, this.info.menungguJoker) : null;
-        const baru = pertama ? (awal ? [awal] : []) : v.peristiwa.filter((e) => e.id > this.idPeristiwa);
+        // View pertama (baru masuk) atau susulan sesudah sambung ulang (diterima lewat sambungan lain dari
+        // view yang tampil, atau membawa lebih banyak peristiwa daripada satu aksi): jangan putar ulang
+        // kejadian lama dengan tombol terkunci (jam giliran di server terus jalan), kecuali kocok & bagi
+        // putaran yang baru dimulai. Mentung yang terlewat dikabarkan ringkas (kabarMentungTerlewat).
+        const lanjutan = this.view ? v.peristiwa.filter((e) => e.id > this.idPeristiwa) : [];
+        const susulan = !!this.view && this.idPeristiwa >= 0 && (nomor !== this.nomorTampil || lanjutan.length > BATAS_PERISTIWA_SATU_VIEW);
+        const pertama = this.idPeristiwa < 0 || !this.view || susulan;
+        if (susulan) this.kabarMentungTerlewat(v);
+        // Kocok & bagi yang sudah pernah tampil di HP ini (sambung ulang cepat selagi popup joker masih
+        // menunggu) tidak diputar lagi: hanya pembagian yang terlewat (keputusan 5.1).
+        const calonAwal = pertama && this.info ? peristiwaAwalPerluDiputar(v, this.info.menungguJoker) : null;
+        const awal = calonAwal && calonAwal.id > this.idPeristiwa ? calonAwal : null;
+        const baru = pertama ? (awal ? [awal] : []) : lanjutan;
         if (baru.length) {
           this.animasi = true;
           this.render();
         }
         this.viewTertunda = v;
+        this.nomorTertunda = nomor;
         for (let i = 0; i < baru.length; i++) {
           if (this.hancur) return;
           const e = baru[i];
@@ -635,7 +822,7 @@ export class KontrolMeja implements AksiAdegan {
         if (this.hancur) return;
         if (v.peristiwa.length) this.idPeristiwa = v.peristiwa[v.peristiwa.length - 1].id;
         else this.idPeristiwa = Math.max(this.idPeristiwa, 0);
-        this.pasangView(v);
+        this.pasangView(v, nomor);
         this.disembunyikan.clear();
         this.animasi = false;
         this.tampilkan();
@@ -655,11 +842,28 @@ export class KontrolMeja implements AksiAdegan {
     }
   }
 
+  /**
+   * View susulan sesudah sambung ulang: mentung yang terjadi selama putus tidak diputar ulang (panelnya
+   * menahan meja), cukup sorakan singkat + pembaca layar. Rinciannya di hasil putaran dan Log. Siapa yang
+   * mentung dan siapa yang kepentung memang terbuka untuk semua orang.
+   */
+  private kabarMentungTerlewat(v: ViewPemain) {
+    const saya = v.saya;
+    if (saya === null) return;
+    for (const m of mentungTerlewat(this.view, v, this.idPeristiwa)) {
+      const siapa = m.pemain === saya ? 'Kamu' : (v.pemain[m.pemain]?.nama ?? 'Pemain');
+      const kena = m.kepentung.includes(saya);
+      const t = teksMentungTerlewat(siapa, kena);
+      void sorak({ judul: t.judul, sub: t.sub, gaya: kena ? 'merah' : 'emas', durasi: 1800 });
+      umumkan(t.umum);
+    }
+  }
+
   /** Tampilkan view yang sedang diputar sekarang juga (dipakai pemutar untuk tahu posisi tujuan). */
   private terapkanViewBerikut(sembunyi: string[]) {
     if (this.hancur) return;
     const v = this.viewTertunda;
-    if (v) this.pasangView(v);
+    if (v) this.pasangView(v, this.nomorTertunda);
     sembunyi.forEach((id) => this.disembunyikan.add(id));
     this.render();
     // View pertama: ukur bar sekarang (ResizeObserver baru melapor nanti) supaya kartu dibagi
@@ -668,7 +872,8 @@ export class KontrolMeja implements AksiAdegan {
   }
 
   /** Pasang view baru (di tengah animasi atau sesudahnya). Putaran baru: keyboard mulai dari awal. */
-  private pasangView(v: ViewPemain) {
+  private pasangView(v: ViewPemain, nomor: number) {
+    this.nomorTampil = nomor;
     if (this.view === v) return;
     const nomorLama = this.view?.putaran?.nomor ?? null;
     this.pertahankanUrutan(v);
@@ -924,16 +1129,19 @@ export class KontrolMeja implements AksiAdegan {
     if (this.hancur || !this.info) return;
     const sambungan = this.sambunganKini();
     const perlu = perluKirimUlangSiapJoker({
-      view: this.view,
+      // View terbaru yang diterima, dan hanya kalau diterima lewat sambungan sekarang: kalau putaran sudah
+      // berganti selama putus, siapJoker untuk putaran lama tidak boleh menjawab popup putaran baru.
+      view: this.viewTerbaru ?? this.view,
       menungguJoker: this.info.menungguJoker,
       jokerDiOk: this.jokerDiOk,
       status: this.app.statusKoneksi?.() ?? 'tersambung',
       sambungan,
       sambunganTerkirim: this.siapJokerDiSambungan,
+      sambunganView: this.sambunganView,
     });
     if (!perlu) return;
     this.siapJokerDiSambungan = sambungan;
-    this.app.kirim({ t: 'siapJoker' });
+    this.app.kirim({ t: 'siapJoker', putaran: this.jokerDiOk });
   }
 
   /**
@@ -1071,7 +1279,14 @@ export class KontrolMeja implements AksiAdegan {
   lepasKeBuangan(id: string): 'abaikan' | false | void {
     // Aksi sebelumnya masih menunggu jawaban: kartu kembali ke tangan tanpa dianggap salah
     // ('abaikan' = scene mengembalikan kartunya tanpa goyang/kilat merah).
-    if (this.menungguJawaban) return 'abaikan';
+    if (this.kunciKirim) return 'abaikan';
+    // Sambungan belum siap: tolak sebelum pilihan ditimpa (pilihan pemain aman), kartu kembali.
+    const putus = this.alasanPutus();
+    if (putus) {
+      this.tolak(putus, id);
+      this.render();
+      return false;
+    }
     const p = this.view?.putaran;
     if (!p || this.view?.status !== 'putaranBerjalan' || p.giliran !== this.saya || p.tahap !== 'main') {
       this.tolak(p?.tahap === 'ambil' && p.giliran === this.saya ? 'Ambil kartu dulu (dari deck atau mulung).' : 'Belum waktunya buang.', id);
@@ -1125,6 +1340,19 @@ export class KontrolMeja implements AksiAdegan {
     bunyi('tolak');
     getar('tolak');
     umumkan(alasan);
+    this.periksaBilaTertahan(alasan);
+  }
+
+  /**
+   * Aksi ditolak karena sambungan belum siap padahal statusnya tersambung: socket baru sudah terbuka, tapi
+   * keadaan meja darinya belum datang ('gabung' tak berjawab). Periksa sekarang (cek cepat: 5 dtk tanpa
+   * kabar = sambung ulang), jangan menunggu watchdog 20 dtk sementara jam giliran jalan. Hanya saat pemain
+   * bertindak, supaya jaringan yang sekadar lambat tidak disambung ulang terus tanpa sebab.
+   */
+  private periksaBilaTertahan(alasan: string) {
+    if (alasan === TEKS_KONEKSI.nyambung && this.app.jenis === 'online' && this.app.statusKoneksi?.() === 'tersambung') {
+      this.app.periksaKoneksi?.();
+    }
   }
 
   /** Sasaran goyang untuk tombol yang ditolak. */
@@ -1138,31 +1366,155 @@ export class KontrolMeja implements AksiAdegan {
   // ---------- aksi ----------
 
   /**
-   * Kirim aksi giliran. Bar aksi dikunci sampai view berikutnya datang (atau BATAS_AKSI_MS), supaya
-   * tombol yang ditekan dua kali / pintasan yang ditahan tidak mengirim aksi yang sama berulang.
-   * Ambil deck tidak melepas pilihan: kartu yang sudah dipilih tetap terpilih di tahap main.
+   * Meja online yang sambungannya belum siap untuk aksi: socket tidak terbuka, status bukan tersambung, atau
+   * keadaan meja dari sambungan sekarang belum datang (sesudah sambung ulang, view lama bisa basi). Kosong =
+   * siap. Offline selalu siap. Memilih dan mengurutkan kartu tetap boleh; pilihan pemain tidak disentuh.
    */
-  private kirimAksi(aksi: Extract<PesanKlien, { t: 'aksi' }>['aksi']) {
-    if (this.menungguJawaban) clearTimeout(this.menungguJawaban);
-    // Kunci dipasang SEBELUM kirim: offline, view jawabannya bisa datang di dalam kirim() itu sendiri.
-    this.menungguJawaban = setTimeout(() => {
-      this.menungguJawaban = null;
+  private alasanPutus(): string {
+    if (this.app.jenis !== 'online') return '';
+    const status = this.app.statusKoneksi?.() ?? 'tersambung';
+    if (status !== 'tersambung' || this.app.siapKirim?.() === false) return TEKS_KONEKSI.nyambung;
+    if (this.sambunganView !== this.sambunganKini()) return TEKS_KONEKSI.nyambung;
+    return '';
+  }
+
+  /**
+   * Kirim aksi giliran. Bar aksi dikunci sampai jawabannya datang (lihat pasangKunciKirim), supaya tombol
+   * yang ditekan dua kali / pintasan yang ditahan tidak mengirim aksi yang sama berulang. Ambil deck tidak
+   * melepas pilihan: kartu yang sudah dipilih tetap terpilih di tahap main.
+   * Sambungan belum siap: ditolak di depan (false), pilihan dan draf mulung tetap utuh. Online, tiap aksi
+   * diberi id acak; server baru menjawab `aksiDiterima` dan tidak menerapkan id yang sama dua kali.
+   */
+  private kirimAksi(aksi: AksiKlien, mulung: Mulung | null = null): boolean {
+    const putus = this.alasanPutus();
+    if (putus) {
+      this.tolak(putus, aksi.jenis === 'ambilDeck' ? 'deck' : 'tangan');
       this.render();
-    }, BATAS_AKSI_MS);
+      return false;
+    }
+    // Kunci dipasang SEBELUM kirim: offline, view jawabannya bisa datang di dalam kirim() itu sendiri.
+    this.pasangKunciKirim();
+    let id: string | undefined;
+    if (this.app.jenis === 'online') {
+      id = idAcak();
+      this.aksiTertunda = {
+        id,
+        aksi,
+        waktu: Date.now(),
+        jejak: jejakGiliran(this.viewTerbaru ?? this.view),
+        nomor: this.sambunganKini(),
+        dikirimUlang: false,
+        pilihan: [...this.dipilih],
+        mulung,
+      };
+    }
     if (aksi.jenis !== 'ambilDeck') this.dipilih.clear();
-    this.app.kirim({ t: 'aksi', aksi });
+    this.app.kirim(id ? { t: 'aksi', aksi, id } : { t: 'aksi', aksi });
+    this.render();
+    return true;
+  }
+
+  /**
+   * Kunci bar aksi sesudah aksi dikirim. Lepas saat jawaban datang (view), server menolak (error), atau
+   * sambungan berubah. Sesudah BATAS_AKSI_MS tanpa jawaban: tetap terkunci dengan "Masih mengirim…" dan
+   * sambungan diperiksa sekarang juga. Cadangan akhir BATAS_KUNCI_MS.
+   */
+  private pasangKunciKirim() {
+    this.lepasKunciKirim();
+    const k: KunciKirim = { nomor: this.sambunganKini(), status: this.app.statusKoneksi?.() ?? 'tersambung', lama: false, timer: [] };
+    k.timer.push(
+      setTimeout(() => {
+        if (this.kunciKirim !== k || this.hancur) return;
+        k.lama = true;
+        this.setPetunjuk(TEKS_KONEKSI.masihMengirim);
+        this.render();
+        this.app.periksaKoneksi?.();
+      }, BATAS_AKSI_MS),
+      setTimeout(() => {
+        if (this.kunciKirim === k && !this.hancur) this.lepasKunciTanpaJawaban();
+      }, BATAS_KUNCI_MS),
+    );
+    this.kunciKirim = k;
+  }
+
+  /** Jawaban datang (view): lepas kunci. Petunjuk "Masih mengirim…" tidak boleh menempel. */
+  private lepasKunciKirim() {
+    const k = this.kunciKirim;
+    if (!k) return;
+    k.timer.forEach((t) => clearTimeout(t));
+    this.kunciKirim = null;
+    if (this.petunjuk === TEKS_KONEKSI.masihMengirim) this.petunjuk = '';
+  }
+
+  /**
+   * Kunci lepas tanpa view jawaban (ditolak server, sambungan berganti, atau cadangan akhir): petunjuk
+   * "Mulung dikirim…"/"Masih mengirim…" sudah tidak benar, tombol dihidupkan lagi.
+   */
+  private lepasKunciTanpaJawaban() {
+    this.lepasKunciKirim();
+    if (this.petunjuk === TEKS_KONEKSI.mulungDikirim) this.petunjuk = '';
     this.render();
   }
 
-  private lepasKunciKirim() {
-    if (!this.menungguJawaban) return;
-    clearTimeout(this.menungguJawaban);
-    this.menungguJawaban = null;
+  /** Kunci aksi yang dikirim lewat sambungan yang sudah putus/berganti: jawabannya tidak akan datang. */
+  private cekKunciKoneksi() {
+    const k = this.kunciKirim;
+    if (k && (k.nomor !== this.sambunganKini() || k.status !== (this.app.statusKoneksi?.() ?? 'tersambung'))) this.lepasKunciTanpaJawaban();
+    // Tombol jendela (kocok/akhiri/kaldu) yang dikirim lewat sambungan lama juga dipulihkan.
+    const basi = [...this.tertunda.keys()].filter((kunci) => !this.sedangDikirim(kunci));
+    if (!basi.length) return;
+    basi.forEach((kunci) => this.tertunda.delete(kunci));
+    this.segarkanModalHasil();
+  }
+
+  /**
+   * View baru diterima selagi ada aksi online yang belum dipastikan sampai.
+   * - Sambungan sama: sidik giliran berubah = aksinya sudah diterapkan.
+   * - Sambungan baru (sesudah putus): sidik berubah = sudah diterapkan atau keadaannya sudah lain (warga
+   *   kedai mengambil alih, dikabarkan lewat 'masuk'), dilupakan. Sidik sama = belum diterapkan: kirim ulang
+   *   SEKALI dengan id yang sama kalau server ini mengenal id aksi (pernah menjawab aksiDiterima) dan umurnya
+   *   ≤ UMUR_KIRIM_ULANG_MS; selain itu pilihan/draf mulung dikembalikan dan pemain diminta mengulang.
+   */
+  private nilaiAksiTertunda(v: ViewPemain) {
+    const a = this.aksiTertunda;
+    if (!a) return;
+    const nomor = this.sambunganKini();
+    const berubah = jejakGiliran(v) !== a.jejak;
+    if (nomor === a.nomor) {
+      if (berubah) this.aksiTertunda = null;
+      return;
+    }
+    if (berubah) {
+      this.aksiTertunda = null;
+      return;
+    }
+    const umur = Date.now() - a.waktu;
+    if (!a.dikirimUlang && this.serverKonfirmasi && umur <= UMUR_KIRIM_ULANG_MS && this.app.siapKirim?.() !== false) {
+      a.dikirimUlang = true;
+      a.nomor = nomor;
+      this.pasangKunciKirim();
+      this.app.kirim({ t: 'aksi', aksi: a.aksi, id: a.id });
+      return;
+    }
+    this.aksiTertunda = null;
+    this.kembalikanPilihan(a);
+  }
+
+  /** Aksi tertunda tidak diterapkan: pilihan kartu dan draf mulung saat dikirim dikembalikan, pemain diminta mengulang. */
+  private kembalikanPilihan(a: AksiTertunda) {
+    this.dipilih = new Set(a.pilihan);
+    if (a.mulung) {
+      this.mulung = a.mulung;
+      this.pilihJumlah = false;
+    }
+    this.setPetunjuk(TEKS_KONEKSI.belumSampai, true);
+    umumkan(TEKS_KONEKSI.belumSampai);
+    this.render();
   }
 
   private ambilDeck() {
     // Ketukan kedua selagi aksi masih dikirim (double-tap): diabaikan diam-diam, bukan "salah".
-    if (this.menungguJawaban) return;
+    if (this.kunciKirim) return;
     const s = this.statusTombol().ambil;
     if (!s.aktif) return this.tolak(s.alasan, 'deck');
     this.kirimAksi({ jenis: 'ambilDeck' });
@@ -1232,13 +1584,20 @@ export class KontrolMeja implements AksiAdegan {
     if (!this.mulung.kombinasi.length) return this.tolak('Susun dulu kombinasinya, lalu tekan "Jadikan".', 'tangan');
     const cek = this.cekMulung();
     if (!cek.ok) return this.tolak(cek.pesan, 'tangan');
-    const { jumlah, kombinasi } = this.mulung;
+    // Sambungan belum siap: draf mulung tetap utuh, tidak ada "Mulung dikirim".
+    const putus = this.alasanPutus();
+    if (putus) {
+      this.tolak(putus, 'tangan');
+      return this.render();
+    }
+    const draf = this.mulung;
+    const { jumlah, kombinasi } = draf;
     this.mulung = null;
     // Petunjuk "Tekan Konfirmasi" sudah basi: beri tahu mulungnya sedang jalan (dibersihkan
-    // sendiri begitu tahap berganti ke main).
-    this.setPetunjuk('Mulung dikirim, tunggu kartunya mendarat…');
+    // sendiri begitu tahap berganti ke main, atau kalau kunci lepas tanpa jawaban).
+    this.setPetunjuk(TEKS_KONEKSI.mulungDikirim);
     umumkan('Mulung dikirim.');
-    this.kirimAksi({ jenis: 'mulung', jumlah, kartuJadi: kombinasi });
+    this.kirimAksi({ jenis: 'mulung', jumlah, kartuJadi: kombinasi }, draf);
   }
 
   private turunkan() {
@@ -1295,7 +1654,10 @@ export class KontrolMeja implements AksiAdegan {
     const hidup: StatusTombol = { aktif: true, alasan: '' };
     const semua = (s: StatusTombol): DaftarStatus => ({ ambil: s, mulung: s, turunkan: s, buang: s, selesai: s, mentung: false });
     if (this.animasi) return semua(mati('Tunggu sebentar, kartu masih bergerak.'));
-    if (this.menungguJawaban) return semua(mati('Sebentar, aksinya lagi diproses…'));
+    if (this.kunciKirim) return semua(mati(this.kunciKirim.lama ? TEKS_KONEKSI.masihMengirim : 'Sebentar, aksinya lagi diproses…'));
+    // Meja online yang sambungannya belum siap (juga susun akhir: turunkan dan Selesai juga aksi).
+    const putus = this.alasanPutus();
+    if (putus && v?.putaran && (v.status === 'putaranBerjalan' || v.status === 'susunAkhir')) return semua(mati(putus));
     if (v?.status === 'susunAkhir' && p) {
       const alasan = this.susunSaya()
         ? ''
@@ -1509,26 +1871,39 @@ export class KontrolMeja implements AksiAdegan {
   private detik() {
     if (this.hancur || !this.view || !this.info) return;
     this.perbaruiWaktu();
-    this.perbaruiKoneksi();
+    // Cadangan kalau kabar koneksiBerubah() dari aplikasi terlewat: status berganti = tombol ikut berganti.
+    if (this.perbaruiKoneksi()) {
+      this.cekKunciKoneksi();
+      this.render();
+    }
     this.detikLanjut();
     if (this.tutorial?.aktif) this.tutorial.perbarui(this.keadaanTutorial(this.statusTombol()));
   }
 
+  /**
+   * Bar waktu giliran. Batas dari server (jam server); jam HP dikoreksi dengan selisih jam yang diukur dari
+   * pong (hanya kalau selisihnya jelas lebih besar dari ketelitiannya, lihat koneksi.ts). Lebar paling
+   * banyak 100%. Giliranku yang sedang dijalankan warga kedai: bar disembunyikan (waktunya sudah lewat).
+   */
   private perbaruiWaktu() {
     const el = this.elWaktu;
     const info = this.info;
     if (!info) return;
     const batas = info.batasWaktu;
     const detik = info.pengaturan.detikGiliran;
-    const st = this.view?.status;
-    if (!batas || !detik || (st !== 'putaranBerjalan' && st !== 'susunAkhir')) {
+    const v = this.view;
+    const st = v?.status;
+    const p = v?.putaran;
+    const milikku = !!p && (st === 'putaranBerjalan' ? p.giliran === this.saya : st === 'susunAkhir' && !p.selesaiSusun[this.saya]);
+    if (!batas || !detik || (st !== 'putaranBerjalan' && st !== 'susunAkhir') || (info.diambilAlihBot && milikku)) {
       el.classList.add('tersembunyi');
       return;
     }
-    const sisa = Math.max(0, batas - Date.now());
+    const sekarang = Date.now() + (this.app.selisihJam?.() ?? 0);
+    const sisa = Math.max(0, batas - sekarang);
     el.classList.remove('tersembunyi');
     el.classList.toggle('mendesak', sisa < 10_000);
-    (el.firstElementChild as HTMLElement).style.width = `${(100 * sisa) / (detik * 1000)}%`;
+    (el.firstElementChild as HTMLElement).style.width = `${Math.min(100, (100 * sisa) / (detik * 1000))}%`;
     // Peringatan sekali per giliran untuk pembaca layar.
     if (sisa < 10_000 && sisa > 0 && (this.giliranSaya() || this.susunSaya()) && this.peringatanWaktu !== this.kunciGiliran) {
       this.peringatanWaktu = this.kunciGiliran;
@@ -1536,9 +1911,10 @@ export class KontrolMeja implements AksiAdegan {
     }
   }
 
-  private perbaruiKoneksi() {
+  /** Lencana koneksi di bar atas. True kalau statusnya berubah sejak terakhir digambar. */
+  private perbaruiKoneksi(): boolean {
     const s = this.app.statusKoneksi?.() ?? 'tersambung';
-    if (s === this.statusKoneksi) return;
+    if (s === this.statusKoneksi) return false;
     const lama = this.statusKoneksi;
     this.statusKoneksi = s;
     const el = this.elKoneksi;
@@ -1548,6 +1924,7 @@ export class KontrolMeja implements AksiAdegan {
     // Status pertama juga dimasukkan (diam-diam): kalau meja dibuka saat putus, "Tersambung lagi." tetap muncul.
     const kabar = this.kabarKoneksi.status(s);
     if (lama !== null && kabar) umumkan(PENGUMUMAN_KONEKSI[kabar]);
+    return true;
   }
 
   /** Ukur tinggi bar HTML sebenarnya lalu beri tahu scene supaya kartu tidak tertutup bar. */
@@ -1632,12 +2009,15 @@ export class KontrolMeja implements AksiAdegan {
     if (this.mulung) {
       const cek = this.mulung.kombinasi.length ? this.cekMulung() : { ok: false };
       const pilihMulung = this.semuaKartuMulung().filter((k) => this.dipilih.has(k.id)).length;
+      // Jadikan hanya menyusun draf di HP ini (tidak mengirim apa pun), jadi tetap boleh selagi menyambung;
+      // Konfirmasi yang mengirim ikut status sambungan.
+      const putus = this.alasanPutus();
       return {
         langkah,
         isi: `${tombol('batal', '✕', hidup, 'ikon')}${tombol('jadikan', `Jadikan${pilihMulung ? ` (${pilihMulung})` : ''}`, pilihMulung >= 3 ? hidup : mati('Pilih minimal 3 kartu.'), 'kedua')}${tombol(
           'konfirmasi',
           'Konfirmasi mulung',
-          cek.ok ? hidup : mati('Susun dulu kombinasinya.'),
+          !cek.ok ? mati('Susun dulu kombinasinya.') : putus ? mati(putus) : hidup,
           'utama',
         )}`,
       };
@@ -1691,7 +2071,7 @@ export class KontrolMeja implements AksiAdegan {
     const b = this.elTombol.querySelector<HTMLElement>(`[data-a="${a}"]`);
     if (!b) return;
     // Aksi sebelumnya belum dijawab: tekan ulang (double-tap / tombol ditahan) diabaikan diam-diam.
-    if (this.menungguJawaban && a !== 'urut') return;
+    if (this.kunciKirim && a !== 'urut') return;
     if (b.getAttribute('aria-disabled') === 'true') return this.tolak(b.dataset.alasan ?? '', this.sasaranTombol(a));
     bunyi('klik');
     const v = this.view;
@@ -1987,7 +2367,7 @@ export class KontrolMeja implements AksiAdegan {
     // Meja hanya menerima ledekan selama hasil putaran. Keadaan terbaru (yang mungkin masih diantrikan di
     // belakang animasi akhir putaran) yang dipakai, jadi ledekan yang datang saat aku masih di panel
     // mentung tetap ditampung; yang datang sesudah hasil ditinggalkan dibuang.
-    if ((this.antrian.at(-1) ?? this.viewTertunda ?? this.view).status !== 'putaranSelesai') return;
+    if ((this.antrian.at(-1)?.v ?? this.viewTertunda ?? this.view).status !== 'putaranSelesai') return;
     if (ke === this.saya && dari !== this.saya) {
       const nama = this.view.pemain[dari]?.nama ?? 'Pemain';
       this.ledekBesar.tambah(nama, isi, `${this.namaUntukPembaca(dari)} ${TEKS_LEDEK.ngeledekKamu}: ${isi}`);
@@ -2042,15 +2422,37 @@ export class KontrolMeja implements AksiAdegan {
 
   // ---------- jendela ----------
 
-  /** Pesan dari tombol jendela sedang dikirim (cegah kirim ganda) sampai dijawab atau batas waktu. */
+  /**
+   * Pesan dari tombol jendela sedang dikirim (cegah kirim ganda) sampai dijawab, ditolak (error), sambungannya
+   * berganti, atau batas waktu.
+   */
   private sedangDikirim(kunci: string): boolean {
     const t = this.tertunda.get(kunci);
-    return t !== undefined && Date.now() - t < BATAS_KIRIM_MS;
+    if (!t) return false;
+    return Date.now() - t.waktu < BATAS_KIRIM_MS && t.nomor === this.sambunganKini() && t.status === (this.app.statusKoneksi?.() ?? 'tersambung');
+  }
+
+  /** Tombol jendela yang mengirim ditekan saat sambungan belum siap: beri tahu, jangan tandai "Mengirim…". */
+  private tolakJendela(): boolean {
+    const alasan = this.alasanPutus();
+    if (!alasan) return false;
+    toast(alasan, true, 3500);
+    bunyi('tolak');
+    getar('tolak');
+    this.periksaBilaTertahan(alasan);
+    return true;
+  }
+
+  /** Modal hasil yang sedang terbuka digambar ulang (tombol yang menunggu dipulihkan). Tertutup: dibiarkan. */
+  private segarkanModalHasil() {
+    if (this.hancur || !document.querySelector('#modal [data-hasil]')) return;
+    const v = this.view;
+    if (v?.status === 'putaranSelesai') this.modalHasil(v.riwayat[v.riwayat.length - 1]);
   }
 
   /** Tandai tombol sedang diproses, kunci tombol sekelompoknya, lalu segarkan modal hasil kalau server diam. */
   private tandaiKirim(kunci: 'kocok' | 'akhiri' | 'kaldu', tombol: HTMLButtonElement, kelompok: Iterable<HTMLButtonElement>) {
-    this.tertunda.set(kunci, Date.now());
+    this.tertunda.set(kunci, { waktu: Date.now(), nomor: this.sambunganKini(), status: this.app.statusKoneksi?.() ?? 'tersambung' });
     // aria-disabled, bukan disabled: tombol yang dimatikan dengan `disabled` melepas fokus keyboard
     // ke <body> (Chrome), jadi pemain keyboard kehilangan posisinya di modal selagi menunggu.
     for (const b of kelompok) b.setAttribute('aria-disabled', 'true');
@@ -2062,14 +2464,14 @@ export class KontrolMeja implements AksiAdegan {
     // dan tombol terkunci selamanya di "Mengocok…"/"Mengirim…".
     if (kunci === 'kocok') this.htmlLanjutTerpasang = '';
     this.timerTertunda.push(
+      // Belum dijawab: periksa sambungan sekarang (socket mati ketahuan cepat), tombol tetap menunggu.
       setTimeout(() => {
-        // Cek modal hasil yang terbuka SEKARANG, bukan tombol lama: wadah lanjut boleh sudah dipasang
-        // ulang, atau modalnya ditutup lalu dibuka lagi dari "Hasil putaran" selagi masih menunggu.
-        // Kalau modalnya sudah ditutup, jangan dibuka lagi tanpa diminta.
-        if (this.hancur || !document.querySelector('#modal [data-hasil]')) return;
-        const v = this.view;
-        if (v?.status === 'putaranSelesai') this.modalHasil(v.riwayat[v.riwayat.length - 1]);
-      }, BATAS_KIRIM_MS + 50),
+        if (!this.hancur && this.sedangDikirim(kunci)) this.app.periksaKoneksi?.();
+      }, BATAS_AKSI_MS),
+      // Cek modal hasil yang terbuka SEKARANG, bukan tombol lama: wadah lanjut boleh sudah dipasang
+      // ulang, atau modalnya ditutup lalu dibuka lagi dari "Hasil putaran" selagi masih menunggu.
+      // Kalau modalnya sudah ditutup, jangan dibuka lagi tanpa diminta.
+      setTimeout(() => this.segarkanModalHasil(), BATAS_KIRIM_MS + 50),
     );
   }
 
@@ -2330,8 +2732,10 @@ export class KontrolMeja implements AksiAdegan {
             this.sasaranLedek = { putaran: h.nomor, kursi: Number(b.dataset.ledekKe) };
             this.segarkanHasil();
           } else if (b.dataset.ledekIsi !== undefined) {
+            if (this.tolakJendela()) return;
             this.kirimLedek(h, b.dataset.ledekIsi);
           } else if (b.hasAttribute('data-siap-lanjut')) {
+            if (this.tolakJendela()) return;
             bunyi('klik');
             // Sinyal putus: pesannya tidak berangkat (aplikasi memberi tahu lewat toast "coba lagi"),
             // jadi tombol Siap dibiarkan supaya bisa ditekan lagi sesudah tersambung.
@@ -2342,13 +2746,13 @@ export class KontrolMeja implements AksiAdegan {
             this.app.kirim({ t: 'siapLanjut' });
             this.segarkanHasil();
           } else if (b.dataset.kocok !== undefined) {
-            if (this.sedangDikirim('kocok')) return;
+            if (this.sedangDikirim('kocok') || this.tolakJendela()) return;
             bunyi('klik');
             const k = b.dataset.kocok;
             this.tandaiKirim('kocok', b, dlg.querySelectorAll<HTMLButtonElement>('[data-kocok]'));
             this.app.kirim({ t: 'putaranBerikut', pengocok: k === 'acak' ? undefined : Number(k) });
           } else if (b.hasAttribute('data-akhiri')) {
-            if (this.sedangDikirim('akhiri')) return;
+            if (this.sedangDikirim('akhiri') || this.tolakJendela()) return;
             bunyi('klik');
             const setuju = !(this.info?.setujuAkhiri.includes(this.saya) ?? false);
             this.akhiriDiminta = setuju;
@@ -2356,7 +2760,7 @@ export class KontrolMeja implements AksiAdegan {
             this.app.kirim({ t: 'akhiri', setuju });
           } else if (b.hasAttribute('data-kaldu')) {
             // Mode kaldu (#42): setuju/batal "putaran berikutnya terakhir". Offline langsung berlaku.
-            if (this.sedangDikirim('kaldu')) return;
+            if (this.sedangDikirim('kaldu') || this.tolakJendela()) return;
             bunyi('klik');
             const setuju = !(this.info?.setujuKaldu?.includes(this.saya) ?? false);
             this.kalduDipilih = setuju;
@@ -2479,7 +2883,8 @@ export class KontrolMeja implements AksiAdegan {
           this.siapJokerDiSambungan = this.sambunganKini();
           tutupModal();
           this.tutorial?.tandai('joker');
-          this.app.kirim({ t: 'siapJoker' });
+          // Nomor putaran ikut dikirim: meja (server baru) mengabaikan OK untuk putaran yang sudah lewat.
+          this.app.kirim({ t: 'siapJoker', putaran: nomor });
         });
       },
       { bisaDitutup: false },
