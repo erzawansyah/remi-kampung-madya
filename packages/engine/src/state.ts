@@ -98,6 +98,13 @@ export interface StatePutaran {
   urutanKartuJadi: number;
   /** Putaran kaldu (#42): pentungan dikali PENGALI_KALDU. Hanya ditulis kalau true. */
   kaldu?: true;
+  /**
+   * Simpanan dari sebelum keputusan #53 yang berhenti tepat saat kartu terakhir di tangan pemain giliran
+   * kembaran kartu pungutannya (dulu sah, sekarang tanpa aksi sah). Hanya ditulis `migrasiState()` untuk
+   * state itu, supaya giliran itu bisa ditutup dengan aturan lama; dihapus begitu pungutan dikosongkan.
+   * Tidak ada = larangan #53 berlaku. Lihat `pungutanBerlaku()` di giliran.ts.
+   */
+  kembaranWarisan?: true;
 }
 
 export type StatusSkor = 'mentung' | 'kepentung' | 'aman';

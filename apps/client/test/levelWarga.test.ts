@@ -26,12 +26,14 @@ const aksiPalsu = (): AksiBeranda => ({
   gabung: vi.fn(),
   lihatPublik: vi.fn(),
   lihatRiwayat: vi.fn(),
+  lihatKompetisi: vi.fn(),
   mainOffline: vi.fn(),
   lanjutOffline: vi.fn(),
   latihan: vi.fn(),
   bantuan: vi.fn(),
   pengaturan: vi.fn(),
   tentang: vi.fn(),
+  usulFitur: vi.fn(),
   pasangAplikasi: null,
   muatUlang: null,
 });
@@ -176,7 +178,7 @@ describe('simpanan pengaturan offline', () => {
 describe('meja offline: level warga kedai', () => {
   const infoPertama = async (k: KoneksiOffline): Promise<InfoMeja> => {
     let info: InfoMeja | null = null;
-    k.saatPesan((p: PesanServer) => {
+    k.saatPesan((p) => {
       if (p.t === 'meja') info = p.info;
     });
     await vi.advanceTimersByTimeAsync(0);

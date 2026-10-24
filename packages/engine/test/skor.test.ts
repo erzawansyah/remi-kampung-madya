@@ -72,13 +72,11 @@ describe('nilai kartu (8.1)', () => {
     expect(nilaiPentungan(kartu('7 love'), true)).toBe(250);
   });
 
-  it('pentungan total (#41): satu kartu sama dengan nilaiPentungan, tiap joker lain +250', () => {
+  it('pentungan total (#41): satu kartu sama dengan nilaiPentungan, joker kedua +250 (paling banyak 2 kartu, #52)', () => {
     expect(nilaiPentunganTotal(kartu('6 love'), false)).toBe(50);
     expect(nilaiPentunganTotal(kartu('As love'), false, [])).toBe(150);
     expect(nilaiPentunganTotal(kartu('7 love'), true)).toBe(250);
     expect(nilaiPentunganTotal(kartu('7 love'), true, kartuSemua('7 waru'))).toBe(500);
-    expect(nilaiPentunganTotal(kartu('7 love'), true, kartuSemua('7 waru', '7 kriting'))).toBe(750);
-    expect(nilaiPentunganTotal(kartu('7 love'), true, kartuSemua('7 waru', '7 kriting', '7 wajik', '7 love#1'))).toBe(1250);
   });
 
   it('skor mentung/kepentung memakai nilai total sekali: +500 / −500', () => {

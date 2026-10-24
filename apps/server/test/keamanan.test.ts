@@ -300,6 +300,6 @@ describe('header keamanan & /healthz', () => {
     await s.tutup();
     s = await nyalakan({ healthzDetail: true });
     const detail = await (await fetch(`http://127.0.0.1:${s.port}/healthz`)).json();
-    expect(detail).toMatchObject({ ok: true, meja: 0, sambungan: 0, galatMeja: 0 });
+    expect(detail).toMatchObject({ ok: true, meja: 0, sambungan: 0, galatMeja: 0, mejaMain: 0 });
   });
 });

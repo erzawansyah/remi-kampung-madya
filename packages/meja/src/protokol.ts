@@ -119,6 +119,29 @@ export const EMOTE_LAMA: ReadonlyMap<string, Emote> = new Map<string, Emote>([
 /** Panjang maksimal pesan yang diketik sendiri (huruf yang tampil). */
 export const MAKS_PESAN = 60;
 
+/**
+ * Ledekan (keputusan pemilik, 24 Okt 2026): hanya selama hasil putaran tampil di meja online, dikirim
+ * langsung ke satu pemain dan tampil besar di layarnya. Siapa pun boleh ngeledek siapa pun (yang
+ * kepentung boleh membalas). Isinya daftar ini atau DAFTAR_EMOTE (EMOTE_LAMA dipetakan); tidak ada
+ * teks bebas untuk ledekan. Warga kedai tidak pernah ngeledek. Daftar ini dipilih pengembang (pemilik:
+ * "tentukan"); urutan menentukan susunan tombol.
+ */
+export const DAFTAR_LEDEKAN = [
+  'Kepentung, rek!',
+  'Makan tuh!',
+  'Cup cup cup…',
+  'Pulang aja, Bos.',
+  'Kok bisa, Bos?',
+  'Sabar ya 😂',
+  'Kasihan deh.',
+  'Rasain!',
+] as const;
+
+export type Ledekan = (typeof DAFTAR_LEDEKAN)[number];
+
+/** Ledekan paling banyak per kursi di satu hasil putaran (di luar batas 1,2 detik bersama emote). */
+export const MAKS_LEDEK_PER_PUTARAN = 12;
+
 export type JenisKursi = 'kosong' | 'manusia' | 'bot';
 
 export interface InfoKursi {
@@ -133,6 +156,24 @@ export interface InfoKursi {
 }
 
 export type StatusMeja = 'lobi' | 'main' | 'selesai';
+
+/** Meja kompetisi (keputusan #51): kode dan nama kompetisinya. */
+export interface KompetisiMeja {
+  kode: string;
+  nama: string;
+}
+
+/**
+ * Bukti ikut serta kompetisi, disimpan di HP peserta. Token hanya dicocokkan server dengan hash-nya
+ * di database; meja tidak pernah melihatnya.
+ */
+export interface TiketKompetisi {
+  kode: string;
+  token: string;
+}
+
+/** Tiket paling banyak yang dikirim bersama pesan gabung. */
+export const MAKS_TIKET = 20;
 
 export interface InfoMeja {
   kode: string;
@@ -152,12 +193,42 @@ export interface InfoMeja {
   setujuKaldu?: number[];
   /** Waktu (ms epoch) batas giliran saat ini; null bila tidak ada batas. */
   batasWaktu: number | null;
-  /** Giliran saat ini sedang dijalankan bot karena waktu habis atau pemain terputus. */
+  /**
+   * Giliran saat ini sedang dijalankan bot karena waktu habis (lewat batas + toleransi tersembunyi).
+   * Giliran pemain yang terputus dan dijalankan warga kedai sesudah masa tenggang tidak ditandai di
+   * sini; pemainnya diberi kabar lewat `dijalankanWarga` di pesan `masuk` saat ia kembali.
+   */
   diambilAlihBot: boolean;
-  /** Awal putaran: kursi manusia yang belum menekan OK di pengumuman joker. Permainan menunggu. */
+  /**
+   * Awal putaran: kursi manusia yang belum menekan OK di pengumuman joker. Permainan menunggu.
+   * Kursi yang tersambung kembali di tengah putaran tanpa sempat melihat joker hanya dimasukkan ke
+   * info miliknya sendiri (popup muncul lagi untuknya, meja lain tidak ikut tertahan).
+   */
   menungguJoker: number[];
   /** Kursi bot yang sedang "mikir" sebelum aksi pertamanya. */
   botMikir: number | null;
+  /** Hanya ada di meja kompetisi (#51). */
+  kompetisi?: KompetisiMeja;
+  /**
+   * Jeda lanjut (keputusan pemilik, 24 Okt 2026): hasil putaran di meja online, host belum bisa
+   * memulai putaran berikutnya supaya yang lain sempat melihat kartu. Hanya ada selama terkunci
+   * (OpsiMeja.jedaLanjutMs, pemain manusia lain yang terhubung belum semuanya menekan Siap).
+   * `sisaMs` relatif terhadap saat pesan dikirim (jam HP sering melenceng; client mengubahnya jadi
+   * waktu lokal saat menerima). `siap`: kursi yang sudah menekan Siap. Aplikasi lama mengabaikannya.
+   */
+  lanjut?: { sisaMs: number; siap: number[] };
+  /**
+   * Meja kompetisi (#51 versi 2): semua kursi terisi peserta yang terhubung, meja mulai sendiri
+   * `sisaMs` lagi (relatif terhadap saat pesan dikirim, seperti `lanjut`). Hanya ada selama hitung
+   * mundur berjalan; batal (hilang) kalau ada yang keluar atau terputus.
+   */
+  mulaiOtomatis?: { sisaMs: number };
+  /**
+   * Meja kompetisi (#51 versi 2) di hasil putaran: putaran berikutnya mulai sendiri `sisaMs` lagi kalau
+   * host belum memulainya (relatif terhadap saat pesan dikirim, seperti `lanjut`). Aplikasi lama
+   * mengabaikannya.
+   */
+  lanjutOtomatis?: { sisaMs: number };
 }
 
 /** Klasemen akhir satu permainan (disimpan server ke database saat permainan selesai). */
@@ -172,6 +243,13 @@ export interface RingkasanAkhir {
   jumlahDeck: number;
   /** Permainan memakai mode kaldu (#42). */
   modeKaldu: boolean;
+  /** Kode kompetisi; hanya ada di meja kompetisi (#51). */
+  kompetisi?: string;
+  /**
+   * Meja kompetisi saja (#51 versi 2): kapan permainan ini dimulai (ms epoch, jam meja). Permainan
+   * dihitung kalau dimulai selagi kompetisinya berjalan, walau selesai sesudahnya.
+   */
+  mulaiPada?: number;
   /** Urut dari peringkat 1. Skor sama = peringkat sama. */
   pemain: {
     kursi: number;
@@ -184,7 +262,30 @@ export interface RingkasanAkhir {
     peringkat: number;
     mentung: number;
     kepentung: number;
+    /** Id peserta kompetisi yang duduk di kursi ini; hanya di meja kompetisi. */
+    peserta?: number;
   }[];
+}
+
+/**
+ * Hasil kompetisi satu kursi peserta di permainan yang baru dicatat (pesan `kompetisiHasil`). Angka
+ * nilai belum dibulatkan; tampilkan dengan `teksNilai()`.
+ */
+export interface HasilKompetisiKursi {
+  kursi: number;
+  /** Nama peserta yang terdaftar di kompetisi. */
+  nama: string;
+  /** Nilai permainan ini, 0–10 (keluar di tengah permainan = 0). */
+  nilai: number;
+  /** Peserta ini keluar di tengah permainan (nilai 0, tidak dihitung dikalahkan untuk yang lain). */
+  keluar: boolean;
+  /** Rata-rata nilai sesudah permainan ini, 0–10. */
+  rataNilai: number;
+  /** Berapa kali main di kompetisi ini, termasuk permainan ini. */
+  main: number;
+  /** Peringkat klasemen sebelum dan sesudah permainan ini; null = belum masuk klasemen (main < minMain). */
+  peringkatSebelum: number | null;
+  peringkatSesudah: number | null;
 }
 
 export interface RingkasanMeja {
@@ -200,29 +301,85 @@ export type AksiGiliran = Extract<Aksi, { pemain: number }>;
 export type AksiKlien = AksiGiliran extends infer A ? (A extends { pemain: number } ? Omit<A, 'pemain'> : never) : never;
 
 export type PesanKlien =
-  | { t: 'buat'; nama: string; pengaturan?: Partial<PengaturanMeja> }
-  | { t: 'gabung'; kode: string; nama: string; token?: string }
+  /** `kompetisi`: buat meja kompetisi (#51); pembuatnya wajib peserta. */
+  | { t: 'buat'; nama: string; pengaturan?: Partial<PengaturanMeja>; kompetisi?: TiketKompetisi }
+  /** `tiket`: semua tiket kompetisi di HP ini, untuk duduk di meja kompetisi (#51). */
+  | { t: 'gabung'; kode: string; nama: string; token?: string; tiket?: TiketKompetisi[] }
   | { t: 'daftar' }
   | { t: 'keluar' }
   | { t: 'aturKursi'; kursi: number; jenis: 'bot' | 'kosong'; level?: LevelBot }
   | { t: 'pengaturan'; pengaturan: Partial<PengaturanMeja> }
   | { t: 'mulai'; pengocok?: number }
-  | { t: 'aksi'; aksi: AksiKlien }
+  /**
+   * `id` (opsional, 1–64 huruf/angka/`_`/`-`, lihat `idAksiSah`): penanda aksi dari client supaya
+   * aksi yang dikirim ulang sesudah sambung ulang tidak diterapkan dua kali. Server (bukan meja)
+   * menjawabnya dengan `aksiDiterima`. Server lama membuang field ini.
+   */
+  | { t: 'aksi'; aksi: AksiKlien; id?: string }
   | { t: 'putaranBerikut'; pengocok?: number }
   | { t: 'akhiri'; setuju: boolean }
   /** Mode kaldu (#42): setuju/batal "putaran berikutnya terakhir". Hanya di antara putaran. */
   | { t: 'putaranTerakhir'; setuju: boolean }
-  | { t: 'siapJoker' }
+  /**
+   * OK di pengumuman joker. `putaran` (opsional): nomor putaran yang jokernya sudah dilihat; meja
+   * mengabaikan OK untuk putaran lain (misalnya OK putaran lama yang terkirim sesudah sambung ulang).
+   */
+  | { t: 'siapJoker'; putaran?: number }
+  /** Jeda lanjut: pemain selain host sudah selesai melihat hasil putaran. */
+  | { t: 'siapLanjut' }
   | { t: 'emote'; isi: string }
+  /** Ledekan ke kursi `ke`; hanya di hasil putaran. Isi dari DAFTAR_LEDEKAN atau DAFTAR_EMOTE. */
+  | { t: 'ledek'; ke: number; isi: string }
   | { t: 'mainLagi' }
   | { t: 'ping' };
 
 export type PesanServer =
-  | { t: 'masuk'; kode: string; token: string; kursi: number }
+  /**
+   * `dijalankanWarga` (opsional, hanya kalau > 0): banyaknya langkah yang dijalankan warga kedai di
+   * kursi ini selama pemainnya terputus, dikabarkan sekali saat ia tersambung kembali.
+   */
+  | { t: 'masuk'; kode: string; token: string; kursi: number; dijalankanWarga?: number }
   | { t: 'meja'; info: InfoMeja }
   | { t: 'view'; view: ViewPemain }
   | { t: 'error'; pesan: string }
   | { t: 'daftar'; meja: RingkasanMeja[] }
-  | { t: 'keluar'; alasan: string }
+  /**
+   * `kompetisi` (opsional): kode kompetisi meja itu (#51 versi 2), untuk lobi kompetisi yang dibubarkan
+   * dan kursi lobi kompetisi yang sudah dilepas. Aplikasi membuka detail kompetisinya.
+   */
+  | { t: 'keluar'; alasan: string; kompetisi?: string }
   | { t: 'emote'; kursi: number; isi: string }
-  | { t: 'pong' };
+  /** Ledekan dari kursi `dari` ke kursi `ke`; dikirim ke semua manusia yang terhubung. */
+  | { t: 'ledek'; dari: number; ke: number; isi: string }
+  /**
+   * Aksi ber-`id` sudah diproses server (diterapkan, atau ditolak dan `error`-nya sudah dikirim lebih
+   * dulu). Hanya dari server online; aksi yang sama dengan `id` yang sudah tercatat dijawab lagi
+   * tanpa diterapkan ulang.
+   */
+  | { t: 'aksiDiterima'; id: string }
+  /** `w` (opsional): jam server (ms epoch) saat menjawab; hanya dari server online, tidak dari meja offline. */
+  | { t: 'pong'; w?: number }
+  /**
+   * Meja kompetisi (#51 versi 2): hasil permainan yang baru selesai sudah tercatat di kompetisi.
+   * Dikirim server ke kursi manusia yang terhubung di meja itu (dan sekali lagi ke yang tersambung
+   * kembali selama klasemen akhir masih tampil). Permainan yang tidak dihitung untuk yang bertahan
+   * karena kurang dari dua kursi bertahan sampai akhir (keputusan pemilik 24 Okt 2026; yang keluar
+   * tetap dicatat 0) tetap dikabarkan, dengan `tidakDihitung: 'keluar'` dan `pemain` kosong. Alasan
+   * tidak dihitung yang lain tidak dikirim.
+   * Aplikasi lama mengabaikannya.
+   */
+  | {
+      t: 'kompetisiHasil';
+      kompetisi: KompetisiMeja;
+      /** Minimal main supaya masuk klasemen (MIN_MAIN_KOMPETISI). */
+      minMain: number;
+      /** Banyaknya peserta di klasemen (sudah ≥ minMain kali main) sesudah permainan ini. */
+      jumlahPeringkat: number;
+      /** Satu per kursi peserta meja ini, urut kursi. Kosong kalau `tidakDihitung`. */
+      pemain: HasilKompetisiKursi[];
+      /**
+       * Ada kalau permainan ini tidak dihitung untuk yang bertahan: 'keluar' = yang bertahan sampai
+       * akhir kurang dari MIN_BERTAHAN_KOMPETISI (hampir semua pemain keluar; yang keluar dicatat 0).
+       */
+      tidakDihitung?: 'keluar';
+    };

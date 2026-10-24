@@ -8,12 +8,28 @@
 // atau peringatan "kartu berbahaya". Contoh joker selalu ditulis "misal joker putaran ini N".
 
 import type { Bunga, Rank } from '@remi/engine';
-import { MAKS_PESAN, TENGGANG_SAMBUNG_MS } from '@remi/meja';
+import {
+  JEDA_LANJUT_MS,
+  MAKS_LEDEK_PER_PUTARAN,
+  MAKS_PESAN,
+  MIN_MAIN_KOMPETISI,
+  MIN_PESERTA,
+  SISA_MIN_SAMBUNG_MS,
+  TENGGANG_SAMBUNG_MS,
+} from '@remi/meja';
 import { TEKS_KALDU } from './kaldu';
+import { TEKS_KOMPETISI } from './kompetisi';
+import { TEKS_KONEKSI } from './koneksi';
+import { TEKS_LANJUT, TEKS_LEDEK } from './ledek';
 import { DAFTAR_LEVEL_WARGA } from './levelWarga';
+import { TEKS_USULAN } from './usulan';
 
 /** Masa tenggang sambung ulang dalam detik (sama dengan yang dipakai meja). */
 const DETIK_TENGGANG = Math.round(TENGGANG_SAMBUNG_MS / 1000);
+/** Sisa waktu paling sedikit untuk yang kembali di gilirannya sendiri (keputusan #57). */
+const DETIK_SISA_MIN = Math.round(SISA_MIN_SAMBUNG_MS / 1000);
+/** Jeda sebelum host bisa memulai putaran berikutnya di meja online (keputusan #54). */
+const DETIK_JEDA_LANJUT = Math.round(JEDA_LANJUT_MS / 1000);
 
 export type KartuContoh = {
   bunga: Bunga;
@@ -373,7 +389,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
         butir: [
           'Ambil: pilih salah satu, ambil 1 kartu teratas dari deck, atau mulung dari buangan (lihat bab Mulung).',
           'Turunkan (boleh dilewati): turunkan satu atau beberapa kartu jadi dari tanganmu.',
-          'Buang: wajib buang 1 kartu ke tumpukan buangan (kecuali nutup pakai beberapa joker, lihat bab Mentung). Setelah itu giliran pindah ke pemain berikutnya.',
+          'Buang: wajib buang 1 kartu ke tumpukan buangan (kecuali nutup pakai dua joker, lihat bab Mentung). Setelah itu giliran pindah ke pemain berikutnya.',
         ],
       },
       {
@@ -510,7 +526,19 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: '**Pentung beberapa joker sekaligus.** Kalau sisa kartumu joker semua, kamu boleh nutup dengan membuang semuanya sekaligus. Syaratnya: semua sisa kartu ikut dibuang, semuanya joker hidup, dan giliran itu kamu awali dengan mulung. Nilainya **250 per joker**: dua joker 500, tiga joker 750. Tidak kena −25, dan tiap yang kepentung kena nilai totalnya. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
+        teks: '**Pentung dua joker sekaligus.** Kalau sisa kartumu tinggal dua joker, kamu boleh nutup dengan membuang keduanya sekaligus. Syaratnya: dua-duanya joker hidup, dan giliran itu kamu awali dengan mulung. Nilainya **250 per joker**, jadi dua joker **500**. Tidak kena −25, dan tiap yang kepentung kena 500. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
+      },
+      {
+        t: 'paragraf',
+        teks: '**Paling banyak dua kartu.** Kalau sisa kartumu tiga joker atau lebih, giliran itu kamu tidak bisa nutup. Buang satu kartu seperti biasa; kalau yang kamu buang joker, kena −25 dan jokernya jadi kartu biasa.',
+      },
+      {
+        t: 'paragraf',
+        teks: '**Pentungan bukan kembaran kartu pungutan (2 deck).** Di permainan 2 deck tiap kartu punya kembaran: angka dan bunganya sama, dari deck satunya. Kamu tidak boleh mentung pakai kembaran kartu yang kamu pungut di giliran itu, dari pungutan paling bawah sampai paling atas. Kartu pungutannya sendiri tetap boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga di giliran itu. Membuang kembaran tanpa mentung tetap boleh.',
+      },
+      {
+        t: 'paragraf',
+        teks: '**Contoh Ani dan Budi** (2 deck, misal joker putaran ini 3). Budi memegang 7, 8, 9 Love dan J, Q, K Wajik. Ani, tepat sebelum Budi, membuang 8 Love dari deck satunya. Budi mungut 8 Love itu dan menurunkan 7-8-9 Love. Sisa kartunya J-Q-K Wajik dan 8 Love miliknya sendiri. Kalau J-Q-K Wajik ikut diturunkan, kartu terakhirnya 8 Love, kembaran kartu yang barusan ia pungut, dan kartu itu tidak boleh jadi pentungan. Jadi aplikasi menolak turunkan yang menyisakan 8 Love sendirian: Budi menyisakan minimal dua kartu dan membuang satu seperti biasa.',
       },
       {
         t: 'paragraf',
@@ -652,7 +680,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'daftar',
         butir: [
-          'Sepakat berhenti: di antara putaran, semua pemain manusia yang terhubung setuju mengakhiri permainan.',
+          'Sepakat berhenti: di antara putaran, semua pemain manusia yang terhubung setuju mengakhiri permainan. Di meja kompetisi tidak ada sepakat berhenti.',
           'Batas putaran: permainan selesai setelah jumlah putaran tertentu.',
           'Batas skor atas: ada pemain yang skor totalnya mencapai batas itu atau lebih.',
           'Batas skor bawah: ada pemain yang skor totalnya turun sampai batas itu atau lebih rendah.',
@@ -680,7 +708,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Putaran kaldu mulai di putaran ke-N kalau batas putaran diisi N, atau di putaran sesudah semua pemain setuju "putaran berikutnya terakhir" (di antara putaran).',
           'Putaran kaldu yang ditutup mentung mengakhiri permainan.',
           'Deck habis dan belum ada yang mentung? Kaldu lagi: putaran berikutnya juga putaran kaldu, sampai ada yang mentung. Pengocoknya tetap yang skornya paling rendah.',
-          'Di mode kaldu batas skor tidak dipakai, dan batas putaran cuma menandai mulainya kaldu. "Akhiri permainan" tetap bisa di antara putaran.',
+          'Di mode kaldu batas skor tidak dipakai, dan batas putaran cuma menandai mulainya kaldu. "Akhiri permainan" tetap bisa di antara putaran, kecuali di meja kompetisi.',
         ],
       },
       {
@@ -719,7 +747,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
           ['Pilih kartu', 'Ketuk kartu di tanganmu. Ketuk lagi untuk batal.'],
           ['Turunkan kartu jadi', 'Pilih minimal 3 kartu, lalu tekan Turunkan.'],
           ['Buang', 'Pilih 1 kartu lalu tekan tombol Buang, atau seret kartunya ke tumpukan buangan.'],
-          ['Nutup pakai beberapa joker', 'Pilih semua sisa kartumu, lalu tekan Mentung, atau seret salah satunya ke tumpukan buangan.'],
+          ['Nutup pakai dua joker', 'Pilih kedua sisa kartumu, lalu tekan Mentung, atau seret salah satunya ke tumpukan buangan.'],
           ['Atur urutan tangan', 'Seret kartu ke posisi baru, atau tekan ⇅ untuk mengurutkan per bunga atau per angka.'],
           ['Selesai menyusun', 'Di susun akhir, tekan Selesai kalau sudah tidak ada yang mau diturunkan.'],
         ],
@@ -774,14 +802,18 @@ export const BAB_BANTUAN: BabBantuan[] = [
         t: 'daftar',
         butir: [
           'Orang baru hanya bisa masuk selama meja masih di lobi.',
-          `Sambungan putus atau halaman ke-refresh? Aplikasi menyambung ulang sendiri. Giliranmu ditunggu ${DETIK_TENGGANG} detik sejak kamu terputus (atau sampai waktu giliran habis, mana yang duluan). Lewat dari itu, warga kedai menjalankan giliranmu sampai kamu kembali.`,
+          `Sambungan putus atau halaman ke-refresh? Aplikasi menyambung ulang sendiri. Giliranmu ditunggu ${DETIK_TENGGANG} detik sejak kamu terputus (atau sampai waktu giliran habis, mana yang duluan). Lewat dari itu, warga kedai menjalankan giliranmu sampai kamu kembali. Kalau kamu kembali waktu masih giliranmu, sisa waktumu paling sedikit ${DETIK_SISA_MIN} detik (sekali per giliran).`,
+          `Sinyal putus-putus? Selama aplikasi menyambung lagi, langkah belum bisa dikirim (muncul "${TEKS_KONEKSI.nyambung}"), tapi kartu yang kamu pilih tetap ada. Kalau muncul "${TEKS_KONEKSI.masihMengirim}", tunggu sebentar: langkahmu dikirim ulang sendiri, atau dikembalikan supaya bisa kamu ulangi. Sesudah tersambung lagi, kejadian yang terlewat tidak diputar ulang, dan kalau warga kedai sempat menjalankan langkahmu, ada kabar singkat. Rinciannya di Log.`,
           'Keluar meja di tengah permainan: kursimu diteruskan warga kedai sampai permainan selesai, dan nggak bisa diambil lagi. Kalau mejanya minimal 2 orang, di peringkat online kamu dihitung juru kunci. Sinyal putus atau aplikasi ketutup nggak dihitung keluar.',
           'Waktu giliran habis: warga kedai menyelesaikan giliranmu.',
-          'Kalau semua pemain manusia terputus, meja menunggu sampai ada yang kembali. Waktu giliran diberi penuh lagi begitu ia tersambung.',
+          'Kalau semua pemain manusia terputus, meja menunggu sampai ada yang kembali. Waktu giliran diberi penuh lagi begitu ia tersambung, dan yang masih terputus dapat waktu tunggu penuh lagi.',
           'Host pergi: tugas host pindah ke pemain manusia lain yang masih terhubung.',
           'Putaran berikutnya dimulai oleh host. Kalau skor terendah sama, host memilih pengocok atau Acak.',
-          'Pengumuman joker menunggu semua pemain menekan OK. Pemain yang terputus tidak ditunggu. Kalau ia kembali sebelum sempat menekan OK, popup joker muncul lagi untuknya.',
-          'Meja tanpa pemain yang terhubung dihapus otomatis setelah 10 menit.',
+          `Di hasil putaran, tombol host baru aktif ${DETIK_JEDA_LANJUT} detik kemudian, supaya semua sempat melihat kartu. Kalau sudah selesai melihat, tekan ${TEKS_LANJUT.siap}. Begitu yang lain siap semua, host bisa langsung lanjut.`,
+          `Mau ngeledek? Waktu hasil putaran tampil, buka bagian ${TEKS_LEDEK.judul} di bawah rincian skor, pilih orangnya, lalu ketuk ledekannya atau emoji. Ledekanmu muncul besar di layar dia, dan yang kepentung boleh membalas. Tiap pemain paling banyak ${MAKS_LEDEK_PER_PUTARAN} ledekan per putaran. Warga kedai nggak ikut ngeledek.`,
+          'Pengumuman joker menunggu semua pemain menekan OK. Pemain yang terputus tidak ditunggu. Kalau ia kembali sebelum sempat menekan OK, popup joker muncul lagi untuknya saja; meja nggak ikut berhenti, kecuali sedang gilirannya.',
+          'Meja tanpa pemain yang terhubung dihapus otomatis: 10 menit kalau masih di lobi, 45 menit kalau permainannya sedang jalan.',
+          'Server sempat mati atau diperbarui? Meja yang permainannya belum selesai tersimpan. Aplikasi menyambung ulang sendiri dan kamu kembali ke kursimu dengan kartu yang sama. Permainan berhenti sebentar sampai ada yang kembali.',
         ],
       },
       {
@@ -790,7 +822,24 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: 'Hasil akhir permainan online masuk **Riwayat & peringkat**. Yang dihitung di peringkat cuma meja yang dimainkan minimal 2 orang. Urutan bawaannya rata-rata skor akhir per permainan, dan bisa diganti (skor terbaik, persen juara, jumlah juara, dan lainnya). Rata-rata, persen juara, dan poin posisi baru muncul sesudah 3 kali main. Peringkat menggabungkan pemain berdasarkan nama tanpa beda huruf besar/kecil, jadi pakai nama yang sama setiap main.',
+        teks: 'Hasil akhir permainan online masuk **Riwayat** (ubin Riwayat & statistik di beranda). Yang dihitung di peringkat cuma meja yang dimainkan minimal 2 orang. Urutan bawaannya rata-rata skor akhir per permainan, dan bisa diganti (skor terbaik, persen juara, jumlah juara, dan lainnya). Rata-rata, persen juara, dan poin posisi baru muncul sesudah 3 kali main. Peringkat menggabungkan pemain berdasarkan nama tanpa beda huruf besar/kecil, jadi pakai nama yang sama setiap main.',
+      },
+      {
+        t: 'paragraf',
+        teks: `**Kompetisi** (tombol Kompetisi di beranda): siapa saja boleh mengajukan kompetisi, lengkap dengan lama kompetisi (1 malam, 1 minggu, atau 1 bulan), jumlah pemain per meja, batas putaran, dan aturan mejanya. Kompetisi jalan begitu ${MIN_PESERTA} orang ikut (yang mengajukan langsung terhitung ikut); kalau 24 jam belum cukup, pengajuannya batal. Yang telat boleh ikut selama kompetisi masih jalan. Selama kompetisi jalan, layar kompetisinya menampilkan meja yang menunggu peserta: pilih Duduk, atau buka meja baru. Meja mulai sendiri begitu semua kursinya terisi peserta. Meja kompetisi khusus peserta (tanpa warga kedai), aturannya ikut kompetisi, dan cuma sekali main.`,
+      },
+      {
+        t: 'daftar',
+        butir: [
+          'Nilai tiap permainan 0 sampai 10, dari banyaknya peserta di meja itu yang kalah skor darimu. Meja 4 orang: juara 10; kedua 6,7; ketiga 3,3; juru kunci 0. Skor sama tidak saling mengalahkan.',
+          'Keluar di tengah permainan = 0, dan yang keluar tidak dihitung sebagai lawan: nilai yang lain dihitung dari peserta yang bertahan sampai akhir saja. Meja 4 orang dengan 1 yang keluar: juara 10; kedua 5; ketiga 0. Kalau cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0.',
+          `Klasemen diurutkan dari rata-rata nilai per permainan, dan kamu masuk klasemen sesudah ${MIN_MAIN_KOMPETISI} kali main. Rata-rata sama: yang lebih sering main di atas, lalu rata-rata skor akhir.`,
+          'Permainan yang sudah mulai sebelum kompetisi berakhir tetap dihitung. Juaranya diumumkan sesudah meja terakhir selesai, lalu dapat 🏆 di samping namanya, juga di tab Peringkat layar Riwayat.',
+          `Meja kompetisi lakennya biru dan bar atasnya menulis nama kompetisi. Sesudah permainan selesai, klasemen akhir menampilkan nilai tiap peserta dan naik-turun peringkatnya. Tombol ${TEKS_KOMPETISI.kembaliKompetisi} membawamu ke daftar meja lagi.`,
+          `Meja kompetisi selalu punya batas waktu per giliran. Di hasil putaran, kalau host belum memulai putaran berikutnya, putarannya mulai sendiri sebentar kemudian. Di meja kompetisi tidak ada Akhiri permainan maupun ${TEKS_KALDU.tombol}: permainan selesai sendiri di batas putaran (atau batas skor kalau diisi), dan kalau mode kaldu dipakai, putaran kaldu mulai sendiri di batas putaran.`,
+          'Kompetisi bisa disudahi lebih awal kalau lebih dari separuh peserta setuju.',
+          'Tiket peserta tersimpan di HP yang dipakai waktu ikut serta, jadi main kompetisi dari HP itu.',
+        ],
       },
       {
         t: 'paragraf',
@@ -799,6 +848,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'paragraf',
         teks: '**Pasang ke layar utama:** game ini bisa dipasang di HP seperti aplikasi. Ketuk "Pasang ke layar utama" di beranda lalu ikuti petunjuknya. Sesudah terpasang, main offline tetap jalan tanpa internet, dan pembaruan masuk sendiri waktu kamu nggak sedang main.',
+      },
+      {
+        t: 'paragraf',
+        teks: `**${TEKS_USULAN.ubin}:** punya ide atau nemu yang aneh? Ketuk 💡 ${TEKS_USULAN.ubin} di beranda (atau di Tentang yang dibuka dari beranda), pilih jenisnya, tulis judul dan ceritanya, lalu kirim atas namamu. Usulanmu dibaca dan ditinjau tiap hari. Kalau sinyal lagi putus, tulisanmu tetap ada selama aplikasinya belum ditutup, dan bisa dikirim lagi.`,
       },
     ],
   },
@@ -843,7 +896,11 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   },
   {
     tanya: 'Bisa nutup pakai dua joker?',
-    jawab: 'Bisa, asal sisa kartumu joker semua dan giliran itu kamu awali dengan mulung. Pilih semuanya, lalu tekan Mentung. Nilainya 250 per joker (dua joker 500), tanpa −25. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
+    jawab: 'Bisa, asal sisa kartumu tinggal dua joker dan giliran itu kamu awali dengan mulung. Pilih keduanya, lalu tekan Mentung. Nilainya 250 per joker (dua joker 500), tanpa −25. Paling banyak dua kartu: sisa tiga joker atau lebih tidak bisa dipakai nutup, jadi buang satu dulu. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
+  },
+  {
+    tanya: 'Kok nggak bisa mentung pakai kartu yang sama persis dengan yang barusan kupungut?',
+    jawab: 'Di permainan 2 deck, pentungan tidak boleh kembaran (angka dan bunga sama, dari deck satunya) kartu yang kamu pungut di giliran itu. Kartu pungutannya sendiri boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga. Aplikasi juga menolak turunkan yang menyisakan kembaran itu sendirian, karena kartu terakhir yang dibuang selalu jadi pentungan. Contohnya ada di bab Mentung (Ani dan Budi).',
   },
   {
     tanya: 'Kartu buangan yang lama kok nggak kelihatan?',
@@ -863,7 +920,15 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   },
   {
     tanya: 'Internetku putus waktu main online. Kartuku hilang?',
-    jawab: `Tidak. Kartumu tetap di kursimu. Giliranmu ditunggu ${DETIK_TENGGANG} detik, dihitung sejak kamu terputus. Lewat dari itu, warga kedai yang menjalankan giliranmu sampai kamu kembali. Buka lagi aplikasinya, dan kamu kembali ke kursimu.`,
+    jawab: `Tidak. Kartumu tetap di kursimu. Giliranmu ditunggu ${DETIK_TENGGANG} detik, dihitung sejak kamu terputus. Lewat dari itu, warga kedai yang menjalankan giliranmu sampai kamu kembali. Kalau kamu kembali waktu masih giliranmu, sisa waktumu paling sedikit ${DETIK_SISA_MIN} detik. Buka lagi aplikasinya, dan kamu kembali ke kursimu.`,
+  },
+  {
+    tanya: 'Kok host nggak bisa langsung lanjut ke putaran berikutnya?',
+    jawab: `Di meja online, sesudah putaran selesai semua diberi waktu ${DETIK_JEDA_LANJUT} detik buat lihat kartu dan skor. Kalau sudah, tekan ${TEKS_LANJUT.siap}. Begitu yang lain siap semua, host bisa langsung lanjut.`,
+  },
+  {
+    tanya: 'Gimana cara ngeledek?',
+    jawab: `Waktu hasil putaran tampil di meja online, buka bagian ${TEKS_LEDEK.judul} di bawah rincian skor, pilih orangnya, lalu ketuk ledekannya atau emoji. Ledekanmu muncul besar di layar dia. Tiap pemain paling banyak ${MAKS_LEDEK_PER_PUTARAN} ledekan per putaran. Di meja offline dan latihan tidak ada ledekan.`,
   },
   {
     tanya: 'Kok namaku nggak bisa diganti?',
@@ -893,11 +958,12 @@ export const GLOSARIUM: { istilah: string; arti: string }[] = [
   { istilah: 'Mulung / mungut', arti: 'Mengambil satu atau beberapa kartu teratas dari buangan.' },
   { istilah: 'Pungutan', arti: 'Kartu-kartu yang diambil dari buangan waktu mulung.' },
   { istilah: 'Modal', arti: 'Kartu dari tanganmu yang dipakai bersama pungutan di kartu jadi.' },
-  { istilah: 'Mentung / nutup', arti: 'Membuang kartu terakhir di tangan (atau semua sisa joker sekaligus), di giliran yang diawali mulung.' },
+  { istilah: 'Mentung / nutup', arti: 'Membuang kartu terakhir di tangan (atau dua joker terakhir sekaligus), di giliran yang diawali mulung.' },
   {
     istilah: 'Pentungan',
-    arti: 'Kartu terakhir yang dibuang waktu mentung. Boleh beberapa kartu sekaligus kalau semuanya joker hidup (250 per joker). Nilainya jadi bonus dan potongan.',
+    arti: 'Kartu terakhir yang dibuang waktu mentung. Boleh dua kartu sekaligus kalau keduanya joker hidup (250 per joker). Di 2 deck, tidak boleh kembaran kartu yang dipungut di giliran itu. Nilainya jadi bonus dan potongan.',
   },
+  { istilah: 'Kembaran', arti: 'Di permainan 2 deck: kartu yang angka dan bunganya sama, dari deck satunya.' },
   { istilah: 'Kepentung', arti: 'Kena potongan pentungan karena kartu buanganmu dipungut lalu dipakai di kartu jadi oleh yang mentung (bukan sebagai pentungannya).' },
   { istilah: 'Balik arah', arti: 'Arah putaran berikutnya dibalik, karena pemain tepat sebelum yang mentung ikut kepentung.' },
   { istilah: 'Lompat', arti: 'Pemain tepat sebelum yang mentung tidak kepentung, jadi arah putaran tetap.' },

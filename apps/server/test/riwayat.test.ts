@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { RingkasanAkhir } from '@remi/meja';
-import { bukaRiwayat, type PenyimpanRiwayat } from '../src/riwayat.js';
+import { bukaRiwayat, MIGRASI, type PenyimpanRiwayat } from '../src/riwayat.js';
 import { jalankanServer, type ServerRemi } from '../src/server.js';
 
 const ringkasan = (kode: string, waktu: number, pemain: [string, number, boolean?][]): RingkasanAkhir => {
@@ -124,7 +124,7 @@ const ringkasanKeluar = (kode: string, waktu: number, pemain: [string, number, (
   })),
 });
 
-describe('riwayat SQLite: migrasi skema v0 → v1', () => {
+describe('riwayat SQLite: migrasi skema v0 → terbaru', () => {
   it('database v0 buatan tangan dimigrasi, baris lama dilengkapi, dan migrasi tidak diulang saat dibuka lagi', () => {
     const db = new DatabaseSync(':memory:');
     db.exec(DDL_V0);
@@ -138,8 +138,8 @@ describe('riwayat SQLite: migrasi skema v0 → v1', () => {
 
     const log: string[] = [];
     const r = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
-    expect(versiSkema(db)).toBe(1);
-    expect(log.some((l) => l.includes('v0 → v1'))).toBe(true);
+    expect(versiSkema(db)).toBe(MIGRASI.length);
+    expect(log.some((l) => l.includes(`v0 → v${MIGRASI.length}`))).toBe(true);
     expect(log.some((l) => l.startsWith('riwayat dilengkapi'))).toBe(true);
 
     const permainan = db.prepare('SELECT kode_meja, jumlah_pemain, jumlah_deck, jumlah_manusia, mode_kaldu FROM permainan ORDER BY id').all();
@@ -171,7 +171,7 @@ describe('riwayat SQLite: migrasi skema v0 → v1', () => {
     // Dibuka lagi: tidak ada ALTER ulang (yang akan galat), tidak ada yang perlu dilengkapi.
     const log2: string[] = [];
     const r2 = bukaRiwayat(db, { log: (...x) => log2.push(x.join(' ')) });
-    expect(versiSkema(db)).toBe(1);
+    expect(versiSkema(db)).toBe(MIGRASI.length);
     expect(log2).toEqual([]);
     expect(r2.peringkat()).toEqual(lama);
     r2.tutup();
@@ -181,7 +181,7 @@ describe('riwayat SQLite: migrasi skema v0 → v1', () => {
   it('database baru langsung v1; baris yang ditulis server lama (tanpa kolom baru) dilengkapi saat dibuka lagi', () => {
     const db = new DatabaseSync(':memory:');
     const r = bukaRiwayat(db);
-    expect(versiSkema(db)).toBe(1);
+    expect(versiSkema(db)).toBe(MIGRASI.length);
     // Server versi sebelumnya (deploy dibatalkan) menulis tanpa kolom baru.
     tulisV0(db, 'LAMAA', '2026-10-06T10:00:00.000Z', [['Élia', 10], ['Budi', 0]]);
     r.tutup();
@@ -366,5 +366,163 @@ describe('endpoint peringkat v2', () => {
   it('selain GET ditolak 405', async () => {
     const r = await fetch(url('?v=2'), { method: 'POST' });
     expect(r.status).toBe(405);
+  });
+});
+
+describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), dan v5 (hasil kompetisi yang ditinggal)', () => {
+  const kolom = (db: DatabaseSync, tabel: string) =>
+    (db.prepare(`PRAGMA table_info(${tabel})`).all() as { name: string; notnull: number; pk: number }[]).map((k) => [k.name, k.notnull, k.pk]);
+  const indeks = (db: DatabaseSync, tabel: string) =>
+    (db.prepare(`PRAGMA index_list(${tabel})`).all() as { name: string; origin: string }[])
+      .filter((i) => i.origin === 'c')
+      .map((i) => i.name)
+      .sort();
+
+  /** Database sampai versi `v` saja, seperti yang ditinggalkan server versi sebelumnya. */
+  function sampaiVersi(v: number): DatabaseSync {
+    const db = new DatabaseSync(':memory:');
+    db.exec(DDL_V0);
+    for (let i = 0; i < v; i++) db.exec(MIGRASI[i]);
+    db.exec(`PRAGMA user_version = ${v}`);
+    return db;
+  }
+
+  it('v3 persis migrasi usul fitur (fitur/usul-fitur), v4 tabel meja_aktif, v5 tabel hasil_kompetisi_ditinggal', () => {
+    expect(MIGRASI).toHaveLength(5);
+    const db = sampaiVersi(5);
+    expect(kolom(db, 'usulan')).toEqual([
+      ['id', 0, 1],
+      ['dibuat_pada', 1, 0],
+      ['nama', 1, 0],
+      ['judul', 1, 0],
+      ['isi', 1, 0],
+      ['jenis', 0, 0],
+      ['notion_halaman', 0, 0],
+      ['terkirim_pada', 0, 0],
+      ['percobaan', 1, 0],
+      ['galat_terakhir', 0, 0],
+    ]);
+    expect(indeks(db, 'usulan')).toEqual(['usulan_belum_terkirim', 'usulan_dibuat']);
+    // Kolom selain kunci dan isi boleh NULL atau punya bawaan (aturan MIGRASI).
+    expect(kolom(db, 'meja_aktif')).toEqual([
+      ['kode', 0, 1],
+      ['data', 1, 0],
+      ['pembuat_jaringan', 0, 0],
+      ['diperbarui_pada', 1, 0],
+    ]);
+    // v5: kunci (meja, waktu mulai, peserta); semua kolom wajib diisi (tabel baru, ditulis server ini saja).
+    expect(kolom(db, 'hasil_kompetisi_ditinggal')).toEqual([
+      ['kode_meja', 1, 1],
+      ['mulai_pada', 1, 2],
+      ['peserta_id', 1, 3],
+      ['lawan', 1, 0],
+      ['skor', 1, 0],
+      ['dicatat_pada', 1, 0],
+    ]);
+    expect(indeks(db, 'hasil_kompetisi_ditinggal')).toEqual(['hasil_kompetisi_ditinggal_peserta']);
+    const fk = (db.prepare('PRAGMA foreign_key_list(hasil_kompetisi_ditinggal)').all() as { table: string; from: string; on_delete: string }[]).map(
+      (f) => [f.table, f.from, f.on_delete],
+    );
+    expect(fk).toEqual([['peserta_kompetisi', 'peserta_id', 'CASCADE']]);
+    db.close();
+  });
+
+  it('database v1 (produksi), v2, v3, dan v4 (server dev) dimigrasi ke v5 tanpa menyentuh isi lama', () => {
+    for (const v of [1, 2, 3, 4]) {
+      const db = sampaiVersi(v);
+      tulisV0(db, 'LAMAA', '2026-10-20T10:00:00.000Z', [['Budi', 10], ['Siti', 0]]);
+      tulisV0(db, 'LAMAB', '2026-10-21T10:00:00.000Z', [['Budi', -5], ['Siti', 20], ['Kipas Dua', 0, true]]);
+      // Baris lengkap seperti yang ditulis server v1 (lengkapiBaris tidak perlu mengisi apa pun).
+      db.exec(`UPDATE permainan SET jumlah_pemain = (SELECT COUNT(*) FROM klasemen k WHERE k.permainan_id = permainan.id), jumlah_deck = 1,
+                 jumlah_manusia = 2; UPDATE klasemen SET kunci_nama = lower(nama);`);
+      const isiLama = () => ({
+        permainan: db.prepare('SELECT * FROM permainan ORDER BY id').all().map((x) => ({ ...x })),
+        klasemen: db.prepare('SELECT * FROM klasemen ORDER BY permainan_id, kursi').all().map((x) => ({ ...x })),
+      });
+      const sebelum = isiLama();
+      const log: string[] = [];
+      const r = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
+      expect(versiSkema(db)).toBe(5);
+      expect(log).toEqual([`skema riwayat dimigrasi v${v} → v5`]);
+      const sesudah = isiLama();
+      expect(sesudah).toEqual(sebelum);
+      expect(r.daftar(10).map((g) => g.kodeMeja)).toEqual(['LAMAB', 'LAMAA']);
+      expect(r.mejaAktif.semua()).toEqual([]);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM hasil_kompetisi_ditinggal').get()).toMatchObject({ n: 0 });
+      const daftar = r.daftar(10);
+      const papan = r.papan();
+      r.tutup();
+      // Dibuka lagi: tidak ada migrasi, isi tabel lama dan bacaannya sama persis.
+      const log2: string[] = [];
+      const r2 = bukaRiwayat(db, { log: (...x) => log2.push(x.join(' ')) });
+      expect(log2).toEqual([]);
+      expect(isiLama()).toEqual(sesudah);
+      expect(r2.daftar(10)).toEqual(daftar);
+      expect(r2.papan()).toEqual(papan);
+      r2.tutup();
+      db.close();
+    }
+  });
+
+  it('database v2 pra-rilis (skema kompetisi versi 1) dimigrasi ke v5: perbaikan pra-rilis tetap jalan, tabel v5 ada dan kosong', () => {
+    const db = sampaiVersi(1);
+    // Seperti server dev yang sempat menjalankan kompetisi versi 1 (v2 waktu itu): skema kompetisi lama.
+    db.exec(`CREATE TABLE kompetisi (kode TEXT PRIMARY KEY, nama TEXT NOT NULL, masa TEXT NOT NULL, pengaturan TEXT NOT NULL,
+        diajukan_pada INTEGER NOT NULL, mulai_pada INTEGER, berakhir_pada INTEGER, ditutup_pada INTEGER);
+      CREATE TABLE peserta_kompetisi (id INTEGER PRIMARY KEY AUTOINCREMENT, kompetisi TEXT NOT NULL REFERENCES kompetisi(kode) ON DELETE CASCADE,
+        nama TEXT NOT NULL, kunci_nama TEXT NOT NULL, hash_token TEXT NOT NULL, ikut_pada INTEGER NOT NULL,
+        setuju_tutup INTEGER NOT NULL DEFAULT 0, UNIQUE (kompetisi, kunci_nama));
+      CREATE TABLE hasil_kompetisi (permainan_id INTEGER NOT NULL REFERENCES permainan(id) ON DELETE CASCADE,
+        peserta_id INTEGER NOT NULL REFERENCES peserta_kompetisi(id) ON DELETE CASCADE, poin INTEGER NOT NULL,
+        skor INTEGER NOT NULL, juara INTEGER NOT NULL, keluar INTEGER NOT NULL, PRIMARY KEY (permainan_id, peserta_id));
+      INSERT INTO kompetisi (kode, nama, masa, pengaturan, diajukan_pada) VALUES ('LAMAA', 'Lama', 'malam', '{}', 1);
+      INSERT INTO peserta_kompetisi (kompetisi, nama, kunci_nama, hash_token, ikut_pada) VALUES ('LAMAA', 'Ani', 'ani', 'x', 1);
+      PRAGMA user_version = 2;`);
+    tulisV0(db, 'LAMAA', '2026-10-20T10:00:00.000Z', [['Budi', 10], ['Siti', 0]]);
+    const log: string[] = [];
+    const r = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
+    expect(versiSkema(db)).toBe(5);
+    expect(log).toContain('skema riwayat dimigrasi v2 → v5');
+    expect(log.some((l) => l.includes('skema kompetisi pra-rilis'))).toBe(true);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM hasil_kompetisi_ditinggal').get()).toMatchObject({ n: 0 });
+    expect(r.kompetisi.status('LAMAA', 2)).toBeNull();
+    expect(r.daftar(10).map((g) => g.kodeMeja)).toEqual(['LAMAA']);
+    // Kunci asing tabel v5 menunjuk tabel peserta yang dibuat ulang: hasil yang ditinggal bisa dicatat.
+    const k = r.kompetisi.ajukan({ nama: 'Baru', masa: 'minggu', pengaturan: {}, namaPengaju: 'Ani' }, 1000);
+    for (const nama of ['Budi', 'Cici', 'Dodi']) r.kompetisi.ikut(k.kode, nama, 1000);
+    const ani = r.kompetisi.cekTiket(k.kode, k.token)!;
+    const n = r.simpanDitinggal({
+      kode: 'MEJAA',
+      selesaiPada: 2000,
+      alasan: null,
+      jumlahPutaran: 0,
+      jumlahDeck: 1,
+      modeKaldu: false,
+      kompetisi: k.kode,
+      mulaiPada: 1500,
+      pemain: [
+        { kursi: 0, nama: 'Ani', bot: false, keluar: true, skor: 0, peringkat: 1, mentung: 0, kepentung: 0, peserta: ani.id },
+        { kursi: 1, nama: 'Budi', bot: false, skor: 0, peringkat: 1, mentung: 0, kepentung: 0, peserta: ani.id + 1 },
+      ],
+    });
+    expect(n).toBe(1);
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    r.tutup();
+    db.close();
+  });
+
+  it('mejaAktif: simpan menimpa per kode, semua urut dari yang paling lama diperbarui, hapus', () => {
+    const r = bukaRiwayat(':memory:');
+    r.mejaAktif.simpan('BBBBB', '{"b":1}', null, 20);
+    r.mejaAktif.simpan('AAAAA', '{"a":1}', '1.2.3.4', 10);
+    r.mejaAktif.simpan('BBBBB', '{"b":2}', '5.6.7.8', 5);
+    expect(r.mejaAktif.semua()).toEqual([
+      { kode: 'BBBBB', data: '{"b":2}', pembuatJaringan: '5.6.7.8', diperbaruiPada: 5 },
+      { kode: 'AAAAA', data: '{"a":1}', pembuatJaringan: '1.2.3.4', diperbaruiPada: 10 },
+    ]);
+    r.mejaAktif.hapus('BBBBB');
+    r.mejaAktif.hapus('ZZZZZ');
+    expect(r.mejaAktif.semua().map((b) => b.kode)).toEqual(['AAAAA']);
+    r.tutup();
   });
 });

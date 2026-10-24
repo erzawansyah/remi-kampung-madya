@@ -10,7 +10,8 @@ import {
   type Aksi,
   type GameState,
 } from '@remi/engine';
-import type { PesanKlien, PesanServer } from '@remi/meja';
+import type { PesanKlien } from '@remi/meja';
+import type { PesanDariMeja } from '../src/koneksi';
 import { vi } from 'vitest';
 
 export interface LangkahPermainan {
@@ -126,7 +127,7 @@ export class WsPalsu {
     this.terkirim.push(p);
     if (p.t === 'ping' && this.jawabPing) queueMicrotask(() => this.onmessage?.({ data: '{"t":"pong"}' }));
   }
-  kirimDariServer(p: PesanServer) {
+  kirimDariServer(p: PesanDariMeja) {
     this.onmessage?.({ data: JSON.stringify(p) });
   }
   close() {

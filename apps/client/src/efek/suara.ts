@@ -14,6 +14,9 @@
 //   sama untuk pentungan apa pun, jadi tidak membocorkan isinya.
 // - 'kepentung' hanya untuk pemain yang kena; 'kepentungLain' (pelan) untuk yang lain. Siapa yang
 //   kepentung memang ditampilkan ke semua orang di panel mentung.
+// - 'jotos' (pukulan + kaca retak) hanya untuk pemain yang kena, 'jotosLain' (pelan) per kursi lain yang
+//   kena. Keduanya baru diputar SESUDAH pentungan terbuka (efek/pemutar.ts), saat siapa yang kena
+//   sudah publik.
 
 import { gerakDikurangi, preferensi } from '../preferensi';
 import { bangunRantai, bisaBersuara, keluaranEfek, mesinAudio, pasangMesinAudio, type Rantai } from './mesinAudio';
@@ -60,6 +63,8 @@ export type JenisBunyi =
   | 'mentungJoker' // pentungan yang dibuka ternyata joker (250): versi paling besar
   | 'kepentung' // kamu kepentung
   | 'kepentungLain' // orang lain kepentung, kamu aman (pelan)
+  | 'jotos' // kamu kepentung, sesaat sesudah pentungan terbuka: bogem berat + kaca retak + serpih kaca
+  | 'jotosLain' // kursi lain kena (retakan kecil di panelnya): "buk" teredam + retak kecil
   | 'bahaya' // kejadian publik yang perlu diwaspadai (kartumu dipungut, lawan tinggal 1 kartu)
   | 'jokerDibuang' // joker dibuang ke meja (publik, lihat pagar di atas)
   | 'tegang' // gebukan kendang makin rapat sebelum pentungan dibuka, dipotong saat dibuka
@@ -218,6 +223,37 @@ const RESEP: Record<JenisBunyi, Resep> = {
     [D3, F3, A3].forEach((m) => tiup(k, akhir, hz(m) * pn, 1.3, { puncak: 0.025 * v, serang: 0.15, terang: 4, gema: 0.4 }));
     return 2.3;
   },
+  jotos: (k, t, { p, pn, v }) => {
+    // "Ketonjok": bogem berat di dada (sub rendah + badan pukulan), "KRAK" kaca retak yang menjalar,
+    // lalu serpih kaca bergemerincing jatuh. Gong rendah di belakang supaya terasa berat, bukan lucu.
+    dentum(k, t, 0.62 * v, { frek: 68, panjang: 0.9 });
+    nada(k, t, 190 * p, 0.09, { tipe: 'triangle', puncak: 0.32 * v, serang: 0.0015, geserKe: 70 * p, lowpass: 1100 });
+    gesek(k, t, 0.025, { frek: 1100 * p, q: 0.7, puncak: 0.48 * v, serang: 0.0008 });
+    // Krak: klik-klik derau yang mula-mula rapat lalu merenggang (retakan menjalar), plus satu sapuan lebar.
+    const krak = Array.from({ length: 16 }, (_, i) => t + 0.008 + 0.17 * (i / 16) ** 1.7 + i * 0.0015);
+    gemeretak(k, krak, { frekMin: 1700 * p, frekMaks: 6800 * p, puncak: (i) => 0.52 * v * (1 - i / 18) * acak(0.55, 1) });
+    gesek(k, t + 0.005, 0.2, { frek: 4200 * p, frekAkhir: 1300 * p, q: 0.6, puncak: 0.25 * v, serang: 0.002 });
+    // Serpih kaca: tiga rentetan denting tinggi tak-harmonis yang bertaburan (satu osilator per rentetan),
+    // ditemani desis pecahan yang halus.
+    for (let jalur = 0; jalur < 3; jalur++) {
+      const waktu: number[] = [];
+      for (let d = 0.07 + jalur * 0.017, i = 0; i < 5; i++, d += acak(0.045, 0.12) * (1 + i * 0.3)) waktu.push(t + d);
+      rentetNada(k, waktu, { frek: () => acak(2900, 7600) * pn, luruh: 0.12, puncak: (i) => 0.09 * v * (1 - i / 7), gema: 0.55 });
+    }
+    const desis: number[] = [];
+    for (let d = 0.06, i = 0; i < 9; i++, d += acak(0.03, 0.07)) desis.push(t + d);
+    rentetDerau(k, desis, { frek: 7200, q: 1.4, luruh: 0.035, puncak: (i) => 0.11 * v * (1 - i / 10) });
+    gong(k, t + 0.015, hz(D2) * pn, 1.5, 0.16 * v);
+    return 1.6;
+  },
+  jotosLain: (k, t, { p, v }) => {
+    // Kursi lain kena: "buk" teredam dari seberang meja dan retakan kecil. Pelan saja.
+    dung(k, t, 0.32 * v, 72);
+    gesek(k, t, 0.02, { frek: 900 * p, q: 0.7, puncak: 0.18 * v, serang: 0.001 });
+    const krak = [0, 0.014, 0.032, 0.055, 0.085].map((d) => t + 0.006 + d);
+    gemeretak(k, krak, { frekMin: 2200 * p, frekMaks: 5200 * p, puncak: (i) => 0.2 * v * (1 - i / 6) });
+    return 0.45;
+  },
   kepentungLain: (k, t, { pn, v }) => {
     // Orang lain kepentung, kamu aman: dentum jauh yang teredam dan dua bilah turun. Pelan saja.
     dung(k, t, 0.16 * v, 85);
@@ -342,6 +378,8 @@ const JEDA_MIN: Partial<Record<JenisBunyi, number>> = {
   mentungJoker: 800,
   kepentung: 800,
   kepentungLain: 800,
+  jotos: 800,
+  jotosLain: 60,
   jokerDibuang: 600,
   menang: 1000,
   kalah: 1000,
@@ -350,10 +388,10 @@ const JEDA_BAWAAN = 70;
 
 /** Maksimal bunyi yang boleh tumpang tindih; bunyi penting tetap lolos. */
 const MAKS_POLIFONI = 8;
-const PENTING: ReadonlySet<JenisBunyi> = new Set(['giliran', 'mentung', 'mentungJoker', 'kepentung', 'jokerDibuang', 'menang', 'kalah', 'tegang']);
+const PENTING: ReadonlySet<JenisBunyi> = new Set(['giliran', 'mentung', 'mentungJoker', 'kepentung', 'jotos', 'jokerDibuang', 'menang', 'kalah', 'tegang']);
 
 /** Bunyi besar yang memakai gema aula (ekor panjang), bukan gema ruangan biasa. */
-const PAKAI_AULA: ReadonlySet<JenisBunyi> = new Set(['tegang', 'mentung', 'mentungJoker', 'kepentung', 'kepentungLain', 'jokerDibuang']);
+const PAKAI_AULA: ReadonlySet<JenisBunyi> = new Set(['tegang', 'mentung', 'mentungJoker', 'kepentung', 'kepentungLain', 'jotos', 'jotosLain', 'jokerDibuang']);
 
 /** Bunyi besar yang meredam musik latar sebentar: [pengali volume musik, lama ditahan (detik)]. */
 const REDAM_MUSIK: Partial<Record<JenisBunyi, readonly [number, number]>> = {
@@ -361,6 +399,7 @@ const REDAM_MUSIK: Partial<Record<JenisBunyi, readonly [number, number]>> = {
   mentung: [0.35, 1.6],
   mentungJoker: [0.25, 2.4],
   kepentung: [0.3, 1.8],
+  jotos: [0.2, 1.6],
   jokerDibuang: [0.4, 1.0],
 };
 
@@ -497,8 +536,11 @@ export const POLA_GETAR = {
   mentung: [50, 40, 140],
   /** Kamu mentung pakai joker (saat pentungan dibuka): dung-dung-DUAAANG. */
   mentungJoker: [60, 60, 60, 60, 240],
-  /** Kamu kepentung: "DUAAR", lalu bergetar turun. */
-  kepentung: [160, 60, 70, 60, 260],
+  /**
+   * Kamu kepentung (saat pukulannya mendarat, sesudah pentungan terbuka): "BUK!" panjang, "krek-krek"
+   * kaca retak, lalu bergetar turun. Pola terkuat di permainan.
+   */
+  kepentung: [260, 40, 30, 30, 30, 70, 80, 60, 300],
   /** Menang permainan. */
   menang: [30, 50, 30, 50, 80],
 } as const satisfies Record<string, number | readonly number[]>;

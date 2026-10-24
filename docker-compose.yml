@@ -16,6 +16,11 @@ services:
       - "127.0.0.1:${REMI_PORT:-2567}:2567"
     environment:
       - PORT=2567
+      # Usul fitur dari game diteruskan ke database Notion pemilik (docs/deploy.md, "Usul fitur ke
+      # Notion"). Isi keduanya di file .env di samping file ini (jangan di-commit). Kosong = usulan
+      # cuma disimpan di database, lalu terkirim begitu diisi dan container dibuat ulang.
+      - NOTION_TOKEN=${NOTION_TOKEN:-}
+      - NOTION_USULAN_DB=${NOTION_USULAN_DB:-}
     volumes:
       # Database klasemen akhir (SQLite). Tetap ada walaupun container dibuat ulang.
       - remi-data:/app/data

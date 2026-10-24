@@ -42,6 +42,7 @@ import {
 } from '../konten/peringkat';
 import { simpan, type CatatanPermainan } from '../penyimpanan';
 import { esc } from './dom';
+import { htmlPiala } from './kompetisi';
 import { angkaSkor } from './rincianSkor';
 
 interface BarisKlasemen {
@@ -70,6 +71,12 @@ interface PermainanTersimpan {
 /** Baris `GET /api/peringkat` bentuk lama (server sebelum #45). */
 type BarisPeringkatLama = Pick<BarisPeringkat, 'nama' | 'main' | 'juara' | 'totalSkor' | 'rataRata' | 'skorTerbaik' | 'mentung' | 'kepentung'>;
 
+/**
+ * Baris papan `?v=2`. `piala` (opsional, server dengan kompetisi versi 2): berapa kali juara kompetisi
+ * (#51), hanya dikirim kalau > 0.
+ */
+type BarisPapan = BarisPeringkat & { piala?: number };
+
 /** Jawaban `GET /api/peringkat?v=2`. */
 interface PapanPeringkat {
   v: 2;
@@ -78,8 +85,8 @@ interface PapanPeringkat {
   periode: BulanWib | null;
   minMain: number;
   jumlahPermainan: number;
-  peringkat: BarisPeringkat[];
-  belumCukup: BarisPeringkat[];
+  peringkat: BarisPapan[];
+  belumCukup: BarisPapan[];
 }
 
 export type TabRiwayat = 'peringkat' | 'permainan' | 'lokal' | 'statistik';
@@ -282,11 +289,13 @@ function htmlPeringkatLama(daftar: BarisPeringkatLama[], namaSaya: string): stri
     .join('')}</div>`;
 }
 
-function htmlBarisPapan(b: BarisPeringkat, label: string, urut: UrutanPeringkat, kunciSaya: string): string {
+function htmlBarisPapan(b: BarisPapan, label: string, urut: UrutanPeringkat, kunciSaya: string): string {
   const angka = angkaUrutan(b, urut);
+  // Piala juara kompetisi (#51 versi 2) di samping nama, kalau server mengirimnya.
+  const piala = typeof b.piala === 'number' && Number.isFinite(b.piala) ? Math.floor(b.piala) : 0;
   return `<div class="baris-peringkat${kunciNama(b.nama) === kunciSaya ? ' saya' : ''}">
       <span class="medali">${label}</span>
-      <span class="nama-skor"><b>${esc(b.nama)}</b><small class="redup">${esc(rincianBaris(b, urut))}</small></span>
+      <span class="nama-skor"><b>${esc(b.nama)}${htmlPiala(piala)}</b><small class="redup">${esc(rincianBaris(b, urut))}</small></span>
       <span class="kanan-peringkat"><b class="total ${angka.kelas}">${esc(angka.teks)}</b><small class="redup">${esc(KETERANGAN_ANGKA[urut])}</small></span>
     </div>`;
 }

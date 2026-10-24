@@ -4,13 +4,16 @@
 import { DAFTAR_LEVEL_BOT, type LevelBot, type SpesifikasiKartuJadi } from '@remi/engine';
 import {
   DAFTAR_EMOTE,
+  DAFTAR_LEDEKAN,
   EMOTE_LAMA,
   MAKS_PESAN,
+  MAKS_TIKET,
   PENGATURAN_BAWAAN,
   type AksiKlien,
   type Emote,
   type PengaturanMeja,
   type PesanKlien,
+  type TiketKompetisi,
 } from './protokol.js';
 
 type Obj = Record<string, unknown>;
@@ -77,8 +80,9 @@ export function rapikanBatasSkor(x: unknown, arah: ArahBatasSkor): number | null
 }
 
 /**
- * Kartu lain paling banyak di satu aksi buang (#41): 2 deck punya 8 kartu seangka joker, jadi
- * nutup pakai joker paling banyak 1 + 7 kartu.
+ * Batas bentuk kartu lain di satu aksi buang (#41): 2 deck punya 8 kartu seangka joker, jadi paling banyak
+ * 1 + 7 kartu. Sejak #52 nutup paling banyak 2 kartu, tapi batas bentuk ini sengaja tetap longgar: pesan
+ * 3+ kartu tetap sampai ke engine, yang menolaknya dengan alasan yang jelas (NUTUP_KEBANYAKAN).
  */
 export const MAKS_KARTU_BUANG_LAIN = 7;
 
@@ -114,7 +118,8 @@ export function validasiAksi(x: unknown): AksiKlien | null {
     case 'buang': {
       if (!isStr(x.kartuId, 40)) return null;
       // Keputusan #41: nutup pakai beberapa joker. Hanya bentuknya yang dicek di sini; sah tidaknya
-      // (semua sisa tangan, joker hidup semua, sesudah mulung) diputuskan validasiBuang di engine.
+      // (paling banyak 2 kartu #52, semua sisa tangan, sesudah mulung, bukan kembaran pungutan #53, joker
+      // hidup semua) diputuskan validasiBuang di engine, supaya pemain dapat alasan penolakannya.
       const lain = x.kartuIdLain;
       if (lain === undefined) return { jenis: 'buang', kartuId: x.kartuId };
       if (!Array.isArray(lain) || lain.length > MAKS_KARTU_BUANG_LAIN || !lain.every((id) => isStr(id, 40))) return null;
@@ -182,6 +187,30 @@ export function validasiPengaturan(x: unknown): Partial<PengaturanMeja> | null {
   return hasil;
 }
 
+/**
+ * Id aksi dari client (`{t:'aksi', id}`): 1–64 karakter huruf/angka ASCII, `_`, atau `-`. Cukup untuk
+ * UUID maupun nonce + penghitung, dan aman dipakai sebagai kunci catatan di server.
+ */
+export function idAksiSah(x: unknown): x is string {
+  return typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x);
+}
+
+/** Tiket kompetisi (#51): kode 5 huruf/angka dan token. Bentuk salah = null. */
+export function validasiTiket(x: unknown): TiketKompetisi | null {
+  if (!isObj(x) || !isStr(x.kode, 20) || !isStr(x.token, 100) || !x.token) return null;
+  return { kode: x.kode.trim().toUpperCase(), token: x.token };
+}
+
+/**
+ * Isi ledekan yang sah: salah satu DAFTAR_LEDEKAN atau DAFTAR_EMOTE, apa adanya; emote versi lama
+ * (EMOTE_LAMA) diganti padanannya. Selain itu null: ledekan tidak menerima teks bebas.
+ */
+export function isiLedek(x: unknown): string | null {
+  if (typeof x !== 'string') return null;
+  if ((DAFTAR_LEDEKAN as readonly string[]).includes(x) || (DAFTAR_EMOTE as readonly string[]).includes(x)) return x;
+  return EMOTE_LAMA.get(x) ?? null;
+}
+
 /** Ubah data mentah (hasil JSON.parse) menjadi PesanKlien yang sah, atau null. */
 export function validasiPesan(x: unknown): PesanKlien | null {
   if (!isObj(x) || typeof x.t !== 'string') return null;
@@ -190,18 +219,30 @@ export function validasiPesan(x: unknown): PesanKlien | null {
     case 'buat': {
       if (!isStr(x.nama, 100)) return null;
       const pengaturan = x.pengaturan === undefined ? {} : validasiPengaturan(x.pengaturan);
-      return pengaturan ? { t: 'buat', nama: x.nama, pengaturan } : null;
+      if (!pengaturan) return null;
+      if (x.kompetisi === undefined) return { t: 'buat', nama: x.nama, pengaturan };
+      const kompetisi = validasiTiket(x.kompetisi);
+      return kompetisi ? { t: 'buat', nama: x.nama, pengaturan, kompetisi } : null;
     }
-    case 'gabung':
+    case 'gabung': {
       if (!isStr(x.kode, 20) || !isStr(x.nama, 100)) return null;
       if (x.token !== undefined && !isStr(x.token, 100)) return null;
-      return { t: 'gabung', kode: x.kode, nama: x.nama, token: x.token as string | undefined };
+      const pesan: PesanKlien = { t: 'gabung', kode: x.kode, nama: x.nama, token: x.token as string | undefined };
+      if (x.tiket === undefined) return pesan;
+      if (!Array.isArray(x.tiket) || x.tiket.length > MAKS_TIKET) return null;
+      const tiket = x.tiket.map(validasiTiket);
+      return tiket.every((t) => t !== null) ? { ...pesan, tiket: tiket as TiketKompetisi[] } : null;
+    }
     case 'daftar':
     case 'keluar':
     case 'mainLagi':
-    case 'siapJoker':
+    case 'siapLanjut':
     case 'ping':
       return { t: x.t };
+    case 'siapJoker':
+      // Nomor putaran opsional; bentuk yang salah ditolak (client yang benar tidak pernah mengirimnya).
+      if (x.putaran === undefined) return { t: 'siapJoker' };
+      return isInt(x.putaran) && x.putaran >= 0 && x.putaran <= 1_000_000 ? { t: 'siapJoker', putaran: x.putaran } : null;
     case 'aturKursi':
       if (!isInt(x.kursi) || (x.jenis !== 'bot' && x.jenis !== 'kosong')) return null;
       if (x.level !== undefined && !isLevel(x.level)) return null;
@@ -215,7 +256,10 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       return pengocok(x.pengocok) ? { t: x.t, pengocok: x.pengocok as number | undefined } : null;
     case 'aksi': {
       const aksi = validasiAksi(x.aksi);
-      return aksi ? { t: 'aksi', aksi } : null;
+      if (!aksi) return null;
+      if (x.id === undefined) return { t: 'aksi', aksi };
+      // Id yang tidak sah = seluruh pesan ditolak (client yang benar tidak pernah mengirimnya).
+      return idAksiSah(x.id) ? { t: 'aksi', aksi, id: x.id } : null;
     }
     case 'akhiri':
     case 'putaranTerakhir':
@@ -230,6 +274,12 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       if (x.isi.length > BATAS_PESAN_MENTAH) return null;
       const isi = rapikanPesan(x.isi);
       return isi ? { t: 'emote', isi } : null;
+    }
+    case 'ledek': {
+      // Kursi 0..5 (meja paling banyak 6 pemain); sah tidaknya sasaran diputuskan meja.
+      if (!isInt(x.ke) || x.ke < 0 || x.ke > 5) return null;
+      const isi = isiLedek(x.isi);
+      return isi ? { t: 'ledek', ke: x.ke, isi } : null;
     }
     default:
       return null;
@@ -379,11 +429,60 @@ const BATAS_PESAN_MENTAH = 1000;
  * tidak ada yang terlihat → null (tidak dikirim).
  */
 export function rapikanPesan(pesan: string): string | null {
-  const normal = pesan.replace(/[^ㄱ-ㆎ]+/gu, (x) => x.normalize('NFKC'));
-  const bersih = buangFormat(normal.replace(/\s+/gu, ' ').replace(KARAKTER_BUANG, ''))
+  return rapikanBaris(pesan, MAKS_PESAN);
+}
+
+/** Panjang maksimal nama kompetisi (huruf yang tampil). */
+export const MAKS_NAMA_KOMPETISI = 32;
+
+/** Nama kompetisi (#51): dibersihkan sama seperti pesan, maksimal `MAKS_NAMA_KOMPETISI` huruf. Kosong → null. */
+export function rapikanNamaKompetisi(nama: unknown): string | null {
+  if (typeof nama !== 'string' || nama.length > BATAS_PESAN_MENTAH) return null;
+  return rapikanBaris(nama, MAKS_NAMA_KOMPETISI);
+}
+
+function rapikanBaris(pesan: string, maks: number): string | null {
+  const bersih = bersihkanBaris(pesan);
+  const pendek = potong(bersih, maks, maks * 3);
+  const hasil = (pendek.length < bersih.length ? pendek.replace(/[‌‍]+$/u, '') : pendek).trim();
+  return TERLIHAT.test(hasil) ? hasil : null;
+}
+
+/** Satu baris teks bebas: NFKC, tanpa karakter kontrol/format/< >, spasi dirapatkan. Belum dipotong. */
+function bersihkanBaris(teks: string): string {
+  const normal = teks.replace(/[^ㄱ-ㆎ]+/gu, (x) => x.normalize('NFKC'));
+  return buangFormat(normal.replace(/\s+/gu, ' ').replace(KARAKTER_BUANG, ''))
     .replace(/\s+/gu, ' ')
     .trim();
-  const pendek = potong(bersih, MAKS_PESAN, MAKS_PESAN * 3);
-  const hasil = (pendek.length < bersih.length ? pendek.replace(/[‌‍]+$/u, '') : pendek).trim();
+}
+
+/** Banyaknya huruf yang tampil (grapheme), dasar batas panjang teks bebas. */
+export function jumlahHuruf(teks: string): number {
+  const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+  if (!Segmenter) return Array.from(teks).length;
+  let n = 0;
+  for (const _ of new Segmenter(undefined, { granularity: 'grapheme' }).segment(teks)) n++;
+  return n;
+}
+
+/**
+ * Teks bebas yang lebih panjang dari pesan meja (judul dan isi usulan): dibersihkan sama seperti
+ * pesan (NFKC, tanpa karakter kontrol/format/< >, tanda gabung per huruf dibatasi), tapi **tidak
+ * dipotong**: panjangnya dicek pemanggil dengan `jumlahHuruf`, supaya teks yang kepanjangan ditolak
+ * dengan jelas, tidak terpotong diam-diam. `barisBaru` = pergantian baris dipertahankan sebagai "\n"
+ * (paling banyak satu baris kosong berturut-turut); tanpa itu jadi spasi. Kosong → null.
+ */
+export function rapikanTeks(teks: string, opsi: { barisBaru?: boolean } = {}): string | null {
+  const baris = opsi.barisBaru ? teks.split(/\r\n?|\n/) : [teks];
+  const rapi: string[] = [];
+  for (const b of baris) {
+    const bersih = bersihkanBaris(b);
+    const isi = bersih ? potong(bersih, Infinity, Infinity).trim() : '';
+    // Baris kosong di awal dan yang berturut-turut dibuang.
+    if (!isi && (!rapi.length || rapi.at(-1) === '')) continue;
+    rapi.push(isi);
+  }
+  while (rapi.at(-1) === '') rapi.pop();
+  const hasil = rapi.join('\n');
   return TERLIHAT.test(hasil) ? hasil : null;
 }

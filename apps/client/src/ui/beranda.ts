@@ -1,8 +1,8 @@
 // Layar beranda: "pintu masuk Kedai Madya".
 // Hero dengan logo kedai dan kipas kartu, aksi utama (lanjutkan / main bareng warga kedai /
 // latihan), pengaturan meja offline yang terlipat, main online dengan status koneksi, navigasi ke
-// Bantuan/Pengaturan/Riwayat/Tentang, kartu info Kedai Madya, dan label versi. Juga layar daftar
-// meja publik.
+// Bantuan/Pengaturan/Riwayat/Tentang/Usul fitur, kartu info Kedai Madya, dan label versi. Juga layar
+// daftar meja publik.
 //
 // Tawaran pasang aplikasi (keputusan #46) HANYA di sini: ubin "Pasang ke layar utama" di menu, plus
 // tombol melayang (anak terakhir .layar.beranda) yang bisa disembunyikan 3 hari lewat "Nanti saja".
@@ -17,7 +17,10 @@ import { gambarKartuKeKanvas, type KartuGambar } from '../game/kartuGrafisGambar
 import { htmlTautanKedai, KEDAI } from '../konten/kedai';
 import { TEKS_TAWARAN } from '../konten/pasang';
 import { TEKS_KALDU } from '../konten/kaldu';
+import { TEKS_KOMPETISI } from '../konten/kompetisi';
+import { TEKS_KONEKSI } from '../konten/koneksi';
 import { TEKS_NAMA } from '../konten/nama';
+import { TEKS_USULAN } from '../konten/usulan';
 import { DAFTAR_LEVEL_WARGA, LEVEL_WARGA, labelLevelKecil } from '../konten/levelWarga';
 import { aturPreferensi, preferensi, saatPreferensiBerubah } from '../preferensi';
 import { labelTanggalGanti, namaTerkunciSampai, simpanNamaBaru, type KeadaanNama } from '../namaPemain';
@@ -27,13 +30,15 @@ import { bacaIsianBatas, htmlIsianBatas, pasangIsianBatas } from './batasSkor';
 import { esc, konfirmasi, toast } from './dom';
 
 /** Keadaan main online yang ditampilkan di beranda. */
-export type StatusOnline = 'siap' | 'offline' | 'menyambung' | 'tersambung' | 'gagal';
+export type StatusOnline = 'siap' | 'offline' | 'menyambung' | 'melanjutkan' | 'tersambung' | 'gagal';
 
 export interface AksiBeranda {
   buatMeja(nama: string): void;
   gabung(nama: string, kode: string): void;
   lihatPublik(): void;
   lihatRiwayat(): void;
+  /** Layar Kompetisi (keputusan #51). */
+  lihatKompetisi(): void;
   mainOffline(nama: string, pengaturan: Partial<PengaturanMeja>, pengocokSaya: boolean): void;
   lanjutOffline(): void;
   /** Permainan latihan dengan panduan (tutorial). */
@@ -41,6 +46,8 @@ export interface AksiBeranda {
   bantuan(): void;
   pengaturan(): void;
   tentang(): void;
+  /** Dialog Usul fitur (24 Okt 2026); dipanggil sesudah nama dipastikan ada. */
+  usulFitur(): void;
   /** Tawaran pasang aplikasi, atau null kalau tidak ada yang bisa ditawarkan (sudah terpasang, desktop, …). */
   pasangAplikasi: TawaranPasangBeranda | null;
   /** Ada versi baru yang siap: muat ulang sekarang. Null kalau tidak ada. */
@@ -99,6 +106,8 @@ const TEKS_STATUS: Record<StatusOnline, string> = {
   siap: '',
   offline: 'Kamu lagi offline',
   menyambung: 'Menyambung…',
+  // Aplikasi dibuka ulang di tengah permainan online: sesi meja terakhir disambung lagi terus.
+  melanjutkan: TEKS_KONEKSI.lanjutSesi,
   tersambung: 'Tersambung',
   gagal: 'Server belum bisa dihubungi',
 };
@@ -274,6 +283,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
             <button type="button" id="gabung">Gabung</button>
           </div>
           <button type="button" class="hantu penuh" id="publik">Cari meja publik</button>
+          <button type="button" class="hantu penuh" id="kompetisi"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.tombolBeranda)}</button>
         </section>
       </div>
 
@@ -283,6 +293,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
           <button type="button" class="nav-ubin" data-nav="pengaturan"><span class="nav-ikon" aria-hidden="true">⚙️</span><span>Pengaturan</span></button>
           <button type="button" class="nav-ubin" data-nav="riwayat"><span class="nav-ikon" aria-hidden="true">🏆</span><span>Riwayat &amp; statistik</span></button>
           <button type="button" class="nav-ubin" data-nav="tentang"><span class="nav-ikon" aria-hidden="true">ℹ️</span><span>Tentang</span></button>
+          <button type="button" class="nav-ubin nav-lebar" data-nav="usulan"><span class="nav-ikon" aria-hidden="true">💡</span><span>${esc(TEKS_USULAN.ubin)}</span></button>
         </nav>
 
         <section class="kartu-kedai" aria-labelledby="judul-kedai">
@@ -461,7 +472,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   });
 
   // ---------- main online ----------
-  const tombolOnline = ['buat', 'gabung', 'publik'].map((id) => el<HTMLButtonElement>(id)!);
+  const tombolOnline = ['buat', 'gabung', 'publik', 'kompetisi'].map((id) => el<HTMLButtonElement>(id)!);
   const kodeEl = el<HTMLInputElement>('kode')!;
   const sibuk = (b: HTMLElement) => {
     tombolOnline.forEach((x) => x.removeAttribute('aria-busy'));
@@ -492,6 +503,11 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
     if (!(await pastikanNama())) return;
     sibuk(el('publik')!);
     aksi.lihatPublik();
+  });
+  // Ikut serta dan meja kompetisi memakai nama ini, jadi nama dipastikan dulu (#49).
+  el('kompetisi')!.addEventListener('click', async () => {
+    if (!(await pastikanNama())) return;
+    aksi.lihatKompetisi();
   });
 
   const statusEl = el('status-online')!;
@@ -541,6 +557,11 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
         return aksi.lihatRiwayat();
       case 'tentang':
         return aksi.tentang();
+      case 'usulan':
+        // Usulan dikirim atas nama pemain, jadi nama dipastikan dulu (#49), sama seperti tombol main.
+        return void pastikanNama().then((n) => {
+          if (n) aksi.usulFitur();
+        });
       case 'pasang':
         return tawaran?.pasang();
       case 'muat-ulang':
@@ -609,7 +630,11 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   aturPasang(aksi.pasangAplikasi);
   aturMuatUlang(aksi.muatUlang);
 
-  const fokusNav = (n: string) => nav.querySelector<HTMLElement>(`[data-nav="${n.replace(/[^a-z-]/gi, '')}"]`)?.focus();
+  // Ubin menu, atau tombol dengan id itu (Kompetisi ada di panel Main online).
+  const fokusNav = (n: string) => {
+    const bersih = n.replace(/[^a-z-]/gi, '');
+    (nav.querySelector<HTMLElement>(`[data-nav="${bersih}"]`) ?? (bersih ? el(bersih) : null))?.focus();
+  };
 
   const pesanGagalTerlihat = () => {
     if (infoGagalEl.classList.contains('tersembunyi') || !infoGagalEl.isConnected) return false;

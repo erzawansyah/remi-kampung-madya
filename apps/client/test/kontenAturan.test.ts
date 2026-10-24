@@ -9,6 +9,7 @@ import {
   AturanError,
   bukaKartuJoker,
   hitungSkorPemain,
+  MAKS_KARTU_NUTUP,
   maksimalMulung,
   Rng,
   NILAI_PENTUNGAN_JOKER,
@@ -100,14 +101,22 @@ function ujiContoh(c: Contoh): { ok: boolean; kode?: string } {
       const as = ks.filter((k) => k.rank === 1);
       const lain = ks.filter((k) => k.rank !== 1);
       const spesifikasi = [as.map((k) => ({ id: k.id })), ...(lain.length ? [lain.map((k) => ({ id: k.id }))] : [])];
-      return cek(() => validasiTurunkan([...ks, PENGISI], spesifikasi, false, 'buangan', ctx));
+      return cek(() => validasiTurunkan([...ks, PENGISI], spesifikasi, false, 'buangan', ctx, []));
     }
     case 'nutupHabisDeck':
       // Tiga kartu pertama dijadikan setelah ambil dari deck, sisa satu kartu di tangan.
-      return cek(() => validasiTurunkan(ks, [ks.slice(0, 3).map((k) => ({ id: k.id }))], false, 'deck', ctx));
+      return cek(() => validasiTurunkan(ks, [ks.slice(0, 3).map((k) => ({ id: k.id }))], false, 'deck', ctx, []));
     case 'buangAs':
       return cek(() =>
-        validasiBuang({ tangan: [...ks, PENGISI], punyaKartuJadi: false, sumberAmbil: 'deck', kartuId: ks[0].id, ctx, asJokerBolehDibuangTanpaJadi: false }),
+        validasiBuang({
+          tangan: [...ks, PENGISI],
+          punyaKartuJadi: false,
+          sumberAmbil: 'deck',
+          kartuId: ks[0].id,
+          pungutan: [],
+          ctx,
+          asJokerBolehDibuangTanpaJadi: false,
+        }),
       );
     case 'mulung': {
       // 4 pemain, joker 9. Buangan dari bawah ke atas: 3 Wajik, K Kriting, 5 Wajik.
@@ -190,7 +199,15 @@ describe('klaim kunci di Bantuan sama dengan engine', () => {
     expect(teksBab('mulung')).toContain('mentung cuma sah di giliran yang kamu awali dengan mulung');
     const kartu = pembuatKartu();
     const t = [kartu({ bunga: 'love', rank: 7 })];
-    const dariBuangan = validasiBuang({ tangan: t, punyaKartuJadi: true, sumberAmbil: 'buangan', kartuId: t[0].id, ctx: ctx5, asJokerBolehDibuangTanpaJadi: false });
+    const dariBuangan = validasiBuang({
+      tangan: t,
+      punyaKartuJadi: true,
+      sumberAmbil: 'buangan',
+      kartuId: t[0].id,
+      pungutan: [],
+      ctx: ctx5,
+      asJokerBolehDibuangTanpaJadi: false,
+    });
     expect(dariBuangan.mentung).toBe(true);
   });
 
@@ -211,10 +228,14 @@ describe('klaim kunci di Bantuan sama dengan engine', () => {
     expect(bukaKartuJoker(deck2, undefined, new Rng(1)).rank).toBe(7);
   });
 
-  it('nutup pakai beberapa joker hidup sekaligus: 250 per joker, harus semua sisa tangan, sesudah mulung (#41)', () => {
-    expect(teksBab('mentung')).toContain('Pentung beberapa joker sekaligus');
-    expect(teksBab('mentung')).toContain('**250 per joker**: dua joker 500, tiga joker 750');
-    expect(FAQ.some((f) => f.tanya === 'Bisa nutup pakai dua joker?' && f.jawab.includes('dua joker 500'))).toBe(true);
+  it('nutup pakai dua joker hidup sekaligus: 250 per joker, paling banyak 2, sesudah mulung (#41, #52)', () => {
+    expect(teksBab('mentung')).toContain('Pentung dua joker sekaligus');
+    expect(teksBab('mentung')).toContain('**250 per joker**, jadi dua joker **500**');
+    expect(teksBab('mentung')).toContain('Kalau sisa kartumu tiga joker atau lebih, giliran itu kamu tidak bisa nutup');
+    expect(semuaTeks).not.toContain('750');
+    expect(FAQ.some((f) => f.tanya === 'Bisa nutup pakai dua joker?' && f.jawab.includes('dua joker 500') && f.jawab.includes('Paling banyak dua kartu'))).toBe(
+      true,
+    );
     expect(GLOSARIUM.find((g) => g.istilah === 'Pentungan')!.arti).toContain('250 per joker');
     const kartu = pembuatKartu();
     const j = [kartu({ bunga: 'waru', rank: 5 }), kartu({ bunga: 'love', rank: 5 }), kartu({ bunga: 'kriting', rank: 5 })];
@@ -226,18 +247,64 @@ describe('klaim kunci di Bantuan sama dengan engine', () => {
           sumberAmbil,
           kartuId: ids[0],
           kartuIdLain: ids.slice(1),
+          pungutan: [],
           ctx: { rankJoker: 5 as Rank, jokerMati: mati },
           asJokerBolehDibuangTanpaJadi: false,
         }),
       );
+    expect(MAKS_KARTU_NUTUP).toBe(2);
     expect(buang(j.slice(0, 2), [j[0].id, j[1].id]).ok).toBe(true);
-    expect(buang(j, j.map((x) => x.id)).ok).toBe(true);
     expect(nilaiPentunganTotal(j[0], true, [j[1]])).toBe(500);
-    expect(nilaiPentunganTotal(j[0], true, [j[1], j[2]])).toBe(750);
+    // Tiga joker (semua sisa tangan) tidak bisa nutup sekaligus (#52); satu joker tetap boleh dibuang biasa.
+    expect(buang(j, j.map((x) => x.id)).kode).toBe('NUTUP_KEBANYAKAN');
+    expect(buang(j, [j[0].id]).ok).toBe(true);
     // Semua sisa kartu harus ikut, sesudah mulung, dan joker mati tidak bisa ikut.
     expect(buang(j, [j[0].id, j[1].id]).kode).toBe('BUANG_SATU_KARTU');
     expect(buang(j.slice(0, 2), [j[0].id, j[1].id], 'deck').kode).toBe('NUTUP_TANPA_MULUNG');
     expect(buang(j.slice(0, 2), [j[0].id, j[1].id], 'buangan', [j[1].id]).kode).toBe('PENTUNGAN_BUKAN_JOKER');
+  });
+
+  it('2 deck: pentungan bukan kembaran kartu pungutan, contoh Ani dan Budi (#53)', () => {
+    const teks = teksBab('mentung');
+    expect(teks).toContain('Pentungan bukan kembaran kartu pungutan (2 deck)');
+    expect(teks).toContain(
+      'Kartu pungutannya sendiri tetap boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga di giliran itu. Membuang kembaran tanpa mentung tetap boleh.',
+    );
+    expect(FAQ.some((f) => f.jawab.includes('Kartu pungutannya sendiri boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga.'))).toBe(true);
+    expect(teks).toContain('**Contoh Ani dan Budi** (2 deck, misal joker putaran ini 3)');
+    expect(FAQ.some((f) => f.jawab.includes('Ani dan Budi'))).toBe(true);
+    // Contoh Ani dan Budi dihitung ulang dengan validator engine. Joker 3, kartu deck kedua = nomor deck 1.
+    const ctx3: KonteksJoker = { rankJoker: 3 as Rank, jokerMati: [] };
+    const kartu = pembuatKartu();
+    const k = (rank: Rank, bunga: Bunga) => kartu({ rank, bunga });
+    const [l7, l8, l9, wJ, wQ, wK] = [k(7, 'love'), k(8, 'love'), k(9, 'love'), k(11, 'wajik'), k(12, 'wajik'), k(13, 'wajik')];
+    const l8Ani = k(8, 'love');
+    expect(l8Ani.deck).toBe(1);
+    const buanganAni = [{ kartu: l8Ani, pemilik: 0 }];
+    const mulung = (spesifikasi: PilihanKartu[][]) =>
+      cek(() =>
+        validasiMulung({ tangan: [l7, l8, l9, wJ, wQ, wK], buangan: buanganAni, punyaKartuJadi: false, jumlahPemain: 4, jumlah: 1, spesifikasi, ctx: ctx3 }),
+      );
+    const id = (...ks: Kartu[]) => ks.map((x) => ({ id: x.id }));
+    // Budi mungut 8 Love Ani untuk 7-8-9 Love: sah.
+    expect(mulung([id(l7, l8Ani, l9)]).ok).toBe(true);
+    // Sekaligus menurunkan J-Q-K Wajik (sisa 8 Love sendirian): ditolak.
+    expect(mulung([id(l7, l8Ani, l9), id(wJ, wQ, wK)]).kode).toBe('SISAKAN_KARTU');
+    // Sesudah mulung: turunkan J-Q-K Wajik ditolak, mentung pakai 8 Love miliknya ditolak, buang biasa boleh.
+    expect(cek(() => validasiTurunkan([l8, wJ, wQ, wK], [id(wJ, wQ, wK)], true, 'buangan', ctx3, buanganAni)).kode).toBe('SISAKAN_KARTU');
+    const buang = (tangan: Kartu[]) =>
+      cek(() =>
+        validasiBuang({ tangan, punyaKartuJadi: true, sumberAmbil: 'buangan', kartuId: l8.id, pungutan: buanganAni, ctx: ctx3, asJokerBolehDibuangTanpaJadi: false }),
+      );
+    expect(buang([l8]).kode).toBe('PENTUNGAN_KEMBARAN');
+    expect(buang([l8, wJ, wQ, wK]).ok).toBe(true);
+    // Kartu pungutannya sendiri boleh jadi pentungan, kecuali kalau kembarannya ikut dipungut juga.
+    const mentungPungutan = (pungutan: { kartu: Kartu; pemilik: number }[]) =>
+      cek(() =>
+        validasiBuang({ tangan: [l8Ani], punyaKartuJadi: true, sumberAmbil: 'buangan', kartuId: l8Ani.id, pungutan, ctx: ctx3, asJokerBolehDibuangTanpaJadi: false }),
+      );
+    expect(mentungPungutan(buanganAni).ok).toBe(true);
+    expect(mentungPungutan([{ kartu: l8, pemilik: 0 }, ...buanganAni]).kode).toBe('PENTUNGAN_KEMBARAN');
   });
 
   it('mode kaldu: pentungan dikali PENGALI_KALDU, kaldu lagi kalau deck habis, tanpa batas skor (#42, #43)', () => {
@@ -276,10 +343,18 @@ describe('klaim kunci di Bantuan sama dengan engine', () => {
     expect(semuaTeks).toContain(`bernilai ${NILAI_PENTUNGAN_JOKER}`);
     const kartu = pembuatKartu();
     const t = [kartu({ bunga: 'love', rank: 5 }), kartu({ bunga: 'love', rank: 8 })];
-    const biasa = validasiBuang({ tangan: t, punyaKartuJadi: true, sumberAmbil: 'deck', kartuId: t[0].id, ctx: ctx5, asJokerBolehDibuangTanpaJadi: false });
+    const biasa = validasiBuang({ tangan: t, punyaKartuJadi: true, sumberAmbil: 'deck', kartuId: t[0].id, pungutan: [], ctx: ctx5, asJokerBolehDibuangTanpaJadi: false });
     expect(biasa.kenaPenaltiJoker).toBe(true);
     const pentungan = [kartu({ bunga: 'waru', rank: 5 })];
-    const hasil = validasiBuang({ tangan: pentungan, punyaKartuJadi: true, sumberAmbil: 'buangan', kartuId: pentungan[0].id, ctx: ctx5, asJokerBolehDibuangTanpaJadi: false });
+    const hasil = validasiBuang({
+      tangan: pentungan,
+      punyaKartuJadi: true,
+      sumberAmbil: 'buangan',
+      kartuId: pentungan[0].id,
+      pungutan: [],
+      ctx: ctx5,
+      asJokerBolehDibuangTanpaJadi: false,
+    });
     expect(hasil.mentung).toBe(true);
     expect(hasil.kenaPenaltiJoker).toBe(false);
   });

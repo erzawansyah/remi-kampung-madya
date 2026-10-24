@@ -405,6 +405,34 @@ describe('renderRiwayat tab Peringkat (leaderboard v2)', () => {
     expect(akar.querySelector('#hasil-peringkat')!.textContent).toContain('Belum ada permainan yang cocok.');
   });
 
+  it('piala juara kompetisi (#51 versi 2): 🏆 di samping nama kalau server mengirim piala, juga di Belum cukup main', async () => {
+    const isi = papanContoh();
+    stubFetch(() => ({
+      ...isi,
+      peringkat: [{ ...isi.peringkat[0], piala: 2 }, isi.peringkat[1]],
+      belumCukup: [{ ...isi.belumCukup[0], piala: 1 }],
+    }));
+    const akar = document.getElementById('ui')!;
+    renderRiwayat(akar, () => {}, 'peringkat');
+    await tunggu();
+    expect(namaBaris(akar)).toEqual(['Siti 🏆2', 'Budi']);
+    expect(namaBaris(akar, '.belum-cukup .baris-peringkat .nama-skor > b')).toEqual(['Joko 🏆']);
+    expect(akar.querySelector('#hasil-peringkat .piala')!.getAttribute('aria-label')).toBe('juara kompetisi 2 kali');
+    // Ganti urutan (diurutkan ulang di HP): pialanya ikut barisnya.
+    ganti(akar.querySelector<HTMLSelectElement>('#urut-peringkat')!, 'juara');
+    expect(namaBaris(akar)).toEqual(['Budi', 'Joko 🏆', 'Siti 🏆2']);
+  });
+
+  it('server tanpa piala (atau piala rusak): tanpa 🏆', async () => {
+    const isi = papanContoh();
+    stubFetch(() => ({ ...isi, peringkat: [{ ...isi.peringkat[0], piala: 'banyak' }, { ...isi.peringkat[1], piala: 0 }] }));
+    const akar = document.getElementById('ui')!;
+    renderRiwayat(akar, () => {}, 'peringkat');
+    await tunggu();
+    expect(akar.querySelector('#hasil-peringkat .piala')).toBeNull();
+    expect(namaBaris(akar)).toEqual(['Siti', 'Budi']);
+  });
+
   it('server lama (jawaban array): tampil cara lama, pilihan dimatikan, ada catatan singkat', async () => {
     stubFetch(() => [{ nama: 'Budi', main: 3, juara: 2, totalSkor: 150, rataRata: 50, skorTerbaik: 120, mentung: 1, kepentung: 0 }]);
     const akar = document.getElementById('ui')!;

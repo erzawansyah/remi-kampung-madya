@@ -22,6 +22,15 @@ import {
   type SaringanPeringkat,
   type UrutanPeringkat,
 } from '@remi/meja';
+import {
+  buatPenyimpanKompetisi,
+  perbaikiSkemaKompetisiPraRilis,
+  SKEMA_HASIL_DITINGGAL,
+  SKEMA_KOMPETISI,
+  type PenyimpanKompetisi,
+} from './kompetisi.js';
+import { buatPenyimpanUsulan, SKEMA_USULAN, type PenyimpanUsulan } from './usulan.js';
+import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, type PenyimpanMejaAktif } from './mejaAktif.js';
 
 export interface PermainanTersimpan {
   id: number;
@@ -61,10 +70,16 @@ export interface PapanPeringkat {
   minMain: number;
   /** Permainan yang dihitung sesudah saringan dan syarat minimal 2 orang. */
   jumlahPermainan: number;
-  peringkat: BarisPapan[];
+  peringkat: BarisPapanPiala[];
   /** Untuk urutan rata-rata/persen/posisi: yang main kurang dari minMain kali. */
-  belumCukup: BarisPapan[];
+  belumCukup: BarisPapanPiala[];
 }
+
+/**
+ * Baris leaderboard v2. `piala` (opsional, hanya kalau > 0): berapa kali orang ini juara kompetisi
+ * yang juaranya sudah ditetapkan (#51 versi 2), dikenali lewat kunciNama. Tidak ada di bentuk lama.
+ */
+export type BarisPapanPiala = BarisPapan & { piala?: number };
 
 export interface PermintaanPapan {
   /** Data mentah boleh (parameter URL): dirapikan, yang tidak sah jadi bawaan. */
@@ -76,6 +91,14 @@ export interface PermintaanPapan {
 
 export interface PenyimpanRiwayat {
   simpan(r: RingkasanAkhir): number;
+  /**
+   * Permainan meja kompetisi yang ditinggal (tidak pernah selesai, `ringkasanDitinggal`): hanya yang
+   * keluar dicatat (kompetisi.catatDitinggal), dan simpanan meja_aktif meja itu dihapus di transaksi
+   * yang sama. Tidak menulis baris permainan/klasemen (Riwayat dan leaderboard umum hanya memuat
+   * permainan yang selesai). Melempar kalau database galat (semuanya dibatalkan, simpanannya tetap ada).
+   * Mengembalikan banyaknya baris yang dicatat.
+   */
+  simpanDitinggal(r: RingkasanAkhir): number;
   /** Permainan terbaru dulu. */
   daftar(batas: number): PermainanTersimpan[];
   /**
@@ -85,6 +108,12 @@ export interface PenyimpanRiwayat {
   peringkat(): BarisPeringkat[];
   /** Leaderboard dengan pilihan urutan dan saringan (keputusan pemilik #45). */
   papan(permintaan?: PermintaanPapan): PapanPeringkat;
+  /** Kompetisi (#51), di database yang sama. Hasil meja kompetisi dicatat simpan() sekalian. */
+  kompetisi: PenyimpanKompetisi;
+  /** Usul fitur dari game (24 Okt 2026), di database yang sama. Diteruskan ke Notion oleh server.ts. */
+  usulan: PenyimpanUsulan;
+  /** Meja online yang masih ada (selamat dari restart/deploy), di database yang sama. Diatur server.ts. */
+  mejaAktif: PenyimpanMejaAktif;
   tutup(): void;
 }
 
@@ -133,6 +162,20 @@ export const MIGRASI: readonly string[] = [
    ALTER TABLE klasemen ADD COLUMN kunci_nama TEXT;
    CREATE INDEX IF NOT EXISTS permainan_selesai ON permainan (selesai_pada);
    CREATE INDEX IF NOT EXISTS klasemen_kunci ON klasemen (kunci_nama) WHERE bot = 0;`,
+  // v2 (23 Okt 2026, keputusan pemilik #51): kompetisi, pesertanya, hasil per permainan, dan juaranya.
+  // Pengecualian aturan "jangan diubah": ditulis ulang di tempat 24 Okt 2026 (kompetisi versi 2)
+  // karena kompetisi belum pernah dirilis ke main. Database pra-rilis diperbaiki
+  // perbaikiSkemaKompetisiPraRilis() saat dibuka.
+  SKEMA_KOMPETISI,
+  // v3 (24 Okt 2026, keputusan pemilik): usul fitur dari game, diteruskan ke Notion. Tanpa alamat IP.
+  SKEMA_USULAN,
+  // v4 (24 Okt 2026, keputusan pemilik): meja online yang masih ada, supaya selamat dari restart/deploy.
+  // Memuat token pemain: database hanya di volume privat.
+  SKEMA_MEJA_AKTIF,
+  // v5 (24 Okt 2026, keputusan pemilik "Yang keluar selalu dicatat 0"): nilai 0 yang keluar dari
+  // permainan meja kompetisi yang ditinggal. Tabel sendiri: permainan/klasemen, Riwayat, dan
+  // leaderboard umum tidak berubah.
+  SKEMA_HASIL_DITINGGAL,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */
@@ -216,7 +259,11 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
   const db = typeof sumber === 'string' ? new DatabaseSync(sumber) : sumber;
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   migrasiSkema(db, log);
+  perbaikiSkemaKompetisiPraRilis(db, log);
   lengkapiBaris(db, log);
+  const kompetisi = buatPenyimpanKompetisi(db);
+  const usulan = buatPenyimpanUsulan(db);
+  const mejaAktif = buatPenyimpanMejaAktif(db);
 
   const tambahPermainan = db.prepare(
     `INSERT INTO permainan (kode_meja, selesai_pada, alasan, jumlah_putaran, jumlah_pemain, jumlah_deck, jumlah_manusia, mode_kaldu)
@@ -309,10 +356,26 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
         for (const p of r.pemain) {
           tambahBaris.run(id, p.kursi, p.peringkat, p.nama, p.bot ? 1 : 0, p.skor, p.mentung, p.kepentung, p.keluar ? 1 : 0, kunciNama(p.nama));
         }
+        if (r.kompetisi) {
+          // Galat kompetisi tidak boleh membatalkan klasemen akhir biasa (SQLite membatalkan per pernyataan).
+          try {
+            kompetisi.catatHasil(id, r);
+          } catch (e) {
+            log(`galat mencatat hasil kompetisi ${r.kompetisi}`, e);
+          }
+        }
         return id;
       });
       cache.clear();
       return id;
+    },
+    simpanDitinggal(r) {
+      // Tanpa cache.clear(): leaderboard umum tidak berubah.
+      return transaksi(db, () => {
+        const n = kompetisi.catatDitinggal(r);
+        mejaAktif.hapus(r.kode);
+        return n;
+      });
     },
     daftar(batas) {
       const baris = ambilPermainan.all(Math.max(1, Math.min(100, Math.floor(batas)))) as {
@@ -368,8 +431,26 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
       const periode = saringan.periode === 'bulan' ? bulanWib(permintaan.sekarang ?? jam()) : null;
       const { baris, jumlah } = agregat(saringan, periode);
       const { peringkat, belumCukup } = urutkanPeringkat(baris, urut);
-      return { v: 2, urut, saringan, periode, minMain: MIN_MAIN, jumlahPermainan: jumlah, peringkat, belumCukup };
+      // Piala juara kompetisi (#51 versi 2): hanya kalau ada; baris di cache tidak diubah.
+      const piala = kompetisi.piala();
+      const denganPiala = (b: BarisPapan): BarisPapanPiala => {
+        const n = piala.get(kunciNama(b.nama)) ?? 0;
+        return n > 0 ? { ...b, piala: n } : b;
+      };
+      return {
+        v: 2,
+        urut,
+        saringan,
+        periode,
+        minMain: MIN_MAIN,
+        jumlahPermainan: jumlah,
+        peringkat: peringkat.map(denganPiala),
+        belumCukup: belumCukup.map(denganPiala),
+      };
     },
+    kompetisi,
+    usulan,
+    mejaAktif,
     tutup() {
       if (milikSendiri) db.close();
     },

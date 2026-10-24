@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DAFTAR_EMOTE } from '@remi/meja';
+import { DAFTAR_EMOTE, DAFTAR_LEDEKAN, PESAN_USULAN } from '@remi/meja';
 import { BAB_BANTUAN, FAQ, GLOSARIUM } from '../src/konten/bantuan';
 import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { KEDAI, TAUTAN_KEDAI } from '../src/konten/kedai';
@@ -8,6 +8,10 @@ import * as PERINGKAT from '../src/konten/peringkat';
 import * as PASANG from '../src/konten/pasang';
 import { TEKS_KALDU } from '../src/konten/kaldu';
 import { TEKS_NAMA } from '../src/konten/nama';
+import * as KOMPETISI from '../src/konten/kompetisi';
+import { TEKS_USULAN } from '../src/konten/usulan';
+import { TEKS_LANJUT, TEKS_LEDEK } from '../src/konten/ledek';
+import { TEKS_KONEKSI, teksDijalankanWarga, teksMentungTerlewat } from '../src/konten/koneksi';
 
 // Penjaga gaya teks (antislop) untuk konten yang dibaca pemain: Bantuan, tutorial, info kedai,
 // dan emote/celetukan. Yang dijaga hanya pola formulaik yang jelas (negasi kontras, klise promosi,
@@ -42,6 +46,39 @@ const sumber: [string, string[]][] = [
   ['Pasang aplikasi', semuaTeks(PASANG)],
   // Mode kaldu (keputusan #42, #43): kotak centang di layar persiapan dan teks pendek di meja.
   ['Mode kaldu', semuaTeks(TEKS_KALDU)],
+  // Kompetisi (keputusan #51): layar Kompetisi, lobi meja kompetisi, dan hasil di klasemen akhir.
+  [
+    'Kompetisi',
+    [
+      ...semuaTeks(KOMPETISI),
+      KOMPETISI.teksMenungguPeserta(2),
+      KOMPETISI.teksMenungguMeja(2, false),
+      KOMPETISI.teksMenungguMeja(1, true),
+      ...[
+        { peringkatSebelum: 3, peringkatSesudah: 2 },
+        { peringkatSebelum: 1, peringkatSesudah: 2 },
+        { peringkatSebelum: 2, peringkatSesudah: 2 },
+        { peringkatSebelum: null, peringkatSesudah: 1 },
+        { peringkatSebelum: null, peringkatSesudah: null },
+      ].map((p) => KOMPETISI.teksHasilKompetisi({ kursi: 0, nama: 'Ani', nilai: 20 / 3, keluar: false, rataNilai: 5.8, main: 4, ...p }, 3, 4)),
+      KOMPETISI.ariaPiala(2),
+    ],
+  ],
+  // Usul fitur (24 Okt 2026): dialog dan pesan penolakan (yang terakhir juga dikirim server).
+  ['Usul fitur', [...semuaTeks(TEKS_USULAN), ...semuaTeks(PESAN_USULAN)]],
+  // Hasil putaran online (24 Okt 2026): jeda lanjut, tombol Siap, dan ledekan.
+  ['Jeda lanjut dan ledekan', [...DAFTAR_LEDEKAN, ...semuaTeks(TEKS_LANJUT), ...semuaTeks(TEKS_LEDEK)]],
+  // Kabar koneksi di meja online (perbaikan koneksi putus-putus).
+  [
+    'Koneksi',
+    [
+      ...semuaTeks(TEKS_KONEKSI),
+      teksDijalankanWarga(2, false),
+      teksDijalankanWarga(1, true),
+      ...semuaTeks(teksMentungTerlewat('Siti', true)),
+      ...semuaTeks(teksMentungTerlewat('Kamu', false)),
+    ],
+  ],
 ];
 
 describe('antislop: teks pemain', () => {

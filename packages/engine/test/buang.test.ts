@@ -92,7 +92,7 @@ describe('setelah ambil dari deck tidak bisa nutup (Aturan Terbuka 3)', () => {
   });
 
   it('validasi buang satu kartu: kartuLain selalu array kosong', () => {
-    const dasar = { punyaKartuJadi: true, ctx: ctx(9), asJokerBolehDibuangTanpaJadi: false } as const;
+    const dasar = { punyaKartuJadi: true, pungutan: [], ctx: ctx(9), asJokerBolehDibuangTanpaJadi: false } as const;
     expect(validasiBuang({ ...dasar, tangan: kartuSemua('K waru', '2 love'), sumberAmbil: 'deck', kartuId: id('K waru') })).toMatchObject({
       kartuLain: [],
       mentung: false,
@@ -110,6 +110,7 @@ describe('setelah ambil dari deck tidak bisa nutup (Aturan Terbuka 3)', () => {
       sumberAmbil: 'buangan',
       kartuId: id('9 love'),
       kartuIdLain: [id('9 waru')],
+      pungutan: [],
       ctx: ctx(9),
       asJokerBolehDibuangTanpaJadi: false,
     });
@@ -125,6 +126,7 @@ describe('setelah ambil dari deck tidak bisa nutup (Aturan Terbuka 3)', () => {
         punyaKartuJadi: true,
         sumberAmbil: 'deck',
         kartuId: id('K waru'),
+        pungutan: [],
         ctx: ctx(9),
         asJokerBolehDibuangTanpaJadi: false,
       }),

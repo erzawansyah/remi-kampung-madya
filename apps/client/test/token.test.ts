@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import gambarSrc from '../src/game/kartuGrafisGambar.ts?raw';
-import { bacaPalet } from '../src/game/warnaMeja';
+import { ATRIBUT_LAKEN, bacaPalet } from '../src/game/warnaMeja';
 
 // CSS `?raw` dikosongkan Vitest (pemrosesan CSS mati), jadi dibaca langsung dari disk.
 const tokenCss = readFileSync(new URL('../src/gaya/token.css', import.meta.url), 'utf8');
@@ -94,6 +94,45 @@ describe('token.css: palet Kedai Madya', () => {
   it('--emas langsung di --laken memang di bawah AA (alasan --teks-emas ada)', () => {
     expect(kontras(tok('--emas'), tok('--laken'))).toBeLessThan(4.5);
     expect(kontras(tok('--teks-emas'), tok('--laken'))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('laken biru meja kompetisi (#51 versi 2)', () => {
+  /** Isi aturan html[data-laken='kompetisi'] { … } di token.css. */
+  const aturan = (() => {
+    const m = tokenCss.match(new RegExp(`html\\[${ATRIBUT_LAKEN}='kompetisi'\\]\\s*\\{([^}]*)\\}`));
+    if (!m) throw new Error('aturan laken kompetisi tidak ada');
+    return Object.fromEntries([...m[1]!.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((x) => [x[1], x[2]!.trim()]));
+  })();
+
+  it('atribut di <html> mengarahkan keempat token --laken* ke --laken-kompetisi*', () => {
+    expect(aturan['--laken']).toBe('var(--laken-kompetisi)');
+    expect(aturan['--laken-terang']).toBe('var(--laken-kompetisi-terang)');
+    expect(aturan['--laken-gelap']).toBe('var(--laken-kompetisi-gelap)');
+    expect(aturan['--laken-pekat']).toBe('var(--laken-kompetisi-pekat)');
+    // Warnanya beda dari laken hijau.
+    expect(tok('--laken-kompetisi')).not.toBe(tok('--laken'));
+  });
+
+  it('kontras pasangan teks di laken biru ≥ 4.5:1 (sama dengan pasangan laken hijau)', () => {
+    const laken = tok('--laken-kompetisi');
+    const kaca = aturan['--panel']!.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/)!.slice(1).map(Number);
+    const panel = campur(kaca[0]!, kaca[1]!, kaca[2]!, kaca[3]!, laken);
+    const pasangan: [string, string, string][] = [
+      ['--teks-redup', tok('--teks-redup'), laken],
+      ['--teks-emas', tok('--teks-emas'), laken],
+      ['--emas-muda', tok('--emas-muda'), laken],
+      ['--teks', tok('--teks'), laken],
+      ['--positif', tok('--positif'), laken],
+      ['--negatif', tok('--negatif'), laken],
+      ['--info', tok('--info'), laken],
+      ['--emas di gelap', tok('--emas'), tok('--laken-kompetisi-gelap')],
+      ['--teks di panel', tok('--teks'), panel],
+      ['--teks-redup di panel', tok('--teks-redup'), panel],
+      ['--emas di panel', tok('--emas'), panel],
+    ];
+    const gagal = pasangan.map(([n, a, b]) => ({ n, rasio: Math.round(kontras(a, b) * 100) / 100 })).filter((p) => p.rasio < 4.5);
+    expect(gagal).toEqual([]);
   });
 });
 

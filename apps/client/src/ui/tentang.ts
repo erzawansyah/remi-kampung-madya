@@ -8,6 +8,7 @@ import '../gaya/jendela.css';
 import changelog from '../../../../CHANGELOG.md?raw';
 import { svgLogo } from '../aset/logoMadya';
 import { htmlTautanKedai, KEDAI } from '../konten/kedai';
+import { TEKS_USULAN } from '../konten/usulan';
 import { BUILD_SHA, BUILD_WAKTU, labelVersi } from '../versi';
 import { bukaBantuan } from './jendelaMalas';
 import { bukaDialog, esc } from './dom';
@@ -234,7 +235,15 @@ export function htmlChangelog(sumber: string = changelog): string {
     .join('\n');
 }
 
-export function bukaTentang(): void {
+export interface OpsiTentang {
+  /**
+   * Tombol Usul fitur (24 Okt 2026). Hanya diisi kalau Tentang dibuka dari beranda; dari menu ☰ di
+   * meja tidak ada, supaya usulan tidak pernah muncul di tengah permainan.
+   */
+  usulFitur?: () => void;
+}
+
+export function bukaTentang(opsi: OpsiTentang = {}): void {
   const ada = document.querySelector<HTMLElement>('.dialog.tentang');
   if (ada) return ada.focus();
   const waktu = waktuBuild();
@@ -256,6 +265,7 @@ export function bukaTentang(): void {
      <p class="redup">Main online bareng teman pakai kode meja, atau offline bareng warga kedai tanpa internet. Permainan offline tersimpan otomatis di HP ini.</p>
      <div class="deret">
        <button type="button" data-bantuan>📖 Buka Bantuan &amp; aturan</button>
+       ${opsi.usulFitur ? `<button type="button" data-usulan><span aria-hidden="true">💡</span> ${esc(TEKS_USULAN.ubin)}</button>` : ''}
      </div>
 
      <section class="tentang-kedai" aria-labelledby="judul-tentang-kedai">
@@ -289,6 +299,8 @@ export function bukaTentang(): void {
         tutup();
         bukaBantuan();
       });
+      // Dialog Usul fitur menumpuk di atas Tentang; sesudah ditutup, pemain kembali ke Tentang.
+      d.querySelector('[data-usulan]')?.addEventListener('click', () => opsi.usulFitur?.());
     },
     { kelas: 'lebar tentang' },
   );
