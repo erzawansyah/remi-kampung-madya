@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Rng, type GameState, type GayaBot, type LevelBot, type ViewPemain } from '@remi/engine';
-import { JEDA_ULANG_GALAT_MAKS_MS, JEDA_ULANG_GALAT_MS, Meja, type OpsiMeja } from '../src/index.js';
+import { JEDA_ULANG_GALAT_MAKS_MS, JEDA_ULANG_GALAT_MS, Meja, TOLERANSI_BATAS_MS, type OpsiMeja } from '../src/index.js';
 import { JamPalsu, KotakSurat, siapkan, siapSemua } from './bantu.js';
 
 const kendali = vi.hoisted(() => ({
@@ -292,7 +292,8 @@ describe('galat di timer meja lain (#38)', () => {
     expect(surat.info('host').batasWaktu).not.toBeNull();
     const awal = jumlahPeristiwa(meja);
     jam.gagalSetel = 1;
-    jam.maju(20_000);
+    // Warga kedai mengambil alih sesudah toleransi tersembunyi di belakang batas resmi.
+    jam.maju(20_000 + TOLERANSI_BATAS_MS);
     expect(galat).toEqual(['batas waktu giliran']);
     expect(jam.jumlahTimer).toBe(1);
     jam.maju(100);

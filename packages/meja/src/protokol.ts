@@ -170,9 +170,17 @@ export interface InfoMeja {
   setujuKaldu?: number[];
   /** Waktu (ms epoch) batas giliran saat ini; null bila tidak ada batas. */
   batasWaktu: number | null;
-  /** Giliran saat ini sedang dijalankan bot karena waktu habis atau pemain terputus. */
+  /**
+   * Giliran saat ini sedang dijalankan bot karena waktu habis (lewat batas + toleransi tersembunyi).
+   * Giliran pemain yang terputus dan dijalankan warga kedai sesudah masa tenggang tidak ditandai di
+   * sini; pemainnya diberi kabar lewat `dijalankanWarga` di pesan `masuk` saat ia kembali.
+   */
   diambilAlihBot: boolean;
-  /** Awal putaran: kursi manusia yang belum menekan OK di pengumuman joker. Permainan menunggu. */
+  /**
+   * Awal putaran: kursi manusia yang belum menekan OK di pengumuman joker. Permainan menunggu.
+   * Kursi yang tersambung kembali di tengah putaran tanpa sempat melihat joker hanya dimasukkan ke
+   * info miliknya sendiri (popup muncul lagi untuknya, meja lain tidak ikut tertahan).
+   */
   menungguJoker: number[];
   /** Kursi bot yang sedang "mikir" sebelum aksi pertamanya. */
   botMikir: number | null;
@@ -233,22 +241,42 @@ export type PesanKlien =
   | { t: 'aturKursi'; kursi: number; jenis: 'bot' | 'kosong'; level?: LevelBot }
   | { t: 'pengaturan'; pengaturan: Partial<PengaturanMeja> }
   | { t: 'mulai'; pengocok?: number }
-  | { t: 'aksi'; aksi: AksiKlien }
+  /**
+   * `id` (opsional, 1–64 huruf/angka/`_`/`-`, lihat `idAksiSah`): penanda aksi dari client supaya
+   * aksi yang dikirim ulang sesudah sambung ulang tidak diterapkan dua kali. Server (bukan meja)
+   * menjawabnya dengan `aksiDiterima`. Server lama membuang field ini.
+   */
+  | { t: 'aksi'; aksi: AksiKlien; id?: string }
   | { t: 'putaranBerikut'; pengocok?: number }
   | { t: 'akhiri'; setuju: boolean }
   /** Mode kaldu (#42): setuju/batal "putaran berikutnya terakhir". Hanya di antara putaran. */
   | { t: 'putaranTerakhir'; setuju: boolean }
-  | { t: 'siapJoker' }
+  /**
+   * OK di pengumuman joker. `putaran` (opsional): nomor putaran yang jokernya sudah dilihat; meja
+   * mengabaikan OK untuk putaran lain (misalnya OK putaran lama yang terkirim sesudah sambung ulang).
+   */
+  | { t: 'siapJoker'; putaran?: number }
   | { t: 'emote'; isi: string }
   | { t: 'mainLagi' }
   | { t: 'ping' };
 
 export type PesanServer =
-  | { t: 'masuk'; kode: string; token: string; kursi: number }
+  /**
+   * `dijalankanWarga` (opsional, hanya kalau > 0): banyaknya langkah yang dijalankan warga kedai di
+   * kursi ini selama pemainnya terputus, dikabarkan sekali saat ia tersambung kembali.
+   */
+  | { t: 'masuk'; kode: string; token: string; kursi: number; dijalankanWarga?: number }
   | { t: 'meja'; info: InfoMeja }
   | { t: 'view'; view: ViewPemain }
   | { t: 'error'; pesan: string }
   | { t: 'daftar'; meja: RingkasanMeja[] }
   | { t: 'keluar'; alasan: string }
   | { t: 'emote'; kursi: number; isi: string }
-  | { t: 'pong' };
+  /**
+   * Aksi ber-`id` sudah diproses server (diterapkan, atau ditolak dan `error`-nya sudah dikirim lebih
+   * dulu). Hanya dari server online; aksi yang sama dengan `id` yang sudah tercatat dijawab lagi
+   * tanpa diterapkan ulang.
+   */
+  | { t: 'aksiDiterima'; id: string }
+  /** `w` (opsional): jam server (ms epoch) saat menjawab; hanya dari server online, tidak dari meja offline. */
+  | { t: 'pong'; w?: number };
