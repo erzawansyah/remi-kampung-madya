@@ -267,7 +267,10 @@ describe('klaim kunci di Bantuan sama dengan engine', () => {
   it('2 deck: pentungan bukan kembaran kartu pungutan, contoh Ani dan Budi (#53)', () => {
     const teks = teksBab('mentung');
     expect(teks).toContain('Pentungan bukan kembaran kartu pungutan (2 deck)');
-    expect(teks).toContain('Kartu pungutannya sendiri tetap boleh jadi pentungan, dan membuang kembarannya tanpa mentung juga boleh');
+    expect(teks).toContain(
+      'Kartu pungutannya sendiri tetap boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga di giliran itu. Membuang kembaran tanpa mentung tetap boleh.',
+    );
+    expect(FAQ.some((f) => f.jawab.includes('Kartu pungutannya sendiri boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga.'))).toBe(true);
     expect(teks).toContain('**Contoh Ani dan Budi** (2 deck, joker putaran ini 3)');
     expect(FAQ.some((f) => f.jawab.includes('Ani dan Budi'))).toBe(true);
     // Contoh Ani dan Budi dihitung ulang dengan validator engine. Joker 3, kartu deck kedua = nomor deck 1.
@@ -295,12 +298,13 @@ describe('klaim kunci di Bantuan sama dengan engine', () => {
       );
     expect(buang([l8]).kode).toBe('PENTUNGAN_KEMBARAN');
     expect(buang([l8, wJ, wQ, wK]).ok).toBe(true);
-    // Kartu pungutannya sendiri boleh jadi pentungan.
-    expect(
+    // Kartu pungutannya sendiri boleh jadi pentungan, kecuali kalau kembarannya ikut dipungut juga.
+    const mentungPungutan = (pungutan: { kartu: Kartu; pemilik: number }[]) =>
       cek(() =>
-        validasiBuang({ tangan: [l8Ani], punyaKartuJadi: true, sumberAmbil: 'buangan', kartuId: l8Ani.id, pungutan: buanganAni, ctx: ctx3, asJokerBolehDibuangTanpaJadi: false }),
-      ).ok,
-    ).toBe(true);
+        validasiBuang({ tangan: [l8Ani], punyaKartuJadi: true, sumberAmbil: 'buangan', kartuId: l8Ani.id, pungutan, ctx: ctx3, asJokerBolehDibuangTanpaJadi: false }),
+      );
+    expect(mentungPungutan(buanganAni).ok).toBe(true);
+    expect(mentungPungutan([{ kartu: l8, pemilik: 0 }, ...buanganAni]).kode).toBe('PENTUNGAN_KEMBARAN');
   });
 
   it('mode kaldu: pentungan dikali PENGALI_KALDU, kaldu lagi kalau deck habis, tanpa batas skor (#42, #43)', () => {

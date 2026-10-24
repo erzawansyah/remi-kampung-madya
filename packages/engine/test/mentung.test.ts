@@ -824,6 +824,51 @@ describe('#53 (2 deck): pentungan tidak boleh kembaran kartu yang dipungut', () 
     });
   });
 
+  describe('kedua kartu kembar ikut dipungut sekaligus (tafsiran paling ketat, perlu konfirmasi pemilik)', () => {
+    // Joker 3. Buangan dari bawah: 8 Love deck kedua (Ani), 4 Waru (Dodi), 8 Love (Ani). Budi mungut ketiganya.
+    const awal = (tangan: string[]) =>
+      meja({
+        rankJoker: 3,
+        giliran: 1,
+        tangan: [['2 wajik'], tangan, ['4 kriting'], ['5 kriting']],
+        buangan: [
+          ['8 love#1', 0],
+          ['4 waru', 3],
+          ['8 love', 0],
+        ],
+      });
+
+    it('8 Love teratas (kartu pungutan itu sendiri) juga kembaran 8 Love paling bawah: tidak boleh jadi pentungan', () => {
+      // Mulung yang menyisakan 8 Love teratas sendirian ditolak, sama seperti kembaran dari tangan.
+      const s = awal(['6 love', '7 love', '2 waru', '3 waru']);
+      harusDitolakAksi(
+        s,
+        mulungAksi(s, 1, 3, ['6 love', '7 love', '8 love#1'], ['2 waru', '3 waru', '4 waru']),
+        'SISAKAN_KARTU',
+        PESAN_SISA,
+      );
+      // Validator langsung: pentungan 8 Love dengan kedua 8 Love di pungutan ditolak.
+      const pungutan = [
+        { kartu: kartu('8 love#1'), pemilik: 0 },
+        { kartu: kartu('4 waru'), pemilik: 3 },
+        { kartu: kartu('8 love'), pemilik: 0 },
+      ];
+      const dasar = { punyaKartuJadi: true, sumberAmbil: 'buangan', ctx: ctx(3), asJokerBolehDibuangTanpaJadi: false } as const;
+      expect(() => validasiBuang({ ...dasar, tangan: [kartu('8 love')], kartuId: id('8 love'), pungutan })).toThrow(PESAN);
+      expect(() => validasiBuang({ ...dasar, tangan: [kartu('8 love#1')], kartuId: id('8 love#1'), pungutan })).toThrow(PESAN);
+      // Kartu pungutan yang tidak punya kembaran di pungutan tetap boleh.
+      expect(validasiBuang({ ...dasar, tangan: [kartu('4 waru')], kartuId: id('4 waru'), pungutan })).toMatchObject({ mentung: true });
+    });
+
+    it('kedua 8 Love masuk kartu jadi, 4 Waru pungutan jadi pentungan: sah, Ani kepentung', () => {
+      const h0 = mulungAksi(awal(['6 love', '7 love', '9 love', '10 love']), 1, 3, ['6 love', '7 love', '8 love#1'], ['8 love', '9 love', '10 love']);
+      if (!h0.ok) throw new Error(h0.error.pesan);
+      expect(h0.state.putaran!.tangan[1].map((k) => k.id)).toEqual([id('4 waru')]);
+      const g = terapkan(h0.state, { jenis: 'buang', pemain: 1, kartuId: id('4 waru') });
+      expect(g.putaran!.mentung).toMatchObject({ pemain: 1, kepentung: [0] });
+    });
+  });
+
   describe('nutup pakai dua joker', () => {
     // Joker 7. Ani membuang 7 Waru deck kedua (sudah joker mati, jadi 7 Waru biasa). Budi mungut untuk
     // 5-6-7 Waru; sisa tangannya 7 Waru (kembaran pungutan) dan 7 Kriting, keduanya joker hidup.

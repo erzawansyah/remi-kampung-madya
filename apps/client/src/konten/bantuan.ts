@@ -518,7 +518,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: '**Pentungan bukan kembaran kartu pungutan (2 deck).** Di permainan 2 deck tiap kartu punya kembaran: angka dan bunganya sama, dari deck satunya. Kamu tidak boleh mentung pakai kembaran kartu yang kamu pungut di giliran itu, dari pungutan paling bawah sampai paling atas. Kartu pungutannya sendiri tetap boleh jadi pentungan, dan membuang kembarannya tanpa mentung juga boleh.',
+        teks: '**Pentungan bukan kembaran kartu pungutan (2 deck).** Di permainan 2 deck tiap kartu punya kembaran: angka dan bunganya sama, dari deck satunya. Kamu tidak boleh mentung pakai kembaran kartu yang kamu pungut di giliran itu, dari pungutan paling bawah sampai paling atas. Kartu pungutannya sendiri tetap boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga di giliran itu. Membuang kembaran tanpa mentung tetap boleh.',
       },
       {
         t: 'paragraf',
@@ -872,7 +872,7 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   },
   {
     tanya: 'Kok nggak bisa mentung pakai kartu yang sama persis dengan yang barusan kupungut?',
-    jawab: 'Di permainan 2 deck, pentungan tidak boleh kembaran (angka dan bunga sama, dari deck satunya) kartu yang kamu pungut di giliran itu. Kartu pungutannya sendiri boleh jadi pentungan. Aplikasi juga menolak turunkan yang menyisakan kembaran itu sendirian, karena kartu terakhir yang dibuang selalu jadi pentungan. Contohnya ada di bab Mentung (Ani dan Budi).',
+    jawab: 'Di permainan 2 deck, pentungan tidak boleh kembaran (angka dan bunga sama, dari deck satunya) kartu yang kamu pungut di giliran itu. Kartu pungutannya sendiri boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga. Aplikasi juga menolak turunkan yang menyisakan kembaran itu sendirian, karena kartu terakhir yang dibuang selalu jadi pentungan. Contohnya ada di bab Mentung (Ani dan Budi).',
   },
   {
     tanya: 'Kartu buangan yang lama kok nggak kelihatan?',
