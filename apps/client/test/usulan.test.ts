@@ -158,6 +158,68 @@ describe('dialog Usul fitur', () => {
     expect(panggil).toHaveLength(1);
   });
 
+  it('kirim ganda dicegah juga kalau dialog ditutup lalu dibuka lagi selagi mengirim', async () => {
+    let lepas!: (x: [number, unknown]) => void;
+    const panggil = pasangFetch(() => new Promise((ok) => (lepas = ok)));
+    bukaUsulan();
+    isi('Fitur', 'Mode turnamen', 'Bisa ada turnamen antar meja?');
+    kirim();
+    await tunggu();
+    expect(q<HTMLInputElement>('#usulan-judul').readOnly).toBe(true);
+    // Batal di tengah jalan (sinyal lemot), lalu Usul fitur dibuka lagi: tulisannya masih ada,
+    // tapi Kirim tetap terkunci menunggu pengiriman yang tadi.
+    q<HTMLButtonElement>('[data-tutup]').click();
+    expect(dialog()).toBeNull();
+    bukaUsulan();
+    expect(q<HTMLTextAreaElement>('#usulan-isi').value).toBe('Bisa ada turnamen antar meja?');
+    const tombol = q<HTMLButtonElement>('#usulan-kirim');
+    expect(tombol.disabled).toBe(true);
+    expect(tombol.textContent).toBe(TEKS_USULAN.mengirim);
+    expect(q<HTMLTextAreaElement>('#usulan-isi').readOnly).toBe(true);
+    kirim();
+    await tunggu();
+    expect(panggil).toHaveLength(1);
+    // Jawaban datang: dialog yang dibuka lagi ikut ditutup, terima kasih sekali, tulisan dikosongkan.
+    lepas([200, { ok: true }]);
+    await tunggu();
+    expect(dialog()).toBeNull();
+    expect(toastTeks().filter((t) => t === TEKS_USULAN.terkirim)).toHaveLength(1);
+    expect(panggil).toHaveLength(1);
+    bukaUsulan();
+    expect(q<HTMLInputElement>('#usulan-judul').value).toBe('');
+    expect(q<HTMLTextAreaElement>('#usulan-isi').value).toBe('');
+    expect(q<HTMLButtonElement>('#usulan-kirim').disabled).toBe(false);
+    expect(q<HTMLInputElement>('#usulan-judul').readOnly).toBe(false);
+  });
+
+  it('penolakan yang datang sesudah dialog dibuka lagi tampil di dialog itu; tanpa dialog lewat toast', async () => {
+    const pesan = 'Hari ini usulan yang masuk sudah banyak. Coba lagi besok, Bos.';
+    let lepas!: (x: [number, unknown]) => void;
+    const panggil = pasangFetch(() => new Promise((ok) => (lepas = ok)));
+    bukaUsulan();
+    isi('', 'Mode turnamen', 'Bisa ada turnamen antar meja?');
+    kirim();
+    await tunggu();
+    tutupSemuaJendela();
+    bukaUsulan();
+    lepas([429, { error: pesan }]);
+    await tunggu();
+    expect(galat().textContent).toBe(pesan);
+    expect(q<HTMLButtonElement>('#usulan-kirim').disabled).toBe(false);
+    expect(q<HTMLTextAreaElement>('#usulan-isi').readOnly).toBe(false);
+    expect(q<HTMLInputElement>('#usulan-judul').value).toBe('Mode turnamen');
+    // Kirim lagi lalu tutup tanpa membuka lagi: penolakannya lewat toast, tulisan tetap di draf.
+    kirim();
+    await tunggu();
+    tutupSemuaJendela();
+    lepas([429, { error: pesan }]);
+    await tunggu();
+    expect(toastTeks()).toContain(pesan);
+    expect(panggil).toHaveLength(2);
+    bukaUsulan();
+    expect(q<HTMLInputElement>('#usulan-judul').value).toBe('Mode turnamen');
+  });
+
   it('offline: pesan ramah, tulisan tetap di isian, server tidak dipanggil', async () => {
     const panggil = pasangFetch(() => [200, { ok: true }]);
     setelOnline(false);

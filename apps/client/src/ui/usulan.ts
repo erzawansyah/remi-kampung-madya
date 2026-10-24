@@ -6,8 +6,10 @@
 // (dialogTerbuka) dan tidak menimpa jendela lain. Aturan isian sama persis dengan server
 // (periksaUsulan dari @remi/meja). Tulisan yang belum terkirim disimpan di memori selama aplikasi
 // terbuka, jadi dialog yang tertutup tidak sengaja (ketuk latar, offline) bisa dilanjutkan.
+// Pengiriman yang sedang jalan juga dicatat untuk seluruh aplikasi (bukan per dialog): dialog yang
+// ditutup selagi mengirim lalu dibuka lagi menunggu pengiriman yang sama, tidak mengirim ulang.
 
-import { DAFTAR_JENIS_USULAN, MAKS_ISI_USULAN, MAKS_JUDUL_USULAN, periksaUsulan, type IsianUsulan } from '@remi/meja';
+import { DAFTAR_JENIS_USULAN, MAKS_ISI_USULAN, MAKS_JUDUL_USULAN, periksaUsulan, type IsianUsulan, type Usulan } from '@remi/meja';
 import { TEKS_USULAN as T } from '../konten/usulan';
 import { simpan } from '../penyimpanan';
 import { bukaDialog, esc, toast } from './dom';
@@ -23,12 +25,25 @@ interface Draf {
 const DRAF_KOSONG: Draf = { jenis: '', judul: '', isi: '' };
 let draf: Draf = { ...DRAF_KOSONG };
 
-/** Khusus test: lupakan tulisan yang belum terkirim. */
+export type HasilKirimUsulan = { ok: true } | { ok: false; pesan: string };
+
+/** Pengiriman yang sedang menunggu jawaban server (paling banyak satu untuk seluruh aplikasi). */
+let kirimanJalan: Promise<HasilKirimUsulan> | null = null;
+
+/** Dialog Usul fitur yang sedang terbuka (paling banyak satu), yang dikabari hasil pengiriman. */
+interface FormUsulan {
+  aturMengirim(ya: boolean): void;
+  tampilGalat(pesan: string): void;
+  tutup(): void;
+}
+let formTerbuka: FormUsulan | null = null;
+
+/** Khusus test: lupakan tulisan dan pengiriman yang belum selesai. */
 export function _lupakanDrafUsulan(): void {
   draf = { ...DRAF_KOSONG };
+  kirimanJalan = null;
+  formTerbuka = null;
 }
-
-export type HasilKirimUsulan = { ok: true } | { ok: false; pesan: string };
 
 /**
  * Kirim usulan ke server. Pesan galat dari server (400/429/…) dikembalikan apa adanya; jaringan putus
@@ -62,6 +77,31 @@ export async function kirimUsulan(isi: unknown, ambil: typeof fetch = fetch): Pr
   return { ok: false, pesan: typeof o.error === 'string' && o.error ? o.error : T.gagalLain };
 }
 
+/**
+ * Kirim usulan yang sudah diperiksa. Hasilnya dikabarkan ke dialog yang terbuka saat jawaban datang
+ * (bisa dialog lain kalau yang tadi ditutup lalu dibuka lagi); tanpa dialog, lewat toast.
+ */
+function mulaiKirim(usulan: Usulan): void {
+  if (kirimanJalan) return;
+  const jalan = kirimUsulan(usulan).catch((): HasilKirimUsulan => ({ ok: false, pesan: T.gagalLain }));
+  kirimanJalan = jalan;
+  formTerbuka?.aturMengirim(true);
+  void jalan.then((hasil) => {
+    if (kirimanJalan !== jalan) return; // dilupakan (khusus test)
+    kirimanJalan = null;
+    const f = formTerbuka;
+    f?.aturMengirim(false);
+    if (!hasil.ok) {
+      if (f) f.tampilGalat(hasil.pesan);
+      else toast(hasil.pesan, true);
+      return;
+    }
+    draf = { ...DRAF_KOSONG };
+    f?.tutup();
+    toast(T.terkirim);
+  });
+}
+
 /** Buka dialog Usul fitur. Nama diambil dari nama yang tersimpan di beranda. */
 export function bukaUsulan(): void {
   const ada = document.querySelector<HTMLElement>('.dialog.usulan');
@@ -77,6 +117,7 @@ export function bukaUsulan(): void {
     );
     return;
   }
+  let form: FormUsulan | null = null;
   const pilihanJenis = [['', T.pilihJenis], ...DAFTAR_JENIS_USULAN.map((j) => [j, j])]
     .map(([v, label]) => `<option value="${esc(v)}">${esc(label)}</option>`)
     .join('');
@@ -101,12 +142,20 @@ export function bukaUsulan(): void {
          <button type="submit" class="utama" id="usulan-kirim">${esc(T.kirim)}</button>
        </div>
      </form>`,
-    (d, tutup) => pasangForm(d, tutup, nama),
-    { kelas: 'usulan' },
+    (d, tutup) => {
+      form = pasangForm(d, tutup, nama);
+      formTerbuka = form;
+    },
+    {
+      kelas: 'usulan',
+      saatTutup: () => {
+        if (formTerbuka === form) formTerbuka = null;
+      },
+    },
   );
 }
 
-function pasangForm(d: HTMLElement, tutup: () => void, nama: string): void {
+function pasangForm(d: HTMLElement, tutup: () => void, nama: string): FormUsulan {
   const form = d.querySelector<HTMLFormElement>('.form-usulan')!;
   const isian: Record<Exclude<IsianUsulan, 'nama'>, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> = {
     jenis: d.querySelector<HTMLSelectElement>('#usulan-jenis')!,
@@ -126,8 +175,6 @@ function pasangForm(d: HTMLElement, tutup: () => void, nama: string): void {
     for (const el of Object.values(isian)) el.removeAttribute('aria-invalid');
   };
   const tampilGalat = (pesan: string, di?: IsianUsulan) => {
-    // Dialog sudah ditutup selagi menunggu jawaban: kabari lewat toast, tulisannya tetap di draf.
-    if (!d.isConnected) return toast(pesan, true);
     bersihkanGalat();
     galat.textContent = pesan;
     galat.hidden = false;
@@ -150,26 +197,26 @@ function pasangForm(d: HTMLElement, tutup: () => void, nama: string): void {
   form.addEventListener('change', catatDraf);
   perbaruiHitung();
 
-  let mengirim = false;
+  // Selama mengirim, judul dan isi hanya-baca: yang terkirim adalah tulisan saat Kirim ditekan, dan
+  // sesudah berhasil dialognya ditutup, jadi ketikan baru di tengah jalan akan hilang. readOnly (bukan
+  // disabled) supaya tetap bisa difokus dan dibaca pembaca layar.
   const aturMengirim = (ya: boolean) => {
-    mengirim = ya;
     tombol.disabled = ya;
     tombol.textContent = ya ? T.mengirim : T.kirim;
     form.toggleAttribute('aria-busy', ya);
+    (isian.judul as HTMLInputElement).readOnly = ya;
+    (isian.isi as HTMLTextAreaElement).readOnly = ya;
   };
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener('submit', (e) => {
     e.preventDefault();
-    if (mengirim) return;
+    if (kirimanJalan) return;
     catatDraf();
     const cek = periksaUsulan({ nama, jenis: isian.jenis.value, judul: isian.judul.value, isi: isian.isi.value });
     if (!cek.ok) return tampilGalat(cek.pesan, cek.isian);
     if (navigator.onLine === false) return tampilGalat(T.offline);
-    aturMengirim(true);
-    const hasil = await kirimUsulan(cek.usulan);
-    aturMengirim(false);
-    if (!hasil.ok) return tampilGalat(hasil.pesan);
-    draf = { ...DRAF_KOSONG };
-    tutup();
-    toast(T.terkirim);
+    mulaiKirim(cek.usulan);
   });
+  // Dibuka lagi selagi pengiriman tadi belum dijawab: tunggu yang itu, Kirim tetap terkunci.
+  if (kirimanJalan) aturMengirim(true);
+  return { aturMengirim, tampilGalat: (pesan) => tampilGalat(pesan), tutup };
 }
