@@ -1171,6 +1171,25 @@ export class Meja {
   }
 }
 
+/**
+ * Data meja yang disimpan server, disiapkan untuk dipulihkan sesudah server mulai ulang (restart atau
+ * deploy). Semua sambungan lama sudah putus, jadi setiap kursi manusia dianggap terputus, persis seperti
+ * kalau semuanya terputus satu per satu (lihat `lepasKursi`): tidak ditunggu di pengumuman joker, dan
+ * suaranya di voting akhiri/kaldu dicabut. Meja yang dibuat dari data ini dijeda (#35) sampai ada yang
+ * kembali; saat itu kursi lain yang masih terputus mendapat masa tenggang penuh, dan yang belum sempat
+ * melihat joker putaran ini ditanya ulang sendiri saat kembali (#34, diubah 24 Okt 2026). Host tidak
+ * diubah di sini (pindah ke manusia pertama yang kembali kalau host belum kembali, seperti biasa).
+ * Mengembalikan salinan; `data` tidak diubah.
+ */
+export function dataMejaDipulihkan(data: DataMeja): DataMeja {
+  const d = JSON.parse(JSON.stringify(data)) as DataMeja;
+  d.kursi = d.kursi.map((k) => (k.jenis === 'manusia' ? { ...k, terhubung: false } : k));
+  d.menungguJoker = [];
+  d.setujuAkhiri = [];
+  delete d.setujuKaldu;
+  return d;
+}
+
 /** Kursi yang ditandai keluar kembali biasa (permainan baru, atau main lagi). */
 function hapusTandaKeluar(kursi: Kursi[]): void {
   for (const k of kursi) {
