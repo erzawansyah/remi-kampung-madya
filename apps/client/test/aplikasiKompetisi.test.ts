@@ -5,11 +5,18 @@
 // - pesan kompetisiHasil sampai ke KontrolMeja, juga kalau datang sebelum meja selesai dimuat;
 // - Kembali ke kompetisi: keluar dari meja lalu detail kompetisinya terbuka;
 // - lobi kompetisi yang dibubarkan server langsung membuka detail kompetisinya;
+// - sambung ulang membawa tiket kompetisi; kursi lobi yang sudah dilepas = detail kompetisinya terbuka;
 // - Duduk dan Buka meja baru dari detail: gabung (dengan tiket) dan buat meja kompetisi.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buatPermainan, terapkanAksi, viewUntuk, type GameState } from '@remi/engine';
-import { PENGATURAN_BAWAAN, PENGATURAN_KOMPETISI_BAWAAN, TEKS_LOBI_KOMPETISI_BUBAR, type InfoMeja } from '@remi/meja';
+import {
+  PENGATURAN_BAWAAN,
+  PENGATURAN_KOMPETISI_BAWAAN,
+  TEKS_KURSI_KOMPETISI_LEPAS,
+  TEKS_LOBI_KOMPETISI_BUBAR,
+  type InfoMeja,
+} from '@remi/meja';
 import type { AppUntukMeja, PesanHasilKompetisi } from '../src/kontrolMeja';
 import { WsPalsu } from './bantu';
 
@@ -257,6 +264,43 @@ describe('Aplikasi: lobi kompetisi', () => {
     expect(url).toContain('/api/kompetisi/KOMPA');
     expect(document.querySelector('#ui .layar-kompetisi')).not.toBeNull();
     expect(laken()).toBeNull();
+  });
+
+  it('sambung ulang ke meja terakhir ikut membawa tiket kompetisi (kursi lobi yang dilepas bisa diduduki lagi)', async () => {
+    const { ws } = await diMejaKompetisi({ status: 'lobi' });
+    expect(ws.terkirim.find((p) => p.t === 'gabung')).toEqual({
+      t: 'gabung',
+      kode: 'MJKOM',
+      nama: 'Aku',
+      token: 'tok',
+      tiket: [{ kode: 'KOMPA', token: 'tiket-aku' }],
+    });
+  });
+
+  it('kursi lobi sudah dilepas (sinyal kembali di lobi yang basi): toast, sesi dihapus, detail kompetisinya terbuka', async () => {
+    const { ws } = await diMejaKompetisi({ status: 'lobi' });
+    const url = pasangFetch();
+    ws.kirimDariServer({ t: 'keluar', alasan: TEKS_KURSI_KOMPETISI_LEPAS, kompetisi: 'KOMPA' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(toastTeks()).toContain(TEKS_KURSI_KOMPETISI_LEPAS);
+    expect(localStorage.getItem(KUNCI_SESI)).toBeNull();
+    expect(url).toContain('/api/kompetisi/KOMPA');
+    expect(document.querySelector('#ui .layar-kompetisi')).not.toBeNull();
+    expect(document.querySelector('#ui .lobi-kompetisi')).toBeNull();
+  });
+
+  it('kursi lobi sudah dilepas saat aplikasi baru dibuka (belum ada info meja): langsung ke detail kompetisinya, tidak diulang', async () => {
+    localStorage.setItem(KUNCI_SESI, JSON.stringify({ kode: 'MJKOM', token: 'tok' }));
+    await nyalakan();
+    const url = pasangFetch();
+    const ws = WsPalsu.terakhir();
+    ws.buka();
+    ws.kirimDariServer({ t: 'keluar', alasan: TEKS_KURSI_KOMPETISI_LEPAS, kompetisi: 'KOMPA' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(url).toContain('/api/kompetisi/KOMPA');
+    expect(document.querySelector('#ui .layar-kompetisi')).not.toBeNull();
+    // Sesinya dihapus: dibuka lagi = tidak mencoba meja itu lagi.
+    expect(localStorage.getItem(KUNCI_SESI)).toBeNull();
   });
 
   it('dikeluarkan dengan alasan lain tetap ke beranda', async () => {

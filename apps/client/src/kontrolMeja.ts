@@ -570,6 +570,11 @@ export class KontrolMeja implements AksiAdegan {
    * saat info diterima (jam HP tidak dipakai untuk membandingkan dengan server). Null = tidak terkunci.
    */
   private akhirLanjut: number | null = null;
+  /**
+   * Meja kompetisi (#51 versi 2): waktu lokal saat putaran berikutnya mulai sendiri, dari
+   * `info.lanjutOtomatis.sisaMs` saat info diterima. Null = tidak ada.
+   */
+  private akhirOtomatis: number | null = null;
   /** Kunci lanjut terakhir yang tampil di modal hasil (untuk mengumumkan saat tombol host terbuka). */
   private lanjutTerkunciTampil = false;
   /** Hasil putaran (panjang riwayat) yang Siap-nya sudah kutekan. */
@@ -726,6 +731,7 @@ export class KontrolMeja implements AksiAdegan {
       this.info = info;
       // Sisa jeda relatif → waktu lokal, setiap info baru (menyamakan ulang hitung mundur).
       this.akhirLanjut = info.lanjut ? Date.now() + Math.max(0, info.lanjut.sisaMs) : null;
+      this.akhirOtomatis = info.lanjutOtomatis ? Date.now() + Math.max(0, info.lanjutOtomatis.sisaMs) : null;
       this.kirimUlangSiapJokerBilaPerlu();
       this.kirimUlangSiapLanjutBilaPerlu();
     }
@@ -1913,6 +1919,7 @@ export class KontrolMeja implements AksiAdegan {
       this.render();
     }
     this.detikLanjut();
+    this.perbaruiHitungOtomatis();
     if (this.tutorial?.aktif) this.tutorial.perbarui(this.keadaanTutorial(this.statusTombol()));
   }
 
@@ -2538,6 +2545,19 @@ export class KontrolMeja implements AksiAdegan {
    * (span kosong di sini), jadi HTML ini tidak berubah tiap detik dan fokus tidak terganggu.
    */
   private htmlLanjutHasil(): string {
+    return this.htmlLanjutInti() + this.htmlLanjutOtomatis();
+  }
+
+  /**
+   * Meja kompetisi (#51 versi 2): satu baris "putaran berikutnya mulai sendiri dalam N detik" di bawah
+   * tombol lanjut, untuk semua pemain. Angkanya diisi perbaruiHitungOtomatis() (span kosong di sini).
+   */
+  private htmlLanjutOtomatis(): string {
+    if (this.app.jenis !== 'online' || !this.info?.kompetisi || this.akhirOtomatis === null) return '';
+    return `<p class="redup rapat" data-lanjut-otomatis>${esc(TEKS_KOMPETISI.lanjutOtomatis)} <span data-hitung-otomatis></span> detik.</p>`;
+  }
+
+  private htmlLanjutInti(): string {
     const v = this.view!;
     const info = this.info!;
     const min = Math.min(...v.skor);
@@ -2586,8 +2606,18 @@ export class KontrolMeja implements AksiAdegan {
     );
   }
 
+  /** Angka hitung mundur mulai sendiri meja kompetisi di modal hasil (detik, dibulatkan ke atas, paling kecil 1). */
+  private perbaruiHitungOtomatis() {
+    if (this.akhirOtomatis === null) return;
+    const n = String(Math.max(1, Math.ceil((this.akhirOtomatis - Date.now()) / 1000)));
+    document.querySelectorAll<HTMLElement>('#modal [data-hitung-otomatis]').forEach((x) => {
+      if (x.textContent !== n) x.textContent = n;
+    });
+  }
+
   /** Angka hitung mundur jeda lanjut di modal hasil (detik, dibulatkan ke atas, paling kecil 1). */
   private perbaruiHitungLanjut() {
+    this.perbaruiHitungOtomatis();
     const el = document.querySelectorAll<HTMLElement>('#modal [data-hitung-lanjut]');
     if (!el.length) return;
     const n = String(this.akhirLanjut === null ? 1 : Math.max(1, Math.ceil((this.akhirLanjut - Date.now()) / 1000)));
@@ -2650,9 +2680,13 @@ export class KontrolMeja implements AksiAdegan {
     this.segarkanHasil();
   }
 
-  /** Pemilih voting di modal hasil: manusia yang masih terhubung (sama dengan hitungan meja). */
+  /**
+   * Pemilih voting di modal hasil, sama dengan hitungan meja: manusia yang masih terhubung. Meja
+   * kompetisi (#51 versi 2): semua kursi peserta yang belum keluar, termasuk yang terputus.
+   */
   private jumlahPemilih(): number {
-    return this.info!.kursi.filter((k) => k.jenis === 'manusia' && k.terhubung).length;
+    const kompetisi = this.app.jenis === 'online' && !!this.info!.kompetisi;
+    return this.info!.kursi.filter((k) => k.jenis === 'manusia' && (k.terhubung || kompetisi)).length;
   }
 
   /** Keadaan tombol "Akhiri permainan" (voting) di modal hasil. */

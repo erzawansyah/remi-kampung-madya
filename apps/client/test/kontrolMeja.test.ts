@@ -1642,6 +1642,32 @@ describe('meja kompetisi (#51 versi 2)', () => {
     expect(vi.mocked(umumkan)).toHaveBeenCalledWith(`${TEKS_KOMPETISI.judulHasil}: +10,0 · rata-rata 5,8 · naik ke peringkat 2 (dari 4)`);
   });
 
+  it('hasil putaran: baris "mulai sendiri dalam N detik" untuk semua; voting akhiri menghitung peserta yang terputus', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    meja.info = {
+      ...meja.info,
+      kompetisi: KOMPETISI_UJI,
+      lanjutOtomatis: { sisaMs: 40_000 },
+      kursi: meja.info.kursi.map((k, i) => ({ ...k, jenis: 'manusia', terhubung: i !== 2 })),
+    };
+    const dlg = await sampaiHasil(meja);
+    expect(dlg.querySelector('[data-lanjut-otomatis]')!.textContent).toBe(`${TEKS_KOMPETISI.lanjutOtomatis} 40 detik.`);
+    // Pemilih meja kompetisi: semua peserta yang belum keluar (Pemain 3 terputus tetap dihitung).
+    expect(dlg.querySelector('[data-akhiri]')!.textContent).toBe('Akhiri permainan (0/4)');
+    // Info tanpa lanjutOtomatis: barisnya hilang.
+    meja.info = { ...meja.info, lanjutOtomatis: undefined };
+    meja.kontrol.perbarui(meja.info, null);
+    expect(document.querySelector('#modal [data-lanjut-otomatis]')).toBeNull();
+  });
+
+  it('meja online biasa: tanpa baris mulai sendiri, voting hanya menghitung yang terhubung', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    meja.info = { ...meja.info, kursi: meja.info.kursi.map((k, i) => ({ ...k, jenis: 'manusia', terhubung: i !== 2 })) };
+    const dlg = await sampaiHasil(meja);
+    expect(dlg.querySelector('[data-lanjut-otomatis]')).toBeNull();
+    expect(dlg.querySelector('[data-akhiri]')!.textContent).toBe('Akhiri permainan (0/3)');
+  });
+
   it('meja online biasa tidak berubah: kode di bar atas, Main lagi untuk host, tanpa bagian kompetisi', async () => {
     meja = await mejaKompetisiSiapMentung({}, { kompetisi: undefined });
     expect(meja.akar.querySelector('.bar-atas .info-jenis')!.textContent).toBe('Meja UJI01');

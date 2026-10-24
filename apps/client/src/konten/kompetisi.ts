@@ -52,8 +52,10 @@ export const TEKS_KOMPETISI = {
   klasemenKosong: 'Belum ada permainan kompetisi.',
   caraHitung: `Tiap permainan di meja kompetisi dapat nilai 0 sampai ${NILAI_MAKS}: banyaknya peserta lain di meja itu yang kalah skor darimu, dibagi (jumlah kursi − 1), dikali ${NILAI_MAKS}. Meja 4 orang: juara 10; kedua 6,7; ketiga 3,3; juru kunci 0. Skor sama tidak saling mengalahkan, dan keluar di tengah permainan = 0. Klasemen diurutkan dari rata-rata nilai per permainan; masuk klasemen sesudah ${MIN_MAIN_KOMPETISI}× main. Rata-rata sama: yang lebih sering main di atas, lalu rata-rata skor akhir.`,
   juara: 'Juara',
-  /** Status 'selesai' tapi masih ada meja yang main: juara belum diumumkan. */
+  /** Status 'selesai' karena masanya habis, tapi masih ada meja yang main: juara belum diumumkan. */
   lencanaMenunggu: 'waktu habis',
+  /** Sama, tapi kompetisinya disudahi lewat voting (masanya belum habis). */
+  lencanaMenungguDisudahi: 'disudahi',
   ketJuaraNanti: 'Juaranya diumumkan sesudah meja terakhir selesai.',
   gagalMuat: 'Kompetisi belum bisa dibuka. Cek sinyal lalu coba lagi.',
   cobaLagi: 'Coba lagi',
@@ -78,6 +80,10 @@ export const TEKS_KOMPETISI = {
   kembaliKompetisi: 'Kembali ke kompetisi',
   /** Judul bagian hasil kompetisi di klasemen akhir (diikuti nama kompetisinya). */
   judulHasil: 'Nilai kompetisi',
+  /** Hasil putaran meja kompetisi: diikuti hitung mundur detik. */
+  lanjutOtomatis: 'Kalau host belum mulai, putaran berikutnya mulai sendiri dalam',
+  /** Waktu per giliran di formulir pengajuan: wajib ada di kompetisi. */
+  ketDetik: 'Giliran yang kehabisan waktu dijalankan warga kedai, jadi tidak ada meja yang tertahan.',
   toastIkut: 'Kamu sudah ikut. Tiketnya tersimpan di HP ini.',
   toastAjukan: 'Kompetisi diajukan. Ajak teman ikut serta, Bos.',
   catatanHp: 'Tiket peserta tersimpan di HP ini. Main kompetisi dari HP yang sama, ya.',

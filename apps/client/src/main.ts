@@ -676,8 +676,11 @@ class Aplikasi implements AppUntukMeja {
         // disambung ulang sendiri, nanti saling rebut.
         if (ditendang) this.sesiDitendang = true;
         toast(p.alasan);
-        // Lobi kompetisi yang dibubarkan karena kompetisinya sudah selesai: langsung ke klasemennya.
-        const kompetisi = p.alasan === TEKS_LOBI_KOMPETISI_BUBAR ? this.info?.kompetisi?.kode : undefined;
+        // Lobi kompetisi yang dibubarkan karena kompetisinya sudah selesai, atau kursi lobi kompetisi
+        // yang sudah dilepas: langsung ke detail kompetisinya (klasemen dan daftar meja). Server baru
+        // menyebut kodenya; server lama hanya mengirim alasan lobi dibubarkan.
+        const kodeDariServer = typeof p.kompetisi === 'string' && /^[A-Z0-9]{5}$/.test(p.kompetisi) ? p.kompetisi : undefined;
+        const kompetisi = kodeDariServer ?? (p.alasan === TEKS_LOBI_KOMPETISI_BUBAR ? this.info?.kompetisi?.kode : undefined);
         this.keluarMeja(!ditendang, kompetisi);
         break;
       }

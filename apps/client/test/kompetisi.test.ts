@@ -11,6 +11,7 @@ import {
   Meja,
   PENGATURAN_KOMPETISI_BAWAAN,
   PILIHAN_BATAS_PUTARAN_KOMPETISI,
+  PILIHAN_DETIK_GILIRAN_KOMPETISI,
   type BarisKompetisi,
   type HasilKompetisiKursi,
   type InfoMeja,
@@ -357,6 +358,16 @@ describe('layar Kompetisi: detail', () => {
     expect(akar().querySelector('.juara-kompetisi')).toBeNull();
   });
 
+  it('disudahi lewat voting dan masih menunggu meja terakhir: lencana "disudahi", bukan "waktu habis"', async () => {
+    pasangFetch(() => detail('selesai', { mejaMain: 1, disudahi: true }));
+    renderKompetisi(akar(), aksiPalsu(), 'KOMPA');
+    await tunggu();
+    const panel = akar().querySelector('#isi-detail .kartu-panel')!;
+    expect(panel.querySelector('.kepala-panel .lencana')!.textContent).toBe(TEKS_KOMPETISI.lencanaMenungguDisudahi);
+    expect(panel.textContent).toContain('Disudahi · menunggu 1 meja terakhir selesai');
+    expect(panel.textContent).not.toContain(TEKS_KOMPETISI.lencanaMenunggu);
+  });
+
   it('galat server ditampilkan apa adanya, dengan Coba lagi', async () => {
     pasangFetch(() => [404, { error: 'Kompetisinya nggak ketemu.' }]);
     renderKompetisi(akar(), aksiPalsu(), 'ZZZZZ');
@@ -483,6 +494,14 @@ describe('layar Kompetisi: ajukan', () => {
     expect(q('#k-putaran').textContent).not.toContain('Tanpa batas');
   });
 
+  it('waktu per giliran wajib ada: 30/60/90/120 detik (bawaan 60), tanpa "Tanpa batas", dengan keterangannya', async () => {
+    await bukaFormulir();
+    expect([...q<HTMLSelectElement>('#k-detik').options].map((o) => Number(o.value))).toEqual([...PILIHAN_DETIK_GILIRAN_KOMPETISI]);
+    expect(q<HTMLSelectElement>('#k-detik').value).toBe('60');
+    expect(q('#k-detik').textContent).not.toContain('Tanpa batas');
+    expect(q('#form-ajukan').textContent).toContain(TEKS_KOMPETISI.ketDetik);
+  });
+
   it('2 deck hanya tampil untuk 4 pemain; selain 4 tidak pernah dikirim nyala', async () => {
     const panggil = await bukaFormulir();
     expect(q('#k-baris-dua').classList.contains('tersembunyi')).toBe(false);
@@ -557,10 +576,15 @@ describe('lobi meja kompetisi', () => {
     expect(akar().querySelector('#kocok')).toBeNull();
     expect(akar().querySelector('#isi-bot')).toBeNull();
     expect(akar().textContent).not.toContain(info.kode);
-    // Host masih bisa mengosongkan kursi, tapi tidak bisa mengisinya dengan warga kedai.
-    for (const s of akar().querySelectorAll<HTMLSelectElement>('[data-kursi]')) {
-      expect([...s.options].map((o) => o.value)).toEqual(['kosong']);
-    }
+    // Host tidak mengatur kursi: tidak bisa mengisi warga kedai maupun mengosongkan kursi peserta lain.
+    expect(akar().querySelectorAll('[data-kursi]')).toHaveLength(0);
+    const ramai: InfoMeja = {
+      ...info,
+      kursi: info.kursi.map((k, i) => ({ jenis: 'manusia', nama: ['Ani', 'Budi', 'Cici'][i]!, terhubung: true, level: k.level })),
+    };
+    renderLobi(akar(), ramai, vi.fn(), vi.fn());
+    expect(akar().querySelectorAll('[data-kursi]')).toHaveLength(0);
+    expect(akar().textContent).toContain('Budi');
   });
 
   it('aturan sebagai teks (dikunci kompetisi): tanpa pilihan, isian, atau kotak centang', () => {

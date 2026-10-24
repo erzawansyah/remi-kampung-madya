@@ -150,7 +150,8 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
       ].join('');
       const nama =
         k.jenis === 'kosong' ? `<span class="redup">${kompetisi ? 'menunggu peserta…' : 'menunggu orang masuk…'}</span>` : `<b>${esc(k.nama)}</b>`;
-      const pilih = host && i !== info.kursiSaya ? pilihanKursi(k, i, !!kompetisi) : '';
+      // Meja kompetisi: peserta memilih mejanya sendiri, host tidak mengatur kursi (meja menolaknya).
+      const pilih = host && !kompetisi && i !== info.kursiSaya ? pilihanKursi(k, i, false) : '';
       return `<div class="kursi"><span class="redup" aria-label="Kursi ${i + 1}">${i + 1}</span><span class="nama">${nama}</span>${lencana}${pilih}</div>`;
     })
     .join('');

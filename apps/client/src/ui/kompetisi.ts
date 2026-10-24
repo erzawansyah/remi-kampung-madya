@@ -10,11 +10,13 @@
 import {
   BATAS_PUTARAN_KOMPETISI_BAWAAN,
   DAFTAR_MASA,
+  DETIK_GILIRAN_KOMPETISI_BAWAAN,
   isMasa,
   JUMLAH_PEMAIN_KOMPETISI_BAWAAN,
   MAKS_PEMAIN_KOMPETISI,
   MIN_PEMAIN_KOMPETISI,
   PILIHAN_BATAS_PUTARAN_KOMPETISI,
+  PILIHAN_DETIK_GILIRAN_KOMPETISI,
   teksNilai,
   type BarisKompetisi,
   type MasaKompetisi,
@@ -314,7 +316,8 @@ export function renderKompetisi(akar: HTMLElement, aksi: AksiKompetisi, kodeAwal
       const adaKursi = (d.meja ?? []).some((m) => m.terisi < m.jumlahPemain);
       // Piala per nama dari baris klasemen (semua peserta ada di salah satu daftarnya).
       const piala = new Map([...d.peringkat, ...d.belumCukup].map((b) => [b.nama, b.piala]));
-      const status = menunggu ? T.lencanaMenunggu : LABEL_STATUS[d.status];
+      // Masih menunggu meja terakhir: lencananya ikut sebabnya (disudahi lewat voting, atau masanya habis).
+      const status = menunggu ? (d.disudahi ? T.lencanaMenungguDisudahi : T.lencanaMenunggu) : LABEL_STATUS[d.status];
       // Fokus dan akordion yang terbuka dipertahankan saat digambar ulang (polling).
       const aktif = document.activeElement;
       const fokus =
@@ -495,7 +498,8 @@ export function renderKompetisi(akar: HTMLElement, aksi: AksiKompetisi, kodeAwal
          <label class="baris">${esc(TEKS_KALDU.label)}<input type="checkbox" id="k-kaldu" aria-describedby="k-ket-kaldu" /></label>
          <p class="bantuan rapat" id="k-ket-kaldu">${esc(TEKS_KALDU.ket)}</p>
          ${htmlIsianBatas({ id: 'k-skor', nilai: nilaiAwal, bisaUbah: true })}
-         <label class="baris">${esc(T.labelDetik)} ${pilihan('k-detik', [30, 60, 90, 120, 0].map((n) => [n, n ? `${n} detik` : 'Tanpa batas']), 60)}</label>
+         <label class="baris">${esc(T.labelDetik)} ${pilihan('k-detik', PILIHAN_DETIK_GILIRAN_KOMPETISI.map((n) => [n, `${n} detik`]), DETIK_GILIRAN_KOMPETISI_BAWAAN)}</label>
+         <p class="bantuan rapat">${esc(T.ketDetik)}</p>
          <div class="deret">
            <button type="submit" class="utama" id="kirim-ajukan">${esc(T.kirimAjukan)}</button>
          </div>
@@ -508,7 +512,7 @@ export function renderKompetisi(akar: HTMLElement, aksi: AksiKompetisi, kodeAwal
     // Nilai awal juga diset lewat .value (atribut selected saja bisa meleset di sebagian mesin DOM).
     q<HTMLSelectElement>('k-jumlah').value = String(JUMLAH_PEMAIN_KOMPETISI_BAWAAN);
     q<HTMLSelectElement>('k-putaran').value = String(BATAS_PUTARAN_KOMPETISI_BAWAAN);
-    q<HTMLSelectElement>('k-detik').value = '60';
+    q<HTMLSelectElement>('k-detik').value = String(DETIK_GILIRAN_KOMPETISI_BAWAAN);
     const kaldu = q<HTMLInputElement>('k-kaldu');
     const selJumlah = q<HTMLSelectElement>('k-jumlah');
     const isianBatas = form.querySelector<HTMLElement>('.isian-batas-skor')!;
@@ -542,7 +546,7 @@ export function renderKompetisi(akar: HTMLElement, aksi: AksiKompetisi, kodeAwal
         batasPutaran: Number(q<HTMLSelectElement>('k-putaran').value) || BATAS_PUTARAN_KOMPETISI_BAWAAN,
         duaDeckUntukEmpat: empat() && q<HTMLInputElement>('k-dua').checked,
         modeKaldu: kaldu.checked,
-        detikGiliran: Number(q<HTMLSelectElement>('k-detik').value),
+        detikGiliran: Number(q<HTMLSelectElement>('k-detik').value) || DETIK_GILIRAN_KOMPETISI_BAWAAN,
         ...batas,
       };
       terkirim = true;

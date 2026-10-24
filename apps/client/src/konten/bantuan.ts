@@ -817,6 +817,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
           `Klasemen diurutkan dari rata-rata nilai per permainan, dan kamu masuk klasemen sesudah ${MIN_MAIN_KOMPETISI} kali main. Rata-rata sama: yang lebih sering main di atas, lalu rata-rata skor akhir.`,
           'Permainan yang sudah mulai sebelum kompetisi berakhir tetap dihitung. Juaranya diumumkan sesudah meja terakhir selesai, lalu dapat 🏆 di samping namanya, juga di Riwayat & peringkat.',
           `Meja kompetisi lakennya biru dan bar atasnya menulis nama kompetisi. Sesudah permainan selesai, klasemen akhir menampilkan nilai tiap peserta dan naik-turun peringkatnya. Tombol ${TEKS_KOMPETISI.kembaliKompetisi} membawamu ke daftar meja lagi.`,
+          'Meja kompetisi selalu punya batas waktu per giliran. Di hasil putaran, kalau host belum memulai putaran berikutnya, putarannya mulai sendiri sebentar kemudian. Akhiri permainan di meja kompetisi baru berlaku kalau semua peserta yang masih di meja setuju, termasuk yang sedang terputus.',
           'Kompetisi bisa disudahi lebih awal kalau lebih dari separuh peserta setuju.',
           'Tiket peserta tersimpan di HP yang dipakai waktu ikut serta, jadi main kompetisi dari HP itu.',
         ],
