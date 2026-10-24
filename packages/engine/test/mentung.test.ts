@@ -761,6 +761,32 @@ describe('#53 (2 deck): pentungan tidak boleh kembaran kartu yang dipungut', () 
       harusDitolakAksi(awal, mulungAksi(awal, 1, 1, ['7 love', '8 love#1', '9 love'], ['J wajik', 'Q wajik', 'K wajik']), 'SISAKAN_KARTU', PESAN_SISA);
     });
 
+    it('yang ditolak hanya langkah yang menyisakan kembaran itu sendirian; sisa dua kartu atau lebih tetap boleh', () => {
+      // Budi juga memegang 2 Kriting. Turunkan J-Q-K Wajik (atau mulung sekaligus menurunkan keduanya)
+      // menyisakan 8 Love dan 2 Kriting: sah, karena masih ada buang biasa. Mentung tidak terjadi di giliran ini.
+      const awal = () =>
+        meja({
+          rankJoker: 3,
+          giliran: 1,
+          tangan: [['2 waru'], ['7 love', '8 love', '9 love', 'J wajik', 'Q wajik', 'K wajik', '2 kriting'], ['4 waru'], ['5 waru']],
+          buangan: [['8 love#1', 0]],
+        });
+      const h0 = mulungAksi(awal(), 1, 1, ['7 love', '8 love#1', '9 love']);
+      if (!h0.ok) throw new Error(h0.error.pesan);
+      const g1 = terapkan(h0.state, { jenis: 'turunkan', pemain: 1, kartuJadi: [spek('J wajik', 'Q wajik', 'K wajik')] });
+      expect(g1.putaran!.tangan[1].map((k) => k.id).sort()).toEqual([id('2 kriting'), id('8 love')].sort());
+      const h1 = mulungAksi(awal(), 1, 1, ['7 love', '8 love#1', '9 love'], ['J wajik', 'Q wajik', 'K wajik']);
+      expect(h1.ok).toBe(true);
+      // Kedua kartu sisa boleh dibuang biasa; kembarannya tetap di tangan untuk giliran berikutnya.
+      for (const buangIni of ['2 kriting', '8 love']) {
+        const g = terapkan(g1, { jenis: 'buang', pemain: 1, kartuId: id(buangIni) });
+        expect(g.status).toBe('putaranBerjalan');
+        expect(g.putaran!.mentung).toBeNull();
+        expect(g.putaran!.tangan[1]).toHaveLength(1);
+        expect(g.putaran!.pungutan).toEqual([]);
+      }
+    });
+
     it('buang biasa (bukan mentung) kembarannya tetap boleh', () => {
       const h0 = mulungAksi(contohAniBudi(), 1, 1, ['7 love', '8 love#1', '9 love']);
       if (!h0.ok) throw new Error(h0.error.pesan);
