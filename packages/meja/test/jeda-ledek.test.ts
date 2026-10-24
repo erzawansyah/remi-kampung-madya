@@ -329,6 +329,37 @@ describe('ledekan di hasil putaran', () => {
     expect(ledekan(ctx, 'budi').at(-1)).toEqual({ t: 'ledek', dari: 0, ke: 1, isi: 'Kok bisa, Bos?' });
   });
 
+  it('jatah 12 tidak terbawa ke permainan baru sesudah Main lagi (nomor putarannya mulai dari 1 lagi)', () => {
+    const ctx = sampaiHasilPutaran();
+    expect(ctx.meja.data.game!.riwayat).toHaveLength(1);
+    for (let i = 0; i < MAKS_LEDEK_PER_PUTARAN; i++) {
+      ctx.jam.maju(1200);
+      ctx.meja.terima('ani', { t: 'ledek', ke: 1, isi: 'Rasain!' });
+    }
+    ctx.jam.maju(1200);
+    ctx.meja.terima('ani', { t: 'ledek', ke: 1, isi: 'Rasain!' });
+    expect(ctx.surat.errors('ani').at(-1)).toBe('Udah, cukup ngeledeknya, Bos.');
+    expect(ledekan(ctx, 'budi')).toHaveLength(MAKS_LEDEK_PER_PUTARAN);
+    ctx.meja.terima('ani', { t: 'akhiri', setuju: true });
+    ctx.meja.terima('budi', { t: 'akhiri', setuju: true });
+    expect(ctx.meja.status).toBe('selesai');
+    ctx.meja.terima('ani', { t: 'mainLagi' });
+    expect(ctx.meja.status).toBe('lobi');
+    ctx.meja.terima('ani', { t: 'mulai', pengocok: 0 });
+    siapSemua(ctx.meja);
+    selesaikanPutaran(ctx, new Rng(21));
+    expect(ctx.meja.data.game!.status).toBe('putaranSelesai');
+    expect(ctx.meja.data.game!.riwayat).toHaveLength(1);
+    const galatSebelum = ctx.surat.errors('ani').length;
+    ctx.jam.maju(1200);
+    ctx.meja.terima('ani', { t: 'ledek', ke: 1, isi: 'Kok bisa, Bos?' });
+    expect(ctx.surat.errors('ani')).toHaveLength(galatSebelum);
+    expect(ledekan(ctx, 'budi').at(-1)).toEqual({ t: 'ledek', dari: 0, ke: 1, isi: 'Kok bisa, Bos?' });
+    expect(ledekan(ctx, 'budi')).toHaveLength(MAKS_LEDEK_PER_PUTARAN + 1);
+    // Jeda lanjut permainan baru juga mulai dari awal (info terakhir disiarkan saat putarannya selesai).
+    expect(lanjut(ctx)).toEqual({ sisaMs: JEDA_LANJUT_MS, siap: [] });
+  });
+
   it('ledekan tidak dikirim ke yang terputus; warga kedai tidak pernah ngeledek', () => {
     const ctx = sampaiHasilPutaran();
     ctx.meja.terputus('budi');

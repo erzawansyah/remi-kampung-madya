@@ -683,6 +683,10 @@ export class Meja {
     this.d.game = null;
     this.d.setujuAkhiri = [];
     this.aturSetujuKaldu([]);
+    // Permainan baru: riwayatnya mulai dari 0 lagi, jadi jeda dan jatah ledekan lama tidak boleh terbawa.
+    this.jedaLanjut = null;
+    this.siapLanjut.clear();
+    this.ledekPutaran = null;
     this.berubah();
   }
 
@@ -763,6 +767,9 @@ export class Meja {
   private mulaiJedaLanjut(g: GameState): void {
     const ms = this.opsi.jedaLanjutMs ?? 0;
     this.siapLanjut.clear();
+    // Jatah ledekan mulai dari 0 di setiap hasil putaran (juga sesudah Main lagi, saat nomor putaran
+    // kembali ke 1), apa pun jedaLanjutMs-nya.
+    this.ledekPutaran = null;
     this.jedaLanjut = ms > 0 ? { putaran: g.riwayat.length, akhir: this.penjadwal.sekarang() + ms } : null;
   }
 
