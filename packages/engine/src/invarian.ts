@@ -1,5 +1,6 @@
 // Pemeriksa state legal. Dipakai test simulasi; bisa juga dipakai server untuk debug.
 
+import { MAKS_KARTU_NUTUP } from './giliran.js';
 import { validasiKartuJadi } from './kartuJadi.js';
 import { ctxPutaran, totalKartu } from './mesin.js';
 import { NILAI_PENTUNGAN_JOKER, nilaiPentunganTotal, PENGALI_KALDU } from './skor.js';
@@ -25,6 +26,8 @@ export function periksaInvarian(state: GameState): string[] {
       if (lain) {
         if (!lain.length) salah.push(`pentunganLain putaran ${h.nomor} kosong (harusnya tidak ditulis)`);
         if (!h.pentunganJoker || lain.some((k) => k.rank !== h.rankJoker)) salah.push(`pentungan putaran ${h.nomor} bukan joker semua`);
+        // Keputusan #52: paling banyak 2 kartu.
+        if (1 + lain.length > MAKS_KARTU_NUTUP) salah.push(`pentungan putaran ${h.nomor} lebih dari ${MAKS_KARTU_NUTUP} kartu`);
         if (h.nilaiPentungan !== NILAI_PENTUNGAN_JOKER * (1 + lain.length) * (h.kaldu ? PENGALI_KALDU : 1)) {
           salah.push(`nilai pentungan putaran ${h.nomor} salah`);
         }
@@ -84,6 +87,7 @@ export function periksaInvarian(state: GameState): string[] {
     if (!m.pentunganLain.length || !m.pentunganJoker || semua.some((k) => k.rank !== p.rankJoker || !p.jokerMati.includes(k.id))) {
       salah.push('pentungan beberapa kartu bukan joker semua');
     }
+    if (semua.length > MAKS_KARTU_NUTUP) salah.push(`pentungan lebih dari ${MAKS_KARTU_NUTUP} kartu`);
     if (p.tangan[m.pemain].length !== 0) salah.push('yang mentung masih punya kartu di tangan');
   }
   const k = state.konfigurasi;

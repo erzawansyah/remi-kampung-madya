@@ -11,6 +11,7 @@ import {
   namaKartu,
   namaRank,
   opsiPeranJoker,
+  pungutanBerlaku,
   putaranBerikutKaldu,
   validasiBuang,
   validasiKartuJadi,
@@ -1192,7 +1193,10 @@ export class KontrolMeja implements AksiAdegan {
       const p = this.view?.putaran;
       if (!p || this.hancur) return;
       const mode = this.view!.status === 'susunAkhir' ? 'akhir' : p.sumberAmbil!;
-      const cek = coba(() => validasiTurunkan(this.tanganServer(), [spek], p.kartuJadi[this.saya].length > 0, mode, this.ctx()));
+      // Pungutan giliran ini (info publik di view): kembarannya tidak boleh tersisa sendirian (#53).
+      const cek = coba(() =>
+        validasiTurunkan(this.tanganServer(), [spek], p.kartuJadi[this.saya].length > 0, mode, this.ctx(), pungutanBerlaku(p)),
+      );
       if (!cek.ok) return this.tolak(cek.pesan, 'tangan');
       this.kirimAksi({ jenis: 'turunkan', kartuJadi: [spek] });
     });
@@ -1274,8 +1278,9 @@ export class KontrolMeja implements AksiAdegan {
     const mainAlasan = pp.tahap !== 'main' ? 'Ambil kartu dulu (dari deck atau mulung).' : '';
     const tangan = this.tanganServer();
     const terpilih = tangan.filter((k) => this.dipilih.has(k.id));
-    // Satu kartu = buang biasa. Beberapa kartu (keputusan #41) hanya sah untuk nutup pakai beberapa joker;
-    // sah tidaknya, dan pesan penolakannya, sepenuhnya dari validasiBuang mesin aturan.
+    // Satu kartu = buang biasa. Beberapa kartu (keputusan #41, paling banyak 2 sejak #52) hanya sah untuk
+    // nutup pakai dua joker; sah tidaknya, dan pesan penolakannya (termasuk pentungan yang kembaran kartu
+    // pungutan giliran ini, #53), sepenuhnya dari validasiBuang mesin aturan.
     const cekBuang = ([kartuId, ...kartuIdLain]: readonly string[]) =>
       coba(() =>
         validasiBuang({
@@ -1284,6 +1289,7 @@ export class KontrolMeja implements AksiAdegan {
           sumberAmbil: pp.sumberAmbil!,
           kartuId,
           ...(kartuIdLain.length ? { kartuIdLain } : {}),
+          pungutan: pungutanBerlaku(pp),
           ctx: this.ctx(),
           asJokerBolehDibuangTanpaJadi: v!.konfigurasi.asJokerBolehDibuangTanpaJadi,
         }),

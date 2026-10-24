@@ -373,7 +373,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
         butir: [
           'Ambil: pilih salah satu, ambil 1 kartu teratas dari deck, atau mulung dari buangan (lihat bab Mulung).',
           'Turunkan (boleh dilewati): turunkan satu atau beberapa kartu jadi dari tanganmu.',
-          'Buang: wajib buang 1 kartu ke tumpukan buangan (kecuali nutup pakai beberapa joker, lihat bab Mentung). Setelah itu giliran pindah ke pemain berikutnya.',
+          'Buang: wajib buang 1 kartu ke tumpukan buangan (kecuali nutup pakai dua joker, lihat bab Mentung). Setelah itu giliran pindah ke pemain berikutnya.',
         ],
       },
       {
@@ -510,7 +510,19 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: '**Pentung beberapa joker sekaligus.** Kalau sisa kartumu joker semua, kamu boleh nutup dengan membuang semuanya sekaligus. Syaratnya: semua sisa kartu ikut dibuang, semuanya joker hidup, dan giliran itu kamu awali dengan mulung. Nilainya **250 per joker**: dua joker 500, tiga joker 750. Tidak kena −25, dan tiap yang kepentung kena nilai totalnya. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
+        teks: '**Pentung dua joker sekaligus.** Kalau sisa kartumu tinggal dua joker, kamu boleh nutup dengan membuang keduanya sekaligus. Syaratnya: dua-duanya joker hidup, dan giliran itu kamu awali dengan mulung. Nilainya **250 per joker**, jadi dua joker **500**. Tidak kena −25, dan tiap yang kepentung kena 500. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
+      },
+      {
+        t: 'paragraf',
+        teks: '**Paling banyak dua kartu.** Kalau sisa kartumu tiga joker atau lebih, giliran itu kamu tidak bisa nutup. Buang satu kartu seperti biasa; kalau yang kamu buang joker, kena −25 dan jokernya jadi kartu biasa.',
+      },
+      {
+        t: 'paragraf',
+        teks: '**Pentungan bukan kembaran kartu pungutan (2 deck).** Di permainan 2 deck tiap kartu punya kembaran: angka dan bunganya sama, dari deck satunya. Kamu tidak boleh mentung pakai kembaran kartu yang kamu pungut di giliran itu, dari pungutan paling bawah sampai paling atas. Kartu pungutannya sendiri tetap boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga di giliran itu. Membuang kembaran tanpa mentung tetap boleh.',
+      },
+      {
+        t: 'paragraf',
+        teks: '**Contoh Ani dan Budi** (2 deck, joker putaran ini 3). Budi memegang 7, 8, 9 Love dan J, Q, K Wajik. Ani, tepat sebelum Budi, membuang 8 Love dari deck satunya. Budi mungut 8 Love itu dan menurunkan 7-8-9 Love. Sisa kartunya J-Q-K Wajik dan 8 Love miliknya sendiri. Kalau J-Q-K Wajik ikut diturunkan, kartu terakhirnya 8 Love, kembaran kartu yang barusan ia pungut, dan kartu itu tidak boleh jadi pentungan. Jadi aplikasi menolak turunkan yang menyisakan 8 Love sendirian: Budi menyisakan minimal dua kartu dan membuang satu seperti biasa.',
       },
       {
         t: 'paragraf',
@@ -719,7 +731,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
           ['Pilih kartu', 'Ketuk kartu di tanganmu. Ketuk lagi untuk batal.'],
           ['Turunkan kartu jadi', 'Pilih minimal 3 kartu, lalu tekan Turunkan.'],
           ['Buang', 'Pilih 1 kartu lalu tekan tombol Buang, atau seret kartunya ke tumpukan buangan.'],
-          ['Nutup pakai beberapa joker', 'Pilih semua sisa kartumu, lalu tekan Mentung, atau seret salah satunya ke tumpukan buangan.'],
+          ['Nutup pakai dua joker', 'Pilih kedua sisa kartumu, lalu tekan Mentung, atau seret salah satunya ke tumpukan buangan.'],
           ['Atur urutan tangan', 'Seret kartu ke posisi baru, atau tekan ⇅ untuk mengurutkan per bunga atau per angka.'],
           ['Selesai menyusun', 'Di susun akhir, tekan Selesai kalau sudah tidak ada yang mau diturunkan.'],
         ],
@@ -856,7 +868,11 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   },
   {
     tanya: 'Bisa nutup pakai dua joker?',
-    jawab: 'Bisa, asal sisa kartumu joker semua dan giliran itu kamu awali dengan mulung. Pilih semuanya, lalu tekan Mentung. Nilainya 250 per joker (dua joker 500), tanpa −25. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
+    jawab: 'Bisa, asal sisa kartumu tinggal dua joker dan giliran itu kamu awali dengan mulung. Pilih keduanya, lalu tekan Mentung. Nilainya 250 per joker (dua joker 500), tanpa −25. Paling banyak dua kartu: sisa tiga joker atau lebih tidak bisa dipakai nutup, jadi buang satu dulu. Joker yang sudah pernah dibuang dihitung kartu biasa, jadi tidak bisa ikut.',
+  },
+  {
+    tanya: 'Kok nggak bisa mentung pakai kartu yang sama persis dengan yang barusan kupungut?',
+    jawab: 'Di permainan 2 deck, pentungan tidak boleh kembaran (angka dan bunga sama, dari deck satunya) kartu yang kamu pungut di giliran itu. Kartu pungutannya sendiri boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga. Aplikasi juga menolak turunkan yang menyisakan kembaran itu sendirian, karena kartu terakhir yang dibuang selalu jadi pentungan. Contohnya ada di bab Mentung (Ani dan Budi).',
   },
   {
     tanya: 'Kartu buangan yang lama kok nggak kelihatan?',
@@ -906,11 +922,12 @@ export const GLOSARIUM: { istilah: string; arti: string }[] = [
   { istilah: 'Mulung / mungut', arti: 'Mengambil satu atau beberapa kartu teratas dari buangan.' },
   { istilah: 'Pungutan', arti: 'Kartu-kartu yang diambil dari buangan waktu mulung.' },
   { istilah: 'Modal', arti: 'Kartu dari tanganmu yang dipakai bersama pungutan di kartu jadi.' },
-  { istilah: 'Mentung / nutup', arti: 'Membuang kartu terakhir di tangan (atau semua sisa joker sekaligus), di giliran yang diawali mulung.' },
+  { istilah: 'Mentung / nutup', arti: 'Membuang kartu terakhir di tangan (atau dua joker terakhir sekaligus), di giliran yang diawali mulung.' },
   {
     istilah: 'Pentungan',
-    arti: 'Kartu terakhir yang dibuang waktu mentung. Boleh beberapa kartu sekaligus kalau semuanya joker hidup (250 per joker). Nilainya jadi bonus dan potongan.',
+    arti: 'Kartu terakhir yang dibuang waktu mentung. Boleh dua kartu sekaligus kalau keduanya joker hidup (250 per joker). Di 2 deck, tidak boleh kembaran kartu yang dipungut di giliran itu. Nilainya jadi bonus dan potongan.',
   },
+  { istilah: 'Kembaran', arti: 'Di permainan 2 deck: kartu yang angka dan bunganya sama, dari deck satunya.' },
   { istilah: 'Kepentung', arti: 'Kena potongan pentungan karena kartu buanganmu dipungut lalu dipakai di kartu jadi oleh yang mentung (bukan sebagai pentungannya).' },
   { istilah: 'Balik arah', arti: 'Arah putaran berikutnya dibalik, karena pemain tepat sebelum yang mentung ikut kepentung.' },
   { istilah: 'Lompat', arti: 'Pemain tepat sebelum yang mentung tidak kepentung, jadi arah putaran tetap.' },

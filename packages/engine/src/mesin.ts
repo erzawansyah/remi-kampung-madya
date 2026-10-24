@@ -4,7 +4,14 @@ import { klon } from './klon.js';
 import { buatDeck, namaKartu, namaRank } from './kartu.js';
 import { AturanError, langgar } from './error.js';
 import { isJokerHidup, type KartuJadi, type KonteksJoker, type SpesifikasiKartuJadi } from './kartuJadi.js';
-import { validasiBuang, validasiMulung, validasiTurunkan, type HasilTurunkan } from './giliran.js';
+import {
+  kembaranPungutan,
+  pungutanBerlaku,
+  validasiBuang,
+  validasiMulung,
+  validasiTurunkan,
+  type HasilTurunkan,
+} from './giliran.js';
 import { hitungSkorPemain, nilaiPentunganTotal, PENGALI_KALDU } from './skor.js';
 import { Rng, seedKeState } from './rng.js';
 import { daftarNama, deskripsiKartuJadi } from './deskripsi.js';
@@ -142,6 +149,7 @@ export function migrasiState(state: GameState): GameState {
   // HasilPutaran.pentunganLain (#41, tidak ada = mentung satu kartu); pembacanya memakai `?? []`.
   // Mode kaldu (#42): KonfigurasiPermainan.modeKaldu, GameState.kalduDiminta, StatePutaran.kaldu,
   // HasilPutaran.kaldu, RincianSkor.pengaliPentungan; tidak ada = mati/bukan kaldu/pengali 1.
+  // Keputusan #53: StatePutaran.kembaranWarisan hanya ditulis untuk satu state warisan (kembaranWarisan()).
   return {
     ...s,
     peristiwa: s.peristiwa ?? [],
@@ -151,8 +159,22 @@ export function migrasiState(state: GameState): GameState {
       mulungBeruntun: p.mulungBeruntun ?? Array(n).fill(0),
       mentung: p.mentung ?? null,
       asalKartu: p.asalKartu ?? {},
+      ...(kembaranWarisan(s.status, p) ? { kembaranWarisan: true as const } : {}),
     },
   };
+}
+
+/**
+ * Keputusan #53: dengan aturan baru, kartu terakhir di tangan pemain giliran (sesudah mulung) tidak pernah
+ * kembaran kartu pungutannya (validasiTurunkan/validasiMulung menolaknya). Simpanan dari sebelum #53 bisa
+ * berhenti tepat di situ (dulu sah: turunkan dulu, mentung pakai kembarannya). Tanpa penanda, giliran itu
+ * tidak punya aksi sah dan warga kedai di kursi itu galat terus. Dengan penanda, giliran itu ditutup dengan
+ * aturan lama (`pungutanBerlaku`); state lain tidak pernah ditandai, jadi golden tidak bergeser.
+ */
+function kembaranWarisan(status: GameState['status'], p: StatePutaran): boolean {
+  if (status !== 'putaranBerjalan' || p.tahap !== 'main' || p.sumberAmbil !== 'buangan') return false;
+  const tangan = p.tangan[p.giliran];
+  return tangan?.length === 1 && kembaranPungutan(tangan[0], p.pungutan ?? []);
 }
 
 /** Versi yang melempar AturanError, praktis untuk test dan simulasi. */
@@ -384,6 +406,7 @@ function turunkan(s: GameState, pemain: number, spesifikasi: SpesifikasiKartuJad
     p.kartuJadi[pemain].length > 0,
     p.sumberAmbil!,
     ctxPutaran(p),
+    pungutanBerlaku(p),
   );
   const baru = pasangKartuJadi(p, pemain, hasil);
   catat(s, `${nama(s, pemain)} menurunkan ${baru.map(deskripsiKartuJadi).join(' dan ')}.`);
@@ -399,6 +422,7 @@ function buang(s: GameState, pemain: number, kartuId: string, kartuIdLain: strin
     sumberAmbil: p.sumberAmbil!,
     kartuId,
     kartuIdLain,
+    pungutan: pungutanBerlaku(p),
     ctx,
     asJokerBolehDibuangTanpaJadi: s.konfigurasi.asJokerBolehDibuangTanpaJadi,
   });
@@ -452,6 +476,7 @@ function buang(s: GameState, pemain: number, kartuId: string, kartuIdLain: strin
   p.tahap = 'ambil';
   p.sumberAmbil = null;
   p.pungutan = [];
+  delete p.kembaranWarisan;
 }
 
 /**
@@ -464,6 +489,7 @@ function mulaiSusunAkhir(s: GameState, sebab: 'deckHabis' | 'mentung'): void {
   p.selesaiSusun = p.tangan.map((t) => t.length === 0);
   p.sumberAmbil = null;
   p.pungutan = [];
+  delete p.kembaranWarisan;
   catat(
     s,
     `${sebab === 'mentung' ? 'Sebelum dihitung' : 'Deck habis'}. Semua pemain boleh menurunkan kartu jadi dari tangan (tanpa mulung), lalu tekan Selesai.`,
@@ -487,7 +513,8 @@ function pemainSusunAkhir(s: GameState, pemain: number): StatePutaran {
 
 function turunkanAkhir(s: GameState, pemain: number, spesifikasi: SpesifikasiKartuJadi[]): void {
   const p = pemainSusunAkhir(s, pemain);
-  const hasil = validasiTurunkan(p.tangan[pemain], spesifikasi, p.kartuJadi[pemain].length > 0, 'akhir', ctxPutaran(p));
+  // Susun akhir tidak punya pungutan (dikosongkan di mulaiSusunAkhir) dan tidak ada buang.
+  const hasil = validasiTurunkan(p.tangan[pemain], spesifikasi, p.kartuJadi[pemain].length > 0, 'akhir', ctxPutaran(p), []);
   const baru = pasangKartuJadi(p, pemain, hasil);
   catat(s, `${nama(s, pemain)} menurunkan ${baru.map(deskripsiKartuJadi).join(' dan ')}.`);
   terjadi(s, { jenis: 'turunkan', pemain, idKartuJadi: baru.map((kj) => kj.id), kembarAs: baru.some(isKembarAsEmpat) });

@@ -16,6 +16,33 @@ import type { EntriBuangan } from './state.js';
 /** Sumber ambil giliran ini, atau 'akhir' untuk fase susun akhir. */
 export type ModeTurunkan = 'deck' | 'buangan' | 'akhir';
 
+/** Keputusan #52: nutup paling banyak pakai 2 kartu (dua joker hidup). */
+export const MAKS_KARTU_NUTUP = 2;
+
+/**
+ * Keputusan #53 (2 deck): `kartu` kembaran salah satu kartu yang dipungut giliran ini, yaitu angka dan
+ * bunganya sama tapi kartunya lain (deck satunya). Kartu pungutan itu sendiri bukan kembarannya. Dengan
+ * 1 deck tidak pernah ada kembaran. Pungutan giliran ini info publik (`StatePutaran.pungutan`, juga di
+ * `ViewPutaran.pungutan`), jadi mesin, warga kedai, meja, dan aplikasi memakai sumber yang sama.
+ */
+export function kembaranPungutan(kartu: Kartu, pungutan: readonly EntriBuangan[]): boolean {
+  return pungutan.some((e) => e.kartu.id !== kartu.id && e.kartu.rank === kartu.rank && e.kartu.bunga === kartu.bunga);
+}
+
+/**
+ * Pungutan giliran ini yang dipakai larangan kembaran (#53) di tahap main: argumen `pungutan` untuk
+ * validasiBuang/validasiTurunkan dari StatePutaran maupun ViewPutaran. Biasanya sama dengan `p.pungutan`.
+ * Satu-satunya pengecualian: simpanan dari sebelum #53 yang berhenti tepat saat kartu terakhir di tangan
+ * kembaran pungutan (`kembaranWarisan`, ditandai migrasiState). State itu tidak punya aksi sah dengan
+ * aturan baru, jadi giliran itu ditutup dengan aturan lama. Kepentung tetap dihitung dari `p.pungutan`.
+ */
+export function pungutanBerlaku(p: {
+  readonly pungutan: readonly EntriBuangan[];
+  readonly kembaranWarisan?: true;
+}): readonly EntriBuangan[] {
+  return p.kembaranWarisan ? [] : p.pungutan;
+}
+
 export interface HasilTurunkan {
   kartuJadi: HasilValidasiKartuJadi[];
   sisaTangan: Kartu[];
@@ -26,7 +53,13 @@ export interface HasilTurunkan {
  * - 3 As butuh kartu jadi lain: yang sudah di meja, atau yang diturunkan bersamaan (bukan 3 As juga).
  * - Harus tersisa minimal 1 kartu untuk dibuang; bila tadi ambil dari deck, minimal 2
  *   (ambil dari deck tidak bisa dipakai nutup).
+ * - Giliran mulung: kalau sisa satu kartu dan kartu itu kembaran kartu yang dipungut giliran ini, minimal 2
+ *   juga. Kartu itu tidak bisa jadi pentungan (#53), dan membuang kartu terakhir selalu berarti mentung,
+ *   jadi tanpa syarat ini giliran macet tanpa aksi sah.
  * - Mode 'akhir' (fase susun akhir setelah deck habis): tidak ada buang, jadi tangan boleh habis.
+ *
+ * @param pungutan kartu yang dipungut giliran ini (`pungutanBerlaku(p)` dari StatePutaran/ViewPutaran; saat
+ *   mulung: kartu yang diambil). Kosong untuk giliran ambil deck dan susun akhir.
  */
 export function validasiTurunkan(
   tersedia: readonly Kartu[],
@@ -34,6 +67,7 @@ export function validasiTurunkan(
   punyaKartuJadi: boolean,
   sumberAmbil: ModeTurunkan,
   ctx: KonteksJoker,
+  pungutan: readonly EntriBuangan[],
 ): HasilTurunkan {
   if (spesifikasi.length === 0) langgar('KARTU_JADI_TIDAK_SAH', 'Pilih dulu kartu yang mau dijadikan.');
   const dipakai = new Set<string>();
@@ -62,6 +96,9 @@ export function validasiTurunkan(
       'SISAKAN_KARTU',
       'Habis ambil dari deck nggak bisa nutup. Sisakan minimal dua kartu: satu dibuang, satu tetap di tangan.',
     );
+  }
+  if (sumberAmbil === 'buangan' && sisaTangan.length === 1 && kembaranPungutan(sisaTangan[0], pungutan)) {
+    langgar('SISAKAN_KARTU', PESAN_SISA_KEMBARAN);
   }
   return { kartuJadi: hasil, sisaTangan };
 }
@@ -102,7 +139,7 @@ export function validasiMulung(input: InputMulung): HasilMulung {
   const diambil = buangan.slice(buangan.length - jumlah);
   const bawah = diambil[0].kartu;
   const tersedia = [...tangan, ...diambil.map((e) => e.kartu)];
-  const hasil = validasiTurunkan(tersedia, input.spesifikasi, input.punyaKartuJadi, 'buangan', ctx);
+  const hasil = validasiTurunkan(tersedia, input.spesifikasi, input.punyaKartuJadi, 'buangan', ctx, diambil);
 
   const indeksKartuJadiBawah = hasil.kartuJadi.findIndex((kj) => kj.kartu.some((d) => d.kartu.id === bawah.id));
   if (indeksKartuJadiBawah < 0) {
@@ -130,8 +167,13 @@ export interface InputBuang {
   punyaKartuJadi: boolean;
   sumberAmbil: 'deck' | 'buangan';
   kartuId: string;
-  /** Keputusan #41: kartu lain yang ikut dibuang (nutup pakai beberapa joker). Kosong/tidak ada = satu kartu. */
+  /**
+   * Keputusan #41: kartu lain yang ikut dibuang (nutup pakai dua joker; paling banyak MAKS_KARTU_NUTUP
+   * kartu seluruhnya, #52). Kosong/tidak ada = satu kartu.
+   */
   kartuIdLain?: readonly string[];
+  /** Kartu yang dipungut giliran ini (`pungutanBerlaku(p)` dari StatePutaran/ViewPutaran); kosong kalau ambil deck. */
+  pungutan: readonly EntriBuangan[];
   ctx: KonteksJoker;
   asJokerBolehDibuangTanpaJadi: boolean;
 }
@@ -148,6 +190,10 @@ export interface HasilBuang {
 const PESAN_KARTU_TIDAK_ADA = 'Kartu itu nggak ada di tanganmu.';
 const PESAN_NUTUP_TANPA_MULUNG = 'Nutup cuma sah kalau giliran ini kamu mulung.';
 const PESAN_AS_BELUM_BOLEH = 'As belum boleh dibuang, kamu belum punya kartu jadi.';
+const PESAN_NUTUP_KEBANYAKAN = `Nutup paling banyak pakai ${MAKS_KARTU_NUTUP} kartu, Bos.`;
+const PESAN_PENTUNGAN_KEMBARAN = 'Nggak bisa mentung pakai kembaran kartu yang barusan kamu pungut, Bos.';
+const PESAN_SISA_KEMBARAN =
+  'Kartu terakhirmu nanti kembaran kartu yang barusan kamu pungut, jadi nggak bisa buat mentung. Sisakan minimal dua kartu: satu dibuang, satu tetap di tangan.';
 
 function cekAsBolehDibuang(kartu: Kartu, input: InputBuang): void {
   const jokerHidup = isJokerHidup(kartu, input.ctx);
@@ -157,11 +203,13 @@ function cekAsBolehDibuang(kartu: Kartu, input: InputBuang): void {
 }
 
 /**
- * Validasi buang. Satu kartu: seperti biasa (kartu terakhir = mentung, harus sesudah mulung).
+ * Validasi buang. Satu kartu: seperti biasa (kartu terakhir = mentung, harus sesudah mulung, dan bukan
+ * kembaran kartu yang dipungut giliran ini, #53). Buang biasa (bukan mentung) kembaran tetap boleh.
  *
- * Beberapa kartu (keputusan #41) hanya sah untuk nutup pakai beberapa joker. Urutan pemeriksaannya
- * sengaja struktur dulu (kartu ada, tidak dobel, semua sisa tangan ikut, giliran diawali mulung), baru
- * status joker, jadi penolakan tidak pernah bilang apa-apa soal joker sebelum syarat lain terpenuhi.
+ * Beberapa kartu (keputusan #41, paling banyak 2 sejak #52) hanya sah untuk nutup pakai dua joker. Urutan
+ * pemeriksaannya sengaja struktur dulu (kartu ada, tidak dobel, semua sisa tangan ikut, giliran diawali
+ * mulung, paling banyak 2, bukan kembaran pungutan), baru status joker, jadi penolakan tidak pernah bilang
+ * apa-apa soal joker sebelum syarat lain terpenuhi. Urutan empat cek pertama sama dengan sebelum #52.
  */
 export function validasiBuang(input: InputBuang): HasilBuang {
   const lain = input.kartuIdLain ?? [];
@@ -176,6 +224,8 @@ export function validasiBuang(input: InputBuang): HasilBuang {
   if (mentung && input.sumberAmbil !== 'buangan') {
     langgar('NUTUP_TANPA_MULUNG', PESAN_NUTUP_TANPA_MULUNG);
   }
+  // Keputusan #53: pentungan tidak boleh kembaran kartu yang dipungut giliran ini.
+  if (mentung && kembaranPungutan(kartu, input.pungutan)) langgar('PENTUNGAN_KEMBARAN', PESAN_PENTUNGAN_KEMBARAN);
   return { kartu, kartuLain: [], mentung, kenaPenaltiJoker: jokerHidup && !mentung };
 }
 
@@ -201,7 +251,14 @@ function validasiBuangBeberapa(input: InputBuang, lain: readonly string[]): Hasi
   }
   // 4) Nutup hanya sesudah mulung.
   if (input.sumberAmbil !== 'buangan') langgar('NUTUP_TANPA_MULUNG', PESAN_NUTUP_TANPA_MULUNG);
-  // 5) Semuanya joker hidup. Joker yang sudah pernah dibuang (joker mati) dihitung kartu biasa.
+  // 5) Keputusan #52: paling banyak 2 kartu. Baru diperiksa sesudah syarat 1–4, jadi hanya kena kalau pemain
+  //    memang mencoba nutup pakai seluruh sisa tangannya sesudah mulung; memilih 3 kartu dari tangan yang
+  //    lebih besar tetap dapat pesan "buang satu kartu". Tangan 3+ joker tidak bisa nutup di giliran itu:
+  //    buang satu kartu seperti biasa (joker hidup yang dibuang begitu kena −25 dan jadi joker mati).
+  if (dipilih.length > MAKS_KARTU_NUTUP) langgar('NUTUP_KEBANYAKAN', PESAN_NUTUP_KEBANYAKAN);
+  // 6) Keputusan #53: tidak ada pentungan yang kembaran kartu pungutan giliran ini (info publik).
+  if (dipilih.some((k) => kembaranPungutan(k, input.pungutan))) langgar('PENTUNGAN_KEMBARAN', PESAN_PENTUNGAN_KEMBARAN);
+  // 7) Semuanya joker hidup. Joker yang sudah pernah dibuang (joker mati) dihitung kartu biasa.
   if (!dipilih.every((k) => isJokerHidup(k, input.ctx))) {
     langgar(
       'PENTUNGAN_BUKAN_JOKER',

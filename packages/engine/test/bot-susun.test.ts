@@ -165,7 +165,7 @@ describe('pencari susunan warga kedai (jago/suhu)', () => {
       expect(h.nilai, JSON.stringify({ kartu: kartu.map((k) => k.id), ctx })).toBe(harap);
       if (h.susunan.length) {
         const spek = keSpesifikasi(h.susunan, kartu, ctx)!;
-        const v = validasiTurunkan(kartu, spek, punyaJadi, 'akhir', ctx);
+        const v = validasiTurunkan(kartu, spek, punyaJadi, 'akhir', ctx, []);
         expect(v.kartuJadi.reduce((s, kj) => s + nilaiKartuJadi(kj), 0)).toBe(h.nilaiJadi);
       }
       diuji++;
@@ -192,11 +192,41 @@ describe('pencari susunan warga kedai (jago/suhu)', () => {
       if (h) {
         ada++;
         const spek = keSpesifikasi(h.susunan, kartu, ctx)!;
-        const v = validasiTurunkan(kartu, spek, true, 'buangan', ctx);
+        const v = validasiTurunkan(kartu, spek, true, 'buangan', ctx, []);
         expect(v.sisaTangan).toHaveLength(1);
       }
     }
     expect(ada).toBeGreaterThan(20);
+  });
+
+  it('mode tepat(1) dengan larangSisa (#53): pentungan terbaik di antara sisa yang tidak dilarang', () => {
+    const rng = new Rng(5353);
+    let ada = 0;
+    let beda = 0;
+    for (let i = 0; i < 90; i++) {
+      const { kartu, ctx } = i % 2 ? tanganSeri(rng, i % 3 === 0) : tanganAcak(rng, i % 3 === 0, true);
+      if (kartu.filter((k) => isJokerHidup(k, ctx)).length > 2) continue;
+      // Larang satu atau dua tipe (beserta status joker hidupnya) jadi sisa.
+      const kunci = (k: Kartu) => `${tipeKartu(k)}${isJokerHidup(k, ctx) ? '*' : ''}`;
+      const dilarang = new Set([kunci(kartu[rng.int(kartu.length)]), kunci(kartu[rng.int(kartu.length)])]);
+      const daun = semuaPembagian(kartu, ctx, true).filter((d) => d.sisa.length === 1);
+      const nilai = (d: (typeof daun)[number]) => nilaiPentungan(d.sisa[0], isJokerHidup(d.sisa[0], ctx)) * 1000 + d.jadi;
+      const boleh = daun.filter((d) => !dilarang.has(kunci(d.sisa[0])));
+      const harap = boleh.length ? Math.max(...boleh.map(nilai)) : null;
+      const larangSisa = (t: number, hidup: boolean) => dilarang.has(`${t}${hidup ? '*' : ''}`);
+      const h = susun.cari(isiDari(kartu, ctx), true, { tepat: 1, catat: true, larangSisa });
+      expect(h ? h.nilai : null, JSON.stringify({ kartu: kartu.map((k) => k.id), ctx, dilarang: [...dilarang] })).toBe(harap);
+      if (h) {
+        ada++;
+        expect(larangSisa(h.sisa[0].t, h.sisa[0].hidup)).toBe(false);
+      }
+      const tanpa = daun.length ? Math.max(...daun.map(nilai)) : null;
+      if (tanpa !== harap) beda++;
+      // Tanpa larangSisa hasilnya sama persis dengan sebelum opsi ini ada.
+      expect(susun.cari(isiDari(kartu, ctx), true, { tepat: 1 })?.nilai ?? null).toBe(tanpa);
+    }
+    expect(ada).toBeGreaterThan(20);
+    expect(beda).toBeGreaterThan(5);
   });
 
   it('mode tepat(0): semua kartu jadi', () => {

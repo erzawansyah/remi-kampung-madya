@@ -103,6 +103,8 @@ export class Penyusun {
   private wajibJadi = 0;
   private punyaJadi = false;
   private catat = false;
+  /** Mode tepat(1): kartu sisa (tipe, joker hidup) yang tidak boleh jadi pentungan; null = semua boleh. */
+  private larangSisa: ((t: number, hidup: boolean) => boolean) | null = null;
   private terbaik = -Infinity;
   private terbaikJadi = 0;
   private terbaikSusunan: SlotJadi[][] = [];
@@ -114,10 +116,17 @@ export class Penyusun {
    * @param punyaJadi pemain sudah punya kartu jadi di meja (syarat 3 As)
    * @param catat simpan susunan terbaik (lebih lambat sedikit)
    * @param wajib tipe yang minimal satu kartunya wajib dijadikan (kartu pungutan paling bawah), −1 bila tidak ada
+   * @param larangSisa mode tepat(1): kartu sisa yang tidak boleh jadi pentungan (keputusan #53, kembaran
+   *   kartu pungutan giliran ini); tidak ada = semua boleh, hasilnya sama persis dengan sebelum opsi ini ada
    */
-  cari(isi: IsiTangan, punyaJadi: boolean, opsi: { tepat?: number; wajib?: number; catat?: boolean } = {}): HasilSusun | null {
+  cari(
+    isi: IsiTangan,
+    punyaJadi: boolean,
+    opsi: { tepat?: number; wajib?: number; catat?: boolean; larangSisa?: (t: number, hidup: boolean) => boolean } = {},
+  ): HasilSusun | null {
     this.punyaJadi = punyaJadi;
     this.catat = opsi.catat ?? false;
+    this.larangSisa = opsi.larangSisa ?? null;
     this.tepat = opsi.tepat !== undefined;
     this.wajib = opsi.wajib ?? -1;
     this.terbaik = -Infinity;
@@ -197,6 +206,7 @@ export class Penyusun {
       if (this.liarPakai < this.liar.length || this.batasLepas !== 0) return;
       // Nilai pentungan kartu sisa (bila ada), lalu nilai kartu jadi sebagai pemecah seri.
       const s = this.lepas[0];
+      if (s && this.larangSisa?.(s.t, s.hidup)) return;
       const pentungan = !s ? 0 : s.hidup ? NILAI_PENTUNGAN_JOKER : NILAI_TIPE[s.t] * 10;
       skor = pentungan * 1000 + jadi;
     } else {

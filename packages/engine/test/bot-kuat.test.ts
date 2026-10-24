@@ -206,6 +206,122 @@ describe('warga kedai jago dan suhu', () => {
     });
   });
 
+  /** Mainkan giliran `pemain` sampai gilirannya lewat atau putaran tidak berjalan lagi (aksi ditolak = gagal). */
+  const mainkanGiliran = (g: GameState, pemain: number, level: LevelBot) => {
+    const aksi: Aksi[] = [];
+    for (let i = 0; i < 6 && g.status === 'putaranBerjalan' && g.putaran!.giliran === pemain; i++) {
+      const a = pilihAksiBot(viewUntuk(g, pemain), level, new Rng(1));
+      aksi.push(a);
+      g = terapkan(g, a);
+    }
+    return { g, aksi };
+  };
+  const SEMUA_LEVEL: LevelBot[] = ['mudah', 'normal', 'jago', 'suhu'];
+
+  describe('#52: nutup paling banyak pakai 2 joker', () => {
+    const lawan = [
+      ['2 waru', '3 wajik', 'K waru'],
+      ['4 waru', 'J wajik', 'Q kriting'],
+    ];
+
+    it('jago/suhu dengan tiga joker hidup: satu jadi pengganti di kartu jadi, nutup pakai dua (500)', () => {
+      for (const level of ['jago', 'suhu'] as const) {
+        // Joker 9. Dulu (#41) mulung 5-6-7 Love lalu nutup pakai tiga joker (750).
+        const g0 = skenario({
+          rankJoker: 9,
+          giliran: 0,
+          tangan: [['5 love', '6 love', '9 kriting', '9 waru', '9 wajik'], ...lawan],
+          buangan: [['7 love', 1]],
+        });
+        const { g, aksi } = mainkanGiliran(g0, 0, level);
+        expect(g.status).toBe('susunAkhir');
+        expect(g.putaran!.mentung!.pentunganLain).toHaveLength(1);
+        expect(cariMentung(g)!.nilai).toBe(500);
+        expect(aksi.some((a) => a.jenis === 'buang' && (a.kartuIdLain?.length ?? 0) > 1)).toBe(false);
+        // Joker ketiga ada di kartu jadi.
+        expect(g.putaran!.kartuJadi[0].flatMap((kj) => kj.kartu).filter((d) => d.kartu.rank === 9)).toHaveLength(1);
+      }
+    });
+
+    it('semua level: sisa tangan tiga joker sesudah mulung tidak nutup, buang satu kartu', () => {
+      for (const level of SEMUA_LEVEL) {
+        const g0 = terapkan(
+          skenario({
+            rankJoker: 9,
+            giliran: 0,
+            tangan: [['5 love', '6 love', '9 kriting', '9 waru', '9 wajik'], ...lawan],
+            buangan: [['7 love', 1]],
+          }),
+          { jenis: 'mulung', pemain: 0, jumlah: 1, kartuJadi: [[{ id: id('5 love') }, { id: id('6 love') }, { id: id('7 love') }]] },
+        );
+        const { g, aksi } = mainkanGiliran(g0, 0, level);
+        expect(aksi.map((a) => a.jenis)).toEqual(['buang']);
+        expect(aksi[0]).not.toHaveProperty('kartuIdLain');
+        expect(g.putaran!.mentung).toBeNull();
+        expect(g.putaran!.tangan[0]).toHaveLength(2);
+      }
+    });
+  });
+
+  describe('#53: pentungan bukan kembaran kartu pungutan (2 deck)', () => {
+    const meja = (rankJoker: 3 | 7, tangan: string[], buangan: [string, number][]) =>
+      skenario({
+        rankJoker,
+        giliran: 1,
+        konfigurasi: { duaDeckUntukEmpat: true },
+        tangan: [['2 waru', '3 wajik', 'K waru'], tangan, ['4 waru', 'J wajik', 'Q kriting'], ['10 waru', '2 kriting', 'As wajik']],
+        buangan,
+      });
+    /** Pentungan mentung giliran ini bukan kembaran kartu yang dipungut di giliran yang sama. */
+    const periksaPentungan = (g: GameState) => {
+      const m = cariMentung(g);
+      if (!m) return;
+      const mulung = g.peristiwa.filter((e) => e.jenis === 'mulung' && e.pemain === m.pemain).at(-1) as Extract<
+        GameState['peristiwa'][number],
+        { jenis: 'mulung' }
+      >;
+      for (const k of [m.pentungan, ...(m.pentunganLain ?? [])]) {
+        for (const e of mulung.kartu) expect(e.kartu.id !== k.id && e.kartu.rank === k.rank && e.kartu.bunga === k.bunga).toBe(false);
+      }
+    };
+
+    it('contoh Ani dan Budi: semua level memainkan giliran Budi tanpa aksi ditolak, tanpa mentung', () => {
+      for (const level of SEMUA_LEVEL) {
+        // Joker 3. Budi (kursi 1): 7-8-9 Love + J-Q-K Wajik. Ani (kursi 0) baru membuang 8 Love deck kedua.
+        const g0 = meja(3, ['7 love', '8 love', '9 love', 'J wajik', 'Q wajik', 'K wajik'], [['8 love#1', 0]]);
+        const { g } = mainkanGiliran(g0, 1, level);
+        expect(g.status).toBe('putaranBerjalan');
+        expect(g.putaran!.giliran).toBe(2);
+        expect(g.putaran!.mentung).toBeNull();
+      }
+    });
+
+    it('jago/suhu memakai kartu pungutan itu sendiri sebagai pentungan, kembarannya masuk kartu jadi', () => {
+      for (const level of ['jago', 'suhu'] as const) {
+        // Buangan dari bawah: 4 Love (kursi 2), K Kriting deck kedua (Ani, kursi 0).
+        const g0 = meja(3, ['5 love', '6 love', 'J kriting', 'Q kriting', 'K kriting'], [
+          ['4 love', 2],
+          ['K kriting#1', 0],
+        ]);
+        const { g } = mainkanGiliran(g0, 1, level);
+        expect(g.status).toBe('susunAkhir');
+        expect(g.putaran!.mentung).toMatchObject({ pemain: 1, kepentung: [2] });
+        expect(g.putaran!.mentung!.pentungan.id).toBe(id('K kriting#1'));
+        periksaPentungan(g);
+      }
+    });
+
+    it('semua level: dua joker yang salah satunya kembaran pungutan tidak dipakai nutup', () => {
+      for (const level of SEMUA_LEVEL) {
+        // Joker 7. Ani membuang 7 Waru deck kedua (joker mati). Budi: 5-6 Waru, 7 Waru dan 7 Kriting (joker hidup).
+        const g0 = meja(7, ['5 waru', '6 waru', '7 waru', '7 kriting'], [['7 waru#1', 0]]);
+        const { g, aksi } = mainkanGiliran(g0, 1, level);
+        expect(aksi.some((a) => a.jenis === 'buang' && a.kartuIdLain)).toBe(false);
+        periksaPentungan(g);
+      }
+    });
+  });
+
   it('tahan kartu jadi: suhu menyimpan seri di tangan, jago menurunkannya begitu ada lawan tinggal 2 kartu', () => {
     // Joker 3. Pemain 0 memegang 4-5-6 Love yang sudah jadi; buangan teratas tidak bisa dipungut.
     const meja = (kartuLawan: string[]) =>

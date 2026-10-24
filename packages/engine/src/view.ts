@@ -43,6 +43,11 @@ export interface ViewPutaran {
   mentung: InfoMentung | null;
   /** Putaran kaldu (#42, info publik). Hanya ada kalau true. */
   kaldu?: true;
+  /**
+   * StatePutaran.kembaranWarisan (simpanan dari sebelum #53). Hanya di view pemain yang sedang giliran:
+   * di view lawan penanda ini akan membocorkan kartu terakhirnya.
+   */
+  kembaranWarisan?: true;
 }
 
 export interface ViewPemain {
@@ -102,6 +107,7 @@ export function viewUntuk(state: GameState, saya: number | null): ViewPemain {
       selesaiSusun: p.selesaiSusun,
       mentung: p.mentung,
       ...(p.kaldu ? { kaldu: true as const } : {}),
+      ...(p.kembaranWarisan && saya === p.giliran ? { kembaranWarisan: true as const } : {}),
     }),
     konfigurasi: { ...state.konfigurasi },
     pemain: state.pemain.map((x) => ({ ...x })),
