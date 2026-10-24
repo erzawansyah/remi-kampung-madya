@@ -38,7 +38,9 @@ vi.mock('../src/ui/bantuan', () => ({ bukaBantuan: vi.fn() }));
 vi.mock('../src/ui/tentang', () => ({ bukaTentang: vi.fn() }));
 vi.mock('../src/ui/dom', async (asli) => ({ ...(await asli<typeof import('../src/ui/dom')>()), umumkan: vi.fn() }));
 
+import { LAMA_HANTAM } from '../src/efek/retak';
 import { bunyi, getar } from '../src/efek/suara';
+import { durasi } from '../src/gerak';
 import { tutupDialogTeratas, tutupModal, umumkan } from '../src/ui/dom';
 import {
   geserFokus,
@@ -1029,10 +1031,14 @@ describe('bunyi panel mentung (siapa yang kepentung sudah tampil untuk semua ora
     expect(getar).toHaveBeenCalledWith('mentung');
     expect(bunyi).toHaveBeenCalledWith('kepentungLain');
     expect(bunyi).not.toHaveBeenCalledWith('kepentung');
+    // Sesudah pentungan terbuka, kursi yang kena dapat "buk" pelan; aku tidak kena, jadi tanpa pukulan besar.
+    await sampai(() => vi.mocked(bunyi).mock.calls.some(([j]) => j === 'jotosLain'));
+    expect(bunyi).not.toHaveBeenCalledWith('jotos');
     expect(getar).not.toHaveBeenCalledWith('kepentung');
+    expect(document.querySelector('.retak-layar')).toBeNull();
   });
 
-  it("aku kepentung (kartuku dipungut lalu lawan mentung): bunyi dan getar 'kepentung'", async () => {
+  it("aku kepentung (kartuku dipungut lalu lawan mentung): bunyi 'kepentung', pukulan 'jotos' + getar 'kepentung' sekali", async () => {
     const g = skenario({
       rankJoker: 2,
       tangan: [['3 waru', '4 waru', '8 waru'], ['5 love', '6 love', '9 waru'], ['3 love', '4 love', '8 kriting'], ['J love', 'Q love', '10 waru']],
@@ -1050,8 +1056,16 @@ describe('bunyi panel mentung (siapa yang kepentung sudah tampil untuk semua ora
     terapkan({ jenis: 'buang', pemain: 1, kartuId: m.g.putaran!.tangan[1][0].id });
     await sampai(() => !!document.querySelector('#modal [data-mentung]'));
     expect(document.querySelector('#modal .kotak-status')!.textContent).toContain('KEPENTUNG');
+    // "Kamu KEPENTUNG" ikut retak: kanvas retakan di belakang tulisannya, tanpa label.
+    expect(document.querySelector('#modal [data-kena] canvas.retak-status')?.getAttribute('aria-hidden')).toBe('true');
+    // Lama "menghantam masuk" ikut preferensi kecepatan (CSS --hantam-lama).
+    expect(document.querySelector<HTMLElement>('#modal [data-kena]')!.style.getPropertyValue('--hantam-lama')).toBe(`${durasi(LAMA_HANTAM)}ms`);
     expect(bunyi).toHaveBeenCalledWith('kepentung');
-    expect(getar).toHaveBeenCalledWith('kepentung');
+    // Getar kepentung ikut pukulannya (sesaat sesudah pentungan terbuka), tidak diulang di panel.
+    await sampai(() => vi.mocked(getar).mock.calls.some(([j]) => j === 'kepentung'));
+    expect(vi.mocked(getar).mock.calls.filter(([j]) => j === 'kepentung')).toHaveLength(1);
+    expect(bunyi).toHaveBeenCalledWith('jotos');
+    expect(document.querySelector('#retak .retak-layar')).not.toBeNull();
     expect(bunyi).not.toHaveBeenCalledWith('kepentungLain');
     // Yang mentung lawan: aku tidak ikut getar mentung.
     expect(getar).not.toHaveBeenCalledWith('mentung');

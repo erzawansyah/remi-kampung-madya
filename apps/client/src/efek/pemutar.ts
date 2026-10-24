@@ -4,16 +4,34 @@
 // Info rahasia: tidak pernah membaca angka joker (rankJoker/kartuDibuka); kartu yang dibagikan atau
 // diambil lawan dari deck selalu tertutup; teks hanya menyebut kartu yang memang terbuka di peristiwa itu,
 // dan teks aksi singkat untuk buang cukup "buang kartu" (keputusan pemilik #6).
+// Kepentung baru "terasa" (pukulan, layar retak, retakan di panel yang kena) sesudah pentungan terbuka;
+// sebelum itu semua pentungan diperlakukan sama.
 // Durasi di sini durasi DASAR; scene menyesuaikannya dengan preferensi kecepatan/gerak.
 
 import { namaKartu, namaRank, type Bunga, type Kartu, type Peristiwa, type ViewPemain } from '@remi/engine';
 import type { MejaScene, Titik } from '../game/MejaScene';
+import * as gerak from '../gerak';
+import { bersihkanRetak, jotos, kotakSah, type KotakCss } from './retak';
 import { bunyi, getar } from './suara';
 import { sorak } from './sorak';
 
 const SIMBOL: Record<Bunga, string> = { love: '♥', wajik: '♦', waru: '♠', kriting: '♣' };
 
 export const labelKartu = (k: Kartu) => `${namaRank(k.rank)}${SIMBOL[k.bunga]}`;
+
+/** Jeda dasar (ms) dari pentungan terbuka sampai pukulan ke yang kepentung mendarat (nilainya baru muncul). */
+export const JEDA_JOTOS = 280;
+/** Jeda dasar (ms) antar retakan panel kalau yang kepentung lebih dari satu. */
+export const JEDA_RETAK_PANEL = 120;
+
+type PeristiwaMentung = Extract<Peristiwa, { jenis: 'mentung' }>;
+
+/** Titik hantam di area tangan sendiri (sedikit bergeser per peristiwa), atau null kalau tidak diketahui. */
+export function titikHantam(tangan: KotakCss | null, benih: number): { x: number; y: number } | null {
+  if (!tangan) return null;
+  const geser = ((benih * 0.618) % 1) - 0.5;
+  return { x: tangan.x + tangan.w * (0.5 + 0.28 * geser), y: tangan.y + tangan.h * 0.3 };
+}
 
 export interface KonteksPemutar {
   scene: MejaScene;
@@ -54,6 +72,8 @@ export class PemutarPeristiwa {
     this.berhenti = true;
     this.timer.forEach((t) => clearTimeout(t));
     this.timer.clear();
+    // Retakan, kilat, dan sentakan kepentung yang masih tampil ikut dibuang.
+    bersihkanRetak();
     if (typeof document !== 'undefined') document.body?.classList.remove('goyang');
   }
 
@@ -234,6 +254,9 @@ export class PemutarPeristiwa {
           // Cadangan bila hentikan() belum dipanggil saat lingkungan DOM dibongkar (test): jangan sentuh DOM yang hilang.
           this.nanti(() => typeof document !== 'undefined' && document.body?.classList.remove('goyang'), 500);
           if (e.pemain === saya) getar(e.pentunganJoker ? 'mentungJoker' : 'mentung');
+          // Pentungan sudah terbuka (siapa yang kena sudah publik): pukulannya menyusul sesaat kemudian,
+          // pas nilai pentungan muncul.
+          if (e.kepentung.length) this.nanti(() => this.kena(e), gerak.durasi(JEDA_JOTOS));
         });
         if (this.berhenti) return;
         // Setelah itu panel mentung: tiap pemain langsung tahu kepentung atau tidak,
@@ -269,6 +292,35 @@ export class PemutarPeristiwa {
         return;
       }
     }
+  }
+
+  /**
+   * Yang kepentung "ketonjok": kalau aku yang kena, bunyi 'jotos' + getar kuat + layar retak dari dekat
+   * tanganku (efek/retak.ts). Panel tiap kursi lain yang kena retak kecil di meja (scene.retakPanel),
+   * bergiliran; yang aman mendengar "buk" pelan per kursi itu. Hanya dipanggil sesudah pentungan terbuka.
+   */
+  private kena(e: PeristiwaMentung) {
+    const { scene } = this.k;
+    const saya = this.k.saya();
+    const kuat = e.pentunganJoker;
+    const akuKena = e.kepentung.includes(saya);
+    if (akuKena) {
+      bunyi('jotos');
+      getar('kepentung');
+      void jotos({ titik: titikHantam(kotakSah(scene.kotakLayar('tangan')), e.id), kuat, benih: e.id });
+    }
+    e.kepentung
+      .filter((p) => p !== saya)
+      .forEach((pemain, urutan) => {
+        const retak = () => {
+          // Yang kena sendiri sudah mendapat pukulan besar; "buk" pelan hanya untuk yang aman.
+          if (!akuKena) bunyi('jotosLain', { urutan });
+          void scene.retakPanel(pemain, { benih: e.id * 7 + pemain, kuat });
+        };
+        // Panel pertama bersamaan dengan pukulan, sisanya bergiliran.
+        if (urutan === 0) retak();
+        else this.nanti(retak, gerak.durasi(urutan * JEDA_RETAK_PANEL));
+      });
   }
 
   /** Kartu-kartu di kartu jadi baru milik `pemain` (diambil dari view sesudah kejadian). */

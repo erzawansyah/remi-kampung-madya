@@ -145,7 +145,8 @@ export function gambarBunga(
   ctx.restore();
 }
 
-function persegiBulat(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+/** Jalur persegi bersudut bulat (arcTo; ctx.roundRect belum ada di Safari/iOS lama). */
+export function persegiBulat(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);

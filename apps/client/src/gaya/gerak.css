@@ -102,6 +102,135 @@
     transform: translateX(8px);
   }
 }
+/* Kepentung (efek/retak.ts): sentakan kamera, retakan menjalar, kilat, serpih. */
+@keyframes jotos {
+  0% {
+    transform: none;
+  }
+  10% {
+    transform: scale(1.075) translate(-1%, 0.6%) rotate(-0.7deg);
+  }
+  22% {
+    transform: scale(1.055) translate(1.1%, -0.7%) rotate(0.6deg);
+  }
+  36% {
+    transform: scale(1.035) translate(-0.8%, 0.5%) rotate(-0.4deg);
+  }
+  52% {
+    transform: scale(1.02) translate(0.5%, -0.3%) rotate(0.2deg);
+  }
+  70% {
+    transform: scale(1.008) translate(-0.2%, 0.1%);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes jotos-kuat {
+  0% {
+    transform: none;
+  }
+  9% {
+    transform: scale(1.11) translate(-1.5%, 0.9%) rotate(-1.1deg);
+  }
+  20% {
+    transform: scale(1.08) translate(1.6%, -1%) rotate(0.9deg);
+  }
+  33% {
+    transform: scale(1.055) translate(-1.2%, 0.8%) rotate(-0.6deg);
+  }
+  48% {
+    transform: scale(1.03) translate(0.8%, -0.5%) rotate(0.3deg);
+  }
+  66% {
+    transform: scale(1.012) translate(-0.3%, 0.2%);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes retak-menjalar {
+  from {
+    clip-path: circle(0 at var(--retak-x) var(--retak-y));
+  }
+  to {
+    clip-path: circle(150% at var(--retak-x) var(--retak-y));
+  }
+}
+/* Retakan bertahan, lalu pudar di sepertiga akhir (lama total dari --retak-lama). */
+@keyframes retak-pudar {
+  0%,
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes kilat-jotos {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes kilat-jotos-kuat {
+  0% {
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  22% {
+    opacity: 0.35;
+  }
+  32% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes serpih-terbang {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) rotate(var(--putar, 0deg));
+  }
+}
+/* "Kamu KEPENTUNG" di panel mentung: menghantam masuk, lalu bergetar. */
+@keyframes hantam {
+  0% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(0.96);
+  }
+  30% {
+    transform: scale(1.01) translateX(-6px);
+  }
+  44% {
+    transform: translateX(6px);
+  }
+  58% {
+    transform: translateX(-4px);
+  }
+  72% {
+    transform: translateX(2px);
+  }
+  100% {
+    transform: none;
+  }
+}
 @keyframes kartu-buka {
   from {
     transform: rotateY(90deg) scale(0.8);
@@ -146,8 +275,14 @@
    Dua blok isinya sama: satu dari sistem, satu dari preferensi pemain. */
 @media (prefers-reduced-motion: reduce) {
   html:not([data-gerak='penuh']) body.goyang #game,
-  html:not([data-gerak='penuh']) .kotak-status.merah {
+  html:not([data-gerak='penuh']) body.jotos #game,
+  html:not([data-gerak='penuh']) .kotak-status.merah,
+  html:not([data-gerak='penuh']) .retak-kanvas,
+  html:not([data-gerak='penuh']) .serpih {
     animation: none;
+  }
+  html:not([data-gerak='penuh']) .serpih {
+    display: none;
   }
   html:not([data-gerak='penuh']) .sorak {
     animation-name: sorak-pudar;
@@ -179,8 +314,14 @@
 }
 
 html[data-gerak='kurang'] body.goyang #game,
-html[data-gerak='kurang'] .kotak-status.merah {
+html[data-gerak='kurang'] body.jotos #game,
+html[data-gerak='kurang'] .kotak-status.merah,
+html[data-gerak='kurang'] .retak-kanvas,
+html[data-gerak='kurang'] .serpih {
   animation: none;
+}
+html[data-gerak='kurang'] .serpih {
+  display: none;
 }
 html[data-gerak='kurang'] .sorak {
   animation-name: sorak-pudar;
@@ -215,4 +356,9 @@ html[data-gerak='kurang'] .waktu > div {
 html[data-efek='hemat'] .tombol-aksi button.utama::after,
 html[data-efek='hemat'] .pemuat-kartu span {
   animation: none;
+}
+/* Hemat efek: retakan kepentung tanpa kilat dan serpih (JS juga tidak membuatnya). */
+html[data-efek='hemat'] .kilat-jotos,
+html[data-efek='hemat'] .serpih {
+  display: none;
 }
