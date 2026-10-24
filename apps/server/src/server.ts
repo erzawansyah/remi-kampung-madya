@@ -1182,8 +1182,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     if (!terbaca.kursi.some((k) => k.jenis === 'manusia')) return 'tidak ada pemain manusia lagi';
     if (terbaca.kompetisi) {
       // Meja kompetisi (#51): kompetisinya harus masih ada. Permainan yang sedang jalan dibiarkan
-      // selesai (hasilnya hanya dihitung kalau kompetisinya masih berjalan, lihat catatHasil); meja yang
-      // masih di lobi tidak bisa mulai lagi kalau kompetisinya sudah tidak berjalan, jadi dibuang.
+      // selesai (dihitung kalau dimulai selagi kompetisinya berjalan, lihat catatHasil; selama ia main,
+      // juara kompetisinya ditunda); meja yang masih di lobi tidak bisa mulai lagi kalau kompetisinya
+      // sudah tidak berjalan, jadi dibuang.
       const k = opsi.riwayat?.kompetisi.untukMeja(terbaca.kompetisi.kode, jam());
       if (!k) return `kompetisi ${terbaca.kompetisi.kode} sudah tidak ada`;
       if (!terbaca.game && k.status !== 'berjalan') return `kompetisi ${terbaca.kompetisi.kode} sudah tidak berjalan`;
