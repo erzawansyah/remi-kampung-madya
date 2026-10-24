@@ -918,7 +918,7 @@ describe('#53 (2 deck): pentungan tidak boleh kembaran kartu yang dipungut', () 
     });
   });
 
-  describe('kedua kartu kembar ikut dipungut sekaligus (tafsiran paling ketat, perlu konfirmasi pemilik)', () => {
+  describe('kedua kartu kembar ikut dipungut sekaligus (tafsiran paling ketat, disetujui pemilik 24 Okt 2026)', () => {
     // Joker 3. Buangan dari bawah: 8 Love deck kedua (Ani), 4 Waru (Dodi), 8 Love (Ani). Budi mungut ketiganya.
     const awal = (tangan: string[]) =>
       meja({

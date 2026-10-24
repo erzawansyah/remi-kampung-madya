@@ -271,7 +271,7 @@ describe('klaim kunci di Bantuan sama dengan engine', () => {
       'Kartu pungutannya sendiri tetap boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga di giliran itu. Membuang kembaran tanpa mentung tetap boleh.',
     );
     expect(FAQ.some((f) => f.jawab.includes('Kartu pungutannya sendiri boleh jadi pentungan, kecuali kalau kembarannya ikut kamu pungut juga.'))).toBe(true);
-    expect(teks).toContain('**Contoh Ani dan Budi** (2 deck, joker putaran ini 3)');
+    expect(teks).toContain('**Contoh Ani dan Budi** (2 deck, misal joker putaran ini 3)');
     expect(FAQ.some((f) => f.jawab.includes('Ani dan Budi'))).toBe(true);
     // Contoh Ani dan Budi dihitung ulang dengan validator engine. Joker 3, kartu deck kedua = nomor deck 1.
     const ctx3: KonteksJoker = { rankJoker: 3 as Rank, jokerMati: [] };
