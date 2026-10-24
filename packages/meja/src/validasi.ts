@@ -408,11 +408,47 @@ export function rapikanNamaKompetisi(nama: unknown): string | null {
 }
 
 function rapikanBaris(pesan: string, maks: number): string | null {
-  const normal = pesan.replace(/[^ㄱ-ㆎ]+/gu, (x) => x.normalize('NFKC'));
-  const bersih = buangFormat(normal.replace(/\s+/gu, ' ').replace(KARAKTER_BUANG, ''))
-    .replace(/\s+/gu, ' ')
-    .trim();
+  const bersih = bersihkanBaris(pesan);
   const pendek = potong(bersih, maks, maks * 3);
   const hasil = (pendek.length < bersih.length ? pendek.replace(/[‌‍]+$/u, '') : pendek).trim();
+  return TERLIHAT.test(hasil) ? hasil : null;
+}
+
+/** Satu baris teks bebas: NFKC, tanpa karakter kontrol/format/< >, spasi dirapatkan. Belum dipotong. */
+function bersihkanBaris(teks: string): string {
+  const normal = teks.replace(/[^ㄱ-ㆎ]+/gu, (x) => x.normalize('NFKC'));
+  return buangFormat(normal.replace(/\s+/gu, ' ').replace(KARAKTER_BUANG, ''))
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+/** Banyaknya huruf yang tampil (grapheme), dasar batas panjang teks bebas. */
+export function jumlahHuruf(teks: string): number {
+  const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+  if (!Segmenter) return Array.from(teks).length;
+  let n = 0;
+  for (const _ of new Segmenter(undefined, { granularity: 'grapheme' }).segment(teks)) n++;
+  return n;
+}
+
+/**
+ * Teks bebas yang lebih panjang dari pesan meja (judul dan isi usulan): dibersihkan sama seperti
+ * pesan (NFKC, tanpa karakter kontrol/format/< >, tanda gabung per huruf dibatasi), tapi **tidak
+ * dipotong**: panjangnya dicek pemanggil dengan `jumlahHuruf`, supaya teks yang kepanjangan ditolak
+ * dengan jelas, tidak terpotong diam-diam. `barisBaru` = pergantian baris dipertahankan sebagai "\n"
+ * (paling banyak satu baris kosong berturut-turut); tanpa itu jadi spasi. Kosong → null.
+ */
+export function rapikanTeks(teks: string, opsi: { barisBaru?: boolean } = {}): string | null {
+  const baris = opsi.barisBaru ? teks.split(/\r\n?|\n/) : [teks];
+  const rapi: string[] = [];
+  for (const b of baris) {
+    const bersih = bersihkanBaris(b);
+    const isi = bersih ? potong(bersih, Infinity, Infinity).trim() : '';
+    // Baris kosong di awal dan yang berturut-turut dibuang.
+    if (!isi && (!rapi.length || rapi.at(-1) === '')) continue;
+    rapi.push(isi);
+  }
+  while (rapi.at(-1) === '') rapi.pop();
+  const hasil = rapi.join('\n');
   return TERLIHAT.test(hasil) ? hasil : null;
 }

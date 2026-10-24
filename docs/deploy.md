@@ -60,6 +60,55 @@ Semua HP yang memakai Wi-Fi kedai keluar lewat **satu IP publik**, jadi di mata 
 
 Kalau kedai sangat ramai dan pesan di atas mulai muncul, naikkan angkanya di `docker-compose.yml` (bagian `environment`, misalnya `- MAKS_MEJA_PER_IP=100`), lalu `docker compose up -d`. Di balik proxy, pastikan alamat pemain terbaca benar (`TRUST_PROXY`, lihat README): kalau tidak, semua pemain terlihat sebagai alamat proxy dan berbagi satu jatah.
 
+## Usul fitur ke Notion
+
+Pemain bisa mengirim usulan dari beranda (ubin **💡 Usul fitur**) atau dari layar Tentang yang dibuka di beranda. Server menyimpan setiap usulan di database SQLite (tabel `usulan`, skema riwayat v3; alamat IP pengirim tidak disimpan), lalu meneruskannya ke database Notion **Permintaan Fitur** sebagai baris baru: Judul, Isi usulan, Pengusul (nama pemain), Sumber `Game`, Jenis (kalau dipilih), Status `Baru`, dan ID server. Kolom lain (Keputusan agent, Prioritas, PR, Versi, Ditinjau) dibiarkan kosong untuk peninjauan harian.
+
+Tanpa pengaturan di bawah, usulan tetap diterima dan disimpan. Begitu Notion diatur dan container dibuat ulang, usulan yang tertunda terkirim sendiri ±10 detik sesudah server jalan.
+
+**Langkah pemilik (sekali saja):**
+
+1. Buka https://www.notion.so/profile/integrations, pilih **New integration**. Isi nama (misalnya `Remi Kampung Madya`), pilih workspace yang berisi database Permintaan Fitur, tipe **Internal**, lalu simpan.
+2. Di tab **Capabilities** integrasi itu, pastikan **Read content** dan **Insert content** dicentang (cukup itu; server hanya membuat baris baru).
+3. Di tab **Configuration**, salin **Internal Integration Secret** (diawali `ntn_` atau `secret_`). Simpan baik-baik, jangan ditempel di chat, issue, atau commit.
+4. Buka database **Permintaan Fitur** di Notion, klik **•••** di kanan atas → **Connections** → cari nama integrasi tadi → **Confirm**. Tanpa langkah ini Notion menjawab `object_not_found` walau token benar.
+5. Di VPS, di folder proyek (sebelah `docker-compose.yml`), buat atau tambahkan ke file `.env`:
+
+   ```bash
+   NOTION_TOKEN=ntn_isi_secret_dari_langkah_3
+   NOTION_USULAN_DB=d31d1a9e7a7a44cf963bab9777f02e4a
+   ```
+
+   Lalu `chmod 600 .env`. File `.env` diabaikan git dan `.dockerignore`, jadi tidak ikut ke repo maupun ke image; `docker compose` membacanya dan meneruskan keduanya sebagai environment container. `NOTION_USULAN_DB` boleh juga ditulis dengan tanda hubung atau berupa tautan database yang disalin dari browser.
+6. Buat ulang container supaya environment baru terbaca: `docker compose up -d` (atau tunggu deploy berikutnya dari webhook, yang menjalankan `docker compose up -d --build`).
+7. Cek log:
+
+   ```bash
+   docker compose logs remi | grep 'usul fitur'
+   # usul fitur: diteruskan ke Notion (database d31d1a9e…)
+   ```
+
+   Kalau yang muncul `usul fitur: Notion belum diatur …` atau `… NOTION_TOKEN kosong …`, isi `.env` belum terbaca: pastikan namanya persis `.env` dan letaknya di sebelah `docker-compose.yml`, lalu ulangi langkah 6.
+8. Kirim satu usulan uji dari game (beranda → **💡 Usul fitur**). Di log muncul `usulan #N masuk` lalu `usulan #N terkirim ke Notion`, dan barisnya tampil di database dengan Status `Baru` dan Sumber `Game`. Baris uji boleh dihapus di Notion.
+
+**Kalau gagal**, lognya satu baris per percobaan, tanpa token dan tanpa isi usulan:
+
+| Di log | Artinya |
+|---|---|
+| `HTTP 401 unauthorized` | Token salah atau sudah dicabut. Salin ulang secret (langkah 3), perbarui `.env`, ulangi langkah 6. |
+| `HTTP 404 object_not_found` | Integrasi belum dihubungkan ke database (langkah 4), atau `NOTION_USULAN_DB` salah. |
+| `HTTP 400 validation_error` | Nama atau tipe kolom di Notion berubah (misalnya Judul, Isi usulan, Pengusul, Sumber, Jenis, Status, atau ID server diganti nama, atau opsi Status `Baru` dihapus). Kembalikan namanya, atau minta pengembang menyesuaikan `apps/server/src/notion.ts`. |
+| `Notion tidak terjangkau: …` | Jaringan VPS ke `api.notion.com` bermasalah. Dicoba lagi sendiri. |
+
+Usulan yang gagal dicoba lagi tiap putaran 5 menit dengan jeda yang makin panjang (5, 10, 20 menit, … paling lama 6 jam), sampai 20 kali (±3,7 hari). Sesudah itu berhenti dicoba, tapi barisnya tetap di database. Untuk mengirim ulang semuanya sesudah masalahnya dibereskan:
+
+```bash
+docker compose exec remi node --disable-warning=ExperimentalWarning -e "new (require('node:sqlite').DatabaseSync)('/app/data/remi.db').exec('UPDATE usulan SET percobaan = 0 WHERE terkirim_pada IS NULL')"
+docker compose restart remi
+```
+
+**Batas:** paling banyak 5 usulan per jaringan per jam (semua HP di Wi-Fi kedai dihitung satu jaringan) dan 200 usulan per 24 jam untuk seluruh server. Judul 3–80 huruf, isi 10–1000 huruf.
+
 ## Cek sesudah deploy
 
 Ganti `B` dengan `http://127.0.0.1:2567` (di VPS) atau `https://remi.domainkamu.com` (lewat proxy).
@@ -74,6 +123,7 @@ Ganti `B` dengan `http://127.0.0.1:2567` (di VPS) atau `https://remi.domainkamu.
 | Riwayat (bentuk lama) | `curl -s $B/api/peringkat` | JSON **array** (boleh kosong), dibaca aplikasi lama yang masih ter-cache di HP |
 | Leaderboard v2 | `curl -s "$B/api/peringkat?v=2&urut=rata"` | JSON **objek** `{"v":2,"urut":"rata",…,"peringkat":[…],"belumCukup":[…]}` |
 | Skema riwayat | `docker compose logs remi \| grep 'skema riwayat'` | sekali `skema riwayat dimigrasi v0 → v1` sesudah deploy rilis leaderboard |
+| Usul fitur | `docker compose logs remi \| grep 'usul fitur'` | `usul fitur: diteruskan ke Notion (database d31d1a9e…)` kalau `NOTION_TOKEN` dan `NOTION_USULAN_DB` diisi (lihat "Usul fitur ke Notion"); sekali `skema riwayat dimigrasi v2 → v3` sesudah deploy rilis usul fitur |
 | WebSocket | buka aplikasi → Buat meja baru | lobi muncul dengan kode meja |
 | PWA | Chrome DevTools → Application | service worker `activated`, precache 12 entri, manifest tanpa error |
 | Tombol pasang (Android) | buka situs di Chrome Android (bukan dari aplikasi yang sudah terpasang) | tombol **Pasang aplikasi** melayang di kanan bawah beranda; diketuk = jendela pasang Chrome (atau dialog petunjuk menu ⋮ kalau Chrome belum menawarkannya); **Nanti saja** menyembunyikannya dan tetap tersembunyi sesudah muat ulang; tidak ada di lobi maupun meja |

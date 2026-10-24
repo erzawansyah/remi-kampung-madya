@@ -23,6 +23,7 @@ import {
   type UrutanPeringkat,
 } from '@remi/meja';
 import { buatPenyimpanKompetisi, SKEMA_KOMPETISI, type PenyimpanKompetisi } from './kompetisi.js';
+import { buatPenyimpanUsulan, SKEMA_USULAN, type PenyimpanUsulan } from './usulan.js';
 
 export interface PermainanTersimpan {
   id: number;
@@ -88,6 +89,8 @@ export interface PenyimpanRiwayat {
   papan(permintaan?: PermintaanPapan): PapanPeringkat;
   /** Kompetisi (#51), di database yang sama. Hasil meja kompetisi dicatat simpan() sekalian. */
   kompetisi: PenyimpanKompetisi;
+  /** Usul fitur dari game (24 Okt 2026), di database yang sama. Diteruskan ke Notion oleh server.ts. */
+  usulan: PenyimpanUsulan;
   tutup(): void;
 }
 
@@ -138,6 +141,8 @@ export const MIGRASI: readonly string[] = [
    CREATE INDEX IF NOT EXISTS klasemen_kunci ON klasemen (kunci_nama) WHERE bot = 0;`,
   // v2 (23 Okt 2026, keputusan pemilik #51): kompetisi, pesertanya, dan hasil per permainan.
   SKEMA_KOMPETISI,
+  // v3 (24 Okt 2026, keputusan pemilik): usul fitur dari game, diteruskan ke Notion. Tanpa alamat IP.
+  SKEMA_USULAN,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */
@@ -223,6 +228,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
   migrasiSkema(db, log);
   lengkapiBaris(db, log);
   const kompetisi = buatPenyimpanKompetisi(db);
+  const usulan = buatPenyimpanUsulan(db);
 
   const tambahPermainan = db.prepare(
     `INSERT INTO permainan (kode_meja, selesai_pada, alasan, jumlah_putaran, jumlah_pemain, jumlah_deck, jumlah_manusia, mode_kaldu)
@@ -385,6 +391,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
       return { v: 2, urut, saringan, periode, minMain: MIN_MAIN, jumlahPermainan: jumlah, peringkat, belumCukup };
     },
     kompetisi,
+    usulan,
     tutup() {
       if (milikSendiri) db.close();
     },
