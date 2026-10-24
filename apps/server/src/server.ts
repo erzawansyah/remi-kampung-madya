@@ -6,9 +6,21 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import sirv from 'sirv';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { GalatMeja, Meja, namaLawanAcak, penjadwalNyata, validasiPesan, type Penjadwal, type PesanServer, type RingkasanAkhir } from '@remi/meja';
+import {
+  GalatMeja,
+  Meja,
+  namaLawanAcak,
+  penjadwalNyata,
+  periksaUsulan,
+  validasiPesan,
+  type Penjadwal,
+  type PesanServer,
+  type RingkasanAkhir,
+} from '@remi/meja';
 import type { PenyimpanRiwayat } from './riwayat.js';
 import { GalatKompetisi } from './kompetisi.js';
+import { buatKlienNotion } from './notion.js';
+import { jalankanPengirimUsulan, type PengirimUsulan } from './usulan.js';
 import { alamatKlien, HEADER_KEAMANAN, kunciIp, originDiizinkan } from './keamanan.js';
 import { buatPembatasLog } from './pembatasLog.js';
 
@@ -66,6 +78,15 @@ export interface OpsiServer {
   maksPengajuan?: number;
   /** Permintaan tulis ke /api/kompetisi per menit per jaringan (bawaan 30). */
   batasTulisKompetisiPerMenit?: number;
+  /**
+   * Usul fitur diteruskan ke database Notion pemilik (env NOTION_TOKEN dan NOTION_USULAN_DB, lihat
+   * main.ts). Kosong = usulan hanya disimpan di database, lalu terkirim begitu Notion diatur dan server
+   * dijalankan ulang. Butuh `riwayat`. `fetch` dan `penjadwal` hanya untuk test.
+   */
+  notion?: { token: string; database: string; fetch?: typeof fetch; penjadwal?: Penjadwal };
+  /** Usulan yang diterima per jaringan per jam (bawaan 5) dan total per 24 jam (bawaan 200). */
+  maksUsulanPerJamPerIp?: number;
+  maksUsulanPerHari?: number;
   log?: (...x: unknown[]) => void;
 }
 
@@ -98,10 +119,29 @@ export const SHA = typeof __SHA_SERVER__ === 'string' ? __SHA_SERVER__ : 'dev';
 const CACHE_ASET = 'public, max-age=31536000, immutable';
 /** Selain itu (index.html, sw.js, manifest, ikon) harus dicek ulang supaya update cepat sampai. */
 const CACHE_LAINNYA = 'no-cache';
-/** Isi permintaan POST /api/kompetisi paling besar (byte). */
+/** Isi permintaan POST /api/kompetisi dan /api/usulan paling besar (byte). */
 const MAKS_ISI_POST = 4096;
+const JAM_MS = 60 * 60_000;
+/** Bawaan batas usul fitur: per jaringan per jam, dan total per 24 jam. */
+const BAWAAN_MAKS_USULAN_PER_JAM_PER_IP = 5;
+const BAWAAN_MAKS_USULAN_PER_HARI = 200;
+/** Permintaan POST /api/usulan per menit per jaringan (termasuk yang ditolak), jaga-jaga banjir. */
+const BATAS_TULIS_USULAN_PER_MENIT = 20;
 
-/** Baca isi JSON permintaan POST (maksimal MAKS_ISI_POST byte). Rusak/kebesaran = GalatKompetisi. */
+/** Penolakan permintaan HTTP yang pesannya boleh ditampilkan ke pemain apa adanya. */
+class GalatPermintaan extends Error {
+  constructor(
+    pesan: string,
+    readonly kodeHttp = 400,
+  ) {
+    super(pesan);
+  }
+}
+
+/**
+ * Baca isi JSON permintaan POST (maksimal MAKS_ISI_POST byte). Rusak/kebesaran = GalatPermintaan.
+ * Kebesaran: sisa isinya tidak dibaca lagi, dan jawaban 413 menutup sambungannya (lihat jawabJson).
+ */
 function bacaJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((ok, gagal) => {
     const potongan: Buffer[] = [];
@@ -109,8 +149,9 @@ function bacaJson(req: IncomingMessage): Promise<Record<string, unknown>> {
     req.on('data', (b: Buffer) => {
       ukuran += b.length;
       if (ukuran > MAKS_ISI_POST) {
-        gagal(new GalatKompetisi('Isinya kebesaran.', 413));
-        req.destroy();
+        req.removeAllListeners('data');
+        req.pause();
+        gagal(new GalatPermintaan('Isinya kebesaran.', 413));
         return;
       }
       potongan.push(b);
@@ -122,10 +163,21 @@ function bacaJson(req: IncomingMessage): Promise<Record<string, unknown>> {
         if (typeof x !== 'object' || x === null || Array.isArray(x)) throw new Error('bukan objek');
         ok(x as Record<string, unknown>);
       } catch {
-        gagal(new GalatKompetisi('Isinya rusak.'));
+        gagal(new GalatPermintaan('Isinya rusak.'));
       }
     });
   });
+}
+
+/** Jawaban JSON API tulis. 413 (isi kebesaran, sisanya tidak dibaca) sekalian menutup sambungan. */
+function jawabJson(res: ServerResponse, kode: number, isi: unknown): void {
+  if (res.headersSent) return;
+  res.writeHead(kode, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+    ...(kode === 413 ? { connection: 'close' } : {}),
+  });
+  res.end(JSON.stringify(isi));
 }
 
 export interface ServerRemi {
@@ -152,6 +204,12 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   const pengajuKompetisi = new Map<string, string>();
   /** Permintaan tulis kompetisi per jaringan di menit ini. */
   const tulisKompetisi = new Map<string, number>();
+  /** Permintaan POST /api/usulan per jaringan di menit ini. */
+  const tulisUsulan = new Map<string, number>();
+  /** Jaringan → waktu usulan yang diterima dalam sejam terakhir (hanya di memori, IP tidak disimpan). */
+  const usulanPerJaringan = new Map<string, number[]>();
+  /** Penerus usul fitur ke Notion; dinyalakan sesudah server jalan (lihat di bawah). */
+  let pengirimUsulan: PengirimUsulan | null = null;
   let galatMeja = 0;
   /** true sejak tutup() dipanggil: sambungan & pesan baru tidak dilayani lagi. */
   let menutup = false;
@@ -243,6 +301,10 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       void layaniKompetisi(req, res, url);
       return;
     }
+    if (url.pathname === '/api/usulan') {
+      void layaniUsulan(req, res);
+      return;
+    }
     if (statis) {
       res.setHeader('cache-control', /^\/assets\/[^/]+\.[a-z0-9]+$/i.test(url.pathname) ? CACHE_ASET : CACHE_LAINNYA);
       return statis(req, res, () => {
@@ -264,11 +326,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
    * POST wajib JSON dari asal yang sama (cek Origin), dan dibatasi per jaringan.
    */
   async function layaniKompetisi(req: IncomingMessage, res: ServerResponse, url: URL) {
-    const json = (kode: number, isi: unknown) => {
-      if (res.headersSent) return;
-      res.writeHead(kode, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(JSON.stringify(isi));
-    };
+    const json = (kode: number, isi: unknown) => jawabJson(res, kode, isi);
     const penyimpan = opsi.riwayat?.kompetisi;
     if (!penyimpan) return json(503, { error: 'Kompetisi belum aktif di server ini.' });
     const bagian = url.pathname.split('/').filter(Boolean).slice(2);
@@ -320,8 +378,55 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       }
       return json(404, { error: 'Nggak ketemu.' });
     } catch (e) {
-      if (e instanceof GalatKompetisi) return json(e.kodeHttp, { error: e.message });
+      if (e instanceof GalatKompetisi || e instanceof GalatPermintaan) return json(e.kodeHttp, { error: e.message });
       log('galat kompetisi', e);
+      return json(500, { error: 'Ada yang salah di server.' });
+    }
+  }
+
+  /**
+   * POST /api/usulan {nama, judul, isi, jenis?} → {ok: true}. Usul fitur dari game (24 Okt 2026):
+   * disimpan di database, lalu langsung diteruskan ke Notion kalau sudah diatur. Penjagaannya sama
+   * dengan POST /api/kompetisi (JSON, cek Origin, isi ≤ 4 KB), ditambah batas per jaringan per jam dan
+   * batas total per 24 jam. Isinya tidak pernah ditulis ke log.
+   */
+  async function layaniUsulan(req: IncomingMessage, res: ServerResponse) {
+    const json = (kode: number, isi: unknown) => jawabJson(res, kode, isi);
+    if (req.method !== 'POST') return json(405, { error: 'Hanya POST.' });
+    const penyimpan = opsi.riwayat?.usulan;
+    if (!penyimpan) return json(503, { error: 'Usulan belum bisa diterima server ini.' });
+    const percaya = opsi.percayaProxy ?? 'lokal';
+    if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '') || !originDiizinkan(req, { percayaProxy: percaya, tambahan: opsi.originDiizinkan })) {
+      return json(403, { error: 'Permintaan ditolak.' });
+    }
+    try {
+      const jaringan = kunciIp(alamatKlien(req, percaya));
+      const kali = (tulisUsulan.get(jaringan) ?? 0) + 1;
+      tulisUsulan.set(jaringan, kali);
+      if (kali > BATAS_TULIS_USULAN_PER_MENIT) return json(429, { error: 'Pelan-pelan, Bos. Coba lagi semenit lagi.' });
+      const isi = await bacaJson(req);
+      // Batas per jam dan per hari dicek sesudah isinya terbaca: dari sini sampai disimpan tidak ada
+      // await lagi, jadi dua permintaan yang datang bersamaan tidak bisa sama-sama lolos.
+      const sekarang = Date.now();
+      const maksPerJam = opsi.maksUsulanPerJamPerIp ?? BAWAAN_MAKS_USULAN_PER_JAM_PER_IP;
+      const dariSini = (usulanPerJaringan.get(jaringan) ?? []).filter((t) => sekarang - t < JAM_MS);
+      if (dariSini.length >= maksPerJam) {
+        return json(429, { error: `Dari jaringanmu sudah masuk ${maksPerJam} usulan dalam sejam. Coba lagi nanti, Bos.` });
+      }
+      if (penyimpan.jumlahSejak(sekarang - 24 * JAM_MS) >= (opsi.maksUsulanPerHari ?? BAWAAN_MAKS_USULAN_PER_HARI)) {
+        return json(429, { error: 'Hari ini usulan yang masuk sudah banyak. Coba lagi besok, Bos.' });
+      }
+      const hasil = periksaUsulan(isi);
+      if (!hasil.ok) return json(400, { error: hasil.pesan });
+      const id = penyimpan.simpan(hasil.usulan, sekarang);
+      dariSini.push(sekarang);
+      usulanPerJaringan.set(jaringan, dariSini);
+      log(`usulan #${id} masuk${pengirimUsulan ? '' : ' (Notion belum diatur, disimpan dulu)'}`);
+      json(200, { ok: true });
+      void pengirimUsulan?.kirimBaru(id);
+    } catch (e) {
+      if (e instanceof GalatPermintaan) return json(e.kodeHttp, { error: e.message });
+      log('galat usulan', e);
       return json(500, { error: 'Ada yang salah di server.' });
     }
   }
@@ -601,6 +706,16 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     for (const s of semuaSambungan) s.jumlahPesan = 0;
   }, 1000);
   const timerTulisKompetisi = setInterval(() => tulisKompetisi.clear(), 60_000);
+  // Tiap menit: jatah POST /api/usulan per menit diulang, catatan per jam yang sudah lewat dibuang.
+  const timerUsulan = setInterval(() => {
+    tulisUsulan.clear();
+    const sekarang = Date.now();
+    for (const [jaringan, waktu] of usulanPerJaringan) {
+      const sisa = waktu.filter((t) => sekarang - t < JAM_MS);
+      if (sisa.length) usulanPerJaringan.set(jaringan, sisa);
+      else usulanPerJaringan.delete(jaringan);
+    }
+  }, 60_000);
 
   // Tiap 30 detik: putuskan sambungan yang tidak menjawab ping, hapus meja yang lama kosong.
   // Ringkasan operasional ke log tiap ±10 menit (pengganti angka detail di /healthz), hanya kalau ada isinya.
@@ -656,6 +771,16 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   });
   // Setelah jalan, galat server HTTP (jarang) cukup dicatat, jangan sampai jadi 'error' tanpa pendengar.
   http.on('error', (e) => log('galat server HTTP', e));
+  // Penerus usul fitur ke Notion: hanya kalau token dan id database diisi, dan database riwayat ada.
+  // Dinyalakan di sini (bukan sebelum listen) supaya timernya tidak tertinggal kalau port gagal dibuka.
+  if (opsi.notion && opsi.riwayat) {
+    pengirimUsulan = jalankanPengirimUsulan({
+      penyimpan: opsi.riwayat.usulan,
+      notion: buatKlienNotion({ token: opsi.notion.token, database: opsi.notion.database, fetch: opsi.notion.fetch }),
+      log,
+      penjadwal: opsi.notion.penjadwal,
+    });
+  }
   const alamat = http.address();
   const port = typeof alamat === 'object' && alamat ? alamat.port : opsi.port;
 
@@ -672,6 +797,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         clearInterval(timerPesan);
         clearInterval(timerBersih);
         clearInterval(timerTulisKompetisi);
+        clearInterval(timerUsulan);
+        // Pengirim usulan berhenti dulu (timer + permintaan yang sedang jalan) sebelum database ditutup.
+        await pengirimUsulan?.hentikan();
         for (const kode of [...daftarMeja.keys()]) hapusMeja(kode);
         // 1001 "going away": client tahu server pergi (bukan ditolak) dan bisa mencoba lagi nanti.
         for (const s of semuaSambungan) {

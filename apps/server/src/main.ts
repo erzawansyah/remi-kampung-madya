@@ -6,6 +6,7 @@ import { jalankanServer, SHA, VERSI } from './server.js';
 import { bukaRiwayat } from './riwayat.js';
 import { pasangPenjagaProses } from './penjaga.js';
 import { daftarEnv } from './keamanan.js';
+import { normalkanIdNotion } from './notion.js';
 
 const di = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 2567);
@@ -25,6 +26,17 @@ const pathDb = process.env.DB_PATH ?? resolve(di, '../data/remi.db');
 // Migrasi skema (PRAGMA user_version) dan pelengkapan baris lama jalan di sini, dicatat ke log.
 const riwayat = bukaRiwayat(pathDb, { log });
 
+// Usul fitur ke Notion (docs/deploy.md, "Usul fitur ke Notion"). Keduanya wajib diisi; tanpa itu usulan
+// tetap disimpan di database dan terkirim sesudah diatur. Token tidak pernah ditulis ke log.
+const tokenNotion = process.env.NOTION_TOKEN?.trim() ?? '';
+const isianDbNotion = process.env.NOTION_USULAN_DB?.trim() ?? '';
+const dbNotion = normalkanIdNotion(isianDbNotion);
+const notion = tokenNotion && dbNotion ? { token: tokenNotion, database: dbNotion } : undefined;
+if (notion) log(`usul fitur: diteruskan ke Notion (database ${dbNotion!.slice(0, 8)}…)`);
+else if (tokenNotion || isianDbNotion) {
+  log(`usul fitur: ${!tokenNotion ? 'NOTION_TOKEN kosong' : !isianDbNotion ? 'NOTION_USULAN_DB kosong' : 'NOTION_USULAN_DB bukan id database Notion'}, usulan disimpan dulu di database`);
+} else log('usul fitur: Notion belum diatur (NOTION_TOKEN, NOTION_USULAN_DB), usulan disimpan dulu di database');
+
 const server = await jalankanServer({
   port,
   folderStatis,
@@ -38,6 +50,7 @@ const server = await jalankanServer({
   // ORIGIN_DIIZINKAN: asal tambahan untuk WebSocket, dipisah koma ("https://a.id,b.id"; "*" = semua).
   originDiizinkan: daftarEnv(process.env.ORIGIN_DIIZINKAN),
   healthzDetail: process.env.HEALTHZ_DETAIL === '1' || process.env.HEALTHZ_DETAIL?.toLowerCase() === 'true',
+  notion,
 });
 log(`Remi Kampung Madya v${VERSI} (${SHA}) jalan di port ${server.port} (statis: ${folderStatis}, database: ${pathDb})`);
 

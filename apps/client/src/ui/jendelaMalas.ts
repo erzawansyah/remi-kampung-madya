@@ -9,6 +9,7 @@
 
 import { adaJaringan, urlChunkGagal, urlUlang } from '../jaringan';
 import { toast } from './dom';
+import type { OpsiTentang } from './tentang';
 
 type ModulBantuan = typeof import('./bantuan');
 type ModulTentang = typeof import('./tentang');
@@ -99,8 +100,8 @@ export function bukaBantuan(bab?: string): void {
   void bukaMalas(bantuan, (m) => m.bukaBantuan(bab), () => bukaBantuan(bab));
 }
 
-export function bukaTentang(): void {
-  void bukaMalas(tentang, (m) => m.bukaTentang(), () => bukaTentang());
+export function bukaTentang(opsi: OpsiTentang = {}): void {
+  void bukaMalas(tentang, (m) => m.bukaTentang(opsi), () => bukaTentang(opsi));
 }
 
 /** Ambil modul Bantuan & Tentang di latar (saat browser senggang), tanpa membuka apa pun. */

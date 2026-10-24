@@ -33,6 +33,7 @@ const aksiPalsu = (): AksiBeranda => ({
   bantuan: vi.fn(),
   pengaturan: vi.fn(),
   tentang: vi.fn(),
+  usulFitur: vi.fn(),
   pasangAplikasi: null,
   muatUlang: null,
 });

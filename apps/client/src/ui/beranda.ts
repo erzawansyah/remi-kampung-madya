@@ -1,8 +1,8 @@
 // Layar beranda: "pintu masuk Kedai Madya".
 // Hero dengan logo kedai dan kipas kartu, aksi utama (lanjutkan / main bareng warga kedai /
 // latihan), pengaturan meja offline yang terlipat, main online dengan status koneksi, navigasi ke
-// Bantuan/Pengaturan/Riwayat/Tentang, kartu info Kedai Madya, dan label versi. Juga layar daftar
-// meja publik.
+// Bantuan/Pengaturan/Riwayat/Tentang/Usul fitur, kartu info Kedai Madya, dan label versi. Juga layar
+// daftar meja publik.
 //
 // Tawaran pasang aplikasi (keputusan #46) HANYA di sini: ubin "Pasang ke layar utama" di menu, plus
 // tombol melayang (anak terakhir .layar.beranda) yang bisa disembunyikan 3 hari lewat "Nanti saja".
@@ -19,6 +19,7 @@ import { TEKS_TAWARAN } from '../konten/pasang';
 import { TEKS_KALDU } from '../konten/kaldu';
 import { TEKS_KOMPETISI } from '../konten/kompetisi';
 import { TEKS_NAMA } from '../konten/nama';
+import { TEKS_USULAN } from '../konten/usulan';
 import { DAFTAR_LEVEL_WARGA, LEVEL_WARGA, labelLevelKecil } from '../konten/levelWarga';
 import { aturPreferensi, preferensi, saatPreferensiBerubah } from '../preferensi';
 import { labelTanggalGanti, namaTerkunciSampai, simpanNamaBaru, type KeadaanNama } from '../namaPemain';
@@ -44,6 +45,8 @@ export interface AksiBeranda {
   bantuan(): void;
   pengaturan(): void;
   tentang(): void;
+  /** Dialog Usul fitur (24 Okt 2026); dipanggil sesudah nama dipastikan ada. */
+  usulFitur(): void;
   /** Tawaran pasang aplikasi, atau null kalau tidak ada yang bisa ditawarkan (sudah terpasang, desktop, …). */
   pasangAplikasi: TawaranPasangBeranda | null;
   /** Ada versi baru yang siap: muat ulang sekarang. Null kalau tidak ada. */
@@ -287,6 +290,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
           <button type="button" class="nav-ubin" data-nav="pengaturan"><span class="nav-ikon" aria-hidden="true">⚙️</span><span>Pengaturan</span></button>
           <button type="button" class="nav-ubin" data-nav="riwayat"><span class="nav-ikon" aria-hidden="true">🏆</span><span>Riwayat &amp; statistik</span></button>
           <button type="button" class="nav-ubin" data-nav="tentang"><span class="nav-ikon" aria-hidden="true">ℹ️</span><span>Tentang</span></button>
+          <button type="button" class="nav-ubin nav-lebar" data-nav="usulan"><span class="nav-ikon" aria-hidden="true">💡</span><span>${esc(TEKS_USULAN.ubin)}</span></button>
         </nav>
 
         <section class="kartu-kedai" aria-labelledby="judul-kedai">
@@ -550,6 +554,11 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
         return aksi.lihatRiwayat();
       case 'tentang':
         return aksi.tentang();
+      case 'usulan':
+        // Usulan dikirim atas nama pemain, jadi nama dipastikan dulu (#49), sama seperti tombol main.
+        return void pastikanNama().then((n) => {
+          if (n) aksi.usulFitur();
+        });
       case 'pasang':
         return tawaran?.pasang();
       case 'muat-ulang':
