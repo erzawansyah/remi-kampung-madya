@@ -793,7 +793,8 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Host pergi: tugas host pindah ke pemain manusia lain yang masih terhubung.',
           'Putaran berikutnya dimulai oleh host. Kalau skor terendah sama, host memilih pengocok atau Acak.',
           'Pengumuman joker menunggu semua pemain menekan OK. Pemain yang terputus tidak ditunggu. Kalau ia kembali sebelum sempat menekan OK, popup joker muncul lagi untuknya.',
-          'Meja tanpa pemain yang terhubung dihapus otomatis setelah 10 menit.',
+          'Meja tanpa pemain yang terhubung dihapus otomatis: 10 menit kalau masih di lobi, 45 menit kalau permainannya sedang jalan.',
+          'Server sempat mati atau diperbarui? Mejanya tersimpan. Aplikasi menyambung ulang sendiri dan kamu kembali ke kursimu.',
         ],
       },
       {

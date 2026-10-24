@@ -24,6 +24,7 @@ import {
 } from '@remi/meja';
 import { buatPenyimpanKompetisi, SKEMA_KOMPETISI, type PenyimpanKompetisi } from './kompetisi.js';
 import { buatPenyimpanUsulan, SKEMA_USULAN, type PenyimpanUsulan } from './usulan.js';
+import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, type PenyimpanMejaAktif } from './mejaAktif.js';
 
 export interface PermainanTersimpan {
   id: number;
@@ -91,6 +92,8 @@ export interface PenyimpanRiwayat {
   kompetisi: PenyimpanKompetisi;
   /** Usul fitur dari game (24 Okt 2026), di database yang sama. Diteruskan ke Notion oleh server.ts. */
   usulan: PenyimpanUsulan;
+  /** Meja online yang masih ada (selamat dari restart/deploy), di database yang sama. Diatur server.ts. */
+  mejaAktif: PenyimpanMejaAktif;
   tutup(): void;
 }
 
@@ -143,6 +146,9 @@ export const MIGRASI: readonly string[] = [
   SKEMA_KOMPETISI,
   // v3 (24 Okt 2026, keputusan pemilik): usul fitur dari game, diteruskan ke Notion. Tanpa alamat IP.
   SKEMA_USULAN,
+  // v4 (24 Okt 2026, keputusan pemilik): meja online yang masih ada, supaya selamat dari restart/deploy.
+  // Memuat token pemain: database hanya di volume privat.
+  SKEMA_MEJA_AKTIF,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */
@@ -229,6 +235,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
   lengkapiBaris(db, log);
   const kompetisi = buatPenyimpanKompetisi(db);
   const usulan = buatPenyimpanUsulan(db);
+  const mejaAktif = buatPenyimpanMejaAktif(db);
 
   const tambahPermainan = db.prepare(
     `INSERT INTO permainan (kode_meja, selesai_pada, alasan, jumlah_putaran, jumlah_pemain, jumlah_deck, jumlah_manusia, mode_kaldu)
@@ -392,6 +399,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
     },
     kompetisi,
     usulan,
+    mejaAktif,
     tutup() {
       if (milikSendiri) db.close();
     },

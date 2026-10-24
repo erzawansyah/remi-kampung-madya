@@ -11,7 +11,21 @@ docker compose ps            # STATUS "healthy" ±30 detik setelah start
 docker compose logs --tail 5 # "Remi Kampung Madya v<versi> (<sha>) jalan di port 2567 ..."
 ```
 
-`docker compose up` mengganti container dengan rapi: `SIGTERM` → server menutup WebSocket, meja, dan database → keluar dengan kode 0 (< 1 detik). Meja online yang sedang jalan hilang (meja hanya di memori), jadi pilih waktu sepi. Permainan offline di HP tidak terpengaruh.
+`docker compose up` mengganti container dengan rapi: `SIGTERM` → server menulis meja yang belum tersimpan, menutup WebSocket dan database → keluar dengan kode 0 (< 1 detik). Meja online yang sedang jalan **dipulihkan** saat server baru jalan (lihat "Meja selamat dari restart" di bawah): HP pemain menyambung lagi sendiri dan kembali ke kursinya. Permainan offline di HP tidak terpengaruh.
+
+### Meja selamat dari restart (skema riwayat v4, 24 Okt 2026)
+
+Setiap meja online disimpan di database yang sama dengan riwayat (tabel `meja_aktif`, migrasi v4), paling lambat 1 detik sesudah berubah, dan semuanya ditulis saat `SIGTERM`. Saat start, server memulihkan meja itu sebelum menerima sambungan, lalu mencatat `meja KODE dipulihkan (main, 3 manusia)` per meja dan `N dari M meja tersimpan dipulihkan`.
+
+- Semua pemain dianggap terputus, jadi permainan dijeda sampai ada yang kembali. HP pemain menyambung ulang sendiri (kode 1001) dan masuk ke kursinya dengan token lama. Pemain yang belum kembali mendapat masa tenggang penuh (20 detik) sejak orang pertama kembali, baru gilirannya dijalankan warga kedai. Giliran yang sedang jalan mendapat waktu penuh lagi.
+- Host tidak pindah ke siapa pun yang kembali duluan: saat deploy semua HP menyambung ulang hampir bersamaan. Host lama ditunggu selama masa tenggang (20 detik) sejak orang pertama kembali; kalau belum kembali juga, baru host pindah ke pemain lain yang terhubung (aturan host yang biasa).
+- Tidak dipulihkan, dan simpanannya dibuang dengan alasan di log (`simpanan meja KODE dibuang: …`): permainan yang sudah selesai (klasemen akhirnya sudah tercatat, jadi tidak pernah tercatat dua kali), simpanan rusak, simpanan yang 24 jam tidak berubah, meja tanpa pemain manusia, meja kompetisi yang kompetisinya sudah tidak ada, dan meja kompetisi di lobi yang kompetisinya sudah tidak berjalan.
+- Kalau proses mati mendadak (`SIGKILL`, listrik VPS), perubahan ±1 detik terakhir bisa hilang: meja dipulihkan ke keadaan sedikit sebelumnya.
+- Meja tanpa manusia terhubung dihapus sesudah **45 menit** kalau sedang main dan masih ada pemain yang bisa kembali, supaya pemain sempat kembali sesudah deploy atau Wi-Fi kedai mati. Lobi, permainan yang sudah selesai, dan meja yang semua pemainnya sudah menekan Keluar (tinggal warga kedai) dihapus sesudah 10 menit. Simpanannya ikut dihapus; meja yang tinggal warga kedai sudah tidak disimpan lagi sejak orang terakhir keluar.
+- `HEALTHZ_DETAIL=1` menambah `mejaMain` di `/healthz`: meja yang sedang dimainkan, yaitu sedang main dengan paling sedikit satu pemain terhubung. Meja yang ditinggal semua orang (dijeda, dipulihkan tapi belum didatangi, atau tinggal warga kedai) tidak dihitung. Skrip deploy boleh menunggu sampai angkanya 0, tapi itu tidak wajib lagi. Ringkasan `status:` di log memakai angka yang sama (`meja N (main M)`).
+- `SIMPAN_MEJA=0` mematikan fitur ini (meja kembali hanya di memori, simpanan lama tidak dipulihkan).
+
+**Database ini sekarang memuat token pemain** (dipakai untuk sambung ulang) dan alamat jaringan pembuat meja selama mejanya masih ada. Volume `remi-data` dan cadangannya (`VACUUM INTO`, salinan `docker compose cp`) harus tetap privat: jangan diunggah ke tempat umum atau dibagikan. Baris meja dihapus begitu mejanya bubar.
 
 ### Rilis leaderboard (skema riwayat v1, keputusan #45)
 
@@ -54,7 +68,7 @@ Semua HP yang memakai Wi-Fi kedai keluar lewat **satu IP publik**, jadi di mata 
 
 | Env | Bawaan | Artinya |
 |---|---|---|
-| `MAKS_MEJA_PER_IP` | 60 (dulu 20) | Meja yang masih ada per jaringan pembuatnya, termasuk meja yang sudah ditinggal tapi belum terhapus (±10 menit). Lewat batas: "Kebanyakan meja dari jaringanmu, Bos." |
+| `MAKS_MEJA_PER_IP` | 60 (dulu 20) | Meja yang masih ada per jaringan pembuatnya, termasuk meja yang sudah ditinggal tapi belum terhapus (±10 menit di lobi, ±45 menit kalau sedang main). Lewat batas: "Kebanyakan meja dari jaringanmu, Bos." |
 | `MAKS_SAMBUNGAN_PER_IP` | 150 (dulu 50) | Sambungan WebSocket sekaligus per jaringan (IPv4 per alamat, IPv6 per /64). Lewat batas: handshake ditolak `429`. |
 | `MAKS_MEJA` | 500 | Batas total meja di server. Satu jaringan tetap tidak bisa menghabiskannya. |
 
@@ -125,8 +139,9 @@ Ganti `B` dengan `http://127.0.0.1:2567` (di VPS) atau `https://remi.domainkamu.
 | 404 | `curl -sI $B/assets/tidak-ada.js` | `404`, `cache-control: no-store` |
 | Riwayat (bentuk lama) | `curl -s $B/api/peringkat` | JSON **array** (boleh kosong), dibaca aplikasi lama yang masih ter-cache di HP |
 | Leaderboard v2 | `curl -s "$B/api/peringkat?v=2&urut=rata"` | JSON **objek** `{"v":2,"urut":"rata",…,"peringkat":[…],"belumCukup":[…]}` |
-| Skema riwayat | `docker compose logs remi \| grep 'skema riwayat'` | sekali `skema riwayat dimigrasi v0 → v1` sesudah deploy rilis leaderboard |
+| Skema riwayat | `docker compose logs remi \| grep 'skema riwayat'` | sekali `skema riwayat dimigrasi v0 → v1` sesudah deploy rilis leaderboard; sekali `… → v4` sesudah deploy rilis usul fitur dan meja selamat dari restart |
 | Usul fitur | `docker compose logs remi \| grep 'usul fitur'` | `usul fitur: diteruskan ke Notion (database d31d1a9e…)` kalau `NOTION_TOKEN` dan `NOTION_USULAN_DB` diisi (lihat "Usul fitur ke Notion"); sekali `skema riwayat dimigrasi v2 → v3` sesudah deploy rilis usul fitur |
+| Meja dipulihkan | `docker compose logs remi \| grep 'dipulihkan'` | sesudah deploy di tengah permainan: `meja KODE dipulihkan (…)` per meja, lalu `N dari M meja tersimpan dipulihkan`; pemain yang sedang main kembali ke kursinya sendiri |
 | WebSocket | buka aplikasi → Buat meja baru | lobi muncul dengan kode meja |
 | PWA | Chrome DevTools → Application | service worker `activated`, precache 12 entri, manifest tanpa error |
 | Tombol pasang (Android) | buka situs di Chrome Android (bukan dari aplikasi yang sudah terpasang) | tombol **Pasang aplikasi** melayang di kanan bawah beranda; diketuk = jendela pasang Chrome (atau dialog petunjuk menu ⋮ kalau Chrome belum menawarkannya); **Nanti saja** menyembunyikannya dan tetap tersembunyi sesudah muat ulang; tidak ada di lobi maupun meja |

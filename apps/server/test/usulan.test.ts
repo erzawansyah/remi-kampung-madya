@@ -13,6 +13,7 @@ import {
   JEDA_MAKS_USULAN_MS,
   JEDA_PUTARAN_USULAN_MS,
   MAKS_PERCOBAAN_USULAN,
+  SKEMA_USULAN,
   jalankanPengirimUsulan,
   jedaCobaLagi,
   type PenyimpanUsulan,
@@ -72,11 +73,12 @@ function notionPalsu(jawab: (h: HalamanUsulan, ke: number) => { id: string } | G
 }
 
 describe('tabel usulan (migrasi v3)', () => {
-  it('database baru langsung versi terbaru; jumlah migrasi = 3 (v1 leaderboard, v2 kompetisi, v3 usulan)', () => {
-    expect(MIGRASI.length).toBe(3);
+  it('database baru langsung versi terbaru; v3 (MIGRASI[2]) = tabel usulan (v1 leaderboard, v2 kompetisi)', () => {
+    // Jumlah migrasi tidak dikunci: entri sesudah v3 (mis. v4 meja_aktif) boleh ditambah di belakang.
+    expect(MIGRASI[2]).toBe(SKEMA_USULAN);
     const db = new DatabaseSync(':memory:');
     const r = bukaRiwayat(db);
-    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(3);
+    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(MIGRASI.length);
     // Alamat IP tidak pernah disimpan: tidak ada kolom untuk itu.
     const kolom = (db.prepare('PRAGMA table_info(usulan)').all() as { name: string }[]).map((k) => k.name);
     expect(kolom).toEqual(['id', 'dibuat_pada', 'nama', 'judul', 'isi', 'jenis', 'notion_halaman', 'terkirim_pada', 'percobaan', 'galat_terakhir']);
@@ -85,7 +87,7 @@ describe('tabel usulan (migrasi v3)', () => {
     db.close();
   });
 
-  it('database v2 (rilis kompetisi) dimigrasi ke v3 tanpa menyentuh data lama', () => {
+  it('database v2 (rilis kompetisi) dimigrasi ke versi terbaru (termasuk v3) tanpa menyentuh data lama', () => {
     const db = new DatabaseSync(':memory:');
     const r = bukaRiwayat(db);
     r.simpan({
@@ -105,7 +107,7 @@ describe('tabel usulan (migrasi v3)', () => {
     db.exec('DROP TABLE usulan; PRAGMA user_version = 2;');
     const log: string[] = [];
     const r2 = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
-    expect(log).toContain('skema riwayat dimigrasi v2 → v3');
+    expect(log).toContain(`skema riwayat dimigrasi v2 → v${MIGRASI.length}`);
     expect(r2.daftar(5).map((p) => p.kodeMeja)).toEqual(['AAAAA']);
     expect(r2.usulan.simpan(usulanAni, T0)).toBe(1);
     r2.tutup();
