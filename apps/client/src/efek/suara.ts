@@ -226,32 +226,32 @@ const RESEP: Record<JenisBunyi, Resep> = {
   jotos: (k, t, { p, pn, v }) => {
     // "Ketonjok": bogem berat di dada (sub rendah + badan pukulan), "KRAK" kaca retak yang menjalar,
     // lalu serpih kaca bergemerincing jatuh. Gong rendah di belakang supaya terasa berat, bukan lucu.
-    dentum(k, t, 0.5 * v, { frek: 68, panjang: 0.9 });
-    nada(k, t, 190 * p, 0.09, { tipe: 'triangle', puncak: 0.26 * v, serang: 0.0015, geserKe: 70 * p, lowpass: 1100 });
-    gesek(k, t, 0.025, { frek: 1100 * p, q: 0.7, puncak: 0.4 * v, serang: 0.0008 });
+    dentum(k, t, 0.62 * v, { frek: 68, panjang: 0.9 });
+    nada(k, t, 190 * p, 0.09, { tipe: 'triangle', puncak: 0.32 * v, serang: 0.0015, geserKe: 70 * p, lowpass: 1100 });
+    gesek(k, t, 0.025, { frek: 1100 * p, q: 0.7, puncak: 0.48 * v, serang: 0.0008 });
     // Krak: klik-klik derau yang mula-mula rapat lalu merenggang (retakan menjalar), plus satu sapuan lebar.
     const krak = Array.from({ length: 16 }, (_, i) => t + 0.008 + 0.17 * (i / 16) ** 1.7 + i * 0.0015);
-    gemeretak(k, krak, { frekMin: 1700 * p, frekMaks: 6800 * p, puncak: (i) => 0.42 * v * (1 - i / 18) * acak(0.55, 1) });
-    gesek(k, t + 0.005, 0.2, { frek: 4200 * p, frekAkhir: 1300 * p, q: 0.6, puncak: 0.2 * v, serang: 0.002 });
+    gemeretak(k, krak, { frekMin: 1700 * p, frekMaks: 6800 * p, puncak: (i) => 0.52 * v * (1 - i / 18) * acak(0.55, 1) });
+    gesek(k, t + 0.005, 0.2, { frek: 4200 * p, frekAkhir: 1300 * p, q: 0.6, puncak: 0.25 * v, serang: 0.002 });
     // Serpih kaca: tiga rentetan denting tinggi tak-harmonis yang bertaburan (satu osilator per rentetan),
     // ditemani desis pecahan yang halus.
     for (let jalur = 0; jalur < 3; jalur++) {
       const waktu: number[] = [];
       for (let d = 0.07 + jalur * 0.017, i = 0; i < 5; i++, d += acak(0.045, 0.12) * (1 + i * 0.3)) waktu.push(t + d);
-      rentetNada(k, waktu, { frek: () => acak(2900, 7600) * pn, luruh: 0.12, puncak: (i) => 0.07 * v * (1 - i / 7), gema: 0.55 });
+      rentetNada(k, waktu, { frek: () => acak(2900, 7600) * pn, luruh: 0.12, puncak: (i) => 0.09 * v * (1 - i / 7), gema: 0.55 });
     }
     const desis: number[] = [];
     for (let d = 0.06, i = 0; i < 9; i++, d += acak(0.03, 0.07)) desis.push(t + d);
-    rentetDerau(k, desis, { frek: 7200, q: 1.4, luruh: 0.035, puncak: (i) => 0.09 * v * (1 - i / 10) });
-    gong(k, t + 0.015, hz(D2) * pn, 1.5, 0.13 * v);
+    rentetDerau(k, desis, { frek: 7200, q: 1.4, luruh: 0.035, puncak: (i) => 0.11 * v * (1 - i / 10) });
+    gong(k, t + 0.015, hz(D2) * pn, 1.5, 0.16 * v);
     return 1.6;
   },
   jotosLain: (k, t, { p, v }) => {
     // Kursi lain kena: "buk" teredam dari seberang meja dan retakan kecil. Pelan saja.
-    dung(k, t, 0.2 * v, 72);
-    gesek(k, t, 0.02, { frek: 900 * p, q: 0.7, puncak: 0.12 * v, serang: 0.001 });
+    dung(k, t, 0.32 * v, 72);
+    gesek(k, t, 0.02, { frek: 900 * p, q: 0.7, puncak: 0.18 * v, serang: 0.001 });
     const krak = [0, 0.014, 0.032, 0.055, 0.085].map((d) => t + 0.006 + d);
-    gemeretak(k, krak, { frekMin: 2200 * p, frekMaks: 5200 * p, puncak: (i) => 0.13 * v * (1 - i / 6) });
+    gemeretak(k, krak, { frekMin: 2200 * p, frekMaks: 5200 * p, puncak: (i) => 0.2 * v * (1 - i / 6) });
     return 0.45;
   },
   kepentungLain: (k, t, { pn, v }) => {
