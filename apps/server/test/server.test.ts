@@ -63,6 +63,9 @@ describe('server WebSocket', () => {
     await a.kirim({ t: 'aturKursi', kursi: 2, jenis: 'bot' });
     await a.kirim({ t: 'mulai', pengocok: 0 });
     await a.kirim({ t: 'siapJoker' });
+    // Siti menekan OK sesudah melihat pengumuman joker (pesan dari dua sambungan berbeda tidak punya
+    // urutan pasti, apalagi dengan kompresi yang berjalan asinkron per sambungan).
+    await b.tunggu('meja', (p) => p.info.status === 'main');
     await b.kirim({ t: 'siapJoker' });
     await a.tunggu('meja', (p) => p.info.menungguJoker.length === 0);
     const vA = await a.tunggu('view');

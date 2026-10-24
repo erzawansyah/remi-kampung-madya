@@ -20,6 +20,17 @@ import { buatPembatasLog } from './pembatasLog.js';
 export const BAWAAN_MAKS_MEJA_PER_IP = 60;
 export const BAWAAN_MAKS_SAMBUNGAN_PER_IP = 150;
 
+/**
+ * Jeda sesudah sambungan pemain tertutup sebelum meja diberi tahu ia terputus (keputusan pemilik
+ * 24 Okt 2026). Muat ulang halaman, pembaruan otomatis, atau ganti sambungan yang selesai dalam jeda
+ * ini tidak dianggap putus: host, suara voting, dan status terhubung tidak berubah. Kalau ia tidak
+ * kembali, tenggang di meja tetap dihitung sejak sambungannya tertutup.
+ */
+export const JEDA_PUTUS_MS = 5_000;
+
+/** Id aksi terakhir yang diingat per pemain (kiriman ulang dengan id yang sama tidak diterapkan lagi). */
+export const MAKS_ID_AKSI = 32;
+
 export interface OpsiServer {
   port: number;
   host?: string;
@@ -66,6 +77,8 @@ export interface OpsiServer {
   maksPengajuan?: number;
   /** Permintaan tulis ke /api/kompetisi per menit per jaringan (bawaan 30). */
   batasTulisKompetisiPerMenit?: number;
+  /** Jeda sebelum pemain yang sambungannya tertutup dianggap terputus (ms). Bawaan {@link JEDA_PUTUS_MS}. */
+  jedaPutusMs?: number;
   log?: (...x: unknown[]) => void;
 }
 
@@ -78,6 +91,12 @@ interface Sambungan {
   ip: string;
   /** Kunci jaringan untuk batas per IP (lihat kunciIp). */
   jaringan: string;
+  /**
+   * Sambungan ini sudah digantikan sambungan baru milik pemain yang sama (tautkan). Aksi yang masih
+   * datang lewat sini (terkirim sebelum client pindah sambungan) tetap diteruskan ke mejanya, dan
+   * jawabannya lewat sambungan baru.
+   */
+  digantikan?: { pemainId: string; kode: string };
 }
 
 export { alamatKlien, alamatLokal, kunciIp, originDiizinkan } from './keamanan.js';
@@ -146,6 +165,10 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   const kosongSejak = new Map<string, number>();
   const sambunganPemain = new Map<string, Sambungan>();
   const semuaSambungan = new Set<Sambungan>();
+  /** Pemain yang sambungannya tertutup tapi belum dikabarkan terputus ke meja (jeda JEDA_PUTUS_MS). */
+  const putusTertunda = new Map<string, { kode: string; timer: unknown }>();
+  /** Id aksi terakhir per pemain (kiriman ulang tidak diterapkan dua kali); dibuang bersama mejanya. */
+  const idAksi = new Map<string, { kode: string; id: string[] }>();
   /** Kode meja → kunci jaringan pembuatnya (untuk batas meja per IP; IPv6 per /64). */
   const pembuatMeja = new Map<string, string>();
   /** Kode pengajuan kompetisi → kunci jaringan pengajunya (batas pengajuan per IP; hilang saat restart). */
@@ -177,6 +200,19 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     sekarang: () => penjadwalDasar.sekarang(),
   });
 
+  /** Batalkan kabar "terputus" yang masih ditunda untuk pemain ini. True = ada yang dibatalkan. */
+  const batalPutusTertunda = (pemainId: string): boolean => {
+    const t = putusTertunda.get(pemainId);
+    if (!t) return false;
+    putusTertunda.delete(pemainId);
+    try {
+      penjadwalDasar.batal(t.timer);
+    } catch (e) {
+      log('galat membatalkan jeda putus', e);
+    }
+    return true;
+  };
+
   const hapusMeja = (kode: string) => {
     try {
       daftarMeja.get(kode)?.hentikan();
@@ -186,6 +222,18 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     daftarMeja.delete(kode);
     kosongSejak.delete(kode);
     pembuatMeja.delete(kode);
+    for (const [pemainId, c] of idAksi) if (c.kode === kode) idAksi.delete(pemainId);
+    for (const [pemainId, t] of putusTertunda) if (t.kode === kode) batalPutusTertunda(pemainId);
+  };
+
+  /** Catatan id aksi pemain di meja `kode` (dibuat kalau belum ada). */
+  const catatanAksi = (pemainId: string, kode: string): string[] => {
+    let c = idAksi.get(pemainId);
+    if (!c || c.kode !== kode) {
+      c = { kode, id: [] };
+      idAksi.set(pemainId, c);
+    }
+    return c.id;
   };
 
   const statis =
@@ -336,6 +384,14 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     server: http,
     path: '/ws',
     maxPayload: 64 * 1024,
+    // Kompresi permessage-deflate (dinegosiasikan otomatis; browser dan client lama tanpa dukungan
+    // tetap jalan tanpa kompresi). View lengkap dikirim setiap ada perubahan dan isinya hampir sama
+    // dengan view sebelumnya, jadi dengan context takeover (bawaan, jangan dimatikan) ukurannya turun
+    // ±50×. Di sinyal lemah, antrian view yang menumpuk sempat membuat jawaban ping telat dan
+    // sambungan yang masih hidup diputus. Catatan ws: `threshold` hanya berlaku kalau context takeover
+    // mati, jadi selama takeover aktif semua pesan dikompres (murah, karena kamusnya terbawa).
+    // maxPayload tetap dicek pada ukuran sesudah dibuka.
+    perMessageDeflate: { threshold: 1024 },
     // Dipanggil sinkron sebelum handshake selesai: tolak dengan kode HTTP tanpa membuka sambungan.
     verifyClient: (info, jawab) => {
       if (menutup) return jawab(false, 503, 'Server sedang dimatikan');
@@ -417,8 +473,12 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       else sambunganPemain.delete(pemainId);
       throw e;
     }
+    // Sudah masuk lagi: kabar "terputus" yang masih ditunda untuknya dibatalkan.
+    batalPutusTertunda(pemainId);
     if (lama && lama !== s) {
-      // Pemain yang sama membuka sambungan baru: tutup yang lama.
+      // Pemain yang sama membuka sambungan baru: tutup yang lama. Aksi yang masih datang lewat
+      // sambungan lama (terkirim sebelum client pindah) tetap diteruskan ke meja yang sama.
+      lama.digantikan = { pemainId, kode: lama.kode ?? kode };
       lama.pemainId = null;
       lama.kode = null;
       lama.ws.close(4000, 'Dibuka di tempat lain');
@@ -450,7 +510,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
 
     switch (pesan.t) {
       case 'ping':
-        return kirimKe(s, { t: 'pong' });
+        // `w` = jam server, supaya client bisa mengoreksi jam HP yang meleset untuk bar waktu giliran.
+        return kirimKe(s, { t: 'pong', w: penjadwalDasar.sekarang() });
       case 'daftar':
         return kirimKe(s, {
           t: 'daftar',
@@ -497,6 +558,10 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         if (!meja) return kirimKe(s, { t: 'error', pesan: `Meja ${kode} nggak ketemu.` });
         const lama = !!pesan.token && meja.punyaPemain(pesan.token);
         const pemainId = lama ? pesan.token! : randomUUID();
+        // Bukti ia sempat putus (untuk sisa waktu minimal di gilirannya): sambungan lamanya masih
+        // tercatat di sambungan lain (misalnya setengah mati) atau baru saja tertutup (jeda putus).
+        const sambunganLama = lama ? sambunganPemain.get(pemainId) : undefined;
+        const gantiSambungan = lama && ((!!sambunganLama && sambunganLama !== s) || putusTertunda.has(pemainId));
         // Meja kompetisi (#51): duduk pakai tiket peserta, dengan nama yang terdaftar.
         let nama = pesan.nama;
         let peserta: number | undefined;
@@ -511,7 +576,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         }
         try {
           // Gagal (meja penuh / sudah mulai) = tautan dikembalikan; pemain tetap di meja lamanya.
-          tautkan(s, pemainId, kode, () => meja.masuk(pemainId, nama, peserta));
+          tautkan(s, pemainId, kode, () => meja.masuk(pemainId, nama, peserta, gantiSambungan));
           kosongSejak.delete(kode);
         } catch (e) {
           if (e instanceof GalatMeja) return kirimKe(s, { t: 'error', pesan: e.message });
@@ -520,14 +585,33 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         return;
       }
       default: {
-        const meja = s.kode ? daftarMeja.get(s.kode) : undefined;
-        if (!meja || !s.pemainId) return kirimKe(s, { t: 'error', pesan: 'Kamu belum masuk meja.' });
+        let pemainId = s.pemainId;
+        let kode = s.kode;
+        // Aksi yang terkirim lewat sambungan lama sebelum client pindah ke sambungan baru: tetap
+        // diteruskan ke meja yang sama (diterapkan sekali kalau ber-id), jawabannya lewat sambungan baru.
+        if (!pemainId && s.digantikan && pesan.t === 'aksi') ({ pemainId, kode } = s.digantikan);
+        const meja = kode ? daftarMeja.get(kode) : undefined;
+        const id = pesan.t === 'aksi' ? pesan.id : undefined;
+        if (!meja || !pemainId) {
+          kirimKe(s, { t: 'error', pesan: 'Kamu belum masuk meja.' });
+          if (id !== undefined) kirimKe(s, { t: 'aksiDiterima', id });
+          return;
+        }
         // Meja kompetisi: permainan baru hanya selama kompetisinya berjalan (yang sedang jalan dibiarkan selesai).
         if ((pesan.t === 'mulai' || pesan.t === 'mainLagi') && meja.kompetisi) {
           const status = opsi.riwayat?.kompetisi.status(meja.kompetisi, Date.now());
           if (status !== 'berjalan') return kirimKe(s, { t: 'error', pesan: TEKS_KOMPETISI_TAK_JALAN });
         }
-        meja.terima(s.pemainId, pesan);
+        if (id === undefined) return meja.terima(pemainId, pesan);
+        // Aksi ber-id: yang sudah pernah diproses tidak diterapkan lagi (kiriman ulang sesudah sambung
+        // ulang), tapi tetap dijawab. Jawaban dikirim sesudah meja memproses (error-nya lebih dulu).
+        const catatan = catatanAksi(pemainId, meja.kode);
+        if (!catatan.includes(id)) {
+          catatan.push(id);
+          if (catatan.length > MAKS_ID_AKSI) catatan.shift();
+          meja.terima(pemainId, pesan);
+        }
+        return kirim(pemainId, { t: 'aksiDiterima', id });
       }
     }
   };
@@ -587,11 +671,34 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         else sambunganPerJaringan.delete(s.jaringan);
       }
       if (s.pemainId && sambunganPemain.get(s.pemainId) === s) {
-        sambunganPemain.delete(s.pemainId);
+        const pemainId = s.pemainId;
+        const kode = s.kode;
+        sambunganPemain.delete(pemainId);
+        if (!kode) return;
+        const kabari = (sejak?: number) => {
+          try {
+            daftarMeja.get(kode)?.terputus(pemainId, sejak);
+          } catch (e) {
+            log(`galat saat pemain terputus dari meja ${kode}`, e);
+          }
+        };
+        const jeda = opsi.jedaPutusMs ?? JEDA_PUTUS_MS;
+        if (menutup || jeda <= 0) return kabari();
+        // Jangan langsung dianggap terputus: muat ulang atau ganti sambungan yang selesai dalam jeda
+        // ini tidak memindahkan host dan tidak mencabut suara voting. Kalau ia tidak kembali, tenggang
+        // di meja dihitung sejak sambungan ini tertutup.
         try {
-          if (s.kode) daftarMeja.get(s.kode)?.terputus(s.pemainId);
+          const sejak = penjadwalDasar.sekarang();
+          batalPutusTertunda(pemainId);
+          const timer = penjadwalDasar.setel(jeda, () => {
+            if (putusTertunda.get(pemainId)?.timer !== timer) return;
+            putusTertunda.delete(pemainId);
+            kabari(sejak);
+          });
+          putusTertunda.set(pemainId, { kode, timer });
         } catch (e) {
-          log(`galat saat pemain terputus dari meja ${s.kode}`, e);
+          log(`galat menjadwalkan jeda putus meja ${kode}`, e);
+          kabari();
         }
       }
     });
@@ -672,6 +779,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         clearInterval(timerPesan);
         clearInterval(timerBersih);
         clearInterval(timerTulisKompetisi);
+        for (const pemainId of [...putusTertunda.keys()]) batalPutusTertunda(pemainId);
         for (const kode of [...daftarMeja.keys()]) hapusMeja(kode);
         // 1001 "going away": client tahu server pergi (bukan ditolak) dan bisa mencoba lagi nanti.
         for (const s of semuaSambungan) {
