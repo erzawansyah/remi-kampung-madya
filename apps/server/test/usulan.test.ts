@@ -373,7 +373,7 @@ describe('POST /api/usulan', () => {
   const log: string[] = [];
   beforeAll(async () => {
     riwayat = bukaRiwayat(':memory:');
-    server = await jalankanServer({ port: 0, host: '127.0.0.1', riwayat, log: (...x) => log.push(x.map(String).join(' ')), maksUsulanPerHari: 12 });
+    server = await jalankanServer({ port: 0, host: '127.0.0.1', riwayat, log: (...x) => log.push(x.map(String).join(' ')), maksUsulanPerHari: 20 });
     alamat = `http://127.0.0.1:${server.port}`;
   });
   afterAll(async () => {
@@ -439,9 +439,17 @@ describe('POST /api/usulan', () => {
     expect((await post(sah(7), { 'x-forwarded-for': jaringanBaru() })).status).toBe(200);
   });
 
-  it('batas total per 24 jam (di test ini 12)', async () => {
+  it('permintaan bersamaan dari satu jaringan tetap paling banyak 5 yang masuk', async () => {
+    const jar = jaringanBaru();
+    const sah = (i: number) => ({ nama: 'Budi', judul: `Bareng ${i}`, isi: 'Isinya cukup panjang.' });
+    const status = await Promise.all(Array.from({ length: 8 }, (_, i) => post(sah(i), { 'x-forwarded-for': jar }).then((r) => r.status)));
+    expect(status.filter((x) => x === 200)).toHaveLength(5);
+    expect(status.filter((x) => x === 429)).toHaveLength(3);
+  });
+
+  it('batas total per 24 jam (di test ini 20)', async () => {
     const sah = { nama: 'Ani', judul: 'Judul', isi: 'Isinya cukup panjang.' };
-    for (let i = riwayat.usulan.jumlahSejak(0); i < 12; i++) expect((await post(sah, { 'x-forwarded-for': jaringanBaru() })).status).toBe(200);
+    for (let i = riwayat.usulan.jumlahSejak(0); i < 20; i++) expect((await post(sah, { 'x-forwarded-for': jaringanBaru() })).status).toBe(200);
     const r = await post(sah, { 'x-forwarded-for': jaringanBaru() });
     expect(r.status).toBe(429);
     expect(((await r.json()) as { error: string }).error).toBe('Hari ini usulan yang masuk sudah banyak. Coba lagi besok, Bos.');

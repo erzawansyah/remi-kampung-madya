@@ -404,6 +404,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       const kali = (tulisUsulan.get(jaringan) ?? 0) + 1;
       tulisUsulan.set(jaringan, kali);
       if (kali > BATAS_TULIS_USULAN_PER_MENIT) return json(429, { error: 'Pelan-pelan, Bos. Coba lagi semenit lagi.' });
+      const isi = await bacaJson(req);
+      // Batas per jam dan per hari dicek sesudah isinya terbaca: dari sini sampai disimpan tidak ada
+      // await lagi, jadi dua permintaan yang datang bersamaan tidak bisa sama-sama lolos.
       const sekarang = Date.now();
       const maksPerJam = opsi.maksUsulanPerJamPerIp ?? BAWAAN_MAKS_USULAN_PER_JAM_PER_IP;
       const dariSini = (usulanPerJaringan.get(jaringan) ?? []).filter((t) => sekarang - t < JAM_MS);
@@ -413,7 +416,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       if (penyimpan.jumlahSejak(sekarang - 24 * JAM_MS) >= (opsi.maksUsulanPerHari ?? BAWAAN_MAKS_USULAN_PER_HARI)) {
         return json(429, { error: 'Hari ini usulan yang masuk sudah banyak. Coba lagi besok, Bos.' });
       }
-      const hasil = periksaUsulan(await bacaJson(req));
+      const hasil = periksaUsulan(isi);
       if (!hasil.ok) return json(400, { error: hasil.pesan });
       const id = penyimpan.simpan(hasil.usulan, sekarang);
       dariSini.push(sekarang);
