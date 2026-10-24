@@ -2237,6 +2237,12 @@ describe('ledekan (meja online)', () => {
     meja.kontrol.terimaLedek(0, 1, 'Makan tuh!');
     expect(lapisan()!.querySelector('.gelembung.ledek.milikku')!.textContent).toBe('Makan tuh! → Pemain 2');
     expect(umumkan).not.toHaveBeenCalled();
+    // Ledekan pendek di kursi tepi layar (scene palsu: posisi 0,0): tetap digeser sejauh setengah lebar
+    // maksimal gelembung ledekan, jadi "isi → nama" tidak terpotong.
+    meja.kontrol.terimaLedek(1, 2, 'Rasain!');
+    const pendek = [...lapisan()!.querySelectorAll<HTMLElement>('.gelembung.ledek')].at(-1)!;
+    expect(pendek.textContent).toBe('Rasain! → Pemain 3');
+    expect(pendek.style.left).toBe(`${Math.min(136, window.innerWidth / 2)}px`);
   });
 
   it('gaya bagian Ledek di modal tidak ikut mengenai gelembung ledekan orang lain', async () => {

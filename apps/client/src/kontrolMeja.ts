@@ -2012,8 +2012,9 @@ export class KontrolMeja implements AksiAdegan {
     el.setAttribute('aria-hidden', 'true');
     const x = pos ? pos.x / dpr : window.innerWidth / 2;
     const y = pos ? pos.y / dpr : window.innerHeight / 2;
-    // Jarak tepi ≈ setengah lebar gelembung supaya tidak terpotong layar.
-    const tepi = panjang ? Math.min(136, window.innerWidth / 2) : 60;
+    // Jarak tepi ≈ setengah lebar gelembung supaya tidak terpotong layar. Gelembung ledekan ("isi → nama")
+    // selebar pesan panjang (max-width 16rem), jadi memakai jarak yang sama.
+    const tepi = panjang || ledek ? Math.min(136, window.innerWidth / 2) : 60;
     el.style.left = `${Math.min(window.innerWidth - tepi, Math.max(tepi, x))}px`;
     el.style.top = `${Math.max(40, y - (milikku ? 70 : 10))}px`;
     (ledek ? lapisanLedek() : this.akar).appendChild(el);
