@@ -538,7 +538,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: '**Contoh Ani dan Budi** (2 deck, joker putaran ini 3). Budi memegang 7, 8, 9 Love dan J, Q, K Wajik. Ani, tepat sebelum Budi, membuang 8 Love dari deck satunya. Budi mungut 8 Love itu dan menurunkan 7-8-9 Love. Sisa kartunya J-Q-K Wajik dan 8 Love miliknya sendiri. Kalau J-Q-K Wajik ikut diturunkan, kartu terakhirnya 8 Love, kembaran kartu yang barusan ia pungut, dan kartu itu tidak boleh jadi pentungan. Jadi aplikasi menolak turunkan yang menyisakan 8 Love sendirian: Budi menyisakan minimal dua kartu dan membuang satu seperti biasa.',
+        teks: '**Contoh Ani dan Budi** (2 deck, misal joker putaran ini 3). Budi memegang 7, 8, 9 Love dan J, Q, K Wajik. Ani, tepat sebelum Budi, membuang 8 Love dari deck satunya. Budi mungut 8 Love itu dan menurunkan 7-8-9 Love. Sisa kartunya J-Q-K Wajik dan 8 Love miliknya sendiri. Kalau J-Q-K Wajik ikut diturunkan, kartu terakhirnya 8 Love, kembaran kartu yang barusan ia pungut, dan kartu itu tidak boleh jadi pentungan. Jadi aplikasi menolak turunkan yang menyisakan 8 Love sendirian: Budi menyisakan minimal dua kartu dan membuang satu seperti biasa.',
       },
       {
         t: 'paragraf',
@@ -810,10 +810,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Host pergi: tugas host pindah ke pemain manusia lain yang masih terhubung.',
           'Putaran berikutnya dimulai oleh host. Kalau skor terendah sama, host memilih pengocok atau Acak.',
           `Di hasil putaran, tombol host baru aktif ${DETIK_JEDA_LANJUT} detik kemudian, supaya semua sempat melihat kartu. Kalau sudah selesai melihat, tekan ${TEKS_LANJUT.siap}. Begitu yang lain siap semua, host bisa langsung lanjut.`,
-          `Mau ngeledek? Waktu hasil putaran tampil, buka bagian ${TEKS_LEDEK.judul} di bawah rincian skor, pilih orangnya, lalu ketuk ledekannya atau emoji. Ledekanmu muncul besar di layar dia, dan yang kepentung boleh membalas. Paling banyak ${MAKS_LEDEK_PER_PUTARAN} ledekan per putaran. Warga kedai nggak ikut ngeledek.`,
+          `Mau ngeledek? Waktu hasil putaran tampil, buka bagian ${TEKS_LEDEK.judul} di bawah rincian skor, pilih orangnya, lalu ketuk ledekannya atau emoji. Ledekanmu muncul besar di layar dia, dan yang kepentung boleh membalas. Tiap pemain paling banyak ${MAKS_LEDEK_PER_PUTARAN} ledekan per putaran. Warga kedai nggak ikut ngeledek.`,
           'Pengumuman joker menunggu semua pemain menekan OK. Pemain yang terputus tidak ditunggu. Kalau ia kembali sebelum sempat menekan OK, popup joker muncul lagi untuknya saja; meja nggak ikut berhenti, kecuali sedang gilirannya.',
           'Meja tanpa pemain yang terhubung dihapus otomatis: 10 menit kalau masih di lobi, 45 menit kalau permainannya sedang jalan.',
-          'Server sempat mati atau diperbarui? Mejanya tersimpan. Aplikasi menyambung ulang sendiri dan kamu kembali ke kursimu dengan kartu yang sama. Permainan berhenti sebentar sampai ada yang kembali.',
+          'Server sempat mati atau diperbarui? Meja yang permainannya belum selesai tersimpan. Aplikasi menyambung ulang sendiri dan kamu kembali ke kursimu dengan kartu yang sama. Permainan berhenti sebentar sampai ada yang kembali.',
         ],
       },
       {
@@ -822,11 +822,11 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: 'Hasil akhir permainan online masuk **Riwayat & peringkat**. Yang dihitung di peringkat cuma meja yang dimainkan minimal 2 orang. Urutan bawaannya rata-rata skor akhir per permainan, dan bisa diganti (skor terbaik, persen juara, jumlah juara, dan lainnya). Rata-rata, persen juara, dan poin posisi baru muncul sesudah 3 kali main. Peringkat menggabungkan pemain berdasarkan nama tanpa beda huruf besar/kecil, jadi pakai nama yang sama setiap main.',
+        teks: 'Hasil akhir permainan online masuk **Riwayat** (ubin Riwayat & statistik di beranda). Yang dihitung di peringkat cuma meja yang dimainkan minimal 2 orang. Urutan bawaannya rata-rata skor akhir per permainan, dan bisa diganti (skor terbaik, persen juara, jumlah juara, dan lainnya). Rata-rata, persen juara, dan poin posisi baru muncul sesudah 3 kali main. Peringkat menggabungkan pemain berdasarkan nama tanpa beda huruf besar/kecil, jadi pakai nama yang sama setiap main.',
       },
       {
         t: 'paragraf',
-        teks: `**Kompetisi** (tombol Kompetisi di beranda): siapa saja boleh mengajukan kompetisi, lengkap dengan lama kompetisi (1 malam, 1 minggu, atau 1 bulan), jumlah pemain per meja, batas putaran, dan aturan mejanya. Kompetisi jalan begitu ${MIN_PESERTA} orang menekan Ikut serta; kalau 24 jam belum cukup, pengajuannya batal. Yang telat boleh ikut selama kompetisi masih jalan. Selama kompetisi jalan, layar kompetisinya menampilkan meja yang menunggu peserta: pilih Duduk, atau buka meja baru. Meja mulai sendiri begitu semua kursinya terisi peserta. Meja kompetisi khusus peserta (tanpa warga kedai), aturannya ikut kompetisi, dan cuma sekali main.`,
+        teks: `**Kompetisi** (tombol Kompetisi di beranda): siapa saja boleh mengajukan kompetisi, lengkap dengan lama kompetisi (1 malam, 1 minggu, atau 1 bulan), jumlah pemain per meja, batas putaran, dan aturan mejanya. Kompetisi jalan begitu ${MIN_PESERTA} orang ikut (yang mengajukan langsung terhitung ikut); kalau 24 jam belum cukup, pengajuannya batal. Yang telat boleh ikut selama kompetisi masih jalan. Selama kompetisi jalan, layar kompetisinya menampilkan meja yang menunggu peserta: pilih Duduk, atau buka meja baru. Meja mulai sendiri begitu semua kursinya terisi peserta. Meja kompetisi khusus peserta (tanpa warga kedai), aturannya ikut kompetisi, dan cuma sekali main.`,
       },
       {
         t: 'daftar',
@@ -834,7 +834,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Nilai tiap permainan 0 sampai 10, dari banyaknya peserta di meja itu yang kalah skor darimu. Meja 4 orang: juara 10; kedua 6,7; ketiga 3,3; juru kunci 0. Skor sama tidak saling mengalahkan.',
           'Keluar di tengah permainan = 0, dan yang keluar tidak dihitung sebagai lawan: nilai yang lain dihitung dari peserta yang bertahan sampai akhir saja. Meja 4 orang dengan 1 yang keluar: juara 10; kedua 5; ketiga 0. Kalau cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0.',
           `Klasemen diurutkan dari rata-rata nilai per permainan, dan kamu masuk klasemen sesudah ${MIN_MAIN_KOMPETISI} kali main. Rata-rata sama: yang lebih sering main di atas, lalu rata-rata skor akhir.`,
-          'Permainan yang sudah mulai sebelum kompetisi berakhir tetap dihitung. Juaranya diumumkan sesudah meja terakhir selesai, lalu dapat 🏆 di samping namanya, juga di Riwayat & peringkat.',
+          'Permainan yang sudah mulai sebelum kompetisi berakhir tetap dihitung. Juaranya diumumkan sesudah meja terakhir selesai, lalu dapat 🏆 di samping namanya, juga di tab Peringkat layar Riwayat.',
           `Meja kompetisi lakennya biru dan bar atasnya menulis nama kompetisi. Sesudah permainan selesai, klasemen akhir menampilkan nilai tiap peserta dan naik-turun peringkatnya. Tombol ${TEKS_KOMPETISI.kembaliKompetisi} membawamu ke daftar meja lagi.`,
           `Meja kompetisi selalu punya batas waktu per giliran. Di hasil putaran, kalau host belum memulai putaran berikutnya, putarannya mulai sendiri sebentar kemudian. Di meja kompetisi tidak ada Akhiri permainan maupun ${TEKS_KALDU.tombol}: permainan selesai sendiri di batas putaran (atau batas skor kalau diisi), dan kalau mode kaldu dipakai, putaran kaldu mulai sendiri di batas putaran.`,
           'Kompetisi bisa disudahi lebih awal kalau lebih dari separuh peserta setuju.',
@@ -851,7 +851,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: `**${TEKS_USULAN.ubin}:** punya ide atau nemu yang aneh? Ketuk 💡 ${TEKS_USULAN.ubin} di beranda (atau di Tentang yang dibuka dari beranda), pilih jenisnya, tulis judul dan ceritanya, lalu kirim atas namamu. Usulanmu dibaca dan ditinjau tiap hari. Kalau sinyal lagi putus, tulisanmu tetap ada dan bisa dikirim lagi.`,
+        teks: `**${TEKS_USULAN.ubin}:** punya ide atau nemu yang aneh? Ketuk 💡 ${TEKS_USULAN.ubin} di beranda (atau di Tentang yang dibuka dari beranda), pilih jenisnya, tulis judul dan ceritanya, lalu kirim atas namamu. Usulanmu dibaca dan ditinjau tiap hari. Kalau sinyal lagi putus, tulisanmu tetap ada selama aplikasinya belum ditutup, dan bisa dikirim lagi.`,
       },
     ],
   },
@@ -928,7 +928,7 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   },
   {
     tanya: 'Gimana cara ngeledek?',
-    jawab: `Waktu hasil putaran tampil di meja online, buka bagian ${TEKS_LEDEK.judul} di bawah rincian skor, pilih orangnya, lalu ketuk ledekannya atau emoji. Ledekanmu muncul besar di layar dia. Paling banyak ${MAKS_LEDEK_PER_PUTARAN} ledekan per putaran. Di meja offline dan latihan tidak ada ledekan.`,
+    jawab: `Waktu hasil putaran tampil di meja online, buka bagian ${TEKS_LEDEK.judul} di bawah rincian skor, pilih orangnya, lalu ketuk ledekannya atau emoji. Ledekanmu muncul besar di layar dia. Tiap pemain paling banyak ${MAKS_LEDEK_PER_PUTARAN} ledekan per putaran. Di meja offline dan latihan tidak ada ledekan.`,
   },
   {
     tanya: 'Kok namaku nggak bisa diganti?',
