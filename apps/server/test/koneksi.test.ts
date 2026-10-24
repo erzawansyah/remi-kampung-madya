@@ -350,6 +350,70 @@ describe(`jeda ${JEDA_PUTUS_MS / 1000} detik sebelum dianggap terputus`, () => {
     a.ws.close();
     b2.ws.close();
   });
+
+  // Selama jeda, meja masih mengira Siti tersambung. Kalau batas tunggu pengumuman joker habis di
+  // jendela itu, Siti tidak boleh dicatat "sudah melihat": popupnya tidak tampil sampai habis.
+  it.each([
+    ['dalam jeda', 1_000],
+    ['sesudah jeda', JEDA_PUTUS_MS + 1_000],
+  ])('batas tunggu joker habis selagi kabar putus ditunda, kembali %s: popup joker muncul lagi untuknya saja', async (_, lewat) => {
+    const jam = new JamUji();
+    const s = await nyalakan({ penjadwal: jam });
+    const a = await klien(s.port);
+    a.kirim({ t: 'buat', nama: 'Budi', pengaturan: { jumlahPemain: 3, detikGiliran: 20 } });
+    const masukA = await tungguPesan(a, (p) => p.t === 'masuk');
+    const b = await klien(s.port);
+    b.kirim({ t: 'gabung', kode: masukA.kode, nama: 'Siti' });
+    const masukB = await tungguPesan(b, (p) => p.t === 'masuk');
+    a.kirim({ t: 'aturKursi', kursi: 2, jenis: 'bot' });
+    a.kirim({ t: 'mulai', pengocok: 0 });
+    await tungguPesan(a, (p) => p.t === 'meja' && info(p).status === 'main');
+    a.kirim({ t: 'siapJoker', putaran: 1 });
+    await tungguPesan(a, (p) => p.t === 'meja' && info(p).status === 'main' && info(p).menungguJoker.length === 1);
+    // Sambungan Siti tertutup 3 dtk sebelum batas tunggu joker (20 dtk).
+    jam.maju(17_000);
+    await sambunganTertutup(s, b, 1);
+    jam.maju(3_000);
+    await tungguPesan(a, (p) => p.t === 'meja' && info(p).status === 'main' && info(p).menungguJoker.length === 0);
+    jam.maju(lewat);
+    await tunggu(30);
+    a.pesan.length = 0;
+    const b2 = await klien(s.port);
+    b2.kirim({ t: 'gabung', kode: masukA.kode, nama: 'Siti', token: masukB.token });
+    expect((await tungguPesan(b2, (p) => p.t === 'masuk')).kursi).toBe(1);
+    expect(info(await tungguPesan(b2, (p) => p.t === 'meja')).menungguJoker).toEqual([1]);
+    expect(info(await tungguPesan(a, (p) => p.t === 'meja')).menungguJoker).toEqual([]);
+    a.ws.close();
+    b2.ws.close();
+  });
+
+  it('sambungan tertutup sesudah batas tunggu joker habis, kembali dalam jeda: popup tidak muncul lagi', async () => {
+    const jam = new JamUji();
+    const s = await nyalakan({ penjadwal: jam });
+    const a = await klien(s.port);
+    a.kirim({ t: 'buat', nama: 'Budi', pengaturan: { jumlahPemain: 3, detikGiliran: 20 } });
+    const masukA = await tungguPesan(a, (p) => p.t === 'masuk');
+    const b = await klien(s.port);
+    b.kirim({ t: 'gabung', kode: masukA.kode, nama: 'Siti' });
+    const masukB = await tungguPesan(b, (p) => p.t === 'masuk');
+    a.kirim({ t: 'aturKursi', kursi: 2, jenis: 'bot' });
+    a.kirim({ t: 'mulai', pengocok: 0 });
+    await tungguPesan(a, (p) => p.t === 'meja' && info(p).status === 'main');
+    a.kirim({ t: 'siapJoker', putaran: 1 });
+    await tungguPesan(a, (p) => p.t === 'meja' && info(p).status === 'main' && info(p).menungguJoker.length === 1);
+    // Popup Siti tampil sampai batas tunggu habis (ia masih tersambung), baru sesudahnya sambungannya tertutup.
+    jam.maju(20_000);
+    await tungguPesan(b, (p) => p.t === 'meja' && info(p).status === 'main' && info(p).menungguJoker.length === 0);
+    jam.maju(3_000);
+    await sambunganTertutup(s, b, 1);
+    jam.maju(1_000);
+    const b2 = await klien(s.port);
+    b2.kirim({ t: 'gabung', kode: masukA.kode, nama: 'Siti', token: masukB.token });
+    await tungguPesan(b2, (p) => p.t === 'masuk');
+    expect(info(await tungguPesan(b2, (p) => p.t === 'meja')).menungguJoker).toEqual([]);
+    a.ws.close();
+    b2.ws.close();
+  });
 });
 
 describe('sambungan baru selagi yang lama masih terbuka (client menutup yang lama belakangan)', () => {

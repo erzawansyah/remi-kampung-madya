@@ -166,7 +166,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   const sambunganPemain = new Map<string, Sambungan>();
   const semuaSambungan = new Set<Sambungan>();
   /** Pemain yang sambungannya tertutup tapi belum dikabarkan terputus ke meja (jeda JEDA_PUTUS_MS). */
-  const putusTertunda = new Map<string, { kode: string; timer: unknown }>();
+  const putusTertunda = new Map<string, { kode: string; timer: unknown; sejak: number }>();
   /** Id aksi terakhir per pemain (kiriman ulang tidak diterapkan dua kali); dibuang bersama mejanya. */
   const idAksi = new Map<string, { kode: string; id: string[] }>();
   /** Kode meja → kunci jaringan pembuatnya (untuk batas meja per IP; IPv6 per /64). */
@@ -562,6 +562,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         // tercatat di sambungan lain (misalnya setengah mati) atau baru saja tertutup (jeda putus).
         const sambunganLama = lama ? sambunganPemain.get(pemainId) : undefined;
         const gantiSambungan = lama && ((!!sambunganLama && sambunganLama !== s) || putusTertunda.has(pemainId));
+        // Kapan sambungan lamanya tertutup (kalau kabar putusnya masih ditunda): meja memakainya untuk
+        // tahu apakah pengumuman joker sempat tampil sampai batas waktunya.
+        const putusPada = lama ? putusTertunda.get(pemainId)?.sejak : undefined;
         // Meja kompetisi (#51): duduk pakai tiket peserta, dengan nama yang terdaftar.
         let nama = pesan.nama;
         let peserta: number | undefined;
@@ -576,7 +579,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         }
         try {
           // Gagal (meja penuh / sudah mulai) = tautan dikembalikan; pemain tetap di meja lamanya.
-          tautkan(s, pemainId, kode, () => meja.masuk(pemainId, nama, peserta, gantiSambungan));
+          tautkan(s, pemainId, kode, () => meja.masuk(pemainId, nama, peserta, gantiSambungan, putusPada));
           kosongSejak.delete(kode);
         } catch (e) {
           if (e instanceof GalatMeja) return kirimKe(s, { t: 'error', pesan: e.message });
@@ -695,7 +698,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
             putusTertunda.delete(pemainId);
             kabari(sejak);
           });
-          putusTertunda.set(pemainId, { kode, timer });
+          putusTertunda.set(pemainId, { kode, timer, sejak });
         } catch (e) {
           log(`galat menjadwalkan jeda putus meja ${kode}`, e);
           kabari();
