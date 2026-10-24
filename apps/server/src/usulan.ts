@@ -114,7 +114,7 @@ const JEDA_AWAL_MS = 10_000;
 
 /**
  * Jeda sebelum usulan yang sudah gagal `percobaan` kali boleh dicoba lagi: 5 menit, lalu dua kali
- * lipat tiap gagal, paling lama 6 jam. 20 percobaan ≈ 3,7 hari sejak gagal pertama.
+ * lipat tiap gagal, paling lama 6 jam. 20 percobaan ≈ 3,4 hari sejak gagal pertama (ditambah selisih detak pengirim).
  */
 export function jedaCobaLagi(percobaan: number): number {
   if (percobaan <= 0) return 0;

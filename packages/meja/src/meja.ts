@@ -1353,7 +1353,8 @@ export class Meja {
    * sendiri (pengocok diundi dari calon pengocok, seperti pilihan Acak) kalau host belum memulainya
    * sampai jeda lanjut habis ditambah satu waktu giliran. Tanpa ini satu host yang tetap tersambung
    * bisa menahan meja (dan juara kompetisinya, yang menunggu meja terakhir selesai) selamanya. Tidak
-   * berjalan selama semua manusia pergi (#35); saat ada yang kembali, waktunya dihitung dari awal.
+   * berjalan selama semua manusia pergi (#35); saat ada yang kembali, waktunya dihitung lagi sejak itu:
+   * sisa jeda lanjut (kalau masih ada) ditambah satu waktu giliran.
    */
   private jadwalkanLanjutKompetisi(sekarang: number): void {
     const g = this.d.game;
