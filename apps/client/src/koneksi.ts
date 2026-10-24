@@ -343,7 +343,12 @@ export class KoneksiOnline implements Koneksi {
       // dipakai lebih dulu daripada localStorage (bisa gagal ditulis atau ditimpa tab lain).
       const sesi = this.sesiMemori ?? (this.pakaiSesiTersimpan ? simpan.sesi() : null);
       const mauMasuk = antri.some((p) => p.t === 'buat' || p.t === 'gabung');
-      if (sesi && !mauMasuk) ws.send(JSON.stringify({ t: 'gabung', kode: sesi.kode, nama: this.nama(), token: sesi.token }));
+      if (sesi && !mauMasuk) {
+        // Tiket kompetisi (#51 versi 2) ikut dikirim: kalau kursi lobi kompetisinya sudah dilepas karena
+        // terlalu lama terputus, server mendudukkannya lagi lewat tiket selama masih ada kursi kosong.
+        const tiket = simpan.tiketKompetisi().map(({ kode, token }) => ({ kode, token }));
+        ws.send(JSON.stringify({ t: 'gabung', kode: sesi.kode, nama: this.nama(), token: sesi.token, ...(tiket.length ? { tiket } : {}) }));
+      }
       for (const p of antri) ws.send(JSON.stringify(p));
       // Ping pertama langsung: watchdog mulai dari sekarang dan sampel jam server cepat ada.
       this.kirimPing(ws);

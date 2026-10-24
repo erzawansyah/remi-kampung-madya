@@ -22,7 +22,7 @@ import {
   type SaringanPeringkat,
   type UrutanPeringkat,
 } from '@remi/meja';
-import { buatPenyimpanKompetisi, SKEMA_KOMPETISI, type PenyimpanKompetisi } from './kompetisi.js';
+import { buatPenyimpanKompetisi, perbaikiSkemaKompetisiPraRilis, SKEMA_KOMPETISI, type PenyimpanKompetisi } from './kompetisi.js';
 import { buatPenyimpanUsulan, SKEMA_USULAN, type PenyimpanUsulan } from './usulan.js';
 import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, type PenyimpanMejaAktif } from './mejaAktif.js';
 
@@ -64,10 +64,16 @@ export interface PapanPeringkat {
   minMain: number;
   /** Permainan yang dihitung sesudah saringan dan syarat minimal 2 orang. */
   jumlahPermainan: number;
-  peringkat: BarisPapan[];
+  peringkat: BarisPapanPiala[];
   /** Untuk urutan rata-rata/persen/posisi: yang main kurang dari minMain kali. */
-  belumCukup: BarisPapan[];
+  belumCukup: BarisPapanPiala[];
 }
+
+/**
+ * Baris leaderboard v2. `piala` (opsional, hanya kalau > 0): berapa kali orang ini juara kompetisi
+ * yang juaranya sudah ditetapkan (#51 versi 2), dikenali lewat kunciNama. Tidak ada di bentuk lama.
+ */
+export type BarisPapanPiala = BarisPapan & { piala?: number };
 
 export interface PermintaanPapan {
   /** Data mentah boleh (parameter URL): dirapikan, yang tidak sah jadi bawaan. */
@@ -142,7 +148,10 @@ export const MIGRASI: readonly string[] = [
    ALTER TABLE klasemen ADD COLUMN kunci_nama TEXT;
    CREATE INDEX IF NOT EXISTS permainan_selesai ON permainan (selesai_pada);
    CREATE INDEX IF NOT EXISTS klasemen_kunci ON klasemen (kunci_nama) WHERE bot = 0;`,
-  // v2 (23 Okt 2026, keputusan pemilik #51): kompetisi, pesertanya, dan hasil per permainan.
+  // v2 (23 Okt 2026, keputusan pemilik #51): kompetisi, pesertanya, hasil per permainan, dan juaranya.
+  // Pengecualian aturan "jangan diubah": ditulis ulang di tempat 24 Okt 2026 (kompetisi versi 2)
+  // karena kompetisi belum pernah dirilis ke main. Database pra-rilis diperbaiki
+  // perbaikiSkemaKompetisiPraRilis() saat dibuka.
   SKEMA_KOMPETISI,
   // v3 (24 Okt 2026, keputusan pemilik): usul fitur dari game, diteruskan ke Notion. Tanpa alamat IP.
   SKEMA_USULAN,
@@ -232,6 +241,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
   const db = typeof sumber === 'string' ? new DatabaseSync(sumber) : sumber;
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   migrasiSkema(db, log);
+  perbaikiSkemaKompetisiPraRilis(db, log);
   lengkapiBaris(db, log);
   const kompetisi = buatPenyimpanKompetisi(db);
   const usulan = buatPenyimpanUsulan(db);
@@ -395,7 +405,22 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
       const periode = saringan.periode === 'bulan' ? bulanWib(permintaan.sekarang ?? jam()) : null;
       const { baris, jumlah } = agregat(saringan, periode);
       const { peringkat, belumCukup } = urutkanPeringkat(baris, urut);
-      return { v: 2, urut, saringan, periode, minMain: MIN_MAIN, jumlahPermainan: jumlah, peringkat, belumCukup };
+      // Piala juara kompetisi (#51 versi 2): hanya kalau ada; baris di cache tidak diubah.
+      const piala = kompetisi.piala();
+      const denganPiala = (b: BarisPapan): BarisPapanPiala => {
+        const n = piala.get(kunciNama(b.nama)) ?? 0;
+        return n > 0 ? { ...b, piala: n } : b;
+      };
+      return {
+        v: 2,
+        urut,
+        saringan,
+        periode,
+        minMain: MIN_MAIN,
+        jumlahPermainan: jumlah,
+        peringkat: peringkat.map(denganPiala),
+        belumCukup: belumCukup.map(denganPiala),
+      };
     },
     kompetisi,
     usulan,

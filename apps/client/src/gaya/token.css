@@ -31,6 +31,13 @@
   --laken-terang: #1d6a3d;
   --laken-gelap: #0c3a20;
   --laken-pekat: #072414;
+  /* Laken biru tua meja kompetisi (#51 versi 2). Dipakai lewat html[data-laken='kompetisi'] di
+     bawah, yang mengarahkan --laken* ke sini. Kontrasnya ≥ laken hijau: --teks-redup 6.5:1,
+     --teks-emas 6.1:1, --emas-muda 7.6:1 di --laken-kompetisi; --emas 7.3:1 di --laken-kompetisi-gelap. */
+  --laken-kompetisi: #1b3d6e;
+  --laken-kompetisi-terang: #24508c;
+  --laken-kompetisi-gelap: #0f2648;
+  --laken-kompetisi-pekat: #081a33;
   /* Kayu tepi meja & papan kedai */
   --kayu: #6e4325;
   --kayu-terang: #9a6438;
@@ -217,4 +224,17 @@
   --lebar-kolom: 480px;
   --lebar-dialog: 560px;
   --lebar-bar-aksi: 100%;
+}
+
+/* Lobi & meja kompetisi (#51 versi 2): laken biru tua. Atributnya dipasang aplikasi selama pemain di
+   lobi/meja kompetisi dan dilepas saat meninggalkannya (game/warnaMeja.ts, aturLaken). Harus di
+   <html> (elemen yang sama dengan :root) supaya token turunan seperti --meja ikut berganti. Kaca bar
+   dan panel ikut sedikit kebiruan supaya tidak terlihat hijau di atas laken biru. */
+html[data-laken='kompetisi'] {
+  --laken: var(--laken-kompetisi);
+  --laken-terang: var(--laken-kompetisi-terang);
+  --laken-gelap: var(--laken-kompetisi-gelap);
+  --laken-pekat: var(--laken-kompetisi-pekat);
+  --kaca: rgba(8, 18, 36, 0.72);
+  --panel: rgba(8, 18, 36, 0.92);
 }

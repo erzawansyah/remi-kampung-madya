@@ -27,7 +27,7 @@ import {
   ukuranSorot,
 } from './kartuGrafis';
 import { acakId, geserBayangan, hitungTataMeja, IKON_KARTU, LAPIS, lebarIkonKartu, LETAK_LABEL_KARTU, PAD_LABEL_KARTU, TINGGI_TANGAN, ukuranLabelKartu, type AksiKetuk, type JenisSorot, type KartuTata, type Kotak, type TataMeja, type TeksTata, type Titik } from './tataMeja';
-import { bacaPalet, type PaletMeja } from './warnaMeja';
+import { bacaPalet, saatLakenBerubah, type PaletMeja } from './warnaMeja';
 import { persegiBulat } from './kartuGrafisGambar';
 import { DURASI, EASE, durasi, easePegas, efekHemat, kurangiGerak } from '../gerak';
 import { preferensi, saatPreferensiBerubah } from '../preferensi';
@@ -200,6 +200,7 @@ export class MejaScene extends Phaser.Scene {
   private lepas = new Map<string, Lepas>();
   private hitungTerbang = 0;
   private lepasPreferensi: (() => void) | null = null;
+  private lepasLaken: (() => void) | null = null;
   private batalPanaskan: (() => void) | null = null;
   /** Penomor tekstur retakan panel (tiap retakan punya tekstur kanvas sendiri, dibuang sesudahnya). */
   private hitungRetak = 0;
@@ -229,6 +230,11 @@ export class MejaScene extends Phaser.Scene {
       daftarkanTeksturKartu(this.textures, { ulang: true });
       this.tataUlang(false);
     });
+    // Laken meja kompetisi dipasang/dilepas (#51 versi 2): token warna dibaca ulang.
+    this.lepasLaken = saatLakenBerubah(() => {
+      this.palet = bacaPalet();
+      if (this.sys.isActive()) this.tataUlang(false);
+    });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.bersihkan());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.bersihkan());
     this.tataUlang(false);
@@ -237,6 +243,8 @@ export class MejaScene extends Phaser.Scene {
   private bersihkan() {
     this.lepasPreferensi?.();
     this.lepasPreferensi = null;
+    this.lepasLaken?.();
+    this.lepasLaken = null;
     this.batalPanaskan?.();
     this.batalPanaskan = null;
     for (const l of this.lepas.values()) clearTimeout(l.timer);

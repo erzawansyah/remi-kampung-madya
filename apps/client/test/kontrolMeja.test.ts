@@ -67,9 +67,12 @@ import {
   PINTASAN_HURUF,
   teksBarAtas,
   teksInfoKaldu,
+  htmlHasilKompetisi,
   type AppUntukMeja,
+  type PesanHasilKompetisi,
 } from '../src/kontrolMeja';
 import { TEKS_KALDU } from '../src/konten/kaldu';
+import { TEKS_KOMPETISI } from '../src/konten/kompetisi';
 import { TEKS_LEDEK } from '../src/konten/ledek';
 import { LAMA_LEDEK_MS } from '../src/ui/ledek';
 import { TEKS_KONEKSI, teksDijalankanWarga, teksMentungTerlewat } from '../src/konten/koneksi';
@@ -1523,6 +1526,165 @@ describe('klasemen akhir', () => {
     expect(ringkas.open).toBe(false);
     expect(ringkas.querySelector('summary')!.textContent).toContain('mentung pakai');
     expect(ringkas.querySelectorAll('.rincian > details.akordion')).toHaveLength(h.rincian.length);
+  });
+});
+
+// ---------- meja kompetisi (#51 versi 2) ----------
+
+const KOMPETISI_UJI = { kode: 'KOMPA', nama: 'Remi Jumat' };
+
+/** Hasil kompetisi meja uji (pesan kompetisiHasil): kursi 0 (aku) naik ke peringkat 2. */
+const hasilKompetisiUji = (g: GameState): PesanHasilKompetisi => ({
+  t: 'kompetisiHasil',
+  kompetisi: KOMPETISI_UJI,
+  minMain: 3,
+  jumlahPeringkat: 4,
+  pemain: g.pemain.map((p, i) => ({
+    kursi: i,
+    nama: p.nama,
+    nilai: i === 0 ? 10 : (3 - i) * (10 / 3),
+    keluar: false,
+    rataNilai: i === 0 ? 35 / 6 : 2,
+    main: i === 3 ? 2 : 4,
+    peringkatSebelum: i === 0 ? 3 : i === 3 ? null : 1,
+    peringkatSesudah: i === 0 ? 2 : i === 3 ? null : 1,
+  })),
+});
+
+/** Meja kompetisi online (semua kursi peserta), aku tinggal membuang satu kartu untuk mentung, 1 putaran. */
+async function mejaKompetisiSiapMentung(appUbah: Partial<AppUntukMeja> = {}, infoUbah: Partial<InfoMeja> = {}): Promise<MejaUji> {
+  const g = skenario({
+    konfigurasi: { batasPutaran: 1 },
+    rankJoker: 2,
+    tangan: [['5 love', '6 love', '9 waru'], ['3 waru', '4 waru', '5 waru'], ['3 love', '4 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+    buangan: [['7 love', 1]],
+    giliran: 0,
+  });
+  const m = new MejaUji(
+    g,
+    {
+      kursi: g.pemain.map((p) => ({ jenis: 'manusia', nama: p.nama, terhubung: true, level: 'normal' })),
+      kompetisi: KOMPETISI_UJI,
+      ...infoUbah,
+    },
+    {
+      jenis: 'online',
+      statusKoneksi: () => 'tersambung',
+      nomorSambungan: () => 1,
+      siapKirim: () => true,
+      kembaliKeKompetisi: vi.fn(),
+      ...appUbah,
+    },
+  );
+  m.app.kirim({ t: 'aksi', aksi: { jenis: 'mulung', jumlah: 1, kartuJadi: [spek('5 love', '6 love', '7 love')] } });
+  await sampai(() => m.g.putaran!.tahap === 'main' && !!m.tombol('buang'));
+  return m;
+}
+
+describe('meja kompetisi (#51 versi 2)', () => {
+  it('bar atas: lencana "🏅 nama kompetisi" (bukan kode meja); menu ☰ juga tanpa kode', async () => {
+    meja = await mejaKompetisiSiapMentung();
+    const jenis = meja.akar.querySelector('.bar-atas .info-jenis')!;
+    expect(jenis.textContent).toBe('🏅 Remi Jumat');
+    expect(jenis.classList.contains('lencana-kompetisi-atas')).toBe(true);
+    expect(meja.akar.querySelector('.bar-atas')!.textContent).not.toContain('UJI01');
+    meja.akar.querySelector<HTMLButtonElement>('.bar-atas [data-a="menu"]')!.click();
+    const menu = document.querySelector('#modal .dialog')!;
+    expect(menu.textContent).toContain('Remi Jumat');
+    expect(menu.textContent).not.toContain('UJI01');
+    expect(menu.textContent).not.toMatch(/kode meja/i);
+  });
+
+  it('klasemen akhir: "Kembali ke kompetisi" menggantikan Main lagi (juga untuk host), dan membuka kompetisinya', async () => {
+    const kembaliKeKompetisi = vi.fn();
+    meja = await mejaKompetisiSiapMentung({ kembaliKeKompetisi });
+    const dlg = await sampaiHasil(meja, '[data-selesai]');
+    expect(meja.info.kursiSaya).toBe(meja.info.host);
+    expect(dlg.querySelector('[data-a="lagi"]')).toBeNull();
+    const tombol = dlg.querySelector<HTMLButtonElement>('[data-a="kompetisi"]')!;
+    expect(tombol.textContent).toBe(TEKS_KOMPETISI.kembaliKompetisi);
+    expect(tombol.classList.contains('utama')).toBe(true);
+    // Rincian skor dan Ke beranda tetap ada.
+    expect(dlg.querySelector('[data-a="skor"]')).not.toBeNull();
+    expect(dlg.querySelector('[data-a="keluar"]')).not.toBeNull();
+    tombol.click();
+    expect(kembaliKeKompetisi).toHaveBeenCalledWith('KOMPA');
+    expect(meja.terkirim.some((p) => p.t === 'mainLagi')).toBe(false);
+    expect(document.querySelector('#modal [data-selesai]')).toBeNull();
+  });
+
+  it('hasil kompetisi yang datang sebelum klasemen tampil: baris nilai tiap peserta, aku duluan', async () => {
+    meja = await mejaKompetisiSiapMentung();
+    meja.kontrol.terimaHasilKompetisi(hasilKompetisiUji(meja.g));
+    const dlg = await sampaiHasil(meja, '[data-selesai]');
+    const bagian = dlg.querySelector('[data-hasil-kompetisi]')!;
+    expect(bagian.querySelector('.judul-hasil-kompetisi')!.textContent).toContain(`${TEKS_KOMPETISI.judulHasil} · Remi Jumat`);
+    const baris = [...bagian.querySelectorAll('li')];
+    expect(baris).toHaveLength(4);
+    expect(baris[0]!.classList.contains('saya')).toBe(true);
+    expect(baris[0]!.querySelector('b')!.textContent).toBe(meja.g.pemain[0]!.nama);
+    expect(baris[0]!.querySelector('.teks-hasil-kompetisi')!.textContent).toBe('+10,0 · rata-rata 5,8 · naik ke peringkat 2 (dari 4)');
+    expect(baris[1]!.querySelector('.teks-hasil-kompetisi')!.textContent).toBe('+6,7 · rata-rata 2,0 · tetap di peringkat 1 (dari 4)');
+    expect(baris[3]!.querySelector('.teks-hasil-kompetisi')!.textContent).toBe('+0,0 · rata-rata 2,0 · belum masuk klasemen (2 dari 3 main)');
+    // Bagian hasil di atas tabel klasemen; pengumuman pembaca layar memuat baris milikku.
+    expect(bagian.compareDocumentPosition(dlg.querySelector('table.klasemen')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(vi.mocked(umumkan).mock.calls.some(([t]) => t.includes('naik ke peringkat 2 (dari 4)'))).toBe(true);
+  });
+
+  it('hasil kompetisi yang datang sesudah klasemen tampil: diisi di tempat dan diumumkan', async () => {
+    meja = await mejaKompetisiSiapMentung();
+    const dlg = await sampaiHasil(meja, '[data-selesai]');
+    const bagian = dlg.querySelector('[data-hasil-kompetisi]')!;
+    expect(bagian.innerHTML).toBe('');
+    vi.mocked(umumkan).mockClear();
+    meja.kontrol.terimaHasilKompetisi(hasilKompetisiUji(meja.g));
+    expect(bagian.querySelectorAll('li')).toHaveLength(4);
+    expect(vi.mocked(umumkan)).toHaveBeenCalledWith(`${TEKS_KOMPETISI.judulHasil}: +10,0 · rata-rata 5,8 · naik ke peringkat 2 (dari 4)`);
+  });
+
+  it('hasil putaran: baris "mulai sendiri dalam N detik" untuk semua; voting akhiri menghitung peserta yang terputus', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    meja.info = {
+      ...meja.info,
+      kompetisi: KOMPETISI_UJI,
+      lanjutOtomatis: { sisaMs: 40_000 },
+      kursi: meja.info.kursi.map((k, i) => ({ ...k, jenis: 'manusia', terhubung: i !== 2 })),
+    };
+    const dlg = await sampaiHasil(meja);
+    expect(dlg.querySelector('[data-lanjut-otomatis]')!.textContent).toBe(`${TEKS_KOMPETISI.lanjutOtomatis} 40 detik.`);
+    // Pemilih meja kompetisi: semua peserta yang belum keluar (Pemain 3 terputus tetap dihitung).
+    expect(dlg.querySelector('[data-akhiri]')!.textContent).toBe('Akhiri permainan (0/4)');
+    // Info tanpa lanjutOtomatis: barisnya hilang.
+    meja.info = { ...meja.info, lanjutOtomatis: undefined };
+    meja.kontrol.perbarui(meja.info, null);
+    expect(document.querySelector('#modal [data-lanjut-otomatis]')).toBeNull();
+  });
+
+  it('meja online biasa: tanpa baris mulai sendiri, voting hanya menghitung yang terhubung', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    meja.info = { ...meja.info, kursi: meja.info.kursi.map((k, i) => ({ ...k, jenis: 'manusia', terhubung: i !== 2 })) };
+    const dlg = await sampaiHasil(meja);
+    expect(dlg.querySelector('[data-lanjut-otomatis]')).toBeNull();
+    expect(dlg.querySelector('[data-akhiri]')!.textContent).toBe('Akhiri permainan (0/3)');
+  });
+
+  it('meja online biasa tidak berubah: kode di bar atas, Main lagi untuk host, tanpa bagian kompetisi', async () => {
+    meja = await mejaKompetisiSiapMentung({}, { kompetisi: undefined });
+    expect(meja.akar.querySelector('.bar-atas .info-jenis')!.textContent).toBe('Meja UJI01');
+    expect(meja.akar.querySelector('.bar-atas .info-jenis')!.classList.contains('lencana-kompetisi-atas')).toBe(false);
+    const dlg = await sampaiHasil(meja, '[data-selesai]');
+    expect(dlg.querySelector('[data-a="lagi"]')!.textContent).toBe('Main lagi (ke lobi)');
+    expect(dlg.querySelector('[data-a="kompetisi"]')).toBeNull();
+    expect(dlg.querySelector('[data-hasil-kompetisi]')).toBeNull();
+  });
+
+  it('htmlHasilKompetisi: kosong tanpa pesan; urutan aku dulu lalu kursi', () => {
+    const g = skenario({ rankJoker: 2, tangan: [['5 love'], ['6 love'], ['7 love']], giliran: 0 });
+    expect(htmlHasilKompetisi(null, 0)).toBe('');
+    const el = document.createElement('div');
+    el.innerHTML = htmlHasilKompetisi(hasilKompetisiUji(g), 2);
+    expect([...el.querySelectorAll('li b')].map((b) => b.textContent)).toEqual([g.pemain[2]!.nama, g.pemain[0]!.nama, g.pemain[1]!.nama]);
+    expect(el.querySelector('li.saya .lencana')!.textContent).toBe('kamu');
   });
 });
 

@@ -10,6 +10,7 @@
 import type { Bunga, Rank } from '@remi/engine';
 import { MAKS_PESAN, MIN_MAIN_KOMPETISI, MIN_PESERTA, TENGGANG_SAMBUNG_MS } from '@remi/meja';
 import { TEKS_KALDU } from './kaldu';
+import { TEKS_KOMPETISI } from './kompetisi';
 import { DAFTAR_LEVEL_WARGA } from './levelWarga';
 
 /** Masa tenggang sambung ulang dalam detik (sama dengan yang dipakai meja). */
@@ -807,13 +808,16 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: `**Kompetisi** (tombol Kompetisi di beranda): siapa saja boleh mengajukan kompetisi, lengkap dengan lama kompetisi (1 malam, 1 minggu, atau 1 bulan) dan aturan mejanya. Kompetisi jalan begitu ${MIN_PESERTA} orang menekan Ikut serta; kalau 24 jam belum cukup, pengajuannya batal. Yang telat boleh ikut selama kompetisi masih jalan. Peserta membuat meja kompetisi dari layar Kompetisi, lalu peserta lain gabung pakai kode meja. Meja kompetisi khusus peserta (tanpa warga kedai) dan aturannya ikut kompetisi.`,
+        teks: `**Kompetisi** (tombol Kompetisi di beranda): siapa saja boleh mengajukan kompetisi, lengkap dengan lama kompetisi (1 malam, 1 minggu, atau 1 bulan), jumlah pemain per meja, batas putaran, dan aturan mejanya. Kompetisi jalan begitu ${MIN_PESERTA} orang menekan Ikut serta; kalau 24 jam belum cukup, pengajuannya batal. Yang telat boleh ikut selama kompetisi masih jalan. Selama kompetisi jalan, layar kompetisinya menampilkan meja yang menunggu peserta: pilih Duduk, atau buka meja baru. Meja mulai sendiri begitu semua kursinya terisi peserta. Meja kompetisi khusus peserta (tanpa warga kedai), aturannya ikut kompetisi, dan cuma sekali main.`,
       },
       {
         t: 'daftar',
         butir: [
-          'Poin tiap permainan = banyaknya peserta yang kalah skor darimu di meja itu. Meja 4 orang: juara 3 poin, juru kunci 0. Keluar di tengah permainan = 0 poin.',
-          `Klasemen diurutkan dari total poin, dan kamu masuk klasemen sesudah ${MIN_MAIN_KOMPETISI} kali main. Poin sama: rata-rata poin per main, lalu rata-rata skor akhir.`,
+          'Nilai tiap permainan 0 sampai 10, dari banyaknya peserta di meja itu yang kalah skor darimu. Meja 4 orang: juara 10; kedua 6,7; ketiga 3,3; juru kunci 0. Skor sama tidak saling mengalahkan. Keluar di tengah permainan = 0.',
+          `Klasemen diurutkan dari rata-rata nilai per permainan, dan kamu masuk klasemen sesudah ${MIN_MAIN_KOMPETISI} kali main. Rata-rata sama: yang lebih sering main di atas, lalu rata-rata skor akhir.`,
+          'Permainan yang sudah mulai sebelum kompetisi berakhir tetap dihitung. Juaranya diumumkan sesudah meja terakhir selesai, lalu dapat 🏆 di samping namanya, juga di Riwayat & peringkat.',
+          `Meja kompetisi lakennya biru dan bar atasnya menulis nama kompetisi. Sesudah permainan selesai, klasemen akhir menampilkan nilai tiap peserta dan naik-turun peringkatnya. Tombol ${TEKS_KOMPETISI.kembaliKompetisi} membawamu ke daftar meja lagi.`,
+          'Meja kompetisi selalu punya batas waktu per giliran. Di hasil putaran, kalau host belum memulai putaran berikutnya, putarannya mulai sendiri sebentar kemudian. Akhiri permainan di meja kompetisi baru berlaku kalau semua peserta yang masih di meja setuju, termasuk yang sedang terputus.',
           'Kompetisi bisa disudahi lebih awal kalau lebih dari separuh peserta setuju.',
           'Tiket peserta tersimpan di HP yang dipakai waktu ikut serta, jadi main kompetisi dari HP itu.',
         ],

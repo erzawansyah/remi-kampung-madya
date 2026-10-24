@@ -46,8 +46,24 @@ const sumber: [string, string[]][] = [
   ['Pasang aplikasi', semuaTeks(PASANG)],
   // Mode kaldu (keputusan #42, #43): kotak centang di layar persiapan dan teks pendek di meja.
   ['Mode kaldu', semuaTeks(TEKS_KALDU)],
-  // Kompetisi (keputusan #51): layar Kompetisi dan lobi meja kompetisi.
-  ['Kompetisi', semuaTeks(KOMPETISI)],
+  // Kompetisi (keputusan #51): layar Kompetisi, lobi meja kompetisi, dan hasil di klasemen akhir.
+  [
+    'Kompetisi',
+    [
+      ...semuaTeks(KOMPETISI),
+      KOMPETISI.teksMenungguPeserta(2),
+      KOMPETISI.teksMenungguMeja(2, false),
+      KOMPETISI.teksMenungguMeja(1, true),
+      ...[
+        { peringkatSebelum: 3, peringkatSesudah: 2 },
+        { peringkatSebelum: 1, peringkatSesudah: 2 },
+        { peringkatSebelum: 2, peringkatSesudah: 2 },
+        { peringkatSebelum: null, peringkatSesudah: 1 },
+        { peringkatSebelum: null, peringkatSesudah: null },
+      ].map((p) => KOMPETISI.teksHasilKompetisi({ kursi: 0, nama: 'Ani', nilai: 20 / 3, keluar: false, rataNilai: 5.8, main: 4, ...p }, 3, 4)),
+      KOMPETISI.ariaPiala(2),
+    ],
+  ],
   // Usul fitur (24 Okt 2026): dialog dan pesan penolakan (yang terakhir juga dikirim server).
   ['Usul fitur', [...semuaTeks(TEKS_USULAN), ...semuaTeks(PESAN_USULAN)]],
   // Hasil putaran online (24 Okt 2026): jeda lanjut, tombol Siap, dan ledekan.

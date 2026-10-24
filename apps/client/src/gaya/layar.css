@@ -885,7 +885,8 @@ table.skor tr.redup td {
 
 /* ---------- Kompetisi (#51) ----------
    .daftar-kompetisi > button.daftar-item.item-kompetisi: satu kompetisi (nama, masa, waktu)
-   .lencana-kompetisi: penanda meja kompetisi di lobi · .sub-judul: judul kecil di klasemen */
+   .sub-judul: judul kecil di klasemen · .piala: 🏆 juara kompetisi di samping nama (juga di Riwayat)
+   .item-meja-kompetisi: meja yang menunggu di detail · .lobi-kompetisi: lobi meja kompetisi */
 .item-kompetisi .nama-skor {
   display: flex;
   flex-direction: column;
@@ -897,10 +898,6 @@ table.skor tr.redup td {
 .item-kompetisi .nama-skor .lencana {
   align-self: flex-start;
 }
-.lencana-kompetisi {
-  align-self: center;
-  font-size: var(--teks-sm);
-}
 .layar-kompetisi .sub-judul {
   font-size: var(--teks-md);
   margin: var(--ruang-3) 0 var(--ruang-2);
@@ -909,6 +906,39 @@ table.skor tr.redup td {
   display: flex;
   flex-direction: column;
   gap: var(--ruang-2);
+}
+/* Piala juara kompetisi (versi 2) di samping nama: "🏆" atau "🏆2". Tidak dipotong di tengah. */
+.piala {
+  white-space: nowrap;
+  font-weight: 800;
+  color: var(--emas);
+}
+/* Daftar meja yang menunggu peserta di detail kompetisi: nama + isi di kiri, tombol Duduk di kanan. */
+.item-meja-kompetisi .nama-skor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.item-meja-kompetisi > button {
+  flex: none;
+}
+.panel-meja-kompetisi > .daftar {
+  margin-bottom: var(--ruang-1);
+}
+/* Lobi meja kompetisi: nama kompetisi jadi judul (tanpa kode meja), status mulai sendiri menonjol. */
+.lobi-kompetisi .nama-kompetisi {
+  font-size: var(--teks-2xl);
+  overflow-wrap: anywhere;
+}
+.status-lobi-kompetisi {
+  font-weight: 700;
+  text-align: center;
+  font-size: var(--teks-lg);
+}
+.status-lobi-kompetisi.penuh {
+  color: var(--emas);
 }
 
 /* ---------- Dialog Usul fitur (ui/usulan.ts) ----------
