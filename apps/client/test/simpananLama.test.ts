@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pilihAksiBot, Rng, type ViewPemain } from '@remi/engine';
-import type { InfoMeja, PesanKlien, PesanServer } from '@remi/meja';
+import type { InfoMeja, PesanKlien } from '@remi/meja';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface Fixture {
@@ -107,7 +107,7 @@ describe('simpanan 0.1.0: permainan offline', () => {
     let view: ViewPemain | null = null;
     let info: InfoMeja | null = null;
     const galat: string[] = [];
-    k!.saatPesan((p: PesanServer) => {
+    k!.saatPesan((p) => {
       if (p.t === 'view') view = p.view;
       if (p.t === 'meja') info = p.info;
       if (p.t === 'error') galat.push(p.pesan);

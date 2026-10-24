@@ -14,20 +14,26 @@
 // - pengumuman pembaca layar tidak menyebut angka joker maupun kartu yang dibuang lawan;
 // - mode kaldu (#42): bar atas dan judul popup joker "Putaran N · Kaldu", tombol voting "Putaran
 //   terakhir" di modal hasil (online n/m, offline langsung berlaku), baris pendek "Putaran berikutnya
-//   kaldu." / "Belum ada yang mentung, kaldu lagi.", lencana ×2 di panel mentung, alasan di klasemen.
+//   kaldu." / "Belum ada yang mentung, kaldu lagi.", lencana ×2 di panel mentung, alasan di klasemen;
+// - koneksi putus-putus: aksi ditolak di depan saat sambungan belum siap (pilihan dan draf mulung utuh),
+//   kunci aksi tidak lepas diam-diam ("Masih mengirim…" + periksa sambungan, lepas oleh view/error/status),
+//   view susulan sesudah sambung ulang tidak diputar ulang (mentung terlewat cukup sorakan), siapJoker
+//   tidak menjawab popup putaran baru, id aksi + kirim ulang sekali, dan bar waktu dengan jam server.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buatPermainan,
   namaKartu,
   namaRank,
+  pilihAksiBot,
+  Rng,
   terapkanAksi,
   viewUntuk,
   type Aksi,
   type GameState,
   type ViewPemain,
 } from '@remi/engine';
-import { PENGATURAN_BAWAAN, type InfoMeja, type PesanKlien } from '@remi/meja';
+import { PENGATURAN_BAWAAN, type InfoMeja } from '@remi/meja';
 import { id, semuaSelesaiSusun, skenario, spek, type Skenario } from '../../../packages/engine/test/bantu';
 
 vi.mock('../src/efek/suara', () => ({ bunyi: vi.fn(), getar: vi.fn() }));
@@ -39,10 +45,14 @@ vi.mock('../src/ui/tentang', () => ({ bukaTentang: vi.fn() }));
 vi.mock('../src/ui/dom', async (asli) => ({ ...(await asli<typeof import('../src/ui/dom')>()), umumkan: vi.fn() }));
 
 import { bunyi, getar } from '../src/efek/suara';
+import { sorak } from '../src/efek/sorak';
 import { tutupDialogTeratas, tutupModal, umumkan } from '../src/ui/dom';
 import {
   geserFokus,
+  jejakGiliran,
   KontrolMeja,
+  masihGiliranku,
+  mentungTerlewat,
   peristiwaAwalPerluDiputar,
   perluKirimUlangSiapJoker,
   PINTASAN_HURUF,
@@ -51,12 +61,13 @@ import {
   type AppUntukMeja,
 } from '../src/kontrolMeja';
 import { TEKS_KALDU } from '../src/konten/kaldu';
+import { TEKS_KONEKSI, teksDijalankanWarga, teksMentungTerlewat } from '../src/konten/koneksi';
 import { KEDAI } from '../src/konten/kedai';
 import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { _setelUlangCache, preferensi } from '../src/preferensi';
 import { mejaMasukPeringkat, opsiKonfirmasiKeluar } from '../src/ui/lobi';
 import type { MejaScene, ModelMeja } from '../src/game/MejaScene';
-import type { StatusKoneksi } from '../src/koneksi';
+import type { PesanKeMeja, StatusKoneksi } from '../src/koneksi';
 
 // ---------- perlengkapan ----------
 
@@ -124,7 +135,7 @@ function infoMeja(g: GameState, ubah: Partial<InfoMeja> = {}): InfoMeja {
 
 /** Meja uji: mesin aturan asli; pesan aksi dari KontrolMeja langsung diterapkan lalu view baru dikirim. */
 class MejaUji {
-  terkirim: PesanKlien[] = [];
+  terkirim: PesanKeMeja[] = [];
   /** true = server diam (pesan dicatat, tidak dijawab), meniru koneksi online yang lambat. */
   diam = false;
   readonly sp = scenePalsu();
@@ -904,13 +915,18 @@ describe('popup joker', () => {
     meja.kontrol.perbarui({ ...meja.info, menungguJoker: [0] }, meja.view());
     await tunggu();
     expect(siap()).toBe(2);
-    // Putus dan tersambung lagi sebelum sampai: dikirim sekali lagi di sambungan baru.
+    // Putus dan tersambung lagi sebelum sampai: info dari sambungan baru saja belum cukup (putaran bisa sudah
+    // berganti selama putus); begitu view sambungan baru datang (masih putaran yang di-OK), dikirim sekali lagi.
     sambungan = 3;
     meja.kontrol.perbarui({ ...meja.info, menungguJoker: [0] }, null);
+    expect(siap()).toBe(2);
+    meja.kontrol.perbarui(null, meja.view());
     expect(siap()).toBe(3);
+    // Nomor putaran yang di-OK ikut dikirim (meja mengabaikan OK untuk putaran lain).
+    expect(meja.terkirim.filter((p) => p.t === 'siapJoker').every((p) => p.t === 'siapJoker' && p.putaran === g.putaran!.nomor)).toBe(true);
     // Server sudah mencatat: tidak ada kirim ulang.
     sambungan = 4;
-    meja.kontrol.perbarui({ ...meja.info, menungguJoker: [] }, null);
+    meja.kontrol.perbarui({ ...meja.info, menungguJoker: [] }, meja.view());
     expect(siap()).toBe(3);
   });
 
@@ -1079,7 +1095,7 @@ describe('kocok & bagi kartu terlihat', () => {
     const akar = document.createElement('div');
     document.body.appendChild(akar);
     sp.ganti.bagiKartu = () => new Promise<void>((r) => (lepas = r));
-    const terkirim: PesanKlien[] = [];
+    const terkirim: PesanKeMeja[] = [];
     const k = new KontrolMeja({ jenis: 'offline', kirim: (p) => terkirim.push(p), keluarMeja: vi.fn(), mainLagiOffline: vi.fn() }, sp.scene, akar);
     k.perbarui(infoMeja(g, { menungguJoker: [0] }), viewUntuk(g, 0));
     await tunggu();
@@ -1217,9 +1233,9 @@ describe('modal hasil putaran', () => {
       expect(document.activeElement).toBe(kocok); // fokus keyboard tidak lepas ke <body>
       kocok.click(); // klik lagi selagi menunggu: diabaikan
       expect(jumlahKocok()).toBe(1);
-      vi.advanceTimersByTime(3000);
-      expect(terkunci(tombolKocok())).toBe(true); // belum lewat batas: tetap terkunci
-      vi.advanceTimersByTime(3100);
+      vi.advanceTimersByTime(6000);
+      expect(terkunci(tombolKocok())).toBe(true); // belum lewat batas (10 dtk): tetap terkunci
+      vi.advanceTimersByTime(4100);
       const pulih = tombolKocok();
       expect(document.querySelector('#modal [data-hasil]')!.closest('.dialog')).toBe(dlg); // diperbarui di tempat
       expect(document.activeElement).toBe(pulih); // fokus pindah ke tombol yang dipasang ulang
@@ -1244,7 +1260,7 @@ describe('modal hasil putaran', () => {
       meja.kontrol.perbarui(meja.info, null);
       expect(terkunci(tombolKocok())).toBe(true);
       expect(tombolKocok().textContent).toBe('Mengocok…');
-      vi.advanceTimersByTime(6100);
+      vi.advanceTimersByTime(10_100);
       expect(lama.isConnected).toBe(false);
       expect(terkunci(tombolKocok())).toBe(false);
       expect(tombolKocok().textContent).toMatch(/^Putaran berikutnya/);
@@ -1276,7 +1292,7 @@ describe('modal hasil putaran', () => {
       meja.tombol('hasil')!.click();
       expect(terkunci(tombolKocok())).toBe(true);
       expect(tombolKocok().textContent).toBe('Mengocok…');
-      vi.advanceTimersByTime(5200);
+      vi.advanceTimersByTime(9200);
       expect(terkunci(tombolKocok())).toBe(false);
       expect(tombolKocok().textContent).toMatch(/^Putaran berikutnya/);
     } finally {
@@ -1632,20 +1648,43 @@ describe('pilihan kartu & anti-dobel', () => {
     expect(meja.tombol('buang')!.dataset.alasan).toBe('Pilih kartu yang mau dibuang.');
   });
 
-  it('kunci kirim lepas sendiri setelah batas waktu kalau server tidak menjawab', async () => {
+  it('server tidak menjawab: 3 dtk tetap terkunci ("Masih mengirim…") dan sambungan diperiksa; cadangan 10 dtk', async () => {
     vi.useFakeTimers();
     try {
-      meja = new MejaUji(permainanGiliranku());
+      const periksa = vi.fn();
+      meja = new MejaUji(permainanGiliranku(), {}, { periksaKoneksi: periksa });
       meja.diam = true;
       tekan('d');
       expect(meja.tombol('ambil')!.dataset.alasan).toBe('Sebentar, aksinya lagi diproses…');
       vi.advanceTimersByTime(3100);
+      // Tidak lepas diam-diam: tetap terkunci, pemain diberi tahu, sambungan dicek sekali.
+      expect(meja.tombol('ambil')!.getAttribute('aria-disabled')).toBe('true');
+      expect(meja.tombol('ambil')!.dataset.alasan).toBe('Masih mengirim…');
+      expect(meja.petunjuk()).toBe('Masih mengirim…');
+      expect(periksa).toHaveBeenCalledTimes(1);
+      tekan('d');
+      expect(meja.aksi).toEqual([{ jenis: 'ambilDeck' }]);
+      vi.advanceTimersByTime(6000);
+      expect(meja.tombol('ambil')!.getAttribute('aria-disabled')).toBe('true');
+      // Cadangan akhir: kunci lepas, petunjuk "Masih mengirim…" tidak menempel.
+      vi.advanceTimersByTime(1000);
       expect(meja.tombol('ambil')!.getAttribute('aria-disabled')).toBe('false');
+      expect(meja.petunjuk()).not.toBe('Masih mengirim…');
+      expect(periksa).toHaveBeenCalledTimes(1);
       tekan('d');
       expect(meja.aksi).toEqual([{ jenis: 'ambilDeck' }, { jenis: 'ambilDeck' }]);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("pesan 'error' (ditolak server) melepas kunci saat itu juga, tanpa menunggu batas waktu", () => {
+    meja = new MejaUji(permainanGiliranku());
+    meja.diam = true;
+    tekan('d');
+    expect(meja.tombol('ambil')!.getAttribute('aria-disabled')).toBe('true');
+    meja.kontrol.saatError();
+    expect(meja.tombol('ambil')!.getAttribute('aria-disabled')).toBe('false');
   });
 
   it('panah tetap boleh auto-repeat', () => {
@@ -1948,3 +1987,507 @@ describe('mode kaldu (#42): teks pendek di meja', () => {
 });
 
 type HasilPutaranUji = Parameters<typeof teksInfoKaldu>[1];
+
+// ---------- sambungan online putus-putus (langkah 3, 5, 6, 8) ----------
+
+interface SambunganUji {
+  status: StatusKoneksi;
+  nomor: number;
+  siap: boolean;
+  selisih: number;
+}
+
+/** MejaUji online dengan status sambungan yang bisa diganti dari test. */
+function mejaOnline(g: GameState, infoUbah: Partial<InfoMeja> = {}, appUbah: Partial<AppUntukMeja> = {}): { m: MejaUji; s: SambunganUji } {
+  const s: SambunganUji = { status: 'tersambung', nomor: 1, siap: true, selisih: 0 };
+  const m = new MejaUji(g, infoUbah, {
+    jenis: 'online',
+    statusKoneksi: () => s.status,
+    nomorSambungan: () => s.nomor,
+    siapKirim: () => s.siap,
+    selisihJam: () => s.selisih,
+    ...appUbah,
+  });
+  return { m, s };
+}
+
+/** Sinyal putus (socket tidak terbuka). */
+function putus(m: MejaUji, s: SambunganUji) {
+  s.status = 'terputus';
+  s.siap = false;
+  m.kontrol.koneksiBerubah();
+}
+
+/** Tersambung lagi lewat socket baru (nomor sambungan naik); view dari sambungan baru belum datang. */
+function sambungLagi(m: MejaUji, s: SambunganUji) {
+  s.status = 'tersambung';
+  s.siap = true;
+  s.nomor++;
+  m.kontrol.koneksiBerubah();
+}
+
+/** Giliranku sudah ambil deck (tahap main). */
+function giliranMain(): GameState {
+  const h = terapkanAksi(permainanGiliranku(), { jenis: 'ambilDeck', pemain: 0 });
+  if (!h.ok) throw new Error(h.error.pesan);
+  return h.state;
+}
+
+/** Giliranku di tahap ambil, dengan 7 love di buangan yang bisa dipungut jadi 5-6-7 love. */
+function giliranMulung(): GameState {
+  return skenario({
+    rankJoker: 2,
+    tangan: [['5 love', '6 love', '9 waru', 'K kriting'], ['3 waru', '4 waru', '5 waru'], ['3 love', '4 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+    buangan: [['7 love', 1]],
+    giliran: 0,
+  });
+}
+
+/** Susun draf mulung 5-6-7 love lewat keyboard (belum dikonfirmasi). */
+function susunDrafMulung(m: MejaUji) {
+  tekan('1');
+  const id = (t: string) => [...m.g.putaran!.tangan[0], ...m.g.putaran!.buangan.map((e) => e.kartu)].find((k) => namaKartu(k).startsWith(t))!.id;
+  m.kontrol.ketukKartu(id('5 Love'));
+  m.kontrol.ketukKartu(id('6 Love'));
+  m.kontrol.ketukKartu(id('7 Love'));
+  tekan('j');
+  expect(m.petunjuk()).toBe('Siap. Tekan "Konfirmasi" untuk mulung.');
+}
+
+/** Mainkan semua kursi (bot normal) sampai putaran sekarang selesai, lalu mulai putaran berikutnya. */
+function mainkanSampaiPutaranBerikut(g: GameState): GameState {
+  const rng = new Rng(11);
+  let s = g;
+  for (let i = 0; i < 5000 && (s.status === 'putaranBerjalan' || s.status === 'susunAkhir'); i++) {
+    const siapa = s.status === 'putaranBerjalan' ? s.putaran!.giliran : s.putaran!.selesaiSusun.findIndex((x) => !x);
+    const h = terapkanAksi(s, pilihAksiBot(viewUntuk(s, siapa), 'normal', rng));
+    if (!h.ok) throw new Error(h.error.pesan);
+    s = h.state;
+  }
+  const h = terapkanAksi(s, { jenis: 'mulaiPutaran' });
+  if (!h.ok) throw new Error(h.error.pesan);
+  return h.state;
+}
+
+/** Jalankan satu giliran pemain `p` (ambil deck, buang kartu biasa). */
+function satuGiliran(g: GameState): GameState {
+  const p = g.putaran!.giliran;
+  const x = terapkanAksi(g, { jenis: 'ambilDeck', pemain: p });
+  if (!x.ok) throw new Error(x.error.pesan);
+  const kartu = x.state.putaran!.tangan[p].find((k) => k.rank !== 1 && k.rank !== x.state.putaran!.rankJoker)!;
+  const y = terapkanAksi(x.state, { jenis: 'buang', pemain: p, kartuId: kartu.id });
+  if (!y.ok) throw new Error(y.error.pesan);
+  return y.state;
+}
+
+const pesanAksi = (m: MejaUji) => m.terkirim.filter((p): p is Extract<PesanKeMeja, { t: 'aksi' }> => p.t === 'aksi');
+
+describe('sambungan belum siap: aksi ditolak di depan, pilihan aman (langkah 3)', () => {
+  it('terputus: Buang mati dengan alasan baru, tidak ada aksi terkirim, pilihan utuh; tiap ketukan diberi tahu', async () => {
+    const { m, s } = mejaOnline(giliranMain());
+    meja = m;
+    const kartu = m.g.putaran!.tangan[0].find((k) => k.rank !== 1)!;
+    m.kontrol.ketukKartu(kartu.id);
+    putus(m, s);
+    expect(m.tombol('buang')!.getAttribute('aria-disabled')).toBe('true');
+    expect(m.tombol('buang')!.dataset.alasan).toBe(TEKS_KONEKSI.nyambung);
+    vi.mocked(bunyi).mockClear();
+    const tolakAwal = m.sp.tolak.length;
+    m.tombol('buang')!.click();
+    tekan('b');
+    expect(pesanAksi(m)).toEqual([]);
+    // Dua ketukan = dua kali diberi tahu (bukan sekali per putus).
+    expect(m.sp.tolak.length - tolakAwal).toBe(2);
+    expect(vi.mocked(bunyi).mock.calls.filter(([b]) => b === 'tolak')).toHaveLength(2);
+    expect(m.petunjuk()).toBe(TEKS_KONEKSI.nyambung);
+    expect(m.sp.model()!.dipilih.has(kartu.id)).toBe(true);
+    // Memilih dan mengurutkan kartu tetap boleh.
+    const lain = m.g.putaran!.tangan[0].find((k) => k.id !== kartu.id)!;
+    m.kontrol.ketukKartu(lain.id);
+    expect(m.sp.model()!.dipilih.has(lain.id)).toBe(true);
+  });
+
+  it('Konfirmasi mulung saat socket belum siap: draf utuh, petunjuk bukan "Mulung dikirim"', () => {
+    const { m, s } = mejaOnline(giliranMulung());
+    meja = m;
+    susunDrafMulung(m);
+    s.siap = false; // socket sedang menutup, status belum sempat berubah
+    m.kontrol.koneksiBerubah();
+    tekan('k');
+    expect(pesanAksi(m)).toEqual([]);
+    expect(m.sp.model()!.mulung?.kombinasi).toHaveLength(1);
+    expect(m.petunjuk()).toBe(TEKS_KONEKSI.nyambung);
+    expect(m.petunjuk()).not.toBe(TEKS_KONEKSI.mulungDikirim);
+  });
+
+  it('tersambung lagi tapi view sambungan baru belum datang: tombol masih mati; sesudah view, Konfirmasi mengirim mulung yang sama', () => {
+    const { m, s } = mejaOnline(giliranMulung());
+    meja = m;
+    susunDrafMulung(m);
+    putus(m, s);
+    sambungLagi(m, s);
+    expect(m.tombol('konfirmasi')!.getAttribute('aria-disabled')).toBe('true');
+    tekan('k');
+    expect(pesanAksi(m)).toEqual([]);
+    m.kontrol.perbarui(m.info, m.view());
+    expect(m.tombol('konfirmasi')!.getAttribute('aria-disabled')).toBe('false');
+    tekan('k');
+    expect(pesanAksi(m)).toHaveLength(1);
+    expect(pesanAksi(m)[0].aksi).toMatchObject({ jenis: 'mulung', jumlah: 1 });
+    expect(m.g.putaran!.tahap).toBe('main');
+  });
+
+  it('seret ke buangan saat putus: kartu kembali (false) tanpa menimpa pilihan', () => {
+    const { m, s } = mejaOnline(giliranMain());
+    meja = m;
+    const [a, b, c] = m.g.putaran!.tangan[0].filter((k) => k.rank !== 1);
+    m.kontrol.ketukKartu(a.id);
+    m.kontrol.ketukKartu(b.id);
+    putus(m, s);
+    expect(m.kontrol.lepasKeBuangan(c.id)).toBe(false);
+    expect(pesanAksi(m)).toEqual([]);
+    expect([...m.sp.model()!.dipilih].sort()).toEqual([a.id, b.id].sort());
+    expect(m.sp.tolak).toContain(c.id);
+  });
+
+  it('status berubah selagi aksi menunggu jawaban: kunci lepas sekarang, petunjuk "Mulung dikirim" dibersihkan', () => {
+    const { m, s } = mejaOnline(giliranMulung());
+    meja = m;
+    susunDrafMulung(m);
+    m.diam = true;
+    tekan('k');
+    expect(m.petunjuk()).toBe(TEKS_KONEKSI.mulungDikirim);
+    expect(m.kontrol.sedangMengirim()).toBe(true);
+    putus(m, s);
+    expect(m.kontrol.sedangMengirim()).toBe(false);
+    expect(m.petunjuk()).not.toBe(TEKS_KONEKSI.mulungDikirim);
+  });
+
+  it('tombol jendela (kocok) saat putus: diberi tahu, tidak tertahan "Mengirim…"', async () => {
+    const g = skenario({
+      rankJoker: 2,
+      tangan: [['5 love', '6 love', '9 waru'], ['3 waru', '4 waru', '5 waru'], ['3 love', '4 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+      buangan: [['7 love', 1]],
+      giliran: 0,
+    });
+    const { m, s } = mejaOnline(g, { kursi: g.pemain.map((p, i) => ({ jenis: i < 2 ? 'manusia' : 'bot', nama: p.nama, terhubung: true, level: 'normal' })) });
+    meja = m;
+    m.app.kirim({ t: 'aksi', aksi: { jenis: 'mulung', jumlah: 1, kartuJadi: [spek('5 love', '6 love', '7 love')] } });
+    await sampai(() => m.g.putaran!.tahap === 'main' && !!m.tombol('buang'));
+    const dlg = await sampaiHasil(m);
+    if (!document.getElementById('toast')) document.body.insertAdjacentHTML('beforeend', '<div id="toast"></div>');
+    putus(m, s);
+    const kocok = dlg.querySelector<HTMLButtonElement>('[data-kocok="acak"]')!;
+    kocok.click();
+    expect(m.terkirim.filter((p) => p.t === 'putaranBerikut')).toEqual([]);
+    expect(terkunci(kocok)).toBe(false);
+    expect(document.querySelector('#toast')?.textContent ?? '').toContain(TEKS_KONEKSI.nyambung);
+  });
+
+  it('kartu hasil seret tetap di titik lepas selama aksinya masih dikirim', () => {
+    meja = new MejaUji(giliranMain());
+    meja.diam = true;
+    const kartu = meja.g.putaran!.tangan[0].find((k) => k.rank !== 1)!;
+    expect(meja.kontrol.lepasKeBuangan(kartu.id)).toBeUndefined();
+    expect(meja.kontrol.sedangMengirim()).toBe(true);
+    meja.kontrol.saatError();
+    expect(meja.kontrol.sedangMengirim()).toBe(false);
+  });
+
+  it('teks baru tidak menyebut kartu maupun joker (pagar kebocoran)', () => {
+    const semua = [...Object.values(TEKS_KONEKSI), teksDijalankanWarga(2, true), teksDijalankanWarga(1, false), ...Object.values(teksMentungTerlewat('Siti', true))];
+    for (const t of semua) {
+      expect(t).not.toMatch(/joker/i);
+      expect(t).not.toMatch(/[♥♦♠♣]|\b(love|wajik|kriting|waru|As)\b/);
+    }
+  });
+});
+
+describe('sesudah sambung ulang: susulan tidak diputar ulang (langkah 5)', () => {
+  it('nomor sambungan naik + satu view dengan ≥4 peristiwa: tidak ada terbang/naikPanggung, tombol langsung aktif', async () => {
+    const { m, s } = mejaOnline(giliranMain());
+    meja = m;
+    await tunggu();
+    // Selama putus: giliranku dijalankan warga kedai (buang), lalu tiga lawan main sampai giliranku lagi.
+    let g = m.g;
+    const kartu = g.putaran!.tangan[0].find((k) => k.rank !== 1 && k.rank !== g.putaran!.rankJoker)!;
+    const h = terapkanAksi(g, { jenis: 'buang', pemain: 0, kartuId: kartu.id });
+    if (!h.ok) throw new Error(h.error.pesan);
+    g = h.state;
+    while (g.putaran!.giliran !== 0) g = satuGiliran(g);
+    m.g = g;
+    putus(m, s);
+    sambungLagi(m, s);
+    const sebelum = m.sp.panggil.length;
+    m.kontrol.perbarui(m.info, m.view());
+    await tunggu();
+    const dipanggil = m.sp.panggil.slice(sebelum);
+    expect(dipanggil).not.toContain('terbang');
+    expect(dipanggil).not.toContain('naikPanggung');
+    expect(m.sp.model()!.view.putaran!.giliran).toBe(0);
+    expect(m.tombol('ambil')!.getAttribute('aria-disabled')).toBe('false');
+  });
+
+  it('view yang antre sebelum nomor naik tetap diputar normal (ambil deck milikku dipamerkan)', async () => {
+    const { m, s } = mejaOnline(permainanGiliranku());
+    meja = m;
+    await tunggu();
+    const h = terapkanAksi(m.g, { jenis: 'ambilDeck', pemain: 0 });
+    if (!h.ok) throw new Error(h.error.pesan);
+    m.g = h.state;
+    m.kontrol.perbarui(null, m.view());
+    // Lalu putus dan tersambung lagi: view berikutnya susulan.
+    putus(m, s);
+    sambungLagi(m, s);
+    m.kontrol.perbarui(m.info, m.view());
+    await sampai(() => m.sp.model()!.view.putaran!.tahap === 'main');
+    expect(m.sp.panggil).toContain('naikPanggung');
+  });
+
+  it('mentung yang terjadi selama putus: sorakan + pembaca layar singkat, tanpa panel yang menahan meja', async () => {
+    const g = skenario({
+      rankJoker: 2,
+      tangan: [['3 waru', '4 waru', '8 waru'], ['5 love', '6 love', '9 waru'], ['3 love', '4 love', '8 kriting'], ['J love', 'Q love', '10 waru']],
+      buangan: [['7 love', 0]],
+      giliran: 1,
+    });
+    const { m, s } = mejaOnline(g, { kursi: g.pemain.map((p, i) => ({ jenis: i < 2 ? 'manusia' : 'bot', nama: p.nama, terhubung: true, level: 'normal' })) });
+    meja = m;
+    await tunggu();
+    vi.mocked(sorak).mockClear();
+    let x = terapkanAksi(m.g, { jenis: 'mulung', pemain: 1, jumlah: 1, kartuJadi: [spek('5 love', '6 love', '7 love')] });
+    if (!x.ok) throw new Error(x.error.pesan);
+    x = terapkanAksi(x.state, { jenis: 'buang', pemain: 1, kartuId: x.state.putaran!.tangan[1][0].id });
+    if (!x.ok) throw new Error(x.error.pesan);
+    m.g = x.state;
+    putus(m, s);
+    sambungLagi(m, s);
+    m.kontrol.perbarui(m.info, m.view());
+    await tunggu();
+    await tunggu();
+    expect(document.querySelector('#modal [data-mentung]')).toBeNull();
+    expect(vi.mocked(sorak)).toHaveBeenCalledWith(expect.objectContaining({ judul: 'KAMU KEPENTUNG!', sub: `${g.pemain[1].nama} mentung waktu sinyalmu putus` }));
+    expect(vi.mocked(umumkan).mock.calls.map(([t]) => t)).toContain(teksMentungTerlewat(g.pemain[1].nama, true).umum);
+    expect(m.sp.model()!.view.status).toBe('susunAkhir');
+  });
+
+  it('mentungTerlewat: dari peristiwa yang belum diputar, plus hasil putaran baru yang peristiwanya tergeser; yang sudah dilihat tidak', () => {
+    const e = (id: number, putaran: number) =>
+      ({ id, putaran, jenis: 'mentung', pemain: 2, kepentung: [0], nilai: 10, dibalik: false, pentunganJoker: false, pentungan: { id: 'x', rank: 5, bunga: 'love' } }) as const;
+    const h = (nomor: number, cara: 'mentung' | 'deckHabis') => ({ nomor, cara, pementung: cara === 'mentung' ? 1 : null, kepentung: cara === 'mentung' ? [3] : [] }) as unknown as ViewPemain['riwayat'][number];
+    const lama = { riwayat: [h(1, 'deckHabis')], peristiwa: [], putaran: null } as unknown as ViewPemain;
+    // Peristiwa mentung putaran 2 belum diputar (id > 10); hasil putaran 3 ditutup mentung, peristiwanya tergeser.
+    const baru = { riwayat: [h(1, 'deckHabis'), h(2, 'mentung'), h(3, 'mentung'), h(4, 'deckHabis')], peristiwa: [e(12, 2)] } as unknown as ViewPemain;
+    expect(mentungTerlewat(lama, baru, 10)).toEqual([
+      { putaran: 2, pemain: 2, kepentung: [0] },
+      { putaran: 3, pemain: 1, kepentung: [3] },
+    ]);
+    // Mentung putaran 2 sudah kulihat (panelnya tampil), lalu putus di susun akhir: bukan terlewat.
+    const lama2 = { riwayat: [h(1, 'deckHabis')], peristiwa: [e(9, 2)], putaran: { nomor: 2, mentung: { pemain: 2 } } } as unknown as ViewPemain;
+    expect(mentungTerlewat(lama2, { riwayat: [h(1, 'deckHabis'), h(2, 'mentung')], peristiwa: [e(9, 2)] } as unknown as ViewPemain, 9)).toEqual([]);
+  });
+
+  it('joker: OK di putaran N, putus, putaran N+1 dimulai: siapJoker tidak dikirim untuk putaran baru dan popup N+1 tampil', async () => {
+    const g1 = permainanGiliranku();
+    const { m, s } = mejaOnline(g1, { menungguJoker: [0] });
+    meja = m;
+    await sampai(() => !!document.querySelector('#modal [data-joker]'));
+    document.querySelector<HTMLButtonElement>('#modal [data-ok]')!.click();
+    const siap = () => m.terkirim.filter((p) => p.t === 'siapJoker');
+    expect(siap()).toEqual([{ t: 'siapJoker', putaran: 1 }]);
+    // Putus: siapJoker itu hilang; selama putus putaran 1 selesai dan putaran 2 dimulai.
+    m.diam = true;
+    putus(m, s);
+    m.g = mainkanSampaiPutaranBerikut(g1);
+    expect(m.g.putaran!.nomor).toBe(2);
+    sambungLagi(m, s);
+    // Urutan dari server: 'meja' dulu (menunggu jokerku), baru 'view' putaran 2.
+    m.info = { ...m.info, menungguJoker: [0] };
+    m.kontrol.perbarui(m.info, null);
+    m.kontrol.perbarui(null, m.view());
+    expect(siap()).toHaveLength(1);
+    await sampai(() => !!document.querySelector('#modal [data-joker]'));
+    expect(document.querySelector('#modal h2')!.textContent).toContain('Putaran 2');
+    expect(siap()).toHaveLength(1);
+    document.querySelector<HTMLButtonElement>('#modal [data-ok]')!.click();
+    expect(siap().at(-1)).toEqual({ t: 'siapJoker', putaran: 2 });
+  });
+});
+
+describe('id aksi, konfirmasi, kirim ulang aman (langkah 6)', () => {
+  it('online: tiap aksi membawa id acak yang sah; offline tanpa id', () => {
+    const { m } = mejaOnline(permainanGiliranku());
+    meja = m;
+    m.diam = true;
+    tekan('d');
+    const [a] = pesanAksi(m);
+    expect(a.id).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+    m.hancurkan();
+    meja = new MejaUji(permainanGiliranku());
+    tekan('d');
+    expect(meja.terkirim.find((p) => p.t === 'aksi')).toEqual({ t: 'aksi', aksi: { jenis: 'ambilDeck' } });
+  });
+
+  /** Aksi Buang terkirim lalu hilang bersama socket lama; tersambung lagi dengan keadaan meja yang sama. */
+  function buangHilang(konfirmasi: boolean) {
+    const { m, s } = mejaOnline(giliranMain());
+    meja = m;
+    if (konfirmasi) m.kontrol.aksiDiterima('aksi-lain-yang-sudah-dikonfirmasi');
+    const kartu = m.g.putaran!.tangan[0].find((k) => k.rank !== 1 && k.rank !== m.g.putaran!.rankJoker)!;
+    m.kontrol.ketukKartu(kartu.id);
+    m.diam = true;
+    tekan('b');
+    expect(pesanAksi(m)).toHaveLength(1);
+    expect(m.sp.model()!.dipilih.size).toBe(0);
+    putus(m, s);
+    sambungLagi(m, s);
+    return { m, s, kartu, id: pesanAksi(m)[0].id };
+  }
+
+  it('server mendukung id: sesudah sambung ulang, aksi yang belum diterapkan dikirim ulang SEKALI dengan id yang sama', () => {
+    const { m, s, id } = buangHilang(true);
+    m.kontrol.perbarui(m.info, m.view());
+    expect(pesanAksi(m)).toHaveLength(2);
+    expect(pesanAksi(m)[1]).toEqual(pesanAksi(m)[0]);
+    expect(pesanAksi(m)[1].id).toBe(id);
+    // Hilang lagi: tidak dikirim ketiga kali, pilihan dikembalikan dan pemain diminta mengulang.
+    putus(m, s);
+    sambungLagi(m, s);
+    m.kontrol.perbarui(m.info, m.view());
+    expect(pesanAksi(m)).toHaveLength(2);
+    expect(m.petunjuk()).toBe(TEKS_KONEKSI.belumSampai);
+  });
+
+  it('server lama (tidak pernah aksiDiterima): tidak dikirim ulang; pilihan kembali dan "Langkahmu belum sampai"', () => {
+    const { m, kartu } = buangHilang(false);
+    m.kontrol.perbarui(m.info, m.view());
+    expect(pesanAksi(m)).toHaveLength(1);
+    expect(m.sp.model()!.dipilih.has(kartu.id)).toBe(true);
+    expect(m.petunjuk()).toBe(TEKS_KONEKSI.belumSampai);
+    expect(vi.mocked(umumkan).mock.calls.map(([t]) => t)).toContain(TEKS_KONEKSI.belumSampai);
+    // Pemain tinggal menekan Buang lagi.
+    m.diam = false;
+    tekan('b');
+    expect(pesanAksi(m)).toHaveLength(2);
+    expect(m.g.putaran!.tangan[0].some((k) => k.id === kartu.id)).toBe(false);
+  });
+
+  it('giliran sudah berganti (dijalankan warga kedai selama putus): tidak dikirim ulang, tanpa petunjuk', () => {
+    const { m, kartu } = buangHilang(true);
+    // Meja menjalankan giliranku dengan kartu lain.
+    const lain = m.g.putaran!.tangan[0].find((k) => k.id !== kartu.id && k.rank !== 1 && k.rank !== m.g.putaran!.rankJoker)!;
+    const h = terapkanAksi(m.g, { jenis: 'buang', pemain: 0, kartuId: lain.id });
+    if (!h.ok) throw new Error(h.error.pesan);
+    m.g = h.state;
+    m.kontrol.perbarui(m.info, m.view());
+    expect(pesanAksi(m)).toHaveLength(1);
+    expect(m.petunjuk()).not.toBe(TEKS_KONEKSI.belumSampai);
+  });
+
+  it('lebih dari 30 dtk: tidak dikirim ulang walau server mendukung, pilihan dikembalikan', () => {
+    vi.useFakeTimers();
+    try {
+      const { m, kartu } = buangHilang(true);
+      vi.advanceTimersByTime(31_000);
+      m.kontrol.perbarui(m.info, m.view());
+      expect(pesanAksi(m)).toHaveLength(1);
+      expect(m.sp.model()!.dipilih.has(kartu.id)).toBe(true);
+      expect(m.petunjuk()).toBe(TEKS_KONEKSI.belumSampai);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('aksiDiterima dari server: aksinya dianggap sampai, tidak ada kirim ulang maupun petunjuk', () => {
+    const { m, id } = buangHilang(true);
+    m.kontrol.aksiDiterima(id!);
+    m.kontrol.perbarui(m.info, m.view());
+    expect(pesanAksi(m)).toHaveLength(1);
+    expect(m.petunjuk()).not.toBe(TEKS_KONEKSI.belumSampai);
+  });
+
+  it('draf mulung yang tidak sampai dikembalikan utuh (tinggal Konfirmasi lagi)', () => {
+    const { m, s } = mejaOnline(giliranMulung());
+    meja = m;
+    susunDrafMulung(m);
+    m.diam = true;
+    tekan('k');
+    expect(m.sp.model()!.mulung).toBeNull();
+    putus(m, s);
+    sambungLagi(m, s);
+    m.kontrol.perbarui(m.info, m.view());
+    expect(m.sp.model()!.mulung?.kombinasi).toHaveLength(1);
+    expect(m.petunjuk()).toBe(TEKS_KONEKSI.belumSampai);
+    m.diam = false;
+    tekan('k');
+    expect(m.g.putaran!.tahap).toBe('main');
+  });
+
+  it('jejakGiliran: berubah oleh aksiku yang diterapkan, sama kalau keadaannya sama', () => {
+    const g = permainanGiliranku();
+    const v = viewUntuk(g, 0);
+    expect(jejakGiliran(viewUntuk(g, 0))).toBe(jejakGiliran(v));
+    const h = terapkanAksi(g, { jenis: 'ambilDeck', pemain: 0 });
+    if (!h.ok) throw new Error(h.error.pesan);
+    expect(jejakGiliran(viewUntuk(h.state, 0))).not.toBe(jejakGiliran(v));
+  });
+});
+
+describe('kabar langkah warga kedai selama putus (langkah 5 butir 3)', () => {
+  it('masihGiliranku: giliran/susun akhir milikku dan tidak sedang dijalankan warga kedai', () => {
+    const g = permainanGiliranku();
+    expect(masihGiliranku(viewUntuk(g, 0), { diambilAlihBot: false })).toBe(true);
+    expect(masihGiliranku(viewUntuk(g, 0), { diambilAlihBot: true })).toBe(false);
+    expect(masihGiliranku(viewUntuk(g, 1), { diambilAlihBot: false })).toBe(false);
+  });
+
+  it('teks kabar: jumlah langkah tanpa nama kartu, dua varian', () => {
+    expect(teksDijalankanWarga(2, false)).toBe('Sinyalmu sempat putus, warga kedai menjalankan 2 langkahmu. Cek Log.');
+    expect(teksDijalankanWarga(1, true)).toBe('Sinyalmu sempat putus, warga kedai sudah mulai giliranmu (1 langkah). Lanjutkan dari sini.');
+  });
+});
+
+describe('bar waktu giliran: jam HP vs server (langkah 8)', () => {
+  const lebar = (m: MejaUji) => (m.akar.querySelector('.waktu > div') as HTMLElement).style.width;
+  const tersembunyi = (m: MejaUji) => m.akar.querySelector('.waktu')!.classList.contains('tersembunyi');
+
+  it('jam HP terlambat 8 dtk: sisa waktu dihitung dengan jam server (selisih dari koneksi)', () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    try {
+      const g = permainanGiliranku();
+      // Server 8 dtk di depan HP; batas 30 dtk lagi menurut server.
+      const info = { pengaturan: { ...PENGATURAN_BAWAAN, jumlahPemain: 4, detikGiliran: 60 }, batasWaktu: 1_000_000 + 8_000 + 30_000 };
+      const { m, s } = mejaOnline(g, info);
+      meja = m;
+      expect(lebar(m)).toBe(`${(100 * 38_000) / 60_000}%`);
+      s.selisih = 8_000;
+      m.kontrol.perbarui(m.info, null);
+      expect(lebar(m)).toBe('50%');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lebar bar paling banyak 100% (jam HP jauh tertinggal)', () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    try {
+      const info = { pengaturan: { ...PENGATURAN_BAWAAN, jumlahPemain: 4, detikGiliran: 30 }, batasWaktu: 1_000_000 + 90_000 };
+      const { m } = mejaOnline(permainanGiliranku(), info);
+      meja = m;
+      expect(lebar(m)).toBe('100%');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('giliranku dijalankan warga kedai: bar disembunyikan; giliran orang lain yang diambil alih tetap tampil', () => {
+    const batas = { pengaturan: { ...PENGATURAN_BAWAAN, jumlahPemain: 4, detikGiliran: 30 }, batasWaktu: Date.now() + 10_000 };
+    const { m } = mejaOnline(permainanGiliranku(), { ...batas, diambilAlihBot: true });
+    meja = m;
+    expect(tersembunyi(m)).toBe(true);
+    m.hancurkan();
+    const g = satuGiliran(permainanGiliranku());
+    meja = mejaOnline(g, { ...batas, diambilAlihBot: true }).m;
+    expect(tersembunyi(meja)).toBe(false);
+  });
+});

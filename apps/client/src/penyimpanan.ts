@@ -82,6 +82,12 @@ function tulis(kunci: string, nilai: unknown): void {
 export interface SesiOnline {
   kode: string;
   token: string;
+  /**
+   * Id instans aplikasi (tab/PWA) yang terakhir masuk meja dengan sesi ini. Instans lain yang sedang
+   * tersembunyi tidak menyambung ulang sendiri ke meja yang sama (lihat KoneksiOnline). Sesi lama tanpa
+   * penanda ini tetap sah.
+   */
+  pemegang?: string;
 }
 
 /** Tiket ikut serta satu kompetisi; token dicocokkan server dengan hash-nya. */
@@ -125,8 +131,12 @@ const rapikanTiket: Rapikan<TiketTersimpan[]> = (x) =>
         .slice(0, MAKS_TIKET)
     : undefined;
 
-const rapikanSesi: Rapikan<SesiOnline | null> = (x) =>
-  x === null ? null : objek(x) && typeof x.kode === 'string' && typeof x.token === 'string' && x.kode && x.token ? { kode: x.kode, token: x.token } : undefined;
+const rapikanSesi: Rapikan<SesiOnline | null> = (x) => {
+  if (x === null) return null;
+  if (!objek(x) || typeof x.kode !== 'string' || typeof x.token !== 'string' || !x.kode || !x.token) return undefined;
+  const pemegang = typeof x.pemegang === 'string' && x.pemegang.length > 0 && x.pemegang.length <= 64 ? x.pemegang : undefined;
+  return pemegang ? { kode: x.kode, token: x.token, pemegang } : { kode: x.kode, token: x.token };
+};
 
 /**
  * Tawaran pasang aplikasi: hanya waktu (ms) yang angka terhingga dan positif yang dipakai, field
