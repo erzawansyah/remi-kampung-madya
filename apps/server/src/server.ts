@@ -16,6 +16,8 @@ import {
   namaLawanAcak,
   penjadwalNyata,
   periksaUsulan,
+  rapikanPengaturanKompetisi,
+  TEKS_KURSI_KOMPETISI_LEPAS,
   TEKS_LOBI_KOMPETISI_BUBAR,
   validasiPesan,
   type DataMeja,
@@ -365,6 +367,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
           const r = m.ringkasan();
           return { kode: r.kode, nama: r.namaHost, terisi: r.terisi, jumlahPemain: r.jumlahPemain, pemain: m.namaDuduk() };
         }),
+    // Server sedang dimatikan: meja sudah dihapus dari memori (mejaMain jadi 0) padahal simpanannya
+    // dipulihkan dan dimainkan sampai selesai sesudah restart. Juara jangan dikunci di jeda ini.
+    tahanJuara: () => menutup,
   };
 
   /** Pesan kompetisiHasil terakhir per meja kompetisi (dikirim lagi ke yang tersambung kembali). */
@@ -578,6 +583,13 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       res.end(JSON.stringify(isi));
       return;
     }
+    if (menutup && url.pathname.startsWith('/api/')) {
+      // Server sedang dimatikan (deploy): meja sudah dihentikan, jadi keadaan kompetisi dan leaderboard
+      // tidak bisa dibaca dengan benar. Aplikasi mencoba lagi sesudah server jalan lagi.
+      res.writeHead(503, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', connection: 'close' });
+      res.end(JSON.stringify({ error: 'Server sedang dimatikan sebentar, coba lagi nanti.' }));
+      return;
+    }
     if (url.pathname === '/api/riwayat' || url.pathname === '/api/peringkat') {
       const json = (kode: number, isi: unknown) => {
         res.writeHead(kode, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -667,7 +679,10 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
           return json(429, { error: 'Pengajuan dari jaringanmu masih ada yang menunggu peserta. Ajak teman ikut dulu, Bos.' });
         }
         if (penyimpan.jumlahPengajuan(sekarang) >= (opsi.maksPengajuan ?? 50)) return json(429, { error: 'Lagi banyak pengajuan, coba lagi nanti.' });
-        const h = penyimpan.ajukan({ nama: isi.nama, masa: isi.masa, pengaturan: isi.pengaturan, namaPengaju: isi.namaPengaju }, sekarang);
+        // Isian dari API publik: batas putaran dan waktu per giliran hanya pilihan formulir (yang lain
+        // jatuh ke bawaan), supaya "tanpa batas" tidak bisa masuk lewat angka besar atau 0.
+        const pengaturan = rapikanPengaturanKompetisi(isi.pengaturan);
+        const h = penyimpan.ajukan({ nama: isi.nama, masa: isi.masa, pengaturan, namaPengaju: isi.namaPengaju }, sekarang);
         pengajuKompetisi.set(h.kode, jaringan);
         log(`kompetisi ${h.kode} diajukan`);
         return json(200, { ...h, detail: penyimpan.detail(h.kode, sekarang, h.token, keadaanMeja) });
@@ -969,12 +984,22 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
             peserta = p.id;
           }
         }
+        // Sambung ulang (membawa token meja ini) ke meja kompetisi padahal kursinya sudah tidak ada:
+        // kursi lobinya dilepas karena ia terlalu lama terputus (#51 versi 2). Aplikasi ikut mengirim
+        // tiketnya, jadi ia langsung duduk lagi kalau masih ada kursi kosong.
+        const kursiLepas = !!kodeKompetisi && !!pesan.token && !lama;
         try {
           // Gagal (meja penuh / sudah mulai) = tautan dikembalikan; pemain tetap di meja lamanya.
           tautkan(s, pemainId, kode, () => meja.masuk(pemainId, nama, peserta, gantiSambungan, putusPada));
           kosongSejak.delete(kode);
         } catch (e) {
-          if (e instanceof GalatMeja) return kirimKe(s, { t: 'error', pesan: e.message });
+          if (e instanceof GalatMeja) {
+            // Tidak bisa duduk lagi (kursinya sudah diisi orang lain, permainannya sudah mulai, tiketnya
+            // tidak ada): kabari dengan ramah dan arahkan ke daftar meja kompetisinya, bukan galat
+            // "Ikut serta dulu" yang menyesatkan. Aplikasi menghapus sesinya dan membuka detail kompetisi.
+            if (kursiLepas) return kirimKe(s, { t: 'keluar', alasan: TEKS_KURSI_KOMPETISI_LEPAS, kompetisi: kodeKompetisi });
+            return kirimKe(s, { t: 'error', pesan: e.message });
+          }
           throw e;
         }
         // Tersambung kembali saat klasemen akhir meja kompetisi masih tampil: hasil kompetisinya dikirim lagi.
@@ -1078,7 +1103,12 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
           }
         };
         const jeda = opsi.jedaPutusMs ?? JEDA_PUTUS_MS;
-        if (menutup || jeda <= 0) return kabari();
+        // Lobi meja kompetisi (#51 versi 2): langsung, tanpa jeda putus. Hitung mundur mulai sendiri
+        // (2 detik) lebih pendek dari jeda itu, jadi tanpa ini permainan tetap mulai dengan peserta yang
+        // aplikasinya sudah tertutup. Muat ulang di lobi cukup mengulang hitung mundurnya.
+        const mejaIni = daftarMeja.get(kode);
+        const lobiKompetisi = !!mejaIni?.kompetisi && mejaIni.status === 'lobi';
+        if (menutup || jeda <= 0 || lobiKompetisi) return kabari();
         // Jangan langsung dianggap terputus: muat ulang atau ganti sambungan yang selesai dalam jeda
         // ini tidak memindahkan host dan tidak mencabut suara voting. Kalau ia tidak kembali, tenggang
         // di meja dihitung sejak sambungan ini tertutup.

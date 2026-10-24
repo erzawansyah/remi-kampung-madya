@@ -223,6 +223,12 @@ export interface InfoMeja {
    * mundur berjalan; batal (hilang) kalau ada yang keluar atau terputus.
    */
   mulaiOtomatis?: { sisaMs: number };
+  /**
+   * Meja kompetisi (#51 versi 2) di hasil putaran: putaran berikutnya mulai sendiri `sisaMs` lagi kalau
+   * host belum memulainya (relatif terhadap saat pesan dikirim, seperti `lanjut`). Aplikasi lama
+   * mengabaikannya.
+   */
+  lanjutOtomatis?: { sisaMs: number };
 }
 
 /** Klasemen akhir satu permainan (disimpan server ke database saat permainan selesai). */
@@ -337,7 +343,11 @@ export type PesanServer =
   | { t: 'view'; view: ViewPemain }
   | { t: 'error'; pesan: string }
   | { t: 'daftar'; meja: RingkasanMeja[] }
-  | { t: 'keluar'; alasan: string }
+  /**
+   * `kompetisi` (opsional): kode kompetisi meja itu (#51 versi 2), untuk lobi kompetisi yang dibubarkan
+   * dan kursi lobi kompetisi yang sudah dilepas. Aplikasi membuka detail kompetisinya.
+   */
+  | { t: 'keluar'; alasan: string; kompetisi?: string }
   | { t: 'emote'; kursi: number; isi: string }
   /** Ledekan dari kursi `dari` ke kursi `ke`; dikirim ke semua manusia yang terhubung. */
   | { t: 'ledek'; dari: number; ke: number; isi: string }

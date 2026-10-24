@@ -70,6 +70,11 @@ export interface KeadaanMejaKompetisi {
   mejaMain(kode: string): number;
   /** Meja kompetisi ini yang masih di lobi. */
   mejaMenunggu(kode: string): MejaMenunggu[];
+  /**
+   * True = juara jangan ditetapkan sekarang, walau `mejaMain` 0: misalnya server sedang dimatikan
+   * (meja sudah dihentikan dari memori tapi simpanannya akan dipulihkan dan selesai sesudah restart).
+   */
+  tahanJuara?(): boolean;
 }
 
 const TANPA_MEJA: KeadaanMejaKompetisi = { mejaMain: () => 0, mejaMenunggu: () => [] };
@@ -275,7 +280,8 @@ const pengaturanDari = (json: string): PengaturanKompetisi => {
   } catch {
     // Rusak: jatuh ke bawaan.
   }
-  return rapikanPengaturanKompetisi(mentah);
+  // Yang tersimpan sudah dirapikan saat ditulis; dibaca longgar supaya data uji 1–2 putaran tetap apa adanya.
+  return rapikanPengaturanKompetisi(mentah, 'tersimpan');
 };
 
 export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
@@ -398,7 +404,7 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
     const w = waktu(b);
     const status = statusKompetisi(w, sekarang);
     const mejaMain = status === 'pengajuan' || status === 'batal' ? 0 : meja.mejaMain(b.kode);
-    if (status === 'selesai' && b.juara_pada === null && mejaMain === 0) tetapkanSatu(b, sekarang);
+    if (status === 'selesai' && b.juara_pada === null && mejaMain === 0 && !meja.tahanJuara?.()) tetapkanSatu(b, sekarang);
     const juara =
       status === 'selesai' && b.juara_pada !== null ? (juaraTersimpan.all(b.kode) as { nama: string }[]).map((j) => String(j.nama)) : null;
     return {
@@ -437,7 +443,9 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
       const nama = rapikanNamaKompetisi(data.nama);
       if (!nama) throw new GalatKompetisi('Kasih nama kompetisinya dulu, Bos.');
       if (!isMasa(data.masa)) throw new GalatKompetisi('Pilih lama kompetisinya dulu.');
-      const pengaturan = rapikanPengaturanKompetisi(data.pengaturan);
+      // Longgar ('tersimpan'): API publik sudah merapikan isiannya dengan aturan pengajuan (hanya pilihan
+      // formulir) sebelum memanggil ini. Test dan data uji boleh memakai 1–2 putaran.
+      const pengaturan = rapikanPengaturanKompetisi(data.pengaturan, 'tersimpan');
       return transaksi(() => {
         hapusBatal.run(sekarang - 24 * 60 * 60 * 1000 - SIMPAN_BATAL_MS);
         const kode = buatKode();
@@ -581,6 +589,7 @@ export function buatPenyimpanKompetisi(db: DatabaseSync): PenyimpanKompetisi {
 
     tetapkanJuara(sekarang, meja = TANPA_MEJA) {
       const baru: string[] = [];
+      if (meja.tahanJuara?.()) return baru;
       for (const b of belumAdaJuara.all(sekarang) as unknown as BarisKompetisiDb[]) {
         if (meja.mejaMain(b.kode) > 0) continue;
         if (tetapkanSatu(b, sekarang)) baru.push(b.kode);

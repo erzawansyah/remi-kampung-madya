@@ -9,11 +9,13 @@ import { Rng } from '@remi/engine';
 import {
   BATAS_PENGAJUAN_MS,
   BATAS_PUTARAN_KOMPETISI_BAWAAN,
+  DETIK_GILIRAN_KOMPETISI_BAWAAN,
   JEDA_MULAI_KOMPETISI_MS,
   MIN_MAIN_KOMPETISI,
   Meja,
   PENGATURAN_KOMPETISI_BAWAAN,
   PILIHAN_BATAS_PUTARAN_KOMPETISI,
+  PILIHAN_DETIK_GILIRAN_KOMPETISI,
   TENGGANG_SAMBUNG_MS,
   akhirKompetisi,
   berjalanPada,
@@ -239,10 +241,12 @@ describe('klasemen kompetisi', () => {
 });
 
 describe('pengaturan dan pesan kompetisi', () => {
-  it('bawaan: 4 pemain, batas putaran 5; pilihan batas putaran tanpa "tanpa batas"', () => {
-    expect(PENGATURAN_KOMPETISI_BAWAAN).toMatchObject({ jumlahPemain: 4, batasPutaran: 5, modeKaldu: false });
+  it('bawaan: 4 pemain, batas putaran 5, 60 detik per giliran; pilihan batas putaran dan waktu tanpa "tanpa batas"', () => {
+    expect(PENGATURAN_KOMPETISI_BAWAAN).toMatchObject({ jumlahPemain: 4, batasPutaran: 5, modeKaldu: false, detikGiliran: 60 });
     expect(BATAS_PUTARAN_KOMPETISI_BAWAAN).toBe(5);
+    expect(DETIK_GILIRAN_KOMPETISI_BAWAAN).toBe(60);
     expect([...PILIHAN_BATAS_PUTARAN_KOMPETISI]).toEqual([3, 5, 10, 15, 20]);
+    expect([...PILIHAN_DETIK_GILIRAN_KOMPETISI]).toEqual([30, 60, 90, 120]);
   });
 
   it('pengaturan dari data tak dipercaya: kunci rusak jatuh ke bawaan, kunci lain dibuang', () => {
@@ -259,12 +263,25 @@ describe('pengaturan dan pesan kompetisi', () => {
     // Batas putaran wajib angka: kosong/rusak = 5. Jumlah pemain rusak = 4.
     expect(rapikanPengaturanKompetisi({ batasPutaran: null })).toMatchObject({ batasPutaran: 5 });
     expect(rapikanPengaturanKompetisi({ batasPutaran: 0 })).toMatchObject({ batasPutaran: 5 });
-    expect(rapikanPengaturanKompetisi({ batasPutaran: 2 })).toMatchObject({ batasPutaran: 2 });
+    for (const n of PILIHAN_BATAS_PUTARAN_KOMPETISI) expect(rapikanPengaturanKompetisi({ batasPutaran: n })).toMatchObject({ batasPutaran: n });
     for (const rusak of [1, 7, 3.5, '3', null]) expect(rapikanPengaturanKompetisi({ jumlahPemain: rusak })).toMatchObject({ jumlahPemain: 4 });
     expect(rapikanPengaturanKompetisi({ jumlahPemain: 2 })).toMatchObject({ jumlahPemain: 2 });
     // 2 deck hanya berarti di meja 4 orang.
     expect(rapikanPengaturanKompetisi({ jumlahPemain: 5, duaDeckUntukEmpat: true })).toMatchObject({ jumlahPemain: 5, duaDeckUntukEmpat: false });
     expect(rapikanPengaturanKompetisi({ jumlahPemain: 4, duaDeckUntukEmpat: true })).toMatchObject({ duaDeckUntukEmpat: true });
+  });
+
+  it('pengajuan: batas putaran dan waktu per giliran hanya dari pilihan formulir; yang tersimpan lebih longgar', () => {
+    // Isian pengajuan (API publik): selain pilihan formulir jatuh ke bawaan, termasuk "tanpa batas"
+    // yang disamarkan sebagai angka besar dan waktu 0 (tanpa batas waktu).
+    for (const n of [1, 2, 4, 21, 100000, -5, 3.5]) expect(rapikanPengaturanKompetisi({ batasPutaran: n })).toMatchObject({ batasPutaran: 5 });
+    for (const d of [0, 1, 45, 600, -30]) expect(rapikanPengaturanKompetisi({ detikGiliran: d })).toMatchObject({ detikGiliran: 60 });
+    for (const d of PILIHAN_DETIK_GILIRAN_KOMPETISI) expect(rapikanPengaturanKompetisi({ detikGiliran: d })).toMatchObject({ detikGiliran: d });
+    // Yang tersimpan di database (termasuk data uji yang ditulis langsung): 1–20 putaran, 1–600 detik.
+    expect(rapikanPengaturanKompetisi({ batasPutaran: 2, detikGiliran: 45 }, 'tersimpan')).toMatchObject({ batasPutaran: 2, detikGiliran: 45 });
+    expect(rapikanPengaturanKompetisi({ batasPutaran: 1 }, 'tersimpan')).toMatchObject({ batasPutaran: 1 });
+    expect(rapikanPengaturanKompetisi({ batasPutaran: 21, detikGiliran: 0 }, 'tersimpan')).toMatchObject({ batasPutaran: 5, detikGiliran: 60 });
+    expect(rapikanPengaturanKompetisi({ batasPutaran: 100000, detikGiliran: 601 }, 'tersimpan')).toMatchObject({ batasPutaran: 5, detikGiliran: 60 });
   });
 
   it('ubahan terkunci: kunci kompetisi (termasuk jumlah pemain) yang nilainya berubah', () => {
@@ -341,7 +358,8 @@ describe('meja kompetisi', () => {
     expect(() => meja.masuk('hp2', 'Ani', 1)).toThrow(/dari HP lain/);
     meja.masuk('budi', 'Budi', 2);
     meja.terima('host', { t: 'aturKursi', kursi: 2, jenis: 'bot' });
-    expect(surat.errors('host').at(-1)).toMatch(/nggak bisa diisi warga kedai/);
+    expect(surat.errors('host').at(-1)).toMatch(/diisi peserta sendiri/);
+    expect(meja.data.kursi[2].jenis).toBe('kosong');
     meja.terima('host', { t: 'mulai' });
     expect(surat.errors('host').at(-1)).toMatch(/mulai sendiri begitu semua kursi terisi/);
     meja.terima('host', { t: 'pengaturan', pengaturan: { batasPutaran: 3 } });
@@ -393,13 +411,15 @@ describe('meja kompetisi', () => {
     expect(meja.status).toBe('main');
   });
 
-  it('host mengosongkan kursi di tengah hitung mundur: batal', () => {
+  it('host tidak bisa mengosongkan kursi peserta lain, juga di tengah hitung mundur', () => {
     const { meja, surat, jam } = penuh();
     meja.terima('host', { t: 'aturKursi', kursi: 1, jenis: 'kosong' });
-    expect(surat.terakhir('budi', 'keluar')?.alasan).toMatch(/diganti oleh host/);
-    expect(surat.info('host').mulaiOtomatis).toBeUndefined();
-    jam.maju(10_000);
-    expect(meja.status).toBe('lobi');
+    expect(surat.errors('host').at(-1)).toMatch(/diisi peserta sendiri/);
+    expect(surat.terakhir('budi', 'keluar')).toBeUndefined();
+    expect(meja.data.kursi[1]).toMatchObject({ jenis: 'manusia', nama: 'Budi' });
+    expect(surat.info('host').mulaiOtomatis).toBeDefined();
+    jam.maju(JEDA_MULAI_KOMPETISI_MS);
+    expect(meja.status).toBe('main');
   });
 
   it('kompetisi yang sudah tidak berjalan: tidak mulai sendiri dan tidak menerima peserta baru', () => {
@@ -439,6 +459,189 @@ describe('meja kompetisi', () => {
     meja.terputus('cici');
     jam.maju(TENGGANG_SAMBUNG_MS * 3);
     expect(meja.data.kursi[1]).toMatchObject({ jenis: 'manusia', nama: 'Cici' });
+  });
+
+  it('lobi: yang kembali sesudah semua terputus tidak langsung melepas kursi peserta lain', () => {
+    const { meja, surat, jam } = buatMeja();
+    meja.masuk('budi', 'Budi', 2);
+    meja.terputus('host');
+    meja.terputus('budi');
+    jam.maju(TENGGANG_SAMBUNG_MS * 3);
+    // Tidak ada yang menunggu: tidak ada yang dilepas.
+    expect(meja.data.kursi.map((k) => k.jenis)).toEqual(['manusia', 'manusia', 'kosong']);
+    // Host kembali: Budi mendapat masa tenggang penuh lagi, dihitung sejak host kembali.
+    meja.terhubung('host');
+    jam.maju(TENGGANG_SAMBUNG_MS - 1);
+    expect(meja.data.kursi[1]).toMatchObject({ jenis: 'manusia', nama: 'Budi' });
+    meja.terhubung('budi');
+    jam.maju(TENGGANG_SAMBUNG_MS * 2);
+    expect(meja.data.kursi[1]).toMatchObject({ jenis: 'manusia', nama: 'Budi', terhubung: true });
+    // Kalau Budi tidak kembali sampai tenggang barunya habis, kursinya baru dilepas.
+    meja.terputus('budi');
+    jam.maju(TENGGANG_SAMBUNG_MS);
+    expect(surat.info('host').kursi.map((k) => k.jenis)).toEqual(['manusia', 'kosong', 'kosong']);
+  });
+
+  it('lobi yang dipulihkan: yang kembali lebih dari 20 detik sesudah server jalan tidak langsung melepas kursi lain', () => {
+    const a = buatMeja();
+    a.meja.masuk('budi', 'Budi', 2);
+    const lobi = dataMejaDipulihkan(a.meja.data);
+    a.meja.hentikan();
+    const ctx = siapkan();
+    const meja = new Meja(ctx.opsi, lobi);
+    ctx.jam.maju(25_000);
+    meja.terhubung('host');
+    ctx.jam.maju(TENGGANG_SAMBUNG_MS - 1);
+    expect(meja.data.kursi[1]).toMatchObject({ jenis: 'manusia', nama: 'Budi' });
+    meja.terhubung('budi');
+    ctx.jam.maju(TENGGANG_SAMBUNG_MS);
+    expect(meja.data.kursi.map((k) => [k.jenis, k.terhubung])).toEqual([
+      ['manusia', true],
+      ['manusia', true],
+      ['kosong', false],
+    ]);
+  });
+
+  /** Meja kompetisi 2 orang yang sudah sampai hasil putaran 1 (Ani host, Budi). */
+  const sampaiHasilPutaran = (extra: Partial<OpsiMeja> = {}, pengaturan: Partial<KompetisiDataMeja['pengaturan']> = {}) => {
+    const ctx = buatMeja(
+      { jedaLanjutMs: 10_000, ...extra },
+      { ...KOMPETISI, pengaturan: { ...KOMPETISI.pengaturan, jumlahPemain: 2, batasPutaran: 3, detikGiliran: 30, ...pengaturan } },
+    );
+    ctx.meja.masuk('budi', 'Budi', 2);
+    ctx.jam.maju(JEDA_MULAI_KOMPETISI_MS);
+    siapSemua(ctx.meja);
+    const rng = new Rng(3);
+    for (let i = 0; i < 20000 && ctx.meja.data.game?.status !== 'putaranSelesai'; i++) {
+      if (aksiManusia(ctx.meja, ctx.surat, 'host', rng) || aksiManusia(ctx.meja, ctx.surat, 'budi', rng)) continue;
+      ctx.jam.langkah();
+    }
+    expect(ctx.meja.data.game?.status).toBe('putaranSelesai');
+    return ctx;
+  };
+
+  it('hasil putaran: host yang diam tidak bisa menahan meja, putaran berikutnya mulai sendiri', () => {
+    const { meja, surat, jam, galat } = sampaiHasilPutaran();
+    // Jeda lanjut 10 detik + satu waktu giliran (30 detik).
+    expect(surat.info('host').lanjutOtomatis).toEqual({ sisaMs: 40_000 });
+    expect(surat.info('budi').lanjutOtomatis).toEqual({ sisaMs: 40_000 });
+    // Budi menekan Siap: jeda lanjut selesai, tapi batas mulai sendiri tidak berubah.
+    meja.terima('budi', { t: 'siapLanjut' });
+    jam.maju(39_999);
+    expect(meja.data.game?.status).toBe('putaranSelesai');
+    // Budi bukan host: tidak bisa memulai sendiri, dan voting akhiri butuh suara host.
+    meja.terima('budi', { t: 'putaranBerikut' });
+    expect(surat.errors('budi').at(-1)).toMatch(/Cuma host/);
+    meja.terima('budi', { t: 'akhiri', setuju: true });
+    expect(meja.status).toBe('main');
+    jam.maju(1);
+    expect(meja.data.game?.status).toBe('putaranBerjalan');
+    expect(meja.data.game?.putaran?.nomor).toBe(2);
+    expect(surat.info('host').lanjutOtomatis).toBeUndefined();
+    // Suara akhiri yang belum lolos ikut hilang di putaran baru.
+    expect(meja.data.setujuAkhiri).toEqual([]);
+    expect(galat).toEqual([]);
+  });
+
+  it('hasil putaran: host yang memulai sendiri lebih dulu tetap boleh; meja biasa tidak mulai sendiri', () => {
+    const { meja, surat, jam } = sampaiHasilPutaran();
+    jam.maju(10_000);
+    meja.terima('host', { t: 'putaranBerikut' });
+    expect(meja.data.game?.putaran?.nomor).toBe(2);
+    expect(surat.info('host').lanjutOtomatis).toBeUndefined();
+
+    // Meja biasa (tanpa kompetisi): tidak ada mulai sendiri, info tanpa lanjutOtomatis.
+    const ctx = siapkan({ jedaLanjutMs: 10_000 });
+    const biasa = Meja.buat(ctx.opsi, 'host', 'Ani', { jumlahPemain: 2, batasPutaran: 3, detikGiliran: 30 });
+    biasa.masuk('budi', 'Budi');
+    biasa.terima('host', { t: 'mulai' });
+    siapSemua(biasa);
+    const rng = new Rng(3);
+    for (let i = 0; i < 20000 && biasa.data.game?.status !== 'putaranSelesai'; i++) {
+      if (aksiManusia(biasa, ctx.surat, 'host', rng) || aksiManusia(biasa, ctx.surat, 'budi', rng)) continue;
+      ctx.jam.langkah();
+    }
+    expect('lanjutOtomatis' in ctx.surat.info('host')).toBe(false);
+    ctx.jam.maju(10 * 60_000);
+    expect(biasa.data.game?.status).toBe('putaranSelesai');
+  });
+
+  it('hasil putaran: semua pergi = tidak mulai sendiri; yang kembali mendapat waktu penuh lagi', () => {
+    const { meja, surat, jam } = sampaiHasilPutaran();
+    meja.terputus('host');
+    meja.terputus('budi');
+    jam.maju(10 * 60_000);
+    expect(meja.data.game?.status).toBe('putaranSelesai');
+    meja.terhubung('budi');
+    // Jeda lanjut sudah lewat: tinggal satu waktu giliran.
+    expect(surat.info('budi').lanjutOtomatis).toEqual({ sisaMs: 30_000 });
+    jam.maju(30_000);
+    expect(meja.data.game?.putaran?.nomor).toBe(2);
+  });
+
+  it('meja kompetisi tanpa waktu per giliran (data lama): mulai sendiri memakai 60 detik', () => {
+    const { meja, surat, jam } = sampaiHasilPutaran({}, { detikGiliran: 0 });
+    expect(surat.info('host').lanjutOtomatis).toEqual({ sisaMs: 70_000 });
+    jam.maju(70_000);
+    expect(meja.data.game?.putaran?.nomor).toBe(2);
+  });
+
+  it('voting akhiri di meja kompetisi butuh suara semua peserta yang belum keluar, termasuk yang terputus', () => {
+    const ctx = buatMeja(
+      { jedaLanjutMs: 10_000 },
+      { ...KOMPETISI, pengaturan: { ...KOMPETISI.pengaturan, jumlahPemain: 3, batasPutaran: 5, detikGiliran: 30 } },
+    );
+    const { meja, surat, jam } = ctx;
+    meja.masuk('budi', 'Budi', 2);
+    meja.masuk('cici', 'Cici', 3);
+    jam.maju(JEDA_MULAI_KOMPETISI_MS);
+    siapSemua(meja);
+    const rng = new Rng(9);
+    for (let i = 0; i < 20000 && meja.data.game?.status !== 'putaranSelesai'; i++) {
+      if (aksiManusia(meja, surat, 'host', rng) || aksiManusia(meja, surat, 'budi', rng) || aksiManusia(meja, surat, 'cici', rng)) continue;
+      jam.langkah();
+    }
+    expect(meja.data.game?.status).toBe('putaranSelesai');
+    // Budi dan Cici terputus sebentar; Ani sendirian tidak bisa memotong batas putaran.
+    meja.terputus('budi');
+    meja.terputus('cici');
+    meja.terima('host', { t: 'akhiri', setuju: true });
+    expect(meja.status).toBe('main');
+    expect(surat.info('host').setujuAkhiri).toEqual([0]);
+    // Yang kembali dan ikut setuju: baru berlaku kalau semua peserta (Cici juga) setuju.
+    meja.terhubung('budi');
+    meja.terima('budi', { t: 'akhiri', setuju: true });
+    expect(meja.status).toBe('main');
+    // Cici keluar (juru kunci, kursinya warga kedai): tidak ikut memilih lagi, jadi voting lolos.
+    meja.tinggalkan('cici');
+    expect(meja.status).toBe('selesai');
+  });
+
+  it('voting putaran terakhir (kaldu) di meja kompetisi: aturan pemilih sama dengan akhiri', () => {
+    const { meja, surat } = sampaiHasilPutaran({}, { modeKaldu: true, batasSkorAtas: null, batasSkorBawah: null });
+    meja.terputus('budi');
+    meja.terima('host', { t: 'putaranTerakhir', setuju: true });
+    expect(surat.info('host').setujuKaldu).toEqual([0]);
+    expect(meja.data.game?.kalduDiminta).toBeFalsy();
+    meja.terhubung('budi');
+    meja.terima('budi', { t: 'putaranTerakhir', setuju: true });
+    expect(meja.data.game?.kalduDiminta).toBe(true);
+  });
+
+  it('meja biasa: voting akhiri tetap cukup suara manusia yang terhubung (#36)', () => {
+    const ctx = siapkan();
+    const meja = Meja.buat(ctx.opsi, 'host', 'Ani', { jumlahPemain: 2, batasPutaran: 5 });
+    meja.masuk('budi', 'Budi');
+    meja.terima('host', { t: 'mulai' });
+    siapSemua(meja);
+    const rng = new Rng(3);
+    for (let i = 0; i < 20000 && meja.data.game?.status !== 'putaranSelesai'; i++) {
+      if (aksiManusia(meja, ctx.surat, 'host', rng) || aksiManusia(meja, ctx.surat, 'budi', rng)) continue;
+      ctx.jam.langkah();
+    }
+    meja.terputus('budi');
+    meja.terima('host', { t: 'akhiri', setuju: true });
+    expect(meja.status).toBe('selesai');
   });
 
   it('main sampai selesai: ringkasan akhir membawa kompetisi, waktu mulai, dan id peserta; Main lagi ditolak', () => {

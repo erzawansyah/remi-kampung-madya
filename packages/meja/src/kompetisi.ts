@@ -40,6 +40,13 @@ export const JUMLAH_PEMAIN_KOMPETISI_BAWAAN = 4;
 /** Batas putaran meja kompetisi wajib angka; pilihan di formulir pengajuan dan bawaannya. */
 export const PILIHAN_BATAS_PUTARAN_KOMPETISI = [3, 5, 10, 15, 20] as const;
 export const BATAS_PUTARAN_KOMPETISI_BAWAAN = 5;
+/**
+ * Waktu per giliran meja kompetisi wajib ada (tanpa "Tanpa batas"): tanpa batas waktu satu pemain
+ * yang tersambung bisa menahan giliran, pengumuman joker, atau susun akhir selamanya, dan juara
+ * kompetisinya ikut tertahan karena menunggu meja terakhir selesai (tafsiran pengembang).
+ */
+export const PILIHAN_DETIK_GILIRAN_KOMPETISI = [30, 60, 90, 120] as const;
+export const DETIK_GILIRAN_KOMPETISI_BAWAAN = 60;
 
 /**
  * Jeda sebelum meja kompetisi yang kursinya sudah penuh (semua peserta terhubung) mulai sendiri,
@@ -52,6 +59,13 @@ export const JEDA_MULAI_KOMPETISI_MS = 2_000;
  * berakhir (lobinya dibubarkan). Aplikasi boleh mencocokkannya untuk membuka layar kompetisi itu.
  */
 export const TEKS_LOBI_KOMPETISI_BUBAR = 'Kompetisinya sudah selesai, mejanya dibubarkan. Klasemennya ada di menu Kompetisi, Bos.';
+
+/**
+ * Alasan pesan `keluar` untuk peserta yang menyambung ulang ke meja kompetisi padahal kursinya sudah
+ * tidak ada (kursi lobi dilepas karena ia terlalu lama terputus, lalu tidak bisa duduk lagi karena
+ * kursinya sudah diisi orang lain atau permainannya sudah mulai).
+ */
+export const TEKS_KURSI_KOMPETISI_LEPAS = 'Kursimu di meja kompetisi dilepas karena kamu lama terputus. Duduk lagi dari daftar meja, Bos.';
 
 export const DAFTAR_MASA = ['malam', 'minggu', 'bulan'] as const;
 export type MasaKompetisi = (typeof DAFTAR_MASA)[number];
@@ -88,30 +102,44 @@ export const PENGATURAN_KOMPETISI_BAWAAN: Readonly<PengaturanKompetisi> = {
   batasSkorAtas: PENGATURAN_BAWAAN.batasSkorAtas,
   batasSkorBawah: PENGATURAN_BAWAAN.batasSkorBawah,
   modeKaldu: false,
-  detikGiliran: PENGATURAN_BAWAAN.detikGiliran,
+  detikGiliran: DETIK_GILIRAN_KOMPETISI_BAWAAN,
   levelBot: PENGATURAN_BAWAAN.levelBot,
 };
 
 /**
- * Pengaturan kompetisi dari data yang tidak dipercaya (isian, JSON di database): tiap kunci yang
- * tidak sah jatuh ke bawaan masing-masing (batas putaran kosong/rusak → 5, jumlah pemain rusak → 4),
- * kunci lain dibuang. "2 deck untuk 4 pemain" hanya berarti di meja 4 orang, jadi selain itu false.
- * Tidak pernah melempar.
+ * Asal pengaturan yang dirapikan:
+ * - 'pengajuan' (bawaan): isian pengajuan dari API publik. Batas putaran dan waktu per giliran hanya
+ *   boleh salah satu pilihan formulir (PILIHAN_BATAS_PUTARAN_KOMPETISI, PILIHAN_DETIK_GILIRAN_KOMPETISI).
+ * - 'tersimpan': JSON di database. Lebih longgar (batas putaran 1–20, waktu 1–600 detik), supaya data
+ *   uji yang ditulis langsung (permainan 1–2 putaran) tetap terbaca apa adanya. Bukan untuk isian.
  */
-export function rapikanPengaturanKompetisi(x: unknown): PengaturanKompetisi {
+export type AsalPengaturanKompetisi = 'pengajuan' | 'tersimpan';
+
+/**
+ * Pengaturan kompetisi dari data yang tidak dipercaya (isian, JSON di database): tiap kunci yang
+ * tidak sah jatuh ke bawaan masing-masing (batas putaran kosong/rusak → 5, jumlah pemain rusak → 4,
+ * waktu per giliran kosong/0/rusak → 60 detik), kunci lain dibuang. "2 deck untuk 4 pemain" hanya
+ * berarti di meja 4 orang, jadi selain itu false. Tidak pernah melempar.
+ */
+export function rapikanPengaturanKompetisi(x: unknown, asal: AsalPengaturanKompetisi = 'pengajuan'): PengaturanKompetisi {
   const o = typeof x === 'object' && x !== null ? (x as Record<string, unknown>) : {};
   const b = PENGATURAN_KOMPETISI_BAWAAN;
   const bulat = (v: unknown, min: number, maks: number): v is number =>
     typeof v === 'number' && Number.isInteger(v) && v >= min && v <= maks;
+  const salahSatu = (v: unknown, pilihan: readonly number[]): v is number => typeof v === 'number' && pilihan.includes(v);
+  const tersimpan = asal === 'tersimpan';
+  const maksPutaran = Math.max(...PILIHAN_BATAS_PUTARAN_KOMPETISI);
   const jumlahPemain = bulat(o.jumlahPemain, MIN_PEMAIN_KOMPETISI, MAKS_PEMAIN_KOMPETISI) ? o.jumlahPemain : b.jumlahPemain;
+  const batasPutaran = tersimpan ? bulat(o.batasPutaran, 1, maksPutaran) : salahSatu(o.batasPutaran, PILIHAN_BATAS_PUTARAN_KOMPETISI);
+  const detikGiliran = tersimpan ? bulat(o.detikGiliran, 1, 600) : salahSatu(o.detikGiliran, PILIHAN_DETIK_GILIRAN_KOMPETISI);
   return {
     jumlahPemain,
     duaDeckUntukEmpat: jumlahPemain === 4 && typeof o.duaDeckUntukEmpat === 'boolean' ? o.duaDeckUntukEmpat : false,
-    batasPutaran: bulat(o.batasPutaran, 1, 100000) ? o.batasPutaran : b.batasPutaran,
+    batasPutaran: batasPutaran ? (o.batasPutaran as number) : b.batasPutaran,
     batasSkorAtas: batasSkorSah(o.batasSkorAtas, 'atas') ? o.batasSkorAtas : b.batasSkorAtas,
     batasSkorBawah: batasSkorSah(o.batasSkorBawah, 'bawah') ? o.batasSkorBawah : b.batasSkorBawah,
     modeKaldu: typeof o.modeKaldu === 'boolean' ? o.modeKaldu : b.modeKaldu,
-    detikGiliran: bulat(o.detikGiliran, 0, 600) ? o.detikGiliran : b.detikGiliran,
+    detikGiliran: detikGiliran ? (o.detikGiliran as number) : b.detikGiliran,
     levelBot: isLevel(o.levelBot) ? o.levelBot : b.levelBot,
   };
 }
