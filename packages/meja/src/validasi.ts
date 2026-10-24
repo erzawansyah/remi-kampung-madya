@@ -187,6 +187,14 @@ export function validasiPengaturan(x: unknown): Partial<PengaturanMeja> | null {
   return hasil;
 }
 
+/**
+ * Id aksi dari client (`{t:'aksi', id}`): 1–64 karakter huruf/angka ASCII, `_`, atau `-`. Cukup untuk
+ * UUID maupun nonce + penghitung, dan aman dipakai sebagai kunci catatan di server.
+ */
+export function idAksiSah(x: unknown): x is string {
+  return typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x);
+}
+
 /** Tiket kompetisi (#51): kode 5 huruf/angka dan token. Bentuk salah = null. */
 export function validasiTiket(x: unknown): TiketKompetisi | null {
   if (!isObj(x) || !isStr(x.kode, 20) || !isStr(x.token, 100) || !x.token) return null;
@@ -228,10 +236,13 @@ export function validasiPesan(x: unknown): PesanKlien | null {
     case 'daftar':
     case 'keluar':
     case 'mainLagi':
-    case 'siapJoker':
     case 'siapLanjut':
     case 'ping':
       return { t: x.t };
+    case 'siapJoker':
+      // Nomor putaran opsional; bentuk yang salah ditolak (client yang benar tidak pernah mengirimnya).
+      if (x.putaran === undefined) return { t: 'siapJoker' };
+      return isInt(x.putaran) && x.putaran >= 0 && x.putaran <= 1_000_000 ? { t: 'siapJoker', putaran: x.putaran } : null;
     case 'aturKursi':
       if (!isInt(x.kursi) || (x.jenis !== 'bot' && x.jenis !== 'kosong')) return null;
       if (x.level !== undefined && !isLevel(x.level)) return null;
@@ -245,7 +256,10 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       return pengocok(x.pengocok) ? { t: x.t, pengocok: x.pengocok as number | undefined } : null;
     case 'aksi': {
       const aksi = validasiAksi(x.aksi);
-      return aksi ? { t: 'aksi', aksi } : null;
+      if (!aksi) return null;
+      if (x.id === undefined) return { t: 'aksi', aksi };
+      // Id yang tidak sah = seluruh pesan ditolak (client yang benar tidak pernah mengirimnya).
+      return idAksiSah(x.id) ? { t: 'aksi', aksi, id: x.id } : null;
     }
     case 'akhiri':
     case 'putaranTerakhir':

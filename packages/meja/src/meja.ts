@@ -120,11 +120,26 @@ export const TENGGANG_SAMBUNG_MS = 20_000;
 
 /**
  * Batas terlama tunggu pengumuman joker untuk pemain yang tersambung kembali di tengah putaran.
- * Berlaku juga kalau batas waktu giliran meja lebih panjang (yang lebih pendek dipakai). Supaya meja
- * yang sudah jalan tidak tertahan lama (misalnya OK-nya tertekan saat sinyal putus dan tidak sampai
- * ke server). Tiap kursi paling banyak sekali ditanya ulang per putaran.
+ * Berlaku juga kalau batas waktu giliran meja lebih panjang (yang lebih pendek dipakai). Sejak
+ * 24 Okt 2026 (#34 diubah) yang menunggu hanya pemain itu sendiri; meja jalan terus, kecuali giliran
+ * sedang dipegang pemain itu. Tiap kursi paling banyak sekali ditanya ulang per putaran.
  */
 export const BATAS_JOKER_SAMBUNG_MS = 30_000;
+
+/**
+ * Sisa waktu giliran paling sedikit untuk pemain yang tersambung kembali di gilirannya sendiri
+ * (keputusan pemilik 24 Okt 2026, mengubah #37). Paling banyak sekali per kursi per giliran, tidak
+ * pernah lebih dari satu giliran penuh, dan tidak membatalkan pengambilalihan yang sudah terjadi.
+ */
+export const SISA_MIN_SAMBUNG_MS = 20_000;
+
+/**
+ * Toleransi tersembunyi sesudah batas waktu giliran (keputusan pemilik 24 Okt 2026): warga kedai baru
+ * mengambil alih sekian ms sesudah batas resmi. `InfoMeja.batasWaktu` tetap batas resmi, dan aksi di
+ * jendela ini diterima biasa tanpa memperpanjang batas. Supaya aksi yang ditekan di detik terakhir
+ * lalu tertahan sebentar di jaringan tidak ditolak.
+ */
+export const TOLERANSI_BATAS_MS = 2_500;
 
 /**
  * Jeda coba ulang sesudah langkah warga kedai gagal total (semua cadangan galat): 2 detik, lalu dua
@@ -212,10 +227,45 @@ export class Meja {
   private timerTenggang: unknown = null;
   /** Waktu tiap kursi manusia terputus (untuk masa tenggang). Tidak disimpan. */
   private putusSejak = new Map<number, number>();
-  /** Bertambah setiap tunggu joker baru karena pemain tersambung kembali (kunci batas waktu). */
-  private seriJoker = 0;
-  /** Tunggu joker yang sedang berjalan dimulai karena ada yang tersambung kembali. */
-  private jokerSambung = false;
+  /**
+   * Kursi yang tersambung kembali di tengah putaran tanpa sempat melihat joker, beserta batas waktu
+   * tunggunya (#34, diubah 24 Okt 2026). Popup joker hanya muncul lagi untuk kursi itu (lewat
+   * `info(kursiSaya)`); meja lain jalan terus, kecuali giliran sedang dipegang kursi itu. Tidak
+   * disimpan, seperti `putusSejak`: kursinya sudah tercatat di `sudahLihatJoker`.
+   */
+  private jokerSambungUlang = new Map<number, number>();
+  private timerJokerSambung: unknown = null;
+  /**
+   * Kursi yang dicatat sudah melihat joker putaran ini hanya karena batas tunggu pengumuman habis
+   * (belum menekan OK), beserta waktu habisnya. Kalau ternyata sambungannya sudah putus sebelum
+   * batas itu (server baru memberi tahu meja sesudah jeda singkat), popupnya tidak tampil sampai
+   * habis: ia ditanya ulang saat kembali (#34). Tidak disimpan, dikosongkan tiap putaran baru.
+   */
+  private jokerHabisWaktu = new Map<number, number>();
+  /**
+   * Kursi yang sudah diberi sisa waktu minimal sambung ulang di giliran `kunci` (sekali per kursi).
+   * Dikosongkan tiap permainan baru: kunci susun akhir (`nomor:akhir`) berulang sesudah "Main lagi".
+   */
+  private sisaMinimal: { kunci: string; kursi: number[] } | null = null;
+  /**
+   * Kursi manusia yang sudah dijalankan warga kedai (aksinya diterapkan) di giliran `kunci`. Di susun
+   * akhir semua kursi memakai kunci yang sama, jadi `kunciLangkahBot` (ikut terisi oleh langkah kursi
+   * warga kedai sendiri) tidak bisa dipakai untuk tahu apakah pengambilalihan sudah dijalankan.
+   * Dikosongkan tiap permainan baru, seperti `sisaMinimal`.
+   */
+  private langkahWargaDiManusia: { kunci: string; kursi: number[] } | null = null;
+  /** Meja sedang dijeda karena semua manusia terputus (#35); dipakai untuk memberi tenggang baru. */
+  private jedaTotal = false;
+  /**
+   * Jadwal langkah warga kedai berikutnya. Disimpan supaya jeda mikirnya tidak diundi ulang setiap
+   * ada perubahan lain (sambung ulang, aksi manusia di susun akhir): sisa waktunya yang dipakai.
+   */
+  private jadwalBot: { kunci: string; kursi: number; waktu: number } | null = null;
+  /**
+   * Banyaknya langkah warga kedai di kursi manusia selama orangnya terputus. Dikabarkan sekali lewat
+   * pesan 'masuk' (`dijalankanWarga`) saat ia tersambung kembali. Tidak disimpan.
+   */
+  private dijalankanWarga = new Map<number, number>();
   /** Langkah warga kedai yang gagal total berturut-turut di satu giliran (untuk jeda coba ulang). */
   private galatBot: { kunci: string; kali: number } | null = null;
   /** Timer coba ulang menyusun jadwal kalau jadwalkan() sendiri galat, dan berapa kali sudah gagal. */
@@ -348,11 +398,14 @@ export class Meja {
   /**
    * Duduk di kursi kosong, atau sambung ulang bila pemainId sudah punya kursi. Meja kompetisi (#51):
    * `peserta` wajib (diisi server sesudah tiketnya dicek), dan satu peserta hanya boleh satu kursi.
+   * `gantiSambungan`: server tahu pemain ini kembali lewat sambungan baru sesudah sambungan lamanya
+   * putus atau digantikan (bukti putus untuk sisa waktu minimal, lihat `terhubung`). `putusPada`:
+   * waktu sambungan lamanya tertutup, kalau server tahu (lihat `terhubung`).
    */
-  masuk(pemainId: string, nama: string, peserta?: number): number {
+  masuk(pemainId: string, nama: string, peserta?: number, gantiSambungan = false, putusPada?: number): number {
     const ada = this.kursiDari(pemainId);
     if (ada !== null) {
-      this.terhubung(pemainId);
+      this.terhubung(pemainId, gantiSambungan, putusPada);
       return ada;
     }
     if (this.status !== 'lobi') galat('Permainan di meja ini sudah mulai.');
@@ -365,6 +418,7 @@ export class Meja {
     this.d.kursi[i] = { jenis: 'manusia', nama: rapikanNama(nama), pemainId, terhubung: true, level: this.d.pengaturan.levelBot };
     if (this.d.kompetisi && peserta !== undefined) this.d.kursi[i].peserta = peserta;
     this.putusSejak.delete(i);
+    this.dijalankanWarga.delete(i);
     // Nama yang baru masuk sama dengan nama warga kedai di lobi: warga kedainya yang ganti nama.
     const kunci = kunciNama(this.d.kursi[i].nama);
     this.d.kursi.forEach((k, j) => {
@@ -376,38 +430,105 @@ export class Meja {
     return i;
   }
 
-  terhubung(pemainId: string): void {
+  /**
+   * Pemain di kursinya tersambung (lagi). `gantiSambungan` = server tahu ia kembali lewat sambungan
+   * baru (lihat `masuk`); bersama `putusSejak` jadi bukti ia sempat putus, syarat sisa waktu minimal.
+   * `putusPada` = waktu sambungan lamanya tertutup (server yang masih menunda kabar putusnya); kosong
+   * bersama `gantiSambungan` = tidak diketahui (sambungan lama setengah mati yang digantikan).
+   */
+  terhubung(pemainId: string, gantiSambungan = false, putusPada?: number): void {
     const i = this.kursiDari(pemainId);
     if (i === null) return;
+    const sempatPutus = gantiSambungan || this.putusSejak.has(i);
+    // Batas tunggu pengumuman joker habis selagi meja belum tahu ia putus: popupnya tidak tampil
+    // sampai habis, jadi ditanya ulang di bawah. (Kalau meja sudah tahu, terputus() yang mengurus.)
+    if (gantiSambungan && !this.putusSejak.has(i)) this.cekJokerHabisWaktu(i, putusPada);
     this.d.kursi[i].terhubung = true;
     this.putusSejak.delete(i);
     // Belum sempat melihat pengumuman joker putaran ini (misalnya terputus atau refresh sebelum
-    // menekan OK): popup joker muncul lagi untuknya. Yang sudah menekan OK tidak ditanya lagi.
-    // Tanya ulang cuma sekali per kursi per putaran: kursinya langsung dicatat di sudahLihatJoker,
-    // jadi kalau ia putus-sambung lagi, meja tidak ditahan lagi.
+    // menekan OK): popup joker muncul lagi untuknya saja (#34, diubah 24 Okt 2026). Meja tidak ikut
+    // menunggu, kecuali giliran sedang dipegang kursi ini (lihat jadwalkan). Yang sudah menekan OK
+    // tidak ditanya lagi. Tanya ulang cuma sekali per kursi per putaran: kursinya langsung dicatat
+    // di sudahLihatJoker, jadi kalau ia putus-sambung lagi, popup tidak muncul lagi.
     if (
       this.d.game?.status === 'putaranBerjalan' &&
       !this.d.sudahLihatJoker.includes(i) &&
       !this.d.menungguJoker.includes(i)
     ) {
-      if (!this.d.menungguJoker.length) {
-        this.seriJoker++;
-        this.jokerSambung = true;
-      }
-      this.d.menungguJoker = [...this.d.menungguJoker, i].sort((a, b) => a - b);
+      this.jokerSambungUlang.set(i, this.penjadwal.sekarang() + this.lamaJokerSambung());
       this.d.sudahLihatJoker = [...this.d.sudahLihatJoker, i].sort((a, b) => a - b);
     }
-    this.kirimKe(pemainId, { t: 'masuk', kode: this.d.kode, token: pemainId, kursi: i });
+    if (sempatPutus) this.beriSisaMinimal(i);
+    const dijalankan = this.dijalankanWarga.get(i) ?? 0;
+    this.dijalankanWarga.delete(i);
+    this.kirimKe(pemainId, {
+      t: 'masuk',
+      kode: this.d.kode,
+      token: pemainId,
+      kursi: i,
+      ...(dijalankan > 0 ? { dijalankanWarga: dijalankan } : {}),
+    });
     this.perbaruiHost();
     this.berubah();
   }
 
-  terputus(pemainId: string): void {
+  /**
+   * Pemain terputus. `sejak` (opsional): waktu sambungannya sebenarnya putus, kalau server baru
+   * memberi tahu belakangan (jeda singkat sebelum dianggap terputus); tenggang dihitung dari situ.
+   */
+  terputus(pemainId: string, sejak?: number): void {
     const i = this.kursiDari(pemainId);
     if (i === null) return;
+    const sekarang = this.penjadwal.sekarang();
+    const putusPada = sejak === undefined ? sekarang : Math.min(sejak, sekarang);
     this.d.kursi[i].terhubung = false;
-    this.putusSejak.set(i, this.penjadwal.sekarang());
+    this.putusSejak.set(i, putusPada);
+    this.cekJokerHabisWaktu(i, putusPada);
     this.lepasKursi(i);
+  }
+
+  /**
+   * Kursi i dicatat sudah melihat joker hanya karena batas tunggu pengumuman habis (`jokerHabisWaktu`).
+   * Kalau sambungannya sudah putus sebelum batas itu (atau waktunya tidak diketahui), popupnya tidak
+   * tampil sampai habis: catatan "sudah melihat" dicabut, jadi ia ditanya ulang saat kembali (#34;
+   * jeda putus di server membuat meja telat tahu). Putus sesudah batas: popupnya sudah tampil sampai
+   * habis, tidak ditanya lagi. Catatannya dibuang di kedua kasus.
+   */
+  private cekJokerHabisWaktu(i: number, putusPada: number | undefined): void {
+    const habis = this.jokerHabisWaktu.get(i);
+    if (habis === undefined) return;
+    this.jokerHabisWaktu.delete(i);
+    if (putusPada !== undefined && putusPada > habis) return;
+    this.d.sudahLihatJoker = this.d.sudahLihatJoker.filter((x) => x !== i);
+  }
+
+  /** Lama tunggu popup joker untuk kursi yang tersambung kembali (≤ BATAS_JOKER_SAMBUNG_MS). */
+  private lamaJokerSambung(): number {
+    const lamaGiliran = Math.max(0, this.d.pengaturan.detikGiliran) * 1000;
+    return lamaGiliran > 0 ? Math.min(lamaGiliran, BATAS_JOKER_SAMBUNG_MS) : BATAS_JOKER_SAMBUNG_MS;
+  }
+
+  /**
+   * Sisa waktu minimal untuk pemain yang kembali di gilirannya sendiri (keputusan pemilik
+   * 24 Okt 2026, mengubah #37): batas waktu giliran dimundurkan sampai tersisa SISA_MIN_SAMBUNG_MS
+   * (tidak pernah lebih dari satu giliran penuh). Hanya kalau ia memegang giliran (atau susun akhirnya
+   * belum selesai), giliran itu belum diambil alih warga kedai, dan belum pernah diberi di giliran
+   * yang sama: paling banyak sekali per kursi per giliran, jadi tidak bisa dipakai mengulur waktu.
+   */
+  private beriSisaMinimal(i: number): void {
+    const g = this.d.game;
+    const kunci = this.kunciGiliran();
+    if (!g?.putaran || !kunci || this.batasWaktu === null || this.kunciTimer !== kunci || this.ambilAlih === kunci) return;
+    const giliranku = g.status === 'susunAkhir' ? !g.putaran.selesaiSusun[i] : g.putaran.giliran === i;
+    if (!giliranku) return;
+    const sudah = this.sisaMinimal?.kunci === kunci ? this.sisaMinimal.kursi : [];
+    if (sudah.includes(i)) return;
+    const lamaGiliran = Math.max(0, this.d.pengaturan.detikGiliran) * 1000;
+    const batasBaru = this.penjadwal.sekarang() + Math.min(SISA_MIN_SAMBUNG_MS, lamaGiliran);
+    // Sisanya masih cukup: tidak diubah, dan jatahnya belum terpakai.
+    if (batasBaru <= this.batasWaktu) return;
+    this.batasWaktu = batasBaru;
+    this.sisaMinimal = { kunci, kursi: [...sudah, i] };
   }
 
   /**
@@ -431,6 +552,7 @@ export class Meja {
       }
     }
     this.putusSejak.delete(i);
+    this.dijalankanWarga.delete(i);
     this.lepasKursi(i);
   }
 
@@ -443,6 +565,7 @@ export class Meja {
     this.d.setujuAkhiri = this.d.setujuAkhiri.filter((x) => x !== i);
     this.aturSetujuKaldu((this.d.setujuKaldu ?? []).filter((x) => x !== i));
     this.d.menungguJoker = this.d.menungguJoker.filter((x) => x !== i);
+    this.jokerSambungUlang.delete(i);
     this.perbaruiHost();
     if (this.cekVotingAkhiri() || this.cekVotingKaldu()) return;
     this.berubah();
@@ -491,7 +614,12 @@ export class Meja {
       case 'siapLanjut':
         return this.tandaiSiapLanjut(kursi);
       case 'siapJoker':
+        // OK untuk putaran lain (misalnya OK putaran lama yang baru terkirim sesudah sambung ulang,
+        // padahal putaran baru sudah mulai): diabaikan, supaya popup putaran ini tetap muncul.
+        if (pesan.putaran !== undefined && pesan.putaran !== this.d.game?.putaran?.nomor) return;
         this.d.menungguJoker = this.d.menungguJoker.filter((x) => x !== kursi);
+        this.jokerSambungUlang.delete(kursi);
+        this.jokerHabisWaktu.delete(kursi);
         if (this.d.game?.status === 'putaranBerjalan' && !this.d.sudahLihatJoker.includes(kursi)) {
           this.d.sudahLihatJoker = [...this.d.sudahLihatJoker, kursi].sort((a, b) => a - b);
         }
@@ -538,6 +666,8 @@ export class Meja {
       // Saat main, yang boleh diubah hanya tempo bot.
       if (Object.keys(ubah).some((k) => k !== 'tempoBot')) galat('Pengaturan cuma bisa diubah sebelum permainan mulai.');
       this.d.pengaturan = { ...this.d.pengaturan, ...ubah };
+      // Tempo baru langsung berlaku: jeda warga kedai yang sedang berjalan diundi ulang.
+      this.jadwalBot = null;
       this.berubah();
       return;
     }
@@ -582,6 +712,10 @@ export class Meja {
     });
     this.d.setujuAkhiri = [];
     this.aturSetujuKaldu([]);
+    // Permainan baru: nomor putaran mulai dari 1 lagi, jadi kunci susun akhir (`nomor:akhir`) bisa
+    // sama dengan permainan sebelumnya. Catatan per giliran yang tidak disimpan dikosongkan.
+    this.sisaMinimal = null;
+    this.langkahWargaDiManusia = null;
     this.terapkan(game, { jenis: 'mulaiPutaran', pengocok });
   }
 
@@ -598,6 +732,7 @@ export class Meja {
     const g = this.d.game;
     if (!g || (g.status !== 'putaranBerjalan' && g.status !== 'susunAkhir')) galat('Belum ada putaran yang berjalan.');
     if (this.d.menungguJoker.length) galat('Tunggu semua pemain melihat joker dulu.');
+    if (this.jokerSambungUlang.has(kursi)) galat('Tekan OK di pengumuman joker dulu, Bos.');
     const giliranSaya = g.status === 'susunAkhir' || g.putaran!.giliran === kursi;
     if (giliranSaya && this.ambilAlih !== null && this.ambilAlih === this.kunciGiliran()) {
       galat('Waktu habis, giliranmu dijalankan warga kedai dulu, Bos.');
@@ -688,6 +823,7 @@ export class Meja {
     this.jedaLanjut = null;
     this.siapLanjut.clear();
     this.ledekPutaran = null;
+    this.dijalankanWarga.clear();
     this.berubah();
   }
 
@@ -713,7 +849,13 @@ export class Meja {
         .map((k, i) => (k.jenis === 'manusia' && k.terhubung ? i : -1))
         .filter((i) => i >= 0);
       this.d.sudahLihatJoker = [];
-      this.jokerSambung = false;
+      this.jokerSambungUlang.clear();
+      this.jokerHabisWaktu.clear();
+    }
+    // Putaran selesai/susun akhir: tunggu popup joker karena sambung ulang tidak berarti lagi.
+    if (h.state.status !== 'putaranBerjalan') {
+      this.jokerSambungUlang.clear();
+      this.jokerHabisWaktu.clear();
     }
     const idTerakhir = game.peristiwa.at(-1)?.id ?? 0;
     this.d.game = h.state;
@@ -847,11 +989,13 @@ export class Meja {
     if (this.timerTenggang !== null) this.penjadwal.batal(this.timerTenggang);
     if (this.timerPulih !== null) this.penjadwal.batal(this.timerPulih);
     if (this.timerLanjut !== null) this.penjadwal.batal(this.timerLanjut);
+    if (this.timerJokerSambung !== null) this.penjadwal.batal(this.timerJokerSambung);
     this.timerBot = null;
     this.timerGiliran = null;
     this.timerTenggang = null;
     this.timerPulih = null;
     this.timerLanjut = null;
+    this.timerJokerSambung = null;
   }
 
   /**
@@ -916,50 +1060,79 @@ export class Meja {
     }
     const g = this.d.game;
     const kunci = this.kunciGiliran();
+    const sekarang = this.penjadwal.sekarang();
+    // Semua manusia pergi (#35): dicatat. Saat ada yang kembali, kursi manusia lain yang masih
+    // terputus mendapat masa tenggang penuh lagi, dihitung sejak meja lanjut (keputusan pemilik
+    // 24 Okt 2026), supaya tidak langsung dijalankan warga kedai karena tenggangnya habis selama jeda.
+    if (this.jumlahManusiaTerhubung === 0) {
+      if (g) this.jedaTotal = true;
+    } else if (this.jedaTotal) {
+      this.jedaTotal = false;
+      this.d.kursi.forEach((k, i) => {
+        if (k.jenis === 'manusia' && !k.terhubung) this.putusSejak.set(i, sekarang);
+      });
+    }
     if (!g || !kunci) {
       this.batasWaktu = null;
       this.kunciTimer = null;
+      this.jadwalBot = null;
+      if (g?.status !== 'putaranBerjalan') this.jokerSambungUlang.clear();
       return;
     }
     // Semua manusia pergi: permainan dijeda sampai ada yang kembali. Batas waktu yang sedang
     // berjalan dibuang, jadi saat ada yang kembali giliran (atau pengumuman joker) dapat waktu penuh
-    // lagi, tidak langsung diambil alih warga kedai karena waktunya habis selama jeda.
+    // lagi, tidak langsung diambil alih warga kedai karena waktunya habis selama jeda. Pengambilalihan
+    // karena waktu habis yang belum sempat dijalankan warga kedai ikut dibatalkan (sesuai maksud #35).
     if (this.jumlahManusiaTerhubung === 0) {
       this.kunciTimer = null;
       this.batasWaktu = null;
+      this.jadwalBot = null;
+      if (this.ambilAlih === kunci && !this.sudahDijalankanWarga(g, kunci)) this.ambilAlih = null;
       return;
     }
     this.botMikir = null;
-    const sekarang = this.penjadwal.sekarang();
 
-    // Pengumuman joker: permainan menunggu semua menekan OK (kalau ada batas waktu, dibatasi juga).
-    // Tunggu karena ada yang tersambung kembali di tengah putaran selalu dibatasi, paling lama
-    // BATAS_JOKER_SAMBUNG_MS walau batas waktu giliran lebih panjang, supaya meja yang sudah jalan
-    // tidak tertahan lama.
+    // Popup joker untuk kursi yang tersambung kembali: batas tunggunya per kursi (#34).
+    this.jadwalkanJokerSambung(sekarang);
+
+    // Pengumuman joker awal putaran: permainan menunggu semua menekan OK (kalau ada batas waktu,
+    // dibatasi juga).
     if (this.d.menungguJoker.length) {
-      const lamaGiliran = Math.max(0, this.d.pengaturan.detikGiliran) * 1000;
-      const lamaJoker = this.jokerSambung
-        ? lamaGiliran > 0
-          ? Math.min(lamaGiliran, BATAS_JOKER_SAMBUNG_MS)
-          : BATAS_JOKER_SAMBUNG_MS
-        : lamaGiliran;
+      this.jadwalBot = null;
+      const lamaJoker = Math.max(0, this.d.pengaturan.detikGiliran) * 1000;
       if (lamaJoker > 0) {
-        const kunciJoker = `joker:${g.putaran!.nomor}:${this.seriJoker}`;
+        const kunciJoker = `joker:${g.putaran!.nomor}`;
         if (this.kunciTimer !== kunciJoker) {
           this.kunciTimer = kunciJoker;
           this.batasWaktu = sekarang + lamaJoker;
         }
         this.timerGiliran = this.pasangTimer(Math.max(0, this.batasWaktu! - sekarang), 'batas waktu pengumuman joker', () => {
           // Popupnya sudah tampil sampai batas waktu: dianggap sudah melihat, tidak ditanya lagi.
+          // Dicatat waktunya: kalau ternyata sambungannya sudah putus sebelum ini (meja belum tahu
+          // karena jeda putus di server), ia tetap ditanya ulang saat kembali (cekJokerHabisWaktu).
+          const kini = this.penjadwal.sekarang();
+          for (const i of this.d.menungguJoker) this.jokerHabisWaktu.set(i, kini);
           this.d.sudahLihatJoker = [...new Set([...this.d.sudahLihatJoker, ...this.d.menungguJoker])].sort((a, b) => a - b);
           this.d.menungguJoker = [];
-          this.jokerSambung = false;
           this.berubah();
         });
       } else this.batasWaktu = null;
       return;
     }
-    this.jokerSambung = false;
+
+    // Giliran dipegang kursi yang tersambung kembali dan belum melihat joker: giliran itu menunggu
+    // OK-nya (warga kedai tidak jalan), paling lama sampai batas tunggunya. Sesudahnya giliran mulai
+    // dengan waktu penuh (kunci timer berganti), seperti sebelum #34 diubah.
+    if (g.status === 'putaranBerjalan' && this.ambilAlih !== kunci) {
+      const i = g.putaran!.giliran;
+      const batas = this.jokerSambungUlang.get(i);
+      if (batas !== undefined && this.d.kursi[i]?.jenis === 'manusia' && this.d.kursi[i].terhubung) {
+        this.kunciTimer = `jokerSambung:${kunci}:${i}`;
+        this.batasWaktu = batas;
+        this.jadwalBot = null;
+        return;
+      }
+    }
 
     // Susun akhir: semua yang belum selesai menyusun bersamaan; bot (dan manusia yang terputus
     // atau kehabisan waktu) dijalankan satu per satu, manusia lain diberi batas waktu bersama.
@@ -987,19 +1160,30 @@ export class Meja {
       });
     }
     if (olehBot.length) {
+      const kursiBot = olehBot[0];
       const awalGiliran = this.kunciLangkahBot !== kunci;
       const [min, maks] = JEDA_BOT[this.d.pengaturan.tempoBot ?? 'santai'][awalGiliran ? 'mikir' : 'lanjut'];
       // Langkah sebelumnya di giliran ini gagal total: coba lagi dengan jeda yang makin panjang.
       const gagal = this.galatBot?.kunci === kunci ? this.galatBot.kali : 0;
-      const jeda = gagal ? jedaUlangGalat(gagal) : (this.opsi.jedaBotMs ?? Math.round(min + Math.random() * (maks - min)));
-      if (awalGiliran) this.botMikir = olehBot[0];
+      let jeda: number;
+      if (gagal) jeda = jedaUlangGalat(gagal);
+      else if (this.jadwalBot?.kunci === kunci && this.jadwalBot.kursi === kursiBot) {
+        // Jadwal langkah yang sama sudah diundi: pakai sisanya, jangan diundi ulang (perubahan lain
+        // seperti sambung ulang pemain tidak boleh menunda warga kedai terus-menerus).
+        jeda = Math.max(0, this.jadwalBot.waktu - sekarang);
+      } else {
+        jeda = this.opsi.jedaBotMs ?? Math.round(min + Math.random() * (maks - min));
+        this.jadwalBot = { kunci, kursi: kursiBot, waktu: sekarang + jeda };
+      }
+      if (awalGiliran) this.botMikir = kursiBot;
       this.timerBot = this.pasangTimer(jeda, 'langkah warga kedai', () => {
         this.kunciLangkahBot = kunci;
         this.botMikir = null;
-        this.langkahBot(olehBot[0], kunci);
+        this.jadwalBot = null;
+        this.langkahBot(kursiBot, kunci);
       });
       if (olehBot.length === menunggu.length) return;
-    }
+    } else this.jadwalBot = null;
     const detik = this.d.pengaturan.detikGiliran;
     if (detik <= 0) {
       this.batasWaktu = null;
@@ -1007,12 +1191,46 @@ export class Meja {
     }
     if (this.kunciTimer !== kunci) {
       this.kunciTimer = kunci;
-      this.batasWaktu = this.penjadwal.sekarang() + detik * 1000;
+      this.batasWaktu = sekarang + detik * 1000;
     }
-    const sisa = Math.max(0, this.batasWaktu! - this.penjadwal.sekarang());
+    // Warga kedai baru mengambil alih sesudah toleransi tersembunyi; batas resmi (info) tetap. Dihitung
+    // dari batas resmi, jadi penyusunan ulang di jendela toleransi tidak memperpanjangnya.
+    const sisa = Math.max(0, this.batasWaktu! + TOLERANSI_BATAS_MS - sekarang);
     this.timerGiliran = this.pasangTimer(sisa, 'batas waktu giliran', () => {
       if (this.kunciGiliran() !== kunci) return;
       this.ambilAlih = kunci;
+      this.berubah();
+    });
+  }
+
+  /**
+   * Pengambilalihan giliran `kunci` karena waktu habis sudah dijalankan warga kedai? Giliran biasa:
+   * kuncinya hanya milik satu kursi, jadi cukup `kunciLangkahBot`. Susun akhir: kuncinya dipakai
+   * bersama (termasuk kursi warga kedai sendiri yang menyusun), jadi dilihat per kursi manusia yang
+   * masih menyusun. Yang sudah selesai disusunkan warga kedai tidak menghalangi pembatalan untuk
+   * yang lain.
+   */
+  private sudahDijalankanWarga(g: GameState, kunci: string): boolean {
+    if (g.status !== 'susunAkhir') return this.kunciLangkahBot === kunci;
+    const dijalankan = this.langkahWargaDiManusia?.kunci === kunci ? this.langkahWargaDiManusia.kursi : [];
+    return g.putaran!.selesaiSusun.some((selesai, i) => !selesai && this.d.kursi[i]?.jenis === 'manusia' && dijalankan.includes(i));
+  }
+
+  /**
+   * Timer batas tunggu popup joker untuk kursi yang tersambung kembali (yang paling dulu habis).
+   * Habis = popupnya dianggap sudah dilihat; kursinya sudah tercatat di sudahLihatJoker.
+   */
+  private jadwalkanJokerSambung(sekarang: number): void {
+    if (this.d.game?.status !== 'putaranBerjalan') {
+      this.jokerSambungUlang.clear();
+      return;
+    }
+    if (!this.jokerSambungUlang.size) return;
+    const paling = Math.min(...this.jokerSambungUlang.values());
+    this.timerJokerSambung = this.pasangTimer(Math.max(0, paling - sekarang), 'batas popup joker sambung ulang', () => {
+      this.timerJokerSambung = null;
+      const kini = this.penjadwal.sekarang();
+      for (const [i, batas] of [...this.jokerSambungUlang]) if (batas <= kini) this.jokerSambungUlang.delete(i);
       this.berubah();
     });
   }
@@ -1041,6 +1259,17 @@ export class Meja {
     // persis seperti sebelum ada gaya; gaya lain bisa memakai rng lebih banyak (pilihDekat, tunda
     // mentung), jadi urutan acak kursi lain di meja yang sama ikut bergeser.
     const rng = new Rng(this.d.rngBot);
+    // Langkah di kursi manusia yang sedang terputus dihitung, untuk dikabarkan saat ia kembali.
+    const kursiPutus = k.jenis === 'manusia' && !k.terhubung;
+    const kursiManusia = k.jenis === 'manusia';
+    const catatDijalankan = () => {
+      if (kursiPutus) this.dijalankanWarga.set(giliran, (this.dijalankanWarga.get(giliran) ?? 0) + 1);
+      // Untuk jeda total di susun akhir (sudahDijalankanWarga): kursi manusia mana yang sudah dijalankan.
+      if (kursiManusia) {
+        const sudah = this.langkahWargaDiManusia?.kunci === kunci ? this.langkahWargaDiManusia.kursi : [];
+        if (!sudah.includes(giliran)) this.langkahWargaDiManusia = { kunci, kursi: [...sudah, giliran] };
+      }
+    };
     let view: ViewPemain | null = null;
     for (const cara of [level, 'mudah', 'aman'] as const) {
       let aksi: Aksi | null = null;
@@ -1049,9 +1278,11 @@ export class Meja {
         aksi = cara === 'aman' ? aksiAman(view) : pilihAksiBot(view, cara, rng, cara === level ? gaya : 'standar');
         this.d.rngBot = rng.state;
         this.terapkan(g, aksi);
+        catatDijalankan();
         return;
       } catch (e) {
         if (this.d.game !== g) {
+          catatDijalankan();
           // Aksinya sudah diterapkan, yang galat sesudahnya (menyiarkan/menyimpan). Jangan disusul
           // aksi lain; cukup pastikan jadwal meja tetap tersusun.
           this.catatGalat(`sesudah langkah warga kedai kursi ${giliran}`, e);
@@ -1107,7 +1338,12 @@ export class Meja {
       ...(this.d.pengaturan.modeKaldu === true ? { setujuKaldu: [...(this.d.setujuKaldu ?? [])] } : {}),
       batasWaktu: this.batasWaktu,
       diambilAlihBot: this.ambilAlih !== null && this.ambilAlih === this.kunciGiliran(),
-      menungguJoker: [...this.d.menungguJoker],
+      // Kursi yang tersambung kembali tanpa sempat melihat joker hanya ada di info miliknya sendiri:
+      // popup muncul lagi untuknya, pemain lain tidak ikut tertahan (#34, diubah 24 Okt 2026).
+      menungguJoker:
+        kursiSaya !== null && this.jokerSambungUlang.has(kursiSaya)
+          ? [...new Set([...this.d.menungguJoker, kursiSaya])].sort((a, b) => a - b)
+          : [...this.d.menungguJoker],
       botMikir: this.botMikir,
       ...(this.d.kompetisi ? { kompetisi: { kode: this.d.kompetisi.kode, nama: this.d.kompetisi.nama } } : {}),
       // Hanya selama terkunci, supaya info meja lain (dan golden) tidak berubah.
