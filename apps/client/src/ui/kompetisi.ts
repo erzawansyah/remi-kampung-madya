@@ -5,8 +5,11 @@
 // detail, supaya server tahu "kamu" yang mana.
 
 import {
+  BATAS_PUTARAN_KOMPETISI_BAWAAN,
   DAFTAR_MASA,
   isMasa,
+  PILIHAN_BATAS_PUTARAN_KOMPETISI,
+  teksNilai,
   type BarisKompetisi,
   type MasaKompetisi,
   type PengaturanKompetisi,
@@ -55,7 +58,6 @@ const BATAS_PENGAJUAN_MS = 24 * 60 * 60 * 1000;
 
 const tanggal = (ms: number) =>
   new Date(ms).toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-const satuDesimal = (x: number) => (Math.round(x * 10) / 10).toLocaleString('id-ID');
 const tiketUntuk = (kode: string) => simpan.tiketKompetisi().find((t) => t.kode === kode) ?? null;
 
 /** Galat dari server yang pesannya boleh ditampilkan apa adanya. */
@@ -120,13 +122,13 @@ export function ringkasAturan(p: PengaturanKompetisi): string {
 }
 
 function htmlBaris(b: BarisKompetisi, label: string, namaSaya: string | null): string {
-  const rincian = [`${b.main}× main`, `${b.juara}× juara`, `rata-rata ${satuDesimal(b.rataPoin)} poin`, b.keluar ? `keluar ${b.keluar}×` : '']
+  const rincian = [`${b.main}× main`, `${b.juara}× juara meja`, b.keluar ? `keluar ${b.keluar}×` : '']
     .filter(Boolean)
     .join(' · ');
   return `<div class="baris-peringkat${b.nama === namaSaya ? ' saya' : ''}">
       <span class="medali">${label}</span>
       <span class="nama-skor"><b>${esc(b.nama)}</b><small class="redup">${esc(rincian)}</small></span>
-      <span class="kanan-peringkat"><b class="total">${b.poin}</b><small class="redup">poin</small></span>
+      <span class="kanan-peringkat"><b class="total">${teksNilai(b.rataNilai)}</b><small class="redup">nilai</small></span>
     </div>`;
 }
 
@@ -306,7 +308,7 @@ export function renderKompetisi(akar: HTMLElement, aksi: AksiKompetisi, kodeAwal
            <input type="text" id="k-nama" maxlength="32" placeholder="${esc(T.contohNama)}" autocomplete="off" enterkeyhint="done" required /></label>
          <label class="baris">${esc(T.labelMasa)} ${pilihan('k-masa', DAFTAR_MASA.map((m) => [m, LABEL_MASA[m]]), 'malam')}</label>
          <p class="bantuan rapat">${esc(T.ketAturan)}</p>
-         <label class="baris">Batas putaran ${pilihan('k-putaran', [3, 5, 10, 15, 20, 0].map((n) => [n, n ? String(n) : 'Tanpa batas']), 5)}</label>
+         <label class="baris">Batas putaran ${pilihan('k-putaran', PILIHAN_BATAS_PUTARAN_KOMPETISI.map((n) => [n, String(n)]), BATAS_PUTARAN_KOMPETISI_BAWAAN)}</label>
          <label class="baris">Meja 4 pemain pakai 2 deck<input type="checkbox" id="k-dua" /></label>
          <label class="baris">${esc(TEKS_KALDU.label)}<input type="checkbox" id="k-kaldu" aria-describedby="k-ket-kaldu" /></label>
          <p class="bantuan rapat" id="k-ket-kaldu">${esc(TEKS_KALDU.ket)}</p>
@@ -343,7 +345,7 @@ export function renderKompetisi(akar: HTMLElement, aksi: AksiKompetisi, kodeAwal
       const masa = q<HTMLSelectElement>('k-masa').value;
       const batas = kaldu.checked ? { batasSkorAtas: null, batasSkorBawah: null } : bacaIsianBatas(form, 'k-skor');
       const pengaturan: Partial<PengaturanKompetisi> = {
-        batasPutaran: Number(q<HTMLSelectElement>('k-putaran').value) || null,
+        batasPutaran: Number(q<HTMLSelectElement>('k-putaran').value) || BATAS_PUTARAN_KOMPETISI_BAWAAN,
         duaDeckUntukEmpat: q<HTMLInputElement>('k-dua').checked,
         modeKaldu: kaldu.checked,
         detikGiliran: Number(q<HTMLSelectElement>('k-detik').value),

@@ -9,21 +9,25 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import {
   dataMejaDipulihkan,
   GalatMeja,
+  hasilKompetisiMeja,
   JEDA_LANJUT_MS,
   Meja,
+  MIN_MAIN_KOMPETISI,
   namaLawanAcak,
   penjadwalNyata,
   periksaUsulan,
   validasiPesan,
   type DataMeja,
+  type KlasemenKompetisi,
   type Penjadwal,
   type PesanServer,
   type RingkasanAkhir,
+  type StatusKompetisi,
   type StatusMeja,
 } from '@remi/meja';
 import type { PenyimpanRiwayat } from './riwayat.js';
 import { bacaDataMeja, type BarisMejaAktif } from './mejaAktif.js';
-import { GalatKompetisi } from './kompetisi.js';
+import { GalatKompetisi, type KeadaanMejaKompetisi } from './kompetisi.js';
 import { buatKlienNotion } from './notion.js';
 import { jalankanPengirimUsulan, type PengirimUsulan } from './usulan.js';
 import { alamatKlien, HEADER_KEAMANAN, kunciIp, originDiizinkan } from './keamanan.js';
@@ -147,6 +151,11 @@ export interface OpsiServer {
   healthzDetail?: boolean;
   /** Penyimpan klasemen akhir (SQLite). Kosong = tidak disimpan (kompetisi juga tidak aktif). */
   riwayat?: PenyimpanRiwayat;
+  /**
+   * Jeda sebelum meja kompetisi yang kursinya penuh mulai sendiri (ms). Bawaan JEDA_MULAI_KOMPETISI_MS
+   * (2 detik); untuk test.
+   */
+  jedaMulaiKompetisiMs?: number;
   /** Pengajuan kompetisi yang masih menunggu peserta: maksimal per jaringan (bawaan 3) dan total (bawaan 50). */
   maksPengajuanPerIp?: number;
   maksPengajuan?: number;
@@ -186,6 +195,8 @@ interface Sambungan {
 export { alamatKlien, alamatLokal, kunciIp, originDiizinkan } from './keamanan.js';
 
 const TEKS_KOMPETISI_TAK_JALAN = 'Kompetisinya sudah selesai atau belum jalan, Bos.';
+/** Pesan `keluar` untuk peserta di lobi meja kompetisi yang kompetisinya sudah berakhir. */
+export const TEKS_LOBI_KOMPETISI_BUBAR = 'Kompetisinya sudah selesai, mejanya dibubarkan. Klasemennya ada di menu Kompetisi, Bos.';
 
 // Tanpa huruf/angka yang mirip (0/O, 1/I/L).
 const HURUF_KODE = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -334,6 +345,32 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     return true;
   };
 
+  /** Jam kompetisi = jam meja (penjadwal), supaya waktu mulai permainan dan masa kompetisi sebanding. */
+  const jam = () => penjadwalDasar.sekarang();
+
+  /**
+   * Keadaan meja kompetisi di memori, untuk penyimpan kompetisi (#51 versi 2): meja yang sedang main
+   * (juara ditunda sampai semuanya selesai; meja yang dipulihkan sesudah restart ikut dihitung) dan
+   * lobi yang menunggu peserta (daftar meja di detail kompetisi).
+   */
+  const keadaanMeja: KeadaanMejaKompetisi = {
+    mejaMain: (kode) => {
+      let n = 0;
+      for (const m of daftarMeja.values()) if (m.kompetisi === kode && m.status === 'main') n++;
+      return n;
+    },
+    mejaMenunggu: (kode) =>
+      [...daftarMeja.values()]
+        .filter((m) => m.kompetisi === kode && m.status === 'lobi')
+        .map((m) => {
+          const r = m.ringkasan();
+          return { kode: r.kode, nama: r.namaHost, terisi: r.terisi, jumlahPemain: r.jumlahPemain, pemain: m.namaDuduk() };
+        }),
+  };
+
+  /** Pesan kompetisiHasil terakhir per meja kompetisi (dikirim lagi ke yang tersambung kembali). */
+  const hasilKompetisiTerakhir = new Map<string, PesanServer>();
+
   // Simpanan meja di database (rencana koneksi langkah 9): meja selamat dari restart/deploy.
   const simpananMeja = opsi.simpanMeja === false ? null : (opsi.riwayat?.mejaAktif ?? null);
   /** Meja yang perubahannya belum ditulis: timer tulis dan data terbaru (referensi hidup dari Meja). */
@@ -426,8 +463,71 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     daftarMeja.delete(kode);
     kosongSejak.delete(kode);
     pembuatMeja.delete(kode);
+    hasilKompetisiTerakhir.delete(kode);
     for (const [pemainId, c] of idAksi) if (c.kode === kode) idAksi.delete(pemainId);
     for (const [pemainId, t] of putusTertunda) if (t.kode === kode) batalPutusTertunda(pemainId);
+  };
+
+  /**
+   * Bubarkan lobi meja kompetisi yang kompetisinya sudah tidak berjalan (#51 versi 2): pesertanya
+   * diberi pesan `keluar` yang ramah, mejanya dihapus. Meja yang sedang main dibiarkan selesai, dan meja
+   * yang klasemen akhirnya sedang tampil dibiarkan sampai ditinggal. `hanya` = satu kompetisi saja.
+   */
+  const bubarkanLobiKompetisi = (hanya?: string) => {
+    const penyimpan = opsi.riwayat?.kompetisi;
+    if (!penyimpan) return;
+    const status = new Map<string, StatusKompetisi | null>();
+    for (const [kode, meja] of [...daftarMeja]) {
+      const k = meja.kompetisi;
+      if (!k || (hanya !== undefined && k !== hanya) || meja.status !== 'lobi') continue;
+      try {
+        if (!status.has(k)) status.set(k, penyimpan.status(k, jam()));
+        if (status.get(k) === 'berjalan') continue;
+        meja.bubarkan(TEKS_LOBI_KOMPETISI_BUBAR);
+      } catch (e) {
+        log(`galat membubarkan lobi kompetisi ${kode}`, e);
+      }
+      hapusMeja(kode);
+      log(`lobi kompetisi meja ${kode} dibubarkan (kompetisi ${k} sudah selesai)`);
+    }
+  };
+
+  /** Tetapkan juara kompetisi yang sudah berakhir dan tidak punya meja yang masih main. */
+  const tetapkanJuara = () => {
+    try {
+      for (const k of opsi.riwayat?.kompetisi.tetapkanJuara(jam(), keadaanMeja) ?? []) log(`juara kompetisi ${k} ditetapkan`);
+    } catch (e) {
+      log('galat menetapkan juara kompetisi', e);
+    }
+  };
+
+  /**
+   * Sesudah klasemen akhir meja kompetisi disimpan: kabari kursi manusia di meja itu nilai dan
+   * naik-turun peringkatnya (pesan kompetisiHasil), lalu tetapkan juara kalau ini meja terakhir yang
+   * main sesudah kompetisinya berakhir.
+   */
+  const kabarHasilKompetisi = (kodeMeja: string, r: RingkasanAkhir, id: number, sebelum: KlasemenKompetisi | null) => {
+    const penyimpan = opsi.riwayat?.kompetisi;
+    if (!penyimpan || !r.kompetisi) return;
+    try {
+      const sesudah = penyimpan.klasemen(r.kompetisi);
+      if (!sebelum || !sesudah || penyimpan.jumlahHasil(id) === 0) {
+        log(`permainan meja ${kodeMeja} tidak dihitung di kompetisi ${r.kompetisi}`);
+      } else {
+        const pesan: PesanServer = {
+          t: 'kompetisiHasil',
+          kompetisi: { kode: r.kompetisi, nama: penyimpan.untukMeja(r.kompetisi, jam())?.nama ?? '' },
+          minMain: MIN_MAIN_KOMPETISI,
+          jumlahPeringkat: sesudah.peringkat.length,
+          pemain: hasilKompetisiMeja(r.pemain, sebelum, sesudah),
+        };
+        hasilKompetisiTerakhir.set(kodeMeja, pesan);
+        daftarMeja.get(kodeMeja)?.kabariManusia(pesan);
+      }
+    } catch (e) {
+      log(`galat mengabarkan hasil kompetisi meja ${kodeMeja}`, e);
+    }
+    tetapkanJuara();
   };
 
   /** Catatan id aksi pemain di meja `kode` (dibuat kalau belum ada). */
@@ -491,6 +591,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         if (url.pathname === '/api/riwayat') return json(200, opsi.riwayat.daftar(Number(q.get('batas') ?? 30) || 30));
         // Tanpa v=2: array bentuk lama. Aplikasi lama yang masih ter-cache di HP memanggil .map() langsung.
         if (q.get('v') !== '2') return json(200, opsi.riwayat.peringkat());
+        // Piala juara kompetisi ikut di baris v2: juara yang sudah bisa ditetapkan ditetapkan dulu.
+        tetapkanJuara();
         // Parameter yang tidak sah jatuh ke bawaan (rapikanUrutan/rapikanSaringan), tidak pernah 400.
         return json(
           200,
@@ -539,13 +641,13 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     const bagian = url.pathname.split('/').filter(Boolean).slice(2);
     const kode = bagian[0]?.toUpperCase();
     if ((kode && !/^[A-Z0-9]{5}$/.test(kode)) || bagian.length > 2) return json(404, { error: 'Nggak ketemu.' });
-    const sekarang = Date.now();
+    const sekarang = jam();
     try {
       if (req.method === 'GET') {
         if (bagian.length > 1) return json(404, { error: 'Nggak ketemu.' });
-        if (!kode) return json(200, { v: 1, kompetisi: penyimpan.daftar(sekarang) });
+        if (!kode) return json(200, { v: 1, kompetisi: penyimpan.daftar(sekarang, keadaanMeja) });
         const tiket = req.headers['x-tiket-kompetisi'];
-        const d = penyimpan.detail(kode, sekarang, typeof tiket === 'string' ? tiket.slice(0, 100) : null);
+        const d = penyimpan.detail(kode, sekarang, typeof tiket === 'string' ? tiket.slice(0, 100) : null, keadaanMeja);
         return d ? json(200, d) : json(404, { error: 'Kompetisinya nggak ketemu.' });
       }
       if (req.method !== 'POST') return json(405, { error: 'Hanya GET dan POST.' });
@@ -569,19 +671,24 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         const h = penyimpan.ajukan({ nama: isi.nama, masa: isi.masa, pengaturan: isi.pengaturan, namaPengaju: isi.namaPengaju }, sekarang);
         pengajuKompetisi.set(h.kode, jaringan);
         log(`kompetisi ${h.kode} diajukan`);
-        return json(200, { ...h, detail: penyimpan.detail(h.kode, sekarang, h.token) });
+        return json(200, { ...h, detail: penyimpan.detail(h.kode, sekarang, h.token, keadaanMeja) });
       }
       if (bagian[1] === 'ikut') {
         const sebelum = penyimpan.status(kode, sekarang);
         const h = penyimpan.ikut(kode, isi.nama, sekarang);
         if (sebelum === 'pengajuan' && penyimpan.status(kode, sekarang) === 'berjalan') log(`kompetisi ${kode} mulai`);
-        return json(200, { ...h, detail: penyimpan.detail(kode, sekarang, h.token) });
+        return json(200, { ...h, detail: penyimpan.detail(kode, sekarang, h.token, keadaanMeja) });
       }
       if (bagian[1] === 'tutup') {
         if (typeof isi.token !== 'string' || typeof isi.setuju !== 'boolean') return json(400, { error: 'Isinya rusak.' });
+        const sebelum = penyimpan.status(kode, sekarang);
         penyimpan.setujuTutup(kode, isi.token, isi.setuju, sekarang);
-        if (penyimpan.status(kode, sekarang) === 'selesai') log(`kompetisi ${kode} disudahi lewat voting`);
-        return json(200, { detail: penyimpan.detail(kode, sekarang, isi.token) });
+        if (sebelum === 'berjalan' && penyimpan.status(kode, sekarang) === 'selesai') {
+          log(`kompetisi ${kode} disudahi lewat voting`);
+          // Lobi yang menunggu peserta dibubarkan sekarang; meja yang sedang main dibiarkan selesai.
+          bubarkanLobiKompetisi(kode);
+        }
+        return json(200, { detail: penyimpan.detail(kode, sekarang, isi.token, keadaanMeja) });
       }
       return json(404, { error: 'Nggak ketemu.' });
     } catch (e) {
@@ -702,6 +809,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     penjadwal: penjadwalAman(kode),
     jedaBotMs: opsi.jedaBotMs,
     jedaLanjutMs: opsi.jedaLanjutMs ?? JEDA_LANJUT_MS,
+    jedaMulaiKompetisiMs: opsi.jedaMulaiKompetisiMs,
+    // Meja kompetisi: mulai sendiri dan menerima peserta baru hanya selama kompetisinya berjalan.
+    kompetisiBerjalan: (k: string) => opsi.riwayat?.kompetisi.status(k, jam()) === 'berjalan',
     buatSeed: () => randomBytes(4).readInt32LE(0),
     // Nama warga kedai: urutan acak per meja, supaya lawan pertama tidak selalu "Kipas Dua".
     namaLawan: namaLawanAcak(),
@@ -709,12 +819,24 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     saatBerubah: (data: DataMeja) => simpanNanti(kode, data),
     saatSelesai: (r: RingkasanAkhir) => {
       if (!opsi.riwayat) return;
+      // Meja kompetisi: klasemen kompetisi sebelum permainan ini, untuk naik-turun peringkat.
+      let sebelum: KlasemenKompetisi | null = null;
+      if (r.kompetisi) {
+        try {
+          sebelum = opsi.riwayat.kompetisi.klasemen(r.kompetisi);
+        } catch (e) {
+          log(`galat membaca klasemen kompetisi ${r.kompetisi}`, e);
+        }
+      }
+      let id: number;
       try {
-        const id = opsi.riwayat.simpan(r);
+        id = opsi.riwayat.simpan(r);
         log(`klasemen akhir meja ${r.kode} disimpan (#${id})`);
       } catch (e) {
         log('galat menyimpan klasemen akhir', e);
+        return;
       }
+      if (r.kompetisi) kabarHasilKompetisi(kode, r, id, sebelum);
     },
     // Galat timer yang sudah ditangkap meja (meja tetap jalan): tetap dihitung dan dicatat.
     saatGalat: (konteks: string, e: unknown) => {
@@ -783,7 +905,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         return kirimKe(s, {
           t: 'daftar',
           meja: [...daftarMeja.values()]
-            .filter((m) => m.publik && m.status === 'lobi')
+            // Meja kompetisi tidak pernah masuk daftar publik: duduknya lewat daftar meja di kompetisinya.
+            .filter((m) => m.publik && !m.kompetisi && m.status === 'lobi')
             .map((m) => m.ringkasan())
             .filter((r) => r.terisi < r.jumlahPemain),
         });
@@ -802,7 +925,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         let nama = pesan.nama;
         if (pesan.kompetisi) {
           const penyimpan = opsi.riwayat?.kompetisi;
-          const k = penyimpan?.untukMeja(pesan.kompetisi.kode, Date.now());
+          const k = penyimpan?.untukMeja(pesan.kompetisi.kode, jam());
           const peserta = k && penyimpan!.cekTiket(pesan.kompetisi.kode, pesan.kompetisi.token);
           if (!k || !peserta) return kirimKe(s, { t: 'error', pesan: 'Kamu belum ikut kompetisi ini, Bos.' });
           if (k.status !== 'berjalan') return kirimKe(s, { t: 'error', pesan: TEKS_KOMPETISI_TAK_JALAN });
@@ -855,6 +978,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
           if (e instanceof GalatMeja) return kirimKe(s, { t: 'error', pesan: e.message });
           throw e;
         }
+        // Tersambung kembali saat klasemen akhir meja kompetisi masih tampil: hasil kompetisinya dikirim lagi.
+        const hasil = lama && meja.status === 'selesai' ? hasilKompetisiTerakhir.get(kode) : undefined;
+        if (hasil) kirim(pemainId, hasil);
         return;
       }
       default: {
@@ -870,11 +996,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
           if (id !== undefined) kirimKe(s, { t: 'aksiDiterima', id });
           return;
         }
-        // Meja kompetisi: permainan baru hanya selama kompetisinya berjalan (yang sedang jalan dibiarkan selesai).
-        if ((pesan.t === 'mulai' || pesan.t === 'mainLagi') && meja.kompetisi) {
-          const status = opsi.riwayat?.kompetisi.status(meja.kompetisi, Date.now());
-          if (status !== 'berjalan') return kirimKe(s, { t: 'error', pesan: TEKS_KOMPETISI_TAK_JALAN });
-        }
+        // Meja kompetisi tidak punya Mulai dan Main lagi (mulai sendiri selama kompetisinya berjalan;
+        // meja menolak keduanya sendiri).
         if (id === undefined) return meja.terima(pemainId, pesan);
         // Aksi ber-id: yang sudah pernah diproses tidak diterapkan lagi (kiriman ulang sesudah sambung
         // ulang), tapi tetap dijawab. Jawaban dikirim sesudah meja memproses (error-nya lebih dulu).
@@ -1017,6 +1140,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         log('galat ping sambungan', e);
       }
     }
+    // Kompetisi yang masanya baru habis: lobinya dibubarkan, juaranya ditetapkan kalau mejanya sudah selesai semua.
+    bubarkanLobiKompetisi();
+    tetapkanJuara();
     // Jam yang sama dengan meja dan jeda simpan (penjadwal), supaya bisa diuji dengan jam palsu.
     const sekarang = penjadwalDasar.sekarang();
     for (const [kode, meja] of daftarMeja) {
@@ -1058,7 +1184,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       // Meja kompetisi (#51): kompetisinya harus masih ada. Permainan yang sedang jalan dibiarkan
       // selesai (hasilnya hanya dihitung kalau kompetisinya masih berjalan, lihat catatHasil); meja yang
       // masih di lobi tidak bisa mulai lagi kalau kompetisinya sudah tidak berjalan, jadi dibuang.
-      const k = opsi.riwayat?.kompetisi.untukMeja(terbaca.kompetisi.kode, Date.now());
+      const k = opsi.riwayat?.kompetisi.untukMeja(terbaca.kompetisi.kode, jam());
       if (!k) return `kompetisi ${terbaca.kompetisi.kode} sudah tidak ada`;
       if (!terbaca.game && k.status !== 'berjalan') return `kompetisi ${terbaca.kompetisi.kode} sudah tidak berjalan`;
     }

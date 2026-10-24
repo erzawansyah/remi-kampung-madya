@@ -55,15 +55,16 @@ const ringkas = (kode: string, status: string, extra: Record<string, unknown> = 
   ...extra,
 });
 
-const baris = (nama: string, main: number, poin: number): BarisKompetisi => ({
+const baris = (nama: string, main: number, totalNilai: number): BarisKompetisi => ({
   id: nama.length,
   nama,
   main,
-  poin,
   juara: 0,
   keluar: 0,
-  rataPoin: main ? poin / main : 0,
+  totalNilai,
+  rataNilai: main ? totalNilai / main : 0,
   rataSkor: 0,
+  peringkat: main >= 3 ? 1 : null,
 });
 
 const detail = (status: string, extra: Record<string, unknown> = {}) => ({
@@ -143,8 +144,8 @@ describe('layar Kompetisi', () => {
     await tunggu();
     expect(panggil[0]!.url).toBe('/api/kompetisi/KOMPA');
     expect(akar().querySelector('#buat-meja')).toBeNull();
-    // Klasemen: total poin di kanan, yang belum cukup main di bagian terpisah.
-    expect(akar().querySelector('.baris-peringkat .total')!.textContent).toBe('7');
+    // Klasemen: rata-rata nilai di kanan (satu desimal), yang belum cukup main di bagian terpisah.
+    expect(akar().querySelector('.baris-peringkat .total')!.textContent).toBe('2,3');
     expect(akar().textContent).toContain(TEKS_KOMPETISI.judulBelumCukup);
 
     akar().querySelector<HTMLButtonElement>('#ikut')!.click();

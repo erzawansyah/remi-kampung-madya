@@ -807,13 +807,14 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: `**Kompetisi** (tombol Kompetisi di beranda): siapa saja boleh mengajukan kompetisi, lengkap dengan lama kompetisi (1 malam, 1 minggu, atau 1 bulan) dan aturan mejanya. Kompetisi jalan begitu ${MIN_PESERTA} orang menekan Ikut serta; kalau 24 jam belum cukup, pengajuannya batal. Yang telat boleh ikut selama kompetisi masih jalan. Peserta membuat meja kompetisi dari layar Kompetisi, lalu peserta lain gabung pakai kode meja. Meja kompetisi khusus peserta (tanpa warga kedai) dan aturannya ikut kompetisi.`,
+        teks: `**Kompetisi** (tombol Kompetisi di beranda): siapa saja boleh mengajukan kompetisi, lengkap dengan lama kompetisi (1 malam, 1 minggu, atau 1 bulan), jumlah pemain per meja, batas putaran, dan aturan mejanya. Kompetisi jalan begitu ${MIN_PESERTA} orang menekan Ikut serta; kalau 24 jam belum cukup, pengajuannya batal. Yang telat boleh ikut selama kompetisi masih jalan. Selama kompetisi jalan, layar kompetisinya menampilkan meja yang menunggu peserta: pilih Duduk, atau buka meja baru. Meja mulai sendiri begitu semua kursinya terisi peserta. Meja kompetisi khusus peserta (tanpa warga kedai), aturannya ikut kompetisi, dan cuma sekali main.`,
       },
       {
         t: 'daftar',
         butir: [
-          'Poin tiap permainan = banyaknya peserta yang kalah skor darimu di meja itu. Meja 4 orang: juara 3 poin, juru kunci 0. Keluar di tengah permainan = 0 poin.',
-          `Klasemen diurutkan dari total poin, dan kamu masuk klasemen sesudah ${MIN_MAIN_KOMPETISI} kali main. Poin sama: rata-rata poin per main, lalu rata-rata skor akhir.`,
+          'Nilai tiap permainan 0 sampai 10, dari banyaknya peserta di meja itu yang kalah skor darimu. Meja 4 orang: juara 10; kedua 6,7; ketiga 3,3; juru kunci 0. Skor sama tidak saling mengalahkan. Keluar di tengah permainan = 0.',
+          `Klasemen diurutkan dari rata-rata nilai per permainan, dan kamu masuk klasemen sesudah ${MIN_MAIN_KOMPETISI} kali main. Rata-rata sama: yang lebih sering main di atas, lalu rata-rata skor akhir.`,
+          'Permainan yang sudah mulai sebelum kompetisi berakhir tetap dihitung. Juaranya diumumkan sesudah meja terakhir selesai, lalu dapat 🏆 di samping namanya, juga di Riwayat & peringkat.',
           'Kompetisi bisa disudahi lebih awal kalau lebih dari separuh peserta setuju.',
           'Tiket peserta tersimpan di HP yang dipakai waktu ikut serta, jadi main kompetisi dari HP itu.',
         ],

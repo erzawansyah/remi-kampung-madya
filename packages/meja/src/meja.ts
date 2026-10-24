@@ -38,7 +38,7 @@ import {
   type StatusMeja,
 } from './protokol.js';
 import { gayaKursi } from './gayaWarga.js';
-import { ubahanTerkunci, type PengaturanKompetisi } from './kompetisi.js';
+import { JEDA_MULAI_KOMPETISI_MS, ubahanTerkunci, type PengaturanKompetisi } from './kompetisi.js';
 import { isiLedek, kunciNama, rapikanLevel, rapikanNama } from './validasi.js';
 
 export interface Penjadwal {
@@ -83,6 +83,12 @@ export interface Kursi {
 /** Meja kompetisi (#51): kompetisinya dan pengaturan yang dikunci. */
 export interface KompetisiDataMeja extends KompetisiMeja {
   pengaturan: PengaturanKompetisi;
+  /**
+   * Kapan permainan di meja ini dimulai (jam meja, ms epoch); ada sesudah permainan dimulai. Ikut
+   * disimpan, jadi meja yang dipulihkan sesudah restart tetap tahu (versi 2: permainan dihitung kalau
+   * dimulai selagi kompetisinya berjalan).
+   */
+  mulaiPada?: number;
 }
 
 /** Semua yang perlu disimpan supaya meja bisa dilanjutkan (JSON). */
@@ -190,6 +196,14 @@ export interface OpsiMeja {
    * test, golden). Server online memakai JEDA_LANJUT_MS. Klasemen akhir tidak ikut dijeda.
    */
   jedaLanjutMs?: number;
+  /**
+   * Meja kompetisi (#51 versi 2): apakah kompetisinya masih berjalan. Dicek sebelum meja mulai
+   * sendiri dan sebelum peserta baru duduk; false = tidak mulai, tidak menerima peserta baru (server
+   * membubarkan lobinya). Kosong = selalu berjalan (test, meja tanpa server).
+   */
+  kompetisiBerjalan?: (kode: string) => boolean;
+  /** Jeda sebelum meja kompetisi yang penuh mulai sendiri (ms). Kosong = JEDA_MULAI_KOMPETISI_MS. */
+  jedaMulaiKompetisiMs?: number;
   /** Dipanggil setiap data meja berubah (misalnya untuk disimpan). */
   saatBerubah?: (data: DataMeja) => void;
   /** Dipanggil sekali saat permainan selesai, membawa klasemen akhir. */
@@ -292,6 +306,14 @@ export class Meja {
   private timerLanjut: unknown = null;
   /** Banyaknya ledekan tiap kursi di hasil putaran ini (batas MAKS_LEDEK_PER_PUTARAN). */
   private ledekPutaran: { putaran: number; jumlah: Map<number, number> } | null = null;
+  /**
+   * Meja kompetisi di lobi (#51 versi 2): kapan meja mulai sendiri (waktu penjadwal), selama semua
+   * kursi terisi peserta yang terhubung; null = tidak sedang hitung mundur. Tidak disimpan.
+   */
+  private mulaiOtomatisPada: number | null = null;
+  private timerMulaiOtomatis: unknown = null;
+  /** Timer melepas kursi peserta yang terlalu lama terputus di lobi kompetisi. */
+  private timerLepasLobi: unknown = null;
 
   constructor(
     private readonly opsi: OpsiMeja,
@@ -430,6 +452,7 @@ export class Meja {
     if (this.status !== 'lobi') galat('Permainan di meja ini sudah mulai.');
     if (this.d.kompetisi) {
       if (peserta === undefined) galat(`Meja ini khusus peserta kompetisi "${this.d.kompetisi.nama}". Ikut serta dulu dari menu Kompetisi, Bos.`);
+      if (this.opsi.kompetisiBerjalan?.(this.d.kompetisi.kode) === false) galat('Kompetisinya sudah selesai, Bos.');
       if (this.d.kursi.some((k) => k.jenis === 'manusia' && k.peserta === peserta)) galat('Kamu sudah duduk di meja ini dari HP lain.');
     }
     const i = this.d.kursi.findIndex((k) => k.jenis === 'kosong');
@@ -709,9 +732,15 @@ export class Meja {
   private mulai(oleh: number, pengocok?: number): void {
     this.wajibHost(oleh);
     if (this.status !== 'lobi') galat('Permainan sudah berjalan.');
-    if (this.d.kompetisi && this.d.kursi.some((k) => k.jenis !== 'manusia')) {
-      galat('Masih ada kursi kosong. Tunggu peserta lain masuk, atau kurangi jumlah pemain.');
-    }
+    // Meja kompetisi mulai sendiri (jadwalkanLobiKompetisi), tanpa tombol Mulai.
+    if (this.d.kompetisi) galat('Meja kompetisi mulai sendiri begitu semua kursi terisi peserta, Bos.');
+    this.mulaiPermainan(pengocok);
+  }
+
+  /** Mulai permainan baru dari lobi (tombol Mulai host, atau meja kompetisi yang mulai sendiri). */
+  private mulaiPermainan(pengocok?: number): void {
+    if (this.status !== 'lobi') galat('Permainan sudah berjalan.');
+    if (this.d.kompetisi && this.d.kursi.some((k) => k.jenis !== 'manusia')) galat('Masih ada kursi kosong. Tunggu peserta lain masuk.');
     if (this.d.kursi.some((k) => k.jenis === 'kosong')) galat('Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.');
     hapusTandaKeluar(this.d.kursi);
     const p = this.d.pengaturan;
@@ -735,6 +764,9 @@ export class Meja {
     // sama dengan permainan sebelumnya. Catatan per giliran yang tidak disimpan dikosongkan.
     this.sisaMinimal = null;
     this.langkahWargaDiManusia = null;
+    this.mulaiOtomatisPada = null;
+    // Meja kompetisi: waktu mulai dicatat (dihitung kalau dimulai selagi kompetisinya berjalan).
+    if (this.d.kompetisi) this.d.kompetisi.mulaiPada = this.penjadwal.sekarang();
     this.terapkan(game, { jenis: 'mulaiPutaran', pengocok });
   }
 
@@ -832,9 +864,9 @@ export class Meja {
   private mainLagi(oleh: number): void {
     this.wajibHost(oleh);
     if (this.status !== 'selesai') galat('Permainan belum selesai.');
+    // Meja kompetisi cuma sekali main (#51 versi 2): duduk lagi lewat daftar meja kompetisinya.
+    if (this.d.kompetisi) galat('Meja kompetisi cuma sekali main. Kembali ke kompetisi buat duduk di meja baru, Bos.');
     hapusTandaKeluar(this.d.kursi);
-    // Meja kompetisi tanpa warga kedai: kursi yang ditinggal kosong lagi untuk peserta lain.
-    if (this.d.kompetisi) this.d.kursi = this.d.kursi.map((k) => (k.jenis === 'bot' ? kursiKosong(this.d.pengaturan.levelBot) : k));
     this.d.game = null;
     this.d.setujuAkhiri = [];
     this.aturSetujuKaldu([]);
@@ -882,7 +914,9 @@ export class Meja {
     else if (h.state.status !== 'putaranSelesai') this.jedaLanjut = null;
     this.berubah();
     if (game.status !== 'selesai' && h.state.status === 'selesai') {
-      this.opsi.saatSelesai?.(buatRingkasanAkhir(this.d.kode, this.d.kursi, h.state, this.penjadwal.sekarang(), this.d.kompetisi?.kode));
+      this.opsi.saatSelesai?.(
+        buatRingkasanAkhir(this.d.kode, this.d.kursi, h.state, this.penjadwal.sekarang(), this.d.kompetisi?.kode, this.d.kompetisi?.mulaiPada),
+      );
     }
     this.celetukBot(h.state.peristiwa.filter((e) => e.id > idTerakhir));
   }
@@ -1010,6 +1044,10 @@ export class Meja {
     if (this.timerLanjut !== null) this.penjadwal.batal(this.timerLanjut);
     if (this.timerJokerSambung !== null) this.penjadwal.batal(this.timerJokerSambung);
     if (this.timerTahanHost !== null) this.penjadwal.batal(this.timerTahanHost);
+    if (this.timerMulaiOtomatis !== null) this.penjadwal.batal(this.timerMulaiOtomatis);
+    if (this.timerLepasLobi !== null) this.penjadwal.batal(this.timerLepasLobi);
+    this.timerMulaiOtomatis = null;
+    this.timerLepasLobi = null;
     this.timerBot = null;
     this.timerGiliran = null;
     this.timerTenggang = null;
@@ -1079,6 +1117,7 @@ export class Meja {
         this.berubah();
       });
     }
+    this.jadwalkanLobiKompetisi();
     const g = this.d.game;
     const kunci = this.kunciGiliran();
     const sekarang = this.penjadwal.sekarang();
@@ -1231,6 +1270,70 @@ export class Meja {
       this.ambilAlih = kunci;
       this.berubah();
     });
+  }
+
+  /**
+   * Meja kompetisi masih di lobi (#51 versi 2): begitu semua kursi terisi peserta yang terhubung, meja
+   * mulai sendiri JEDA_MULAI_KOMPETISI_MS kemudian (pengocok pertama acak). Hitung mundurnya batal
+   * kalau ada yang keluar atau terputus, dan mulai dari awal lagi saat penuh lagi. Kursi peserta yang
+   * terputus lebih lama dari masa tenggang sambung ulang dikosongkan selama masih ada peserta lain
+   * yang terhubung menunggu, supaya meja tidak tertahan selamanya (tafsiran pengembang).
+   */
+  private jadwalkanLobiKompetisi(): void {
+    if (!this.d.kompetisi || this.status !== 'lobi') {
+      this.mulaiOtomatisPada = null;
+      return;
+    }
+    const sekarang = this.penjadwal.sekarang();
+    if (this.siapMulaiKompetisi()) {
+      this.mulaiOtomatisPada ??= sekarang + Math.max(0, this.opsi.jedaMulaiKompetisiMs ?? JEDA_MULAI_KOMPETISI_MS);
+      this.timerMulaiOtomatis = this.pasangTimer(Math.max(0, this.mulaiOtomatisPada - sekarang), 'mulai sendiri meja kompetisi', () => {
+        this.timerMulaiOtomatis = null;
+        // Dikosongkan dulu: kalau mulai galat, jadwal yang disusun ulang menghitung mundur dari awal
+        // (tidak berputar cepat).
+        this.mulaiOtomatisPada = null;
+        if (!this.siapMulaiKompetisi()) return this.berubah();
+        this.mulaiPermainan();
+      });
+    } else this.mulaiOtomatisPada = null;
+    if (this.jumlahManusiaTerhubung === 0) return;
+    const tenggang = Math.max(0, this.opsi.tenggangSambungMs ?? TENGGANG_SAMBUNG_MS);
+    let paling = Infinity;
+    this.d.kursi.forEach((k, i) => {
+      if (k.jenis !== 'manusia' || k.terhubung) return;
+      // Jaga-jaga: kursi terputus tanpa catatan waktu dihitung sejak sekarang (dicatat, supaya tidak mundur terus).
+      if (!this.putusSejak.has(i)) this.putusSejak.set(i, sekarang);
+      paling = Math.min(paling, this.putusSejak.get(i)! + tenggang);
+    });
+    if (paling === Infinity) return;
+    this.timerLepasLobi = this.pasangTimer(Math.max(0, paling - sekarang), 'lepas kursi lobi kompetisi', () => {
+      this.timerLepasLobi = null;
+      this.lepasKursiLobiTerputus();
+    });
+  }
+
+  /** Semua kursi meja kompetisi di lobi terisi peserta yang terhubung, dan kompetisinya masih berjalan. */
+  private siapMulaiKompetisi(): boolean {
+    const k = this.d.kompetisi;
+    if (!k || this.status !== 'lobi' || !this.d.kursi.length) return false;
+    if (!this.d.kursi.every((x) => x.jenis === 'manusia' && x.terhubung && x.peserta !== undefined)) return false;
+    return this.opsi.kompetisiBerjalan?.(k.kode) !== false;
+  }
+
+  /** Kosongkan kursi lobi kompetisi yang pesertanya terputus lebih lama dari masa tenggang. */
+  private lepasKursiLobiTerputus(): void {
+    if (this.d.kompetisi && this.status === 'lobi' && this.jumlahManusiaTerhubung > 0) {
+      const sekarang = this.penjadwal.sekarang();
+      const tenggang = Math.max(0, this.opsi.tenggangSambungMs ?? TENGGANG_SAMBUNG_MS);
+      this.d.kursi.forEach((k, i) => {
+        if (k.jenis !== 'manusia' || k.terhubung || (this.putusSejak.get(i) ?? -Infinity) + tenggang > sekarang) return;
+        this.d.kursi[i] = kursiKosong(this.d.pengaturan.levelBot);
+        this.putusSejak.delete(i);
+        this.dijalankanWarga.delete(i);
+      });
+      this.perbaruiHost();
+    }
+    this.berubah();
   }
 
   /**
@@ -1396,7 +1499,30 @@ export class Meja {
       ...(this.d.kompetisi ? { kompetisi: { kode: this.d.kompetisi.kode, nama: this.d.kompetisi.nama } } : {}),
       // Hanya selama terkunci, supaya info meja lain (dan golden) tidak berubah.
       ...(lanjut ? { lanjut } : {}),
+      // Meja kompetisi saja, selama hitung mundur mulai sendiri berjalan.
+      ...(this.mulaiOtomatisPada !== null && this.d.kompetisi && this.status === 'lobi'
+        ? { mulaiOtomatis: { sisaMs: Math.max(0, this.mulaiOtomatisPada - this.penjadwal.sekarang()) } }
+        : {}),
     };
+  }
+
+  /** Kirim pesan ke semua kursi manusia yang terhubung (dipakai server, misalnya `kompetisiHasil`). */
+  kabariManusia(pesan: PesanServer): void {
+    this.kirimKeManusia(pesan);
+  }
+
+  /** Nama yang duduk di kursi terisi (manusia dan warga kedai), urut kursi. */
+  namaDuduk(): string[] {
+    return this.d.kursi.filter((k) => k.jenis !== 'kosong').map((k) => k.nama);
+  }
+
+  /**
+   * Bubarkan meja: semua pemain manusia diberi pesan `keluar` dengan `alasan`, lalu semua timer
+   * berhenti (server membuang mejanya). Dipakai server untuk lobi kompetisi yang sudah berakhir.
+   */
+  bubarkan(alasan: string): void {
+    for (const k of this.d.kursi) if (k.jenis === 'manusia' && k.pemainId) this.kirimKe(k.pemainId, { t: 'keluar', alasan });
+    this.hentikan();
   }
 
   private kirimKe(pemainId: string, pesan: PesanServer): void {
@@ -1450,6 +1576,7 @@ export function buatRingkasanAkhir(
   game: GameState,
   selesaiPada: number,
   kompetisi?: string,
+  mulaiPada?: number,
 ): RingkasanAkhir {
   const pemain: RingkasanAkhir['pemain'] = game.pemain
     .map((p, i) => {
@@ -1477,6 +1604,7 @@ export function buatRingkasanAkhir(
     jumlahDeck: aturanPembagian(game.pemain.length, game.konfigurasi.duaDeckUntukEmpat).jumlahDeck,
     modeKaldu: game.konfigurasi.modeKaldu === true,
     ...(kompetisi !== undefined ? { kompetisi } : {}),
+    ...(kompetisi !== undefined && mulaiPada !== undefined ? { mulaiPada } : {}),
     pemain,
   };
 }

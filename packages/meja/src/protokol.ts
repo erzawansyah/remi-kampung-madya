@@ -217,6 +217,12 @@ export interface InfoMeja {
    * waktu lokal saat menerima). `siap`: kursi yang sudah menekan Siap. Aplikasi lama mengabaikannya.
    */
   lanjut?: { sisaMs: number; siap: number[] };
+  /**
+   * Meja kompetisi (#51 versi 2): semua kursi terisi peserta yang terhubung, meja mulai sendiri
+   * `sisaMs` lagi (relatif terhadap saat pesan dikirim, seperti `lanjut`). Hanya ada selama hitung
+   * mundur berjalan; batal (hilang) kalau ada yang keluar atau terputus.
+   */
+  mulaiOtomatis?: { sisaMs: number };
 }
 
 /** Klasemen akhir satu permainan (disimpan server ke database saat permainan selesai). */
@@ -233,6 +239,11 @@ export interface RingkasanAkhir {
   modeKaldu: boolean;
   /** Kode kompetisi; hanya ada di meja kompetisi (#51). */
   kompetisi?: string;
+  /**
+   * Meja kompetisi saja (#51 versi 2): kapan permainan ini dimulai (ms epoch, jam meja). Permainan
+   * dihitung kalau dimulai selagi kompetisinya berjalan, walau selesai sesudahnya.
+   */
+  mulaiPada?: number;
   /** Urut dari peringkat 1. Skor sama = peringkat sama. */
   pemain: {
     kursi: number;
@@ -248,6 +259,27 @@ export interface RingkasanAkhir {
     /** Id peserta kompetisi yang duduk di kursi ini; hanya di meja kompetisi. */
     peserta?: number;
   }[];
+}
+
+/**
+ * Hasil kompetisi satu kursi peserta di permainan yang baru dicatat (pesan `kompetisiHasil`). Angka
+ * nilai belum dibulatkan; tampilkan dengan `teksNilai()`.
+ */
+export interface HasilKompetisiKursi {
+  kursi: number;
+  /** Nama peserta yang terdaftar di kompetisi. */
+  nama: string;
+  /** Nilai permainan ini, 0–10 (keluar di tengah permainan = 0). */
+  nilai: number;
+  /** Peserta ini keluar di tengah permainan (juru kunci). */
+  keluar: boolean;
+  /** Rata-rata nilai sesudah permainan ini, 0–10. */
+  rataNilai: number;
+  /** Berapa kali main di kompetisi ini, termasuk permainan ini. */
+  main: number;
+  /** Peringkat klasemen sebelum dan sesudah permainan ini; null = belum masuk klasemen (main < minMain). */
+  peringkatSebelum: number | null;
+  peringkatSesudah: number | null;
 }
 
 export interface RingkasanMeja {
@@ -316,4 +348,20 @@ export type PesanServer =
    */
   | { t: 'aksiDiterima'; id: string }
   /** `w` (opsional): jam server (ms epoch) saat menjawab; hanya dari server online, tidak dari meja offline. */
-  | { t: 'pong'; w?: number };
+  | { t: 'pong'; w?: number }
+  /**
+   * Meja kompetisi (#51 versi 2): hasil permainan yang baru selesai sudah tercatat di kompetisi.
+   * Dikirim server ke kursi manusia yang terhubung di meja itu (dan sekali lagi ke yang tersambung
+   * kembali selama klasemen akhir masih tampil). Tidak dikirim kalau permainannya tidak dihitung.
+   * Aplikasi lama mengabaikannya.
+   */
+  | {
+      t: 'kompetisiHasil';
+      kompetisi: KompetisiMeja;
+      /** Minimal main supaya masuk klasemen (MIN_MAIN_KOMPETISI). */
+      minMain: number;
+      /** Banyaknya peserta di klasemen (sudah ≥ minMain kali main) sesudah permainan ini. */
+      jumlahPeringkat: number;
+      /** Satu per kursi peserta meja ini, urut kursi. */
+      pemain: HasilKompetisiKursi[];
+    };

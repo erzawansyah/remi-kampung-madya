@@ -414,20 +414,20 @@ describe('meja selamat dari restart server', () => {
 
   it('meja kompetisi dipulihkan selama kompetisinya masih ada; kompetisi yang hilang = simpanan dibuang', async () => {
     const path = dbBaru();
-    const s1 = await nyalakan(path);
+    const s1 = await nyalakan(path, { jedaMulaiKompetisiMs: 20 });
     const sekarang = Date.now();
-    const komp = s1.riwayat.kompetisi.ajukan({ nama: 'Malam Minggu', masa: 'malam', pengaturan: {}, namaPengaju: 'Ani' }, sekarang);
+    const komp = s1.riwayat.kompetisi.ajukan({ nama: 'Malam Minggu', masa: 'malam', pengaturan: { jumlahPemain: 2 }, namaPengaju: 'Ani' }, sekarang);
     const tiket: Record<string, string> = { Ani: komp.token };
     for (const nama of ['Budi', 'Cici', 'Dodi']) tiket[nama] = s1.riwayat.kompetisi.ikut(komp.kode, nama, sekarang).token;
     expect(s1.riwayat.kompetisi.status(komp.kode, Date.now())).toBe('berjalan');
 
     const ani = await klien(s1.server.port);
-    ani.kirim({ t: 'buat', nama: 'Ani', pengaturan: { jumlahPemain: 2 }, kompetisi: { kode: komp.kode, token: tiket.Ani } });
+    ani.kirim({ t: 'buat', nama: 'Ani', kompetisi: { kode: komp.kode, token: tiket.Ani } });
     const masukAni = await tungguPesan(ani, (p) => p.t === 'masuk');
     const budi = await klien(s1.server.port);
     budi.kirim({ t: 'gabung', kode: masukAni.kode, nama: 'Budi', tiket: [{ kode: komp.kode, token: tiket.Budi }] });
     await tungguPesan(budi, (p) => p.t === 'masuk');
-    ani.kirim({ t: 'mulai' });
+    // Meja kompetisi mulai sendiri begitu penuh.
     await tungguPesan(ani, (p) => p.t === 'meja' && info(p).status === 'main');
     // Meja kompetisi kedua masih di lobi.
     const cici = await klien(s1.server.port);
@@ -438,6 +438,13 @@ describe('meja selamat dari restart server', () => {
     const s2 = await nyalakan(path);
     expect(s2.server.jumlahMeja()).toBe(2);
     expect(s2.log.some((l) => l.includes(`meja ${masukAni.kode} dipulihkan (main, 2 manusia, kompetisi ${komp.kode})`))).toBe(true);
+    // Detail kompetisi: meja yang dipulihkan ikut dihitung (sedang main dan menunggu peserta).
+    const d = (await (await fetch(`http://127.0.0.1:${s2.server.port}/api/kompetisi/${komp.kode}`)).json()) as {
+      mejaMain: number;
+      meja: { kode: string; terisi: number }[];
+    };
+    expect(d.mejaMain).toBe(1);
+    expect(d.meja).toEqual([expect.objectContaining({ kode: masukCici.kode, terisi: 1 })]);
     const { k: ani2, masuk } = await kembali(s2.server.port, String(masukAni.kode), 'Ani', String(masukAni.token));
     expect(masuk).toMatchObject({ t: 'masuk', kursi: 0 });
     expect(info(await tungguPesan(ani2, (p) => p.t === 'meja')).kompetisi).toEqual({ kode: komp.kode, nama: 'Malam Minggu' });
@@ -456,18 +463,17 @@ describe('meja selamat dari restart server', () => {
 
   it('meja kompetisi di lobi tidak dipulihkan kalau kompetisinya sudah tidak berjalan; yang sedang main tetap', async () => {
     const path = dbBaru();
-    const s1 = await nyalakan(path);
+    const s1 = await nyalakan(path, { jedaMulaiKompetisiMs: 20 });
     const sekarang = Date.now();
-    const komp = s1.riwayat.kompetisi.ajukan({ nama: 'Sebentar', masa: 'malam', pengaturan: {}, namaPengaju: 'Ani' }, sekarang);
+    const komp = s1.riwayat.kompetisi.ajukan({ nama: 'Sebentar', masa: 'malam', pengaturan: { jumlahPemain: 2 }, namaPengaju: 'Ani' }, sekarang);
     const tiket: Record<string, string> = { Ani: komp.token };
     for (const nama of ['Budi', 'Cici', 'Dodi']) tiket[nama] = s1.riwayat.kompetisi.ikut(komp.kode, nama, sekarang).token;
     const ani = await klien(s1.server.port);
-    ani.kirim({ t: 'buat', nama: 'Ani', pengaturan: { jumlahPemain: 2 }, kompetisi: { kode: komp.kode, token: tiket.Ani } });
+    ani.kirim({ t: 'buat', nama: 'Ani', kompetisi: { kode: komp.kode, token: tiket.Ani } });
     const masukAni = await tungguPesan(ani, (p) => p.t === 'masuk');
     const budi = await klien(s1.server.port);
     budi.kirim({ t: 'gabung', kode: masukAni.kode, nama: 'Budi', tiket: [{ kode: komp.kode, token: tiket.Budi }] });
     await tungguPesan(budi, (p) => p.t === 'masuk');
-    ani.kirim({ t: 'mulai' });
     await tungguPesan(ani, (p) => p.t === 'meja' && info(p).status === 'main');
     const cici = await klien(s1.server.port);
     cici.kirim({ t: 'buat', nama: 'Cici', kompetisi: { kode: komp.kode, token: tiket.Cici } });
@@ -482,6 +488,10 @@ describe('meja selamat dari restart server', () => {
     const s2 = await nyalakan(path);
     expect(s2.server.jumlahMeja()).toBe(1);
     expect(s2.log).toContain(`simpanan meja ${masukCici.kode} dibuang: kompetisi ${komp.kode} sudah tidak berjalan`);
+    // Disudahi, tapi meja yang sedang main (dipulihkan) masih jalan: juara belum diumumkan.
+    const d = (await (await fetch(`http://127.0.0.1:${s2.server.port}/api/kompetisi/${komp.kode}`)).json()) as Record<string, unknown>;
+    expect(d).toMatchObject({ status: 'selesai', disudahi: true, mejaMain: 1 });
+    expect(d.juara).toBeUndefined();
     const { masuk } = await kembali(s2.server.port, String(masukAni.kode), 'Ani', String(masukAni.token));
     expect(masuk).toMatchObject({ t: 'masuk', kursi: 0 });
   });
