@@ -20,7 +20,7 @@ import {
 } from '../giliran.js';
 import { nilaiPentungan } from '../skor.js';
 import type { Rng } from '../rng.js';
-import type { Aksi } from '../state.js';
+import type { Aksi, EntriBuangan } from '../state.js';
 import type { ViewPemain, ViewPutaran } from '../view.js';
 import {
   biasBuang,
@@ -110,12 +110,16 @@ export function opsiMulung(view: ViewPemain): OpsiMulung[] {
   return hasil;
 }
 
-/** Pilih sekumpulan kartu jadi yang tidak tumpang tindih dan sah diturunkan bersama (serakah). */
+/**
+ * Pilih sekumpulan kartu jadi yang tidak tumpang tindih dan sah diturunkan bersama (serakah).
+ * `pungutan` = kartu yang dipungut giliran itu (validasiTurunkan, #53); kosong untuk deck/susun akhir.
+ */
 export function rencanaTurunkan(
   tangan: readonly Kartu[],
   punyaKartuJadi: boolean,
   sumberAmbil: ModeTurunkan,
   ctx: KonteksJoker,
+  pungutan: readonly EntriBuangan[],
 ): SpesifikasiKartuJadi[] {
   const nilai = (spek: SpesifikasiKartuJadi) => spek.length * 100 + spek.length;
   const kandidat = cariKandidatKartuJadi(tangan, ctx).sort((a, b) => nilai(b) - nilai(a));
@@ -127,14 +131,14 @@ export function rencanaTurunkan(
       if (dipilih.includes(k)) continue;
       const pakai = new Set(dipilih.flat().map((c) => c.id));
       if (k.some((c) => pakai.has(c.id))) continue;
-      if (coba(() => validasiTurunkan(tangan, [...dipilih, k], punyaKartuJadi, sumberAmbil, ctx))) {
+      if (coba(() => validasiTurunkan(tangan, [...dipilih, k], punyaKartuJadi, sumberAmbil, ctx, pungutan))) {
         dipilih.push(k);
         berubah = true;
       }
     }
   }
   // Batch yang memuat 3 As bisa jadi baru sah setelah kombinasi lain ikut; pastikan akhirnya sah.
-  return dipilih.length && coba(() => validasiTurunkan(tangan, dipilih, punyaKartuJadi, sumberAmbil, ctx)) ? dipilih : [];
+  return dipilih.length && coba(() => validasiTurunkan(tangan, dipilih, punyaKartuJadi, sumberAmbil, ctx, pungutan)) ? dipilih : [];
 }
 
 function buangSah(view: ViewPemain): Kartu[] {
@@ -148,6 +152,7 @@ function buangSah(view: ViewPemain): Kartu[] {
         punyaKartuJadi: p.kartuJadi[saya].length > 0,
         sumberAmbil: p.sumberAmbil!,
         kartuId: k.id,
+        pungutan: p.pungutan,
         ctx: ctxDari(p),
         asJokerBolehDibuangTanpaJadi: view.konfigurasi.asJokerBolehDibuangTanpaJadi,
       }),
@@ -181,7 +186,7 @@ export function pilihAksiBot(view: ViewPemain, level: LevelBot, rng: Rng, gaya: 
 
 /** Susun akhir: turunkan semua kartu jadi yang ditemukan, lalu selesai. */
 function aksiSusunAkhir(p: ViewPutaran, saya: number): Aksi {
-  const rencana = rencanaTurunkan(p.tangan[saya]!, p.kartuJadi[saya].length > 0, 'akhir', ctxDari(p));
+  const rencana = rencanaTurunkan(p.tangan[saya]!, p.kartuJadi[saya].length > 0, 'akhir', ctxDari(p), []);
   if (rencana.length) return { jenis: 'turunkan', pemain: saya, kartuJadi: rencana };
   return { jenis: 'selesaiSusun', pemain: saya };
 }
@@ -199,7 +204,7 @@ function aksiMudah(view: ViewPemain, p: ViewPutaran, saya: number, rng: Rng): Ak
   const ctx = ctxDari(p);
   if (rng.next() < 0.5) {
     const kandidat = cariKandidatKartuJadi(tangan, ctx).filter((k) =>
-      coba(() => validasiTurunkan(tangan, [k], p.kartuJadi[saya].length > 0, p.sumberAmbil!, ctx)),
+      coba(() => validasiTurunkan(tangan, [k], p.kartuJadi[saya].length > 0, p.sumberAmbil!, ctx, p.pungutan)),
     );
     if (kandidat.length) return { jenis: 'turunkan', pemain: saya, kartuJadi: [rng.pick(kandidat)] };
   }
@@ -212,7 +217,9 @@ function aksiNormal(view: ViewPemain, p: ViewPutaran, saya: number, kg: KonteksG
   if (p.tahap === 'ambil') {
     let terbaik: { skor: number; o: OpsiMulung } | null = null;
     for (const o of p.buangan.length ? opsiMulung(view) : []) {
-      const lanjut = rencanaTurunkan(o.hasil.sisaTangan, true, 'buangan', ctx);
+      // Pungutan cara mulung ini: rencana yang menyisakan kembaran pungutan sendirian ditolak (#53), jadi
+      // "sisa === 1" di bawah memang bisa mentung.
+      const lanjut = rencanaTurunkan(o.hasil.sisaTangan, true, 'buangan', ctx, o.hasil.diambil);
       const sisa = o.hasil.sisaTangan.length - lanjut.flat().length;
       const idPungutan = new Set(o.hasil.diambil.map((e) => e.kartu.id));
       const dipakai = new Set([...o.kartuJadi.flat(), ...lanjut.flat()].map((c) => c.id));
@@ -237,7 +244,7 @@ function aksiNormal(view: ViewPemain, p: ViewPutaran, saya: number, kg: KonteksG
   }
 
   const tangan = p.tangan[saya]!;
-  const rencana = rencanaTurunkan(tangan, p.kartuJadi[saya].length > 0, p.sumberAmbil!, ctx);
+  const rencana = rencanaTurunkan(tangan, p.kartuJadi[saya].length > 0, p.sumberAmbil!, ctx, p.pungutan);
   if (rencana.length) return { jenis: 'turunkan', pemain: saya, kartuJadi: rencana };
 
   const sah = buangSah(view);

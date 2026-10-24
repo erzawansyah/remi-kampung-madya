@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { terapkan, terapkanAksi, type GameState } from '../src/index.js';
-import { id, semuaSelesaiSusun, skenario, spek, type ItemTeks } from './bantu.js';
+import { buatDeck, kembaranPungutan, MAKS_KARTU_NUTUP, terapkan, terapkanAksi, validasiBuang, type GameState } from '../src/index.js';
+import { ctx, id, kartu, kartuJadi, semuaSelesaiSusun, skenario, spek, type ItemTeks } from './bantu.js';
 
 // Pemain 1..4 = indeks 0..3, urutan 1→2→3→4 (arah 1). Giliran pemain 4.
 /** Mulung, buang kartu terakhir (mentung), lalu semua langsung Selesai di susun akhir. */
@@ -356,31 +356,32 @@ describe('#41: mentung pakai beberapa joker sekaligus', () => {
     });
   });
 
-  it('tiga joker, 2 deck, dua kepentung → masing-masing −750, yang mentung +750 (lompat, arah tetap)', () => {
+  it('dua joker kembar (2 deck), dua kepentung → masing-masing −500, yang mentung +500 (lompat, arah tetap)', () => {
+    // Dulu (#41) tangan ini memegang tiga joker dan nutup 750; sejak #52 paling banyak dua kartu.
     const s = skenario({
       rankJoker: 9,
       giliran: 3,
       konfigurasi: { duaDeckUntukEmpat: true },
-      tangan: [['2 waru'], ['3 waru'], ['4 waru'], ['2 love', '3 love', '9 waru', '9 kriting', '9 waru#1']],
+      tangan: [['2 waru'], ['3 waru'], ['4 waru'], ['2 love', '3 love', '9 waru', '9 waru#1']],
       buangan: [
         ['4 love', 0],
         ['5 love', 1],
       ],
     });
     const g = mulung(s, 3, 2, ['2 love', '3 love', '4 love', '5 love']);
-    const hasil = buangBeberapa(g, 3, '9 waru', '9 kriting', '9 waru#1');
+    const hasil = buangBeberapa(g, 3, '9 waru', '9 waru#1');
     expect(hasil.ok).toBe(true);
     const akhir = semuaSelesaiSusun(hasil.ok ? hasil.state : g);
     const h = akhir.riwayat[0];
     expect(h.kepentung).toEqual([0, 1]);
-    expect(h.nilaiPentungan).toBe(750);
-    expect(h.rincian[0]).toMatchObject({ status: 'kepentung', total: -5 - 750 });
-    expect(h.rincian[1]).toMatchObject({ status: 'kepentung', total: -5 - 750 });
+    expect(h.nilaiPentungan).toBe(500);
+    expect(h.rincian[0]).toMatchObject({ status: 'kepentung', total: -5 - 500 });
+    expect(h.rincian[1]).toMatchObject({ status: 'kepentung', total: -5 - 500 });
     expect(h.rincian[2]).toMatchObject({ status: 'aman', total: -5 });
-    expect(h.rincian[3]).toMatchObject({ status: 'mentung', penaltiJoker: 0, total: 20 + 750 });
+    expect(h.rincian[3]).toMatchObject({ status: 'mentung', penaltiJoker: 0, total: 20 + 500 });
     expect(h.dibalik).toBe(false);
     expect(akhir.arah).toBe(1);
-    expect(akhir.log.map((e) => e.pesan)).toContain('Pemain 4 mentung pakai 9 Waru, 9 Kriting dan 9 Waru!');
+    expect(akhir.log.map((e) => e.pesan)).toContain('Pemain 4 mentung pakai 9 Waru dan 9 Waru!');
   });
 
   it('tangan isinya joker semua: mulung pakai joker, sisa dua joker dibuang sekaligus', () => {
@@ -468,7 +469,7 @@ describe('#41: mentung pakai beberapa joker sekaligus', () => {
       harusDitolak(g, buangBeberapa(g, 3, '7 kriting', '7 waru'), 'PENTUNGAN_BUKAN_JOKER');
     });
 
-    it('2 dari 3 kartu di tangan ditolak (semua sisa harus ikut); ketiganya sah = 750', () => {
+    it('2 dari 3 kartu di tangan ditolak (semua sisa harus ikut); ketiganya juga ditolak sejak #52', () => {
       const g = mulung(
         skenario({
           rankJoker: 7,
@@ -486,8 +487,7 @@ describe('#41: mentung pakai beberapa joker sekaligus', () => {
         'BUANG_SATU_KARTU',
         'Buangnya satu kartu aja, Bos. Lebih dari satu cuma boleh buat nutup, dan semua sisa kartumu harus ikut dibuang.',
       );
-      const ok = buangBeberapa(g, 3, '7 waru', '7 kriting', '7 wajik');
-      expect(ok.ok && semuaSelesaiSusun(ok.state).riwayat[0].nilaiPentungan).toBe(750);
+      harusDitolak(g, buangBeberapa(g, 3, '7 waru', '7 kriting', '7 wajik'), 'NUTUP_KEBANYAKAN', 'Nutup paling banyak pakai 2 kartu, Bos.');
     });
 
     it('struktur diperiksa dulu: sebagian tangan (joker + kartu biasa) ditolak tanpa menyebut joker', () => {
@@ -555,5 +555,298 @@ describe('#41: mentung pakai beberapa joker sekaligus', () => {
     expect(terapkan(b2, { jenis: 'buang', pemain: 0, kartuId: id('K waru'), kartuIdLain: [] })).toEqual(
       terapkan(b2, { jenis: 'buang', pemain: 0, kartuId: id('K waru') }),
     );
+  });
+});
+
+/** Tolak: kode (dan pesan) sesuai, state tidak berubah. */
+function harusDitolakAksi(s: GameState, h: ReturnType<typeof terapkanAksi>, kode: string, pesan?: string) {
+  const sebelum = JSON.stringify(s);
+  expect(h.ok).toBe(false);
+  if (h.ok) return;
+  expect(h.error.kode).toBe(kode);
+  if (pesan) expect(h.error.pesan).toBe(pesan);
+  expect(JSON.stringify(s)).toBe(sebelum);
+}
+
+const mulungAksi = (s: GameState, pemain: number, jumlah: number, ...kj: ItemTeks[][]) =>
+  terapkanAksi(s, { jenis: 'mulung', pemain, jumlah, kartuJadi: kj.map((k) => spek(...k)) });
+
+describe('#52: nutup paling banyak pakai 2 kartu', () => {
+  const PESAN = 'Nutup paling banyak pakai 2 kartu, Bos.';
+  const buangBeberapa = (s: GameState, pemain: number, ...teks: string[]) =>
+    terapkanAksi(s, { jenis: 'buang', pemain, kartuId: id(teks[0]), kartuIdLain: teks.slice(1).map(id) });
+
+  // Joker 7. Pemain 4 mulung 4 Love milik pemain 3; sisa tangannya tiga joker hidup.
+  const tigaJoker = () => {
+    const h = mulungAksi(
+      skenario({
+        rankJoker: 7,
+        giliran: 3,
+        tangan: [['2 waru'], ['3 waru'], ['4 waru'], ['5 love', '6 love', '7 waru', '7 kriting', '7 wajik']],
+        buangan: [['4 love', 2]],
+      }),
+      3,
+      1,
+      ['4 love', '5 love', '6 love'],
+    );
+    if (!h.ok) throw new Error(h.error.pesan);
+    return h.state;
+  };
+
+  it('batasnya 2', () => {
+    expect(MAKS_KARTU_NUTUP).toBe(2);
+  });
+
+  it('tiga joker hidup, semua sisa tangan, sesudah mulung: ditolak tanpa menyebut joker', () => {
+    const g = tigaJoker();
+    const h = buangBeberapa(g, 3, '7 waru', '7 kriting', '7 wajik');
+    harusDitolakAksi(g, h, 'NUTUP_KEBANYAKAN', PESAN);
+    expect(!h.ok && h.error.pesan.toLowerCase()).not.toContain('joker');
+  });
+
+  it('empat joker hidup (2 deck) juga ditolak', () => {
+    const h0 = mulungAksi(
+      skenario({
+        rankJoker: 7,
+        giliran: 3,
+        konfigurasi: { duaDeckUntukEmpat: true },
+        tangan: [['2 waru'], ['3 waru'], ['4 waru'], ['5 love', '6 love', '7 waru', '7 kriting', '7 wajik', '7 waru#1']],
+        buangan: [['4 love', 2]],
+      }),
+      3,
+      1,
+      ['4 love', '5 love', '6 love'],
+    );
+    if (!h0.ok) throw new Error(h0.error.pesan);
+    harusDitolakAksi(h0.state, buangBeberapa(h0.state, 3, '7 waru', '7 kriting', '7 wajik', '7 waru#1'), 'NUTUP_KEBANYAKAN', PESAN);
+  });
+
+  it('urutan: jumlah diperiksa sesudah kartu ada dan tidak dobel, sebelum syarat lain (juga untuk kartu biasa)', () => {
+    const g = tigaJoker();
+    harusDitolakAksi(g, buangBeberapa(g, 3, '7 waru', '7 kriting', '7 waru'), 'KARTU_DOBEL');
+    harusDitolakAksi(g, buangBeberapa(g, 3, '7 waru', '7 kriting', '7 love'), 'KARTU_TIDAK_ADA');
+    // Tiga kartu biasa dari tangan lima kartu, sesudah ambil deck: tetap pesan jumlah, bukan joker/mulung.
+    const s = skenario({ rankJoker: 7, giliran: 0, tangan: [['2 love', '9 waru', 'K kriting', '3 wajik'], ['2 waru']], deck: ['9 love', '5 kriting'] });
+    const g2 = terapkan(s, { jenis: 'ambilDeck', pemain: 0 });
+    harusDitolakAksi(g2, buangBeberapa(g2, 0, '2 love', '9 waru', 'K kriting'), 'NUTUP_KEBANYAKAN', PESAN);
+  });
+
+  it('nggak bisa nutup: buang satu joker seperti biasa (−25, jadi joker mati), giliran pindah', () => {
+    const g = tigaJoker();
+    const g2 = terapkan(g, { jenis: 'buang', pemain: 3, kartuId: id('7 wajik') });
+    const p = g2.putaran!;
+    expect(g2.status).toBe('putaranBerjalan');
+    expect(p.mentung).toBeNull();
+    expect(p.giliran).toBe(0);
+    expect(p.tangan[3].map((k) => k.id)).toEqual([id('7 waru'), id('7 kriting')]);
+    expect(p.jokerDibuang[3]).toBe(1);
+    expect(p.jokerMati).toContain(id('7 wajik'));
+    expect(g2.peristiwa.at(-1)).toMatchObject({ jenis: 'buang', pemain: 3, jokerDibuang: true, sisaTangan: 2 });
+  });
+
+  it('dua joker tetap sah: 500', () => {
+    const h0 = mulungAksi(
+      skenario({
+        rankJoker: 7,
+        giliran: 3,
+        tangan: [['2 waru'], ['3 waru'], ['4 waru'], ['5 love', '6 love', '7 waru', '7 kriting']],
+        buangan: [['4 love', 2]],
+      }),
+      3,
+      1,
+      ['4 love', '5 love', '6 love'],
+    );
+    if (!h0.ok) throw new Error(h0.error.pesan);
+    const h = buangBeberapa(h0.state, 3, '7 waru', '7 kriting');
+    expect(h.ok && semuaSelesaiSusun(h.state).riwayat[0].nilaiPentungan).toBe(500);
+  });
+});
+
+describe('#53 (2 deck): pentungan tidak boleh kembaran kartu yang dipungut', () => {
+  const PESAN = 'Nggak bisa mentung pakai kembaran kartu yang barusan kamu pungut, Bos.';
+  const PESAN_SISA =
+    'Kartu terakhirmu nanti kembaran kartu yang barusan kamu pungut, jadi nggak bisa buat mentung. Sisakan minimal dua kartu: satu dibuang, satu tetap di tangan.';
+
+  /** Meja 4 orang 2 deck: Ani (kursi 0), Budi (kursi 1, giliran), Cici, Dodi. */
+  function meja(s: Parameters<typeof skenario>[0]): GameState {
+    const g = skenario({ ...s, konfigurasi: { duaDeckUntukEmpat: true } });
+    g.pemain = ['Ani', 'Budi', 'Cici', 'Dodi'].map((nama) => ({ nama }));
+    return g;
+  }
+
+  /**
+   * Contoh pemilik (24 Okt 2026), joker 3: Budi memegang 7-8-9 Love dan J-Q-K Wajik. Ani (tepat sebelum
+   * Budi) membuang 8 Love dari deck satunya. Budi mungut 8 Love itu untuk 7-8-9 Love, menurunkan J-Q-K
+   * Wajik, lalu mau mentung pakai 8 Love miliknya sendiri: tidak boleh.
+   */
+  const contohAniBudi = () =>
+    meja({
+      rankJoker: 3,
+      giliran: 1,
+      tangan: [['2 waru'], ['7 love', '8 love', '9 love', 'J wajik', 'Q wajik', 'K wajik'], ['4 waru'], ['5 waru']],
+      buangan: [['8 love#1', 0]],
+    });
+
+  describe('contoh Ani dan Budi', () => {
+    it('mentung pakai 8 Love miliknya sendiri ditolak (state dibuat langsung: tangan tinggal 8 Love)', () => {
+      const h0 = mulungAksi(contohAniBudi(), 1, 1, ['7 love', '8 love#1', '9 love']);
+      if (!h0.ok) throw new Error(h0.error.pesan);
+      // Langkah turunkan J-Q-K Wajik dipasang langsung (lewat aksi sekarang ditolak, lihat test berikut).
+      const g: GameState = JSON.parse(JSON.stringify(h0.state));
+      const p = g.putaran!;
+      p.tangan[1] = [kartu('8 love')];
+      p.kartuJadi[1].push(kartuJadi(1, ctx(3), 'J wajik', 'Q wajik', 'K wajik'));
+      expect(p.pungutan.map((e) => e.kartu.id)).toEqual([id('8 love#1')]);
+      harusDitolakAksi(g, terapkanAksi(g, { jenis: 'buang', pemain: 1, kartuId: id('8 love') }), 'PENTUNGAN_KEMBARAN', PESAN);
+    });
+
+    it('jalan menuju ke sana juga ditolak: turunkan J-Q-K Wajik yang menyisakan 8 Love sendirian', () => {
+      const h0 = mulungAksi(contohAniBudi(), 1, 1, ['7 love', '8 love#1', '9 love']);
+      expect(h0.ok).toBe(true);
+      if (!h0.ok) return;
+      expect(h0.state.putaran!.tangan[1].map((k) => k.id)).toEqual([id('8 love'), id('J wajik'), id('Q wajik'), id('K wajik')]);
+      const g = h0.state;
+      harusDitolakAksi(
+        g,
+        terapkanAksi(g, { jenis: 'turunkan', pemain: 1, kartuJadi: [spek('J wajik', 'Q wajik', 'K wajik')] }),
+        'SISAKAN_KARTU',
+        PESAN_SISA,
+      );
+      // Mulung sekaligus menurunkan keduanya juga ditolak.
+      const awal = contohAniBudi();
+      harusDitolakAksi(awal, mulungAksi(awal, 1, 1, ['7 love', '8 love#1', '9 love'], ['J wajik', 'Q wajik', 'K wajik']), 'SISAKAN_KARTU', PESAN_SISA);
+    });
+
+    it('buang biasa (bukan mentung) kembarannya tetap boleh', () => {
+      const h0 = mulungAksi(contohAniBudi(), 1, 1, ['7 love', '8 love#1', '9 love']);
+      if (!h0.ok) throw new Error(h0.error.pesan);
+      const g = terapkan(h0.state, { jenis: 'buang', pemain: 1, kartuId: id('8 love') });
+      expect(g.status).toBe('putaranBerjalan');
+      expect(g.putaran!.mentung).toBeNull();
+      expect(g.putaran!.giliran).toBe(2);
+      expect(g.putaran!.buangan.at(-1)).toEqual({ kartu: kartu('8 love'), pemilik: 1 });
+      // Pungutan dikosongkan di akhir giliran: Cici boleh mentung pakai kartu apa pun lagi.
+      expect(g.putaran!.pungutan).toEqual([]);
+    });
+
+    it('validator langsung: kembaran ditolak hanya kalau jadi pentungan', () => {
+      const pungutan = [{ kartu: kartu('8 love#1'), pemilik: 0 }];
+      const dasar = { punyaKartuJadi: true, sumberAmbil: 'buangan', ctx: ctx(3), asJokerBolehDibuangTanpaJadi: false } as const;
+      expect(() => validasiBuang({ ...dasar, tangan: [kartu('8 love')], kartuId: id('8 love'), pungutan })).toThrow(PESAN);
+      expect(validasiBuang({ ...dasar, tangan: [kartu('8 love'), kartu('J wajik')], kartuId: id('8 love'), pungutan })).toMatchObject({
+        mentung: false,
+      });
+      // Tanpa pungutan (atau pungutan lain) kartu yang sama sah jadi pentungan.
+      expect(validasiBuang({ ...dasar, tangan: [kartu('8 love')], kartuId: id('8 love'), pungutan: [] })).toMatchObject({ mentung: true });
+      expect(
+        validasiBuang({ ...dasar, tangan: [kartu('8 love')], kartuId: id('8 love'), pungutan: [{ kartu: kartu('8 waru#1'), pemilik: 0 }] }),
+      ).toMatchObject({ mentung: true });
+    });
+  });
+
+  describe('mungut 2 kartu: kartu pungutan itu sendiri boleh jadi pentungan, kembarannya tidak', () => {
+    // Buangan dari bawah: 4 Love (Cici), K Kriting deck kedua (Ani). Budi memegang 5-6 Love dan J-Q-K Kriting.
+    const awal = () =>
+      meja({
+        rankJoker: 3,
+        giliran: 1,
+        tangan: [['2 waru'], ['5 love', '6 love', 'J kriting', 'Q kriting', 'K kriting'], ['4 waru'], ['5 waru']],
+        buangan: [
+          ['4 love', 2],
+          ['K kriting#1', 0],
+        ],
+      });
+
+    it('K Kriting milik Budi masuk J-Q-K, K Kriting pungutan jadi pentungan: sah, Ani tidak kepentung', () => {
+      const h0 = mulungAksi(awal(), 1, 2, ['4 love', '5 love', '6 love'], ['J kriting', 'Q kriting', 'K kriting']);
+      if (!h0.ok) throw new Error(h0.error.pesan);
+      expect(h0.state.putaran!.tangan[1].map((k) => k.id)).toEqual([id('K kriting#1')]);
+      const g = terapkan(h0.state, { jenis: 'buang', pemain: 1, kartuId: id('K kriting#1') });
+      expect(g.putaran!.mentung).toMatchObject({ pemain: 1, kepentung: [2] });
+      const h = semuaSelesaiSusun(g).riwayat[0];
+      expect(h.nilaiPentungan).toBe(100);
+      expect(h.pentungan!.id).toBe(id('K kriting#1'));
+    });
+
+    it('kebalikannya (K Kriting pungutan masuk J-Q-K, sisa K Kriting milik sendiri) ditolak', () => {
+      const s = awal();
+      harusDitolakAksi(
+        s,
+        mulungAksi(s, 1, 2, ['4 love', '5 love', '6 love'], ['J kriting', 'Q kriting', 'K kriting#1']),
+        'SISAKAN_KARTU',
+        PESAN_SISA,
+      );
+      // Larangannya untuk semua kartu pungutan, bukan cuma yang paling bawah.
+      const pungutan = [
+        { kartu: kartu('4 love'), pemilik: 2 },
+        { kartu: kartu('K kriting#1'), pemilik: 0 },
+      ];
+      expect(() =>
+        validasiBuang({
+          tangan: [kartu('K kriting')],
+          punyaKartuJadi: true,
+          sumberAmbil: 'buangan',
+          kartuId: id('K kriting'),
+          pungutan,
+          ctx: ctx(3),
+          asJokerBolehDibuangTanpaJadi: false,
+        }),
+      ).toThrow(PESAN);
+    });
+  });
+
+  describe('nutup pakai dua joker', () => {
+    // Joker 7. Ani membuang 7 Waru deck kedua (sudah joker mati, jadi 7 Waru biasa). Budi mungut untuk
+    // 5-6-7 Waru; sisa tangannya 7 Waru (kembaran pungutan) dan 7 Kriting, keduanya joker hidup.
+    const sesudahMulung = () => {
+      const h0 = mulungAksi(
+        meja({
+          rankJoker: 7,
+          giliran: 1,
+          tangan: [['2 love'], ['5 waru', '6 waru', '7 waru', '7 kriting'], ['4 love'], ['5 love']],
+          buangan: [['7 waru#1', 0]],
+        }),
+        1,
+        1,
+        ['5 waru', '6 waru', '7 waru#1'],
+      );
+      if (!h0.ok) throw new Error(h0.error.pesan);
+      return h0.state;
+    };
+
+    it('salah satu joker kembaran kartu pungutan: ditolak', () => {
+      const g = sesudahMulung();
+      const buang = (a: string, b: string) => terapkanAksi(g, { jenis: 'buang', pemain: 1, kartuId: id(a), kartuIdLain: [id(b)] });
+      harusDitolakAksi(g, buang('7 waru', '7 kriting'), 'PENTUNGAN_KEMBARAN', PESAN);
+      harusDitolakAksi(g, buang('7 kriting', '7 waru'), 'PENTUNGAN_KEMBARAN', PESAN);
+    });
+
+    it('buang satu joker seperti biasa tetap boleh (−25)', () => {
+      const g = terapkan(sesudahMulung(), { jenis: 'buang', pemain: 1, kartuId: id('7 waru') });
+      expect(g.putaran!.mentung).toBeNull();
+      expect(g.putaran!.jokerDibuang[1]).toBe(1);
+    });
+  });
+
+  it('1 deck tidak berubah: tidak ada kartu yang kembaran kartu lain', () => {
+    const deck = buatDeck(1);
+    for (const a of deck) for (const b of deck) expect(kembaranPungutan(a, [{ kartu: b, pemilik: 0 }])).toBe(false);
+    // 2 deck: hanya pasangan angka dan bunga sama dari deck lain.
+    const dua = buatDeck(2);
+    const kembar = dua.filter((b) => kembaranPungutan(kartu('8 love'), [{ kartu: b, pemilik: 0 }]));
+    expect(kembar.map((k) => k.id)).toEqual([id('8 love#1')]);
+    // Contoh A (1 deck) tetap mentung seperti biasa.
+    const s = skenario({
+      rankJoker: 9,
+      giliran: 3,
+      tangan: [['2 waru'], ['3 waru'], ['4 waru'], ['5 love', '6 love', '8 kriting']],
+      buangan: [
+        ['10 wajik', 1],
+        ['4 love', 2],
+      ],
+    });
+    const g1 = terapkan(s, { jenis: 'mulung', pemain: 3, jumlah: 1, kartuJadi: [spek('4 love', '5 love', '6 love')] });
+    const g = terapkan(g1, { jenis: 'buang', pemain: 3, kartuId: id('8 kriting') });
+    expect(g.putaran!.mentung).toMatchObject({ pemain: 3, kepentung: [2] });
   });
 });

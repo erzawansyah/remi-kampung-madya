@@ -6,6 +6,7 @@ import {
   buatPermainan,
   DAFTAR_GAYA_BOT,
   DAFTAR_LEVEL_BOT,
+  kembaranPungutan,
   periksaInvarian,
   pilihAksiBot,
   Rng,
@@ -38,8 +39,10 @@ interface Statistik {
   dibalik: number;
   penaltiJoker: number;
   susunAkhir: number;
-  /** Nutup pakai beberapa joker sekaligus (#41). */
+  /** Nutup pakai beberapa joker sekaligus (#41, paling banyak 2 sejak #52). */
   mentungBeberapaJoker: number;
+  /** Sesudah mulung, tangan memegang kembaran kartu yang dipungut (2 deck, #53: tidak boleh jadi pentungan). */
+  kembaranPungutan: number;
 }
 
 export function mainkan(
@@ -74,7 +77,11 @@ export function mainkan(
     }
     const h = terapkanAksi(g, aksi);
     if (!h.ok) throw new Error(`aksi bot ditolak (seed ${seed}): ${JSON.stringify(aksi)} → ${h.error.pesan}`);
-    if (aksi.jenis === 'mulung') stat.mulung++;
+    if (aksi.jenis === 'mulung') {
+      stat.mulung++;
+      const p = h.state.putaran!;
+      if (p.tangan[aksi.pemain].some((k) => kembaranPungutan(k, p.pungutan))) stat.kembaranPungutan++;
+    }
     const sebelum = g.riwayat.length;
     g = h.state;
     stat.aksi++;
@@ -113,6 +120,7 @@ export function ujiSimulasi(judul: string, n: number, duaDeck: boolean): void {
       penaltiJoker: 0,
       susunAkhir: 0,
       mentungBeberapaJoker: 0,
+      kembaranPungutan: 0,
     };
     for (let awal = 1; awal <= 60; awal += 10) {
       it(`seed ${awal}–${awal + 9}: tanpa state ilegal maupun aksi ditolak`, async () => {

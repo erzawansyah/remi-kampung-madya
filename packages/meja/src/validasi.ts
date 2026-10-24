@@ -79,8 +79,9 @@ export function rapikanBatasSkor(x: unknown, arah: ArahBatasSkor): number | null
 }
 
 /**
- * Kartu lain paling banyak di satu aksi buang (#41): 2 deck punya 8 kartu seangka joker, jadi
- * nutup pakai joker paling banyak 1 + 7 kartu.
+ * Batas bentuk kartu lain di satu aksi buang (#41): 2 deck punya 8 kartu seangka joker, jadi paling banyak
+ * 1 + 7 kartu. Sejak #52 nutup paling banyak 2 kartu, tapi batas bentuk ini sengaja tetap longgar: pesan
+ * 3+ kartu tetap sampai ke engine, yang menolaknya dengan alasan yang jelas (NUTUP_KEBANYAKAN).
  */
 export const MAKS_KARTU_BUANG_LAIN = 7;
 
@@ -116,7 +117,8 @@ export function validasiAksi(x: unknown): AksiKlien | null {
     case 'buang': {
       if (!isStr(x.kartuId, 40)) return null;
       // Keputusan #41: nutup pakai beberapa joker. Hanya bentuknya yang dicek di sini; sah tidaknya
-      // (semua sisa tangan, joker hidup semua, sesudah mulung) diputuskan validasiBuang di engine.
+      // (paling banyak 2 kartu #52, semua sisa tangan, sesudah mulung, bukan kembaran pungutan #53, joker
+      // hidup semua) diputuskan validasiBuang di engine, supaya pemain dapat alasan penolakannya.
       const lain = x.kartuIdLain;
       if (lain === undefined) return { jenis: 'buang', kartuId: x.kartuId };
       if (!Array.isArray(lain) || lain.length > MAKS_KARTU_BUANG_LAIN || !lain.every((id) => isStr(id, 40))) return null;

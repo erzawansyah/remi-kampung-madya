@@ -177,6 +177,7 @@ function sahDibuang(g: GameState, pemain: number, k: Kartu, ctx: KonteksJoker): 
       punyaKartuJadi: p.kartuJadi[pemain].length > 0,
       sumberAmbil: p.sumberAmbil!,
       kartuId: k.id,
+      pungutan: p.pungutan,
       ctx,
       asJokerBolehDibuangTanpaJadi: g.konfigurasi.asJokerBolehDibuangTanpaJadi,
     });

@@ -1083,6 +1083,7 @@ function aksiAman(view: ViewPemain): Aksi {
               punyaKartuJadi: p.kartuJadi[saya].length > 0,
               sumberAmbil,
               kartuId: kartu.id,
+              pungutan: p.pungutan,
               ctx,
               asJokerBolehDibuangTanpaJadi: view.konfigurasi.asJokerBolehDibuangTanpaJadi,
             });

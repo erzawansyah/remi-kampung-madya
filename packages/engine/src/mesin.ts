@@ -384,6 +384,7 @@ function turunkan(s: GameState, pemain: number, spesifikasi: SpesifikasiKartuJad
     p.kartuJadi[pemain].length > 0,
     p.sumberAmbil!,
     ctxPutaran(p),
+    p.pungutan,
   );
   const baru = pasangKartuJadi(p, pemain, hasil);
   catat(s, `${nama(s, pemain)} menurunkan ${baru.map(deskripsiKartuJadi).join(' dan ')}.`);
@@ -399,6 +400,7 @@ function buang(s: GameState, pemain: number, kartuId: string, kartuIdLain: strin
     sumberAmbil: p.sumberAmbil!,
     kartuId,
     kartuIdLain,
+    pungutan: p.pungutan,
     ctx,
     asJokerBolehDibuangTanpaJadi: s.konfigurasi.asJokerBolehDibuangTanpaJadi,
   });
@@ -487,7 +489,8 @@ function pemainSusunAkhir(s: GameState, pemain: number): StatePutaran {
 
 function turunkanAkhir(s: GameState, pemain: number, spesifikasi: SpesifikasiKartuJadi[]): void {
   const p = pemainSusunAkhir(s, pemain);
-  const hasil = validasiTurunkan(p.tangan[pemain], spesifikasi, p.kartuJadi[pemain].length > 0, 'akhir', ctxPutaran(p));
+  // Susun akhir tidak punya pungutan (dikosongkan di mulaiSusunAkhir) dan tidak ada buang.
+  const hasil = validasiTurunkan(p.tangan[pemain], spesifikasi, p.kartuJadi[pemain].length > 0, 'akhir', ctxPutaran(p), []);
   const baru = pasangKartuJadi(p, pemain, hasil);
   catat(s, `${nama(s, pemain)} menurunkan ${baru.map(deskripsiKartuJadi).join(' dan ')}.`);
   terjadi(s, { jenis: 'turunkan', pemain, idKartuJadi: baru.map((kj) => kj.id), kembarAs: baru.some(isKembarAsEmpat) });

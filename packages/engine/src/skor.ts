@@ -26,7 +26,7 @@ export function nilaiPentungan(kartu: Kartu, jokerHidup: boolean): number {
 
 /**
  * Nilai semua pentungan. Keputusan #41: nutup pakai beberapa joker hidup sekaligus bernilai 250 per
- * joker (2 joker = 500, 3 joker = 750). `lain` hanya berisi joker hidup (dijaga validasiBuang), dan
+ * joker; sejak #52 paling banyak 2 joker (500). `lain` hanya berisi joker hidup (dijaga validasiBuang), dan
  * tidak ada penalti −25 untuk joker yang dipakai mentung. Yang mentung dapat totalnya sekali, tiap
  * kepentung kena totalnya penuh.
  */
