@@ -755,6 +755,50 @@ details.akordion.saya > summary .nama-skor b {
   font-size: var(--teks-xl);
   color: var(--emas);
 }
+/* Klasemen akhir meja kompetisi (#51 versi 2): nilai dan naik-turun peringkat tiap peserta, aku dulu. */
+.hasil-kompetisi:empty {
+  display: none;
+}
+.hasil-kompetisi {
+  padding: var(--ruang-2) var(--ruang-3);
+  border: 1px solid var(--garis-emas);
+  border-radius: var(--radius-sedang);
+  background: rgba(var(--emas-rgb), 0.08);
+}
+.judul-hasil-kompetisi {
+  margin: 0 0 var(--ruang-1);
+  font-size: var(--teks-md);
+  color: var(--emas);
+}
+.daftar-hasil-kompetisi {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ruang-1);
+  font-size: var(--teks-sm);
+}
+.daftar-hasil-kompetisi li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--ruang-2);
+}
+.daftar-hasil-kompetisi li.saya {
+  font-size: var(--teks-md);
+}
+.daftar-hasil-kompetisi li.saya .teks-hasil-kompetisi {
+  color: var(--teks);
+  font-weight: 700;
+}
+.teks-hasil-kompetisi {
+  color: var(--teks-redup);
+}
+/* Bar atas meja kompetisi: lencana nama kompetisi (ganti "Meja KODE"). */
+.bar-atas .info > .lencana-kompetisi-atas {
+  color: var(--teks-emas);
+}
 /* Satu baris ajakan main di Kedai Madya, hanya di klasemen akhir (kontrolMeja.htmlAjakanKedai). */
 .ajakan-kedai {
   text-align: center;

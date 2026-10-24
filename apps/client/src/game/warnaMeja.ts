@@ -1,8 +1,41 @@
 // Warna kanvas meja diambil dari token CSS (gaya/token.css) supaya kanvas dan HTML satu palet.
-// Dibaca sekali saat scene dibuat (token tidak berubah saat jalan); nilai cadangan dipakai kalau
-// token belum termuat (mis. di lingkungan test).
+// Dibaca saat scene dibuat, dan dibaca ulang saat laken berganti (meja kompetisi, #51 versi 2);
+// nilai cadangan dipakai kalau token belum termuat (mis. di lingkungan test).
+//
+// Laken meja kompetisi: selama pemain berada di lobi/meja kompetisi, <html data-laken="kompetisi">
+// dipasang (aturLaken) dan token --laken* menunjuk ke --laken-kompetisi* (token.css), jadi latar
+// meja HTML dan palet kanvas sama-sama berganti. Dilepas lagi begitu meninggalkan meja.
 
 import type { WarnaTeks } from './tataMeja';
+
+/** Atribut di <html> yang memilih laken: 'kompetisi' = laken meja kompetisi; tidak ada = laken biasa. */
+export const ATRIBUT_LAKEN = 'data-laken';
+export type JenisLaken = 'biasa' | 'kompetisi';
+
+const pendengarLaken = new Set<() => void>();
+
+/** Laken yang sedang dipakai (dibaca dari atribut <html>). */
+export function lakenSekarang(): JenisLaken {
+  try {
+    return document.documentElement.getAttribute(ATRIBUT_LAKEN) === 'kompetisi' ? 'kompetisi' : 'biasa';
+  } catch {
+    return 'biasa';
+  }
+}
+
+/** Pasang laken meja (kompetisi atau biasa). Pendengar (MejaScene) dikabari kalau berganti. */
+export function aturLaken(jenis: JenisLaken): void {
+  if (typeof document === 'undefined' || lakenSekarang() === jenis) return;
+  if (jenis === 'kompetisi') document.documentElement.setAttribute(ATRIBUT_LAKEN, 'kompetisi');
+  else document.documentElement.removeAttribute(ATRIBUT_LAKEN);
+  for (const f of [...pendengarLaken]) f();
+}
+
+/** Dengarkan pergantian laken (mis. untuk membaca ulang palet kanvas). Mengembalikan pelepas. */
+export function saatLakenBerubah(f: () => void): () => void {
+  pendengarLaken.add(f);
+  return () => pendengarLaken.delete(f);
+}
 
 export interface PaletMeja {
   /** Warna teks Phaser (string CSS). */

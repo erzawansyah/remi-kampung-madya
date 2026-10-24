@@ -27,7 +27,16 @@ import {
   type ViewPemain,
   berikutnya,
 } from '@remi/engine';
-import { DAFTAR_EMOTE, MAKS_LEDEK_PER_PUTARAN, MAKS_PESAN, rapikanPesan, type AksiKlien, type InfoMeja, type TempoBot } from '@remi/meja';
+import {
+  DAFTAR_EMOTE,
+  MAKS_LEDEK_PER_PUTARAN,
+  MAKS_PESAN,
+  rapikanPesan,
+  type AksiKlien,
+  type InfoMeja,
+  type PesanServer,
+  type TempoBot,
+} from '@remi/meja';
 import { idAcak, KabarKoneksi, type Kabar, type PesanKeMeja, type StatusKoneksi } from './koneksi';
 import type { AksiAdegan, KotakLayar, MejaScene, ModelMeja } from './game/MejaScene';
 import { gambarKartuKeKanvas } from './game/kartuGrafisGambar';
@@ -53,6 +62,7 @@ import { bukaBantuan, bukaTentang } from './ui/jendelaMalas';
 import { teksPengumuman, Tutorial, type KeadaanTutorial } from './ui/tutorial';
 import { TEKS_TUTORIAL } from './konten/tutorial';
 import { TEKS_KALDU } from './konten/kaldu';
+import { TEKS_KOMPETISI, teksHasilKompetisi } from './konten/kompetisi';
 import { TEKS_LANJUT, TEKS_LEDEK } from './konten/ledek';
 import { apaEmoji, hapusLapisanLedek, htmlLedek, lapisanLedek, LedekBesar, sasaranLedekBawaan } from './ui/ledek';
 import { TEKS_KONEKSI, teksMentungTerlewat } from './konten/koneksi';
@@ -81,6 +91,27 @@ export interface AppUntukMeja {
   periksaKoneksi?(): void;
   /** Selisih jam server − jam HP (ms) untuk bar waktu giliran. Tidak ada = 0. */
   selisihJam?(): number;
+  /** Meja kompetisi (#51 versi 2): tinggalkan meja lalu buka detail kompetisi `kode`. */
+  kembaliKeKompetisi?(kode: string): void;
+}
+
+/** Pesan server kompetisiHasil: nilai dan naik-turun peringkat kompetisi sesudah permainan selesai. */
+export type PesanHasilKompetisi = Extract<PesanServer, { t: 'kompetisiHasil' }>;
+
+/**
+ * Bagian "Nilai kompetisi" di klasemen akhir meja kompetisi: satu baris per peserta di meja ini, aku
+ * duluan. Isinya dari server (pesan kompetisiHasil); '' kalau belum ada.
+ */
+export function htmlHasilKompetisi(h: PesanHasilKompetisi | null, saya: number | null): string {
+  if (!h || !h.pemain.length) return '';
+  const urut = [...h.pemain].sort((a, b) => Number(b.kursi === saya) - Number(a.kursi === saya) || a.kursi - b.kursi);
+  return `<h3 class="judul-hasil-kompetisi"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.judulHasil)} · ${esc(h.kompetisi.nama)}</h3>
+    <ul class="daftar-hasil-kompetisi">${urut
+      .map(
+        (p) => `<li${p.kursi === saya ? ' class="saya"' : ''}><b>${esc(p.nama)}</b>${p.kursi === saya ? ' <span class="lencana">kamu</span>' : ''}
+          <span class="teks-hasil-kompetisi">${esc(teksHasilKompetisi(p, h.minMain, h.jumlahPeringkat))}</span></li>`,
+      )
+      .join('')}</ul>`;
 }
 
 /** Aksi online yang sudah dikirim tapi belum dipastikan sampai (lihat KontrolMeja.nilaiAksiTertunda). */
@@ -515,6 +546,8 @@ export class KontrolMeja implements AksiAdegan {
   private timerDetak: ReturnType<typeof setInterval> | null = null;
   /** Klasemen akhir sudah ditampilkan untuk permainan yang selesai ini. */
   private selesaiDitampilkan = false;
+  /** Hasil kompetisi permainan ini (meja kompetisi), untuk klasemen akhir. */
+  private hasilKompetisi: PesanHasilKompetisi | null = null;
   /** Putaran yang popup jokernya sudah kutekan OK (jangan dibuka lagi sambil menunggu server). */
   private jokerDiOk = -1;
   /** Nomor sambungan tempat siapJoker terakhir dikirim (lihat perluKirimUlangSiapJoker). */
@@ -1854,14 +1887,17 @@ export class KontrolMeja implements AksiAdegan {
     const v = this.view!;
     const info = this.info!;
     const p = v.putaran;
+    // Meja kompetisi (#51 versi 2): lencana nama kompetisinya, bukan kode meja.
+    const kompetisi = this.app.jenis === 'online' ? (info.kompetisi ?? null) : null;
     const t = teksBarAtas(
-      this.app.jenis === 'offline' ? (this.app.tutorial ? 'Latihan' : 'Offline') : `Meja ${info.kode}`,
+      this.app.jenis === 'offline' ? (this.app.tutorial ? 'Latihan' : 'Offline') : kompetisi ? `🏅 ${kompetisi.nama}` : `Meja ${info.kode}`,
       p ? p.nomor : null,
       v.konfigurasi.batasPutaran,
       p?.kaldu === true,
     );
     const [elJenis, elPutaran] = [...this.elInfo.children] as HTMLElement[];
     if (elJenis.textContent !== t.jenis) elJenis.textContent = t.jenis;
+    elJenis.classList.toggle('lencana-kompetisi-atas', !!kompetisi);
     if (elPutaran.textContent !== t.putaran) elPutaran.textContent = t.putaran;
     this.perbaruiWaktu();
     this.perbaruiKoneksi();
@@ -2340,6 +2376,20 @@ export class KontrolMeja implements AksiAdegan {
     const b = this.elAtas.querySelector<HTMLElement>('[data-a=emote]')!;
     b.setAttribute('aria-expanded', 'false');
     if (kembalikanFokus) b.focus();
+  }
+
+  /**
+   * Hasil kompetisi permainan ini masuk (meja kompetisi, #51 versi 2): disimpan untuk klasemen akhir.
+   * Kalau klasemen akhir sudah tampil, bagiannya diisi sekarang dan baris milikku diumumkan.
+   */
+  terimaHasilKompetisi(h: PesanHasilKompetisi) {
+    if (this.hancur) return;
+    this.hasilKompetisi = h;
+    const wadah = document.querySelector<HTMLElement>('#modal [data-hasil-kompetisi]');
+    if (!wadah || !this.selesaiDitampilkan) return;
+    wadah.innerHTML = htmlHasilKompetisi(h, this.view?.saya ?? null);
+    const milikku = h.pemain.find((p) => p.kursi === this.view?.saya);
+    if (milikku) umumkan(`${TEKS_KOMPETISI.judulHasil}: ${teksHasilKompetisi(milikku, h.minMain, h.jumlahPeringkat)}`);
   }
 
   /** Emote masuk. Kalau animasi sedang berjalan, ditunda sebentar supaya tidak mendahului kejadiannya. */
@@ -2926,6 +2976,9 @@ export class KontrolMeja implements AksiAdegan {
     };
     const host = info.kursiSaya === info.host;
     const offline = this.app.jenis === 'offline';
+    // Meja kompetisi (#51 versi 2): cuma sekali main. Ganti Main lagi dengan Kembali ke kompetisi,
+    // dan tampilkan nilai kompetisi tiap peserta (pesan kompetisiHasil, bisa datang belakangan).
+    const kompetisi = offline ? null : (info.kompetisi ?? null);
     const menang = v.saya !== null && peringkat[v.saya] === 1;
     // Putaran terakhir tidak sempat tampil di modal hasil (langsung ke klasemen): ringkasannya di sini.
     const terakhir = v.riwayat.at(-1);
@@ -2937,12 +2990,21 @@ export class KontrolMeja implements AksiAdegan {
        <h2>Klasemen akhir</h2>
        <p class="juara-teks"><span aria-hidden="true">🏆</span> ${esc(juara.join(' & '))} ${juara.length > 1 ? 'juara bareng' : 'juara'}!</p>
        <p class="redup rapat">${esc(v.alasanSelesai ? alasan[v.alasanSelesai] : '')} ${v.riwayat.length} putaran.</p>
+       ${kompetisi ? `<div class="hasil-kompetisi" data-hasil-kompetisi aria-live="polite">${htmlHasilKompetisi(this.hasilKompetisi, v.saya)}</div>` : ''}
        ${penutup.skor}
        ${htmlKlasemen(nama, v.skor, v.saya, terakhir)}
        ${terakhir ? htmlRingkasPutaranTerakhir(terakhir, (i) => nama[i], v.saya) : ''}
        ${penutup.selesai}
        <div class="deret">
-         ${offline ? `<button type="button" class="utama" data-a="lagi">${esc(labelLagi)}</button>` : host ? '<button type="button" class="utama" data-a="lagi">Main lagi (ke lobi)</button>' : ''}
+         ${
+           kompetisi
+             ? `<button type="button" class="utama" data-a="kompetisi">${esc(TEKS_KOMPETISI.kembaliKompetisi)}</button>`
+             : offline
+               ? `<button type="button" class="utama" data-a="lagi">${esc(labelLagi)}</button>`
+               : host
+                 ? '<button type="button" class="utama" data-a="lagi">Main lagi (ke lobi)</button>'
+                 : ''
+         }
          <button type="button" data-a="skor">Rincian skor</button>
          <button type="button" data-a="keluar">Ke beranda</button>
        </div>
@@ -2968,6 +3030,12 @@ export class KontrolMeja implements AksiAdegan {
             this.app.kirim({ t: 'mainLagi' });
           });
         });
+        dlg.querySelector('[data-a=kompetisi]')?.addEventListener('click', () => {
+          bunyi('klik');
+          tutupModal();
+          if (kompetisi && this.app.kembaliKeKompetisi) this.app.kembaliKeKompetisi(kompetisi.kode);
+          else this.app.keluarMeja();
+        });
         dlg.querySelector('[data-a=skor]')!.addEventListener('click', () => this.bukaSkor('riwayat'));
         dlg.querySelector('[data-a=keluar]')!.addEventListener('click', () => {
           tutupModal();
@@ -2981,7 +3049,9 @@ export class KontrolMeja implements AksiAdegan {
       if (menang) getar('menang');
       const hasil = menang ? 'Selamat, kamu juara!' : `Permainan selesai. Kamu peringkat ${peringkat[v.saya]}.`;
       const tutup = penutup.selesai ? ` ${teksPengumuman(TEKS_TUTORIAL.selesai.judul, TEKS_TUTORIAL.selesai.teks)}` : '';
-      umumkan(hasil + tutup);
+      const h = kompetisi ? this.hasilKompetisi?.pemain.find((p) => p.kursi === v.saya) : undefined;
+      const nilai = h ? ` ${TEKS_KOMPETISI.judulHasil}: ${teksHasilKompetisi(h, this.hasilKompetisi!.minMain, this.hasilKompetisi!.jumlahPeringkat)}.` : '';
+      umumkan(hasil + nilai + tutup);
     }
     // Penutup latihan sudah tampil: baru sekarang tutorial dianggap tuntas (tidak ditawarkan lagi).
     if (penutup.selesai) this.tutorial?.tuntaskan();
@@ -3060,7 +3130,9 @@ export class KontrolMeja implements AksiAdegan {
        <p class="redup rapat">${
          offline
            ? 'Permainan offline tersimpan otomatis. Kamu bisa lanjut kapan saja dari beranda.'
-           : `Kode meja: <b>${esc(info?.kode)}</b>. Ajak teman gabung pakai kode ini.`
+           : info?.kompetisi
+             ? `🏅 ${esc(TEKS_KOMPETISI.lencanaMeja)}: <b>${esc(info.kompetisi.nama)}</b>. ${esc(TEKS_KOMPETISI.aturanDikunci)}`
+             : `Kode meja: <b>${esc(info?.kode)}</b>. Ajak teman gabung pakai kode ini.`
        }</p>
        <div class="menu-meja">
          <button type="button" class="utama" data-tutup>Lanjut main</button>
