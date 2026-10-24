@@ -28,9 +28,11 @@ import {
 } from './kartuGrafis';
 import { acakId, geserBayangan, hitungTataMeja, IKON_KARTU, LAPIS, lebarIkonKartu, LETAK_LABEL_KARTU, PAD_LABEL_KARTU, TINGGI_TANGAN, ukuranLabelKartu, type AksiKetuk, type JenisSorot, type KartuTata, type Kotak, type TataMeja, type TeksTata, type Titik } from './tataMeja';
 import { bacaPalet, type PaletMeja } from './warnaMeja';
+import { persegiBulat } from './kartuGrafisGambar';
 import { DURASI, EASE, durasi, easePegas, efekHemat, kurangiGerak } from '../gerak';
 import { preferensi, saatPreferensiBerubah } from '../preferensi';
 import { bunyi, getar } from '../efek/suara';
+import { acakBenih, gambarRetak, LAMA_RETAK_PANEL, polaRetak } from '../efek/retak';
 
 export type { Titik } from './tataMeja';
 
@@ -188,6 +190,8 @@ export class MejaScene extends Phaser.Scene {
   private hitungTerbang = 0;
   private lepasPreferensi: (() => void) | null = null;
   private batalPanaskan: (() => void) | null = null;
+  /** Penomor tekstur retakan panel (tiap retakan punya tekstur kanvas sendiri, dibuang sesudahnya). */
+  private hitungRetak = 0;
 
   constructor() {
     super('meja');
@@ -1345,6 +1349,77 @@ export class MejaScene extends Phaser.Scene {
     e.setDepth(LAPIS.animasi + 60);
     e.explode(jumlah);
     this.time.delayedCall(1300, () => e.destroy());
+  }
+
+  /**
+   * Kursi lawan kepentung (dipanggil sesudah pentungan terbuka): panelnya memerah dan retak kecil, kartu
+   * jadi di panelnya tersentak, lalu pudar. Digambar di atas isi panel tapi di bawah kartu yang sedang
+   * dianimasikan (pentungan di panggung tetap di atas). Gerak dikurangi: tanpa goyang; efek hemat: tanpa
+   * kilau kaca. Selalu selesai dan membuang teksturnya (cadangan waktu).
+   */
+  retakPanel(pemain: number, opsi: { benih: number; kuat?: boolean }): Promise<void> {
+    const k = this.tata.area.panel.get(pemain);
+    if (!k || k.w < 1 || k.h < 1 || !this.bisaAnimasi()) return Promise.resolve();
+    const d = this.tata.d;
+    const w = Math.round(k.w);
+    const h = Math.round(k.h);
+    const kunci = `retak-panel-${this.hitungRetak++}`;
+    const tex = this.textures.createCanvas(kunci, w, h);
+    if (!tex) return Promise.resolve();
+    const ctx = tex.getContext();
+    const r = 10 * d;
+    const kotakBulat = (inset: number) => persegiBulat(ctx, inset, inset, w - 2 * inset, h - 2 * inset, Math.max(0, r - inset));
+    ctx.save();
+    kotakBulat(0);
+    ctx.clip();
+    ctx.fillStyle = efekHemat() ? 'rgba(214, 40, 40, 0.22)' : 'rgba(214, 40, 40, 0.3)';
+    ctx.fillRect(0, 0, w, h);
+    const acak = acakBenih(opsi.benih);
+    const pola = polaRetak({
+      x: w * (0.35 + 0.3 * acak()),
+      y: h * (0.35 + 0.3 * acak()),
+      jari: Math.hypot(w, h) * 0.6,
+      benih: opsi.benih,
+      sinar: opsi.kuat ? 9 : 7,
+      cincin: 1,
+      tebal: 1.6 * d,
+    });
+    gambarRetak(ctx, pola, { skala: d, rinci: !efekHemat() });
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255, 90, 79, 0.9)';
+    ctx.lineWidth = 2 * d;
+    kotakBulat(d);
+    ctx.stroke();
+    tex.refresh();
+    const img = this.add.image(k.x + k.w / 2, k.y + k.h / 2, kunci).setDepth(LAPIS.jadi + 2);
+    const x0 = img.x;
+    // Kartu jadi di panel itu ikut tersentak dan berkilat merah (efek kartu, bukan Image-nya langsung).
+    for (const o of this.kelola.values()) if (o.hidup && dalam(k, o.x, o.y)) this.goyang(o);
+    const lama = durasi(LAMA_RETAK_PANEL);
+    const lamaGoyang = kurangiGerak() ? 0 : durasi(420);
+    const jalan = (async () => {
+      if (lamaGoyang) {
+        await this.tw({
+          angka: true,
+          from: 0,
+          to: 1,
+          duration: lamaGoyang,
+          onUpdate: (tw: Phaser.Tweens.Tween) => {
+            const u = tw.getValue() ?? 0;
+            if (img.active) img.x = x0 + Math.sin(u * Math.PI * 6) * 4 * d * (1 - u);
+          },
+        });
+      }
+      if (img.active) img.x = x0;
+      await this.jeda(lama * 0.72 - lamaGoyang);
+      if (img.active) await this.tw({ targets: img, alpha: 0, duration: Math.round(lama * 0.28) });
+    })();
+    const cadangan = this.jeda(lama + 500);
+    return Promise.race([jalan, cadangan]).then(() => {
+      this.tweens.killTweensOf(img);
+      if (img.active) img.destroy();
+      if (this.textures.exists(kunci)) this.textures.remove(kunci);
+    });
   }
 
   /** Rayakan pemenang akhir: beberapa percikan di panel/tangan pemenang. */

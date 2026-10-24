@@ -56,6 +56,7 @@ import { simpan } from './penyimpanan';
 import { gerakDikurangi } from './preferensi';
 import { durasi } from './gerak';
 import { PemutarPeristiwa, labelKartu } from './efek/pemutar';
+import { retakkanStatus } from './efek/retak';
 import { bersihkanSorak } from './efek/sorak';
 import { bunyi, getar } from './efek/suara';
 
@@ -696,7 +697,7 @@ export class KontrolMeja implements AksiAdegan {
       let status: string;
       if (e.pemain === saya) status = `<div class="kotak-status emas">Kamu MENTUNG! +${e.nilai}</div>`;
       else if (e.kepentung.includes(saya)) {
-        status = `<div class="kotak-status merah">Kamu KEPENTUNG −${e.nilai}
+        status = `<div class="kotak-status merah" data-kena>Kamu KEPENTUNG −${e.nilai}
           <small>Kartumu yang dipakai: ${esc(kartuDari(saya).join(', ') || '-')}</small></div>`;
       } else status = '<div class="kotak-status aman">Kamu aman, nggak kepentung.</div>';
 
@@ -735,6 +736,9 @@ export class KontrolMeja implements AksiAdegan {
         (dlg) => {
           const wadah = dlg.querySelector('[data-kartu]')!;
           for (const k of pentungan) wadah.appendChild(gambarKartuKeKanvas(k, lebarPamer));
+          // "Kamu KEPENTUNG" ikut retak (dekoratif, di belakang tulisannya) dan menghantam masuk (CSS).
+          const kena = dlg.querySelector<HTMLElement>('[data-kena]');
+          if (kena) retakkanStatus(kena, e.id);
           dlg.querySelector('[data-lanjut]')!.addEventListener('click', () => {
             tutupModal();
             selesai();
@@ -743,11 +747,10 @@ export class KontrolMeja implements AksiAdegan {
         { bisaDitutup: false },
       );
       // Siapa yang kepentung sudah tampil untuk semua orang di panel ini: yang kena dapat bunyi besar,
-      // yang lain cukup isyarat pelan.
-      if (e.kepentung.includes(saya)) {
-        bunyi('kepentung');
-        getar('kepentung');
-      } else if (e.kepentung.length > 0) bunyi('kepentungLain');
+      // yang lain cukup isyarat pelan. Getar kepentung sudah diberikan saat pukulannya mendarat
+      // (efek/pemutar.ts), jadi tidak diulang di sini.
+      if (e.kepentung.includes(saya)) bunyi('kepentung');
+      else if (e.kepentung.length > 0) bunyi('kepentungLain');
     });
   }
 

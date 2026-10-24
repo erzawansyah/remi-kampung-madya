@@ -523,9 +523,80 @@ html[data-efek='hemat'] .judul-sorak {
   text-shadow: 0 3px 0 rgba(0, 0, 0, 0.5);
 }
 
-/* Goyang layar saat kepentung (efek/pemutar.ts menambah body.goyang) */
+/* Goyang layar saat pentungan dibuka (efek/pemutar.ts menambah body.goyang) */
 body.goyang #game {
   animation: goyang 0.45s;
+}
+
+/* ---------- Kepentung: "ketonjok" (efek/retak.ts) ----------
+   body.jotos      sentakan kamera meja: zoom ke titik hantam (--jotos-x/y) lalu goyang; menggantikan goyang.
+   #retak          lapisan efek: tanpa sentuhan, di bawah modal (--z-retak).
+   .retak-layar    layar retak untuk yang kena: kanvas retakan + .kilat-jotos + .serpih; .diam = gerak
+                   dikurangi (tanpa menjalar/serpih), .hemat = tanpa kilat/serpih/rona merah.
+   .kotak-status .retak-status  retakan samar di belakang tulisan "Kamu KEPENTUNG" di panel mentung. */
+body.jotos #game {
+  transform-origin: var(--jotos-x, 50%) var(--jotos-y, 74%);
+  animation: jotos var(--jotos-lama, 560ms) linear;
+}
+body.jotos.jotos-kuat #game {
+  animation-name: jotos-kuat;
+}
+#retak {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-retak);
+  pointer-events: none;
+  overflow: hidden;
+}
+#retak * {
+  pointer-events: none;
+}
+.retak-layar {
+  position: absolute;
+  inset: 0;
+  /* Rona merah di tepi layar: dunia sempat "gelap" sesaat sesudah kena bogem. */
+  background: radial-gradient(circle at var(--retak-x) var(--retak-y), rgba(140, 0, 0, 0) 35%, rgba(140, 0, 0, 0.32) 100%);
+  animation: retak-pudar var(--retak-lama, 2100ms) linear forwards;
+}
+.retak-layar.hemat {
+  background: none;
+}
+.retak-kanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  animation: retak-menjalar 0.16s var(--ease-keluar) both;
+}
+.retak-layar.diam .retak-kanvas {
+  animation: none;
+}
+.kilat-jotos {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(
+    circle at var(--retak-x) var(--retak-y),
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 110, 90, 0.6) 20%,
+    rgba(190, 0, 0, 0.32) 48%,
+    rgba(190, 0, 0, 0) 78%
+  );
+  animation: kilat-jotos 0.38s ease-out forwards;
+}
+.retak-layar.kuat .kilat-jotos {
+  animation-name: kilat-jotos-kuat;
+  animation-duration: 0.5s;
+}
+.serpih {
+  position: absolute;
+  left: var(--retak-x);
+  top: var(--retak-y);
+  width: var(--ukuran, 10px);
+  height: var(--ukuran, 10px);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(190, 225, 255, 0.45));
+  opacity: 0;
+  animation: serpih-terbang 0.8s cubic-bezier(0.2, 0.7, 0.4, 1) var(--jeda, 0ms) forwards;
 }
 
 /* ---------- Kartu pamer (popup joker, panel mentung) ----------
@@ -572,9 +643,20 @@ body.goyang #game {
   box-shadow: var(--cahaya-emas);
 }
 .kotak-status.merah {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   background: linear-gradient(180deg, var(--bahaya-latar-terang), var(--bahaya-latar));
   color: var(--teks-di-merah);
-  animation: goyang 0.45s;
+  animation: hantam 0.6s var(--ease-keluar);
+}
+.kotak-status .retak-status {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 .kotak-status.aman {
   background: var(--positif-latar);

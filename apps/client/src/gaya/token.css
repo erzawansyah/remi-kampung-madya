@@ -189,6 +189,9 @@
   /* ---------- Lapisan (z-index) ---------- */
   --z-meja: 0;
   --z-ui: 1;
+  /* Retakan kepentung (efek/retak.ts): di atas meja dan bar, selalu DI BAWAH modal (popup joker, panel
+     mentung) dan tanpa sentuhan. */
+  --z-retak: 3;
   --z-palet: 5;
   --z-gelembung: 6;
   --z-modal: 10;
