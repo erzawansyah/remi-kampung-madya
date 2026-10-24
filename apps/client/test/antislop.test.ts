@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DAFTAR_EMOTE, PESAN_USULAN } from '@remi/meja';
+import { DAFTAR_EMOTE, DAFTAR_LEDEKAN, PESAN_USULAN } from '@remi/meja';
 import { BAB_BANTUAN, FAQ, GLOSARIUM } from '../src/konten/bantuan';
 import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { KEDAI, TAUTAN_KEDAI } from '../src/konten/kedai';
@@ -10,6 +10,7 @@ import { TEKS_KALDU } from '../src/konten/kaldu';
 import { TEKS_NAMA } from '../src/konten/nama';
 import * as KOMPETISI from '../src/konten/kompetisi';
 import { TEKS_USULAN } from '../src/konten/usulan';
+import { TEKS_LANJUT, TEKS_LEDEK } from '../src/konten/ledek';
 
 // Penjaga gaya teks (antislop) untuk konten yang dibaca pemain: Bantuan, tutorial, info kedai,
 // dan emote/celetukan. Yang dijaga hanya pola formulaik yang jelas (negasi kontras, klise promosi,
@@ -48,6 +49,8 @@ const sumber: [string, string[]][] = [
   ['Kompetisi', semuaTeks(KOMPETISI)],
   // Usul fitur (24 Okt 2026): dialog dan pesan penolakan (yang terakhir juga dikirim server).
   ['Usul fitur', [...semuaTeks(TEKS_USULAN), ...semuaTeks(PESAN_USULAN)]],
+  // Hasil putaran online (24 Okt 2026): jeda lanjut, tombol Siap, dan ledekan.
+  ['Jeda lanjut dan ledekan', [...DAFTAR_LEDEKAN, ...semuaTeks(TEKS_LANJUT), ...semuaTeks(TEKS_LEDEK)]],
 ];
 
 describe('antislop: teks pemain', () => {

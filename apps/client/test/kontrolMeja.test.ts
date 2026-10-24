@@ -16,6 +16,9 @@
 //   terakhir" di modal hasil (online n/m, offline langsung berlaku), baris pendek "Putaran berikutnya
 //   kaldu." / "Belum ada yang mentung, kaldu lagi.", lencana ×2 di panel mentung, alasan di klasemen.
 
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buatPermainan,
@@ -54,6 +57,8 @@ import {
   type AppUntukMeja,
 } from '../src/kontrolMeja';
 import { TEKS_KALDU } from '../src/konten/kaldu';
+import { TEKS_LEDEK } from '../src/konten/ledek';
+import { LAMA_LEDEK_MS } from '../src/ui/ledek';
 import { KEDAI } from '../src/konten/kedai';
 import { TEKS_TUTORIAL } from '../src/konten/tutorial';
 import { _setelUlangCache, preferensi } from '../src/preferensi';
@@ -2108,3 +2113,379 @@ describe('mode kaldu (#42): teks pendek di meja', () => {
 });
 
 type HasilPutaranUji = Parameters<typeof teksInfoKaldu>[1];
+
+/** Selektor aturan CSS di src/gaya/ yang menyebut "ledek" (tanpa at-rule dan titik keyframe). */
+function selektorCssLedek(): string[] {
+  const folder = join(dirname(fileURLToPath(import.meta.url)), '../src/gaya');
+  return readdirSync(folder)
+    .filter((f) => f.endsWith('.css'))
+    .flatMap((f) => [...readFileSync(join(folder, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{/g)])
+    .flatMap((m) => m[1].split(','))
+    .map((sel) => sel.trim())
+    .filter((sel) => sel.includes('ledek') && !sel.startsWith('@') && !/^(from|to|[\d.]+%)$/.test(sel));
+}
+
+// ---------- hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 Okt 2026) ----------
+
+describe('jeda lanjut di modal hasil (meja online)', () => {
+  // Jam HP digeser lewat Date.now (detak modal 500 ms tetap jalan dengan timer asli).
+  let geser = 0;
+  beforeEach(() => {
+    geser = 0;
+    const asli = Date.now.bind(Date);
+    vi.spyOn(Date, 'now').mockImplementation(() => asli() + geser);
+  });
+  afterEach(() => vi.mocked(Date.now).mockRestore());
+
+  const tombolKocok = () => document.querySelector<HTMLButtonElement>('#modal [data-kocok="acak"]')!;
+  const lanjutDiKirim = () => meja!.terkirim.filter((p) => p.t === 'putaranBerikut').length;
+
+  /** Meja online, aku (kursi 0) mentung Pemain 2 (kursi 1, manusia); hasilnya tampil dengan info `ubah`. */
+  async function hasilOnline(ubah: Partial<InfoMeja>): Promise<HTMLElement> {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    meja.info = { ...meja.info, ...ubah };
+    return sampaiHasil(meja);
+  }
+
+  it('host: "Putaran berikutnya (10)" terkunci, menyebut yang belum siap; ditekan = penjelasan, tidak terkirim', async () => {
+    const toastEl = document.createElement('div');
+    toastEl.id = 'toast';
+    document.body.appendChild(toastEl);
+    try {
+      const dlg = await hasilOnline({ lanjut: { sisaMs: 10_000, siap: [] } });
+      expect(tombolKocok().textContent).toBe('Putaran berikutnya (10)');
+      expect(terkunci(tombolKocok())).toBe(true);
+      expect(dlg.querySelector('[data-belum-siap]')!.textContent).toBe('Belum siap: Pemain 2.');
+      tombolKocok().click();
+      expect(lanjutDiKirim()).toBe(0);
+      expect(toastEl.textContent).toContain('Tunggu sebentar, yang lain masih lihat kartu.');
+      // Hitung mundur jalan tanpa memasang ulang tombolnya (fokus aman).
+      const tombol = tombolKocok();
+      tombol.focus();
+      geser = 3_200;
+      await sampai(() => tombol.textContent === 'Putaran berikutnya (7)');
+      expect(tombolKocok()).toBe(tombol);
+      expect(document.activeElement).toBe(tombol);
+    } finally {
+      toastEl.remove();
+    }
+  });
+
+  it('jeda habis menurut jam HP: tombol terbuka sendiri dan pembaca layar dikabari sekali', async () => {
+    await hasilOnline({ lanjut: { sisaMs: 10_000, siap: [] } });
+    vi.mocked(umumkan).mockClear();
+    geser = 10_050;
+    await sampai(() => !terkunci(tombolKocok()));
+    expect(tombolKocok().textContent).toMatch(/^Putaran berikutnya \(.+ ngocok\)$/);
+    expect(document.querySelector('#modal [data-belum-siap]')).toBeNull();
+    expect(vi.mocked(umumkan).mock.calls.filter(([t]) => t === 'Sudah bisa lanjut ke putaran berikutnya.')).toHaveLength(1);
+    tombolKocok().click();
+    expect(lanjutDiKirim()).toBe(1);
+  });
+
+  it('semua siap (info tanpa lanjut dari meja): langsung terbuka', async () => {
+    await hasilOnline({ lanjut: { sisaMs: 10_000, siap: [] } });
+    meja!.info = { ...meja!.info, lanjut: undefined };
+    meja!.kontrol.perbarui(meja!.info, null);
+    expect(terkunci(tombolKocok())).toBe(false);
+    expect(tombolKocok().textContent).toMatch(/ngocok\)$/);
+  });
+
+  it('skor terendah sama: pilihan pengocok ikut terkunci dengan hitung mundur', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    meja.info = { ...meja.info, lanjut: { sisaMs: 5_000, siap: [] } };
+    await sampaiHasil(meja);
+    // Semua skor sama: tiap orang calon pengocok.
+    meja.g = { ...meja.g, skor: meja.g.skor.map(() => 0) };
+    meja.kontrol.perbarui(meja.info, meja.view());
+    await sampai(() => document.querySelectorAll('#modal [data-kocok]').length > 1);
+    const semua = [...document.querySelectorAll<HTMLButtonElement>('#modal [data-kocok]')];
+    expect(semua.every(terkunci)).toBe(true);
+    expect(document.querySelector('#modal [data-lanjut-wadah]')!.textContent).toMatch(/Pilih pengocok berikutnya \(5\):/);
+  });
+
+  it('bukan host: tombol Siap, sekali tekan → "Menunggu host…", fokus pindah ke "Lihat meja"', async () => {
+    const dlg = await hasilOnline({ host: 1, lanjut: { sisaMs: 10_000, siap: [] } });
+    expect(dlg.querySelector('[data-kocok]')).toBeNull();
+    const siap = dlg.querySelector<HTMLButtonElement>('[data-siap-lanjut]')!;
+    expect(siap.textContent).toBe('Siap');
+    siap.focus();
+    siap.click();
+    expect(meja!.terkirim.filter((p) => p.t === 'siapLanjut')).toEqual([{ t: 'siapLanjut' }]);
+    expect(dlg.querySelector('[data-siap-lanjut]')).toBeNull();
+    expect(dlg.querySelector('[data-siap-lanjut-terkirim]')!.textContent).toBe('Menunggu host…');
+    expect(document.activeElement).toBe(dlg.querySelector('[data-tutup]'));
+    // Meja mencatatnya: tetap "Menunggu host…"; jeda selesai: teks biasa.
+    meja!.info = { ...meja!.info, lanjut: { sisaMs: 8_000, siap: [0] } };
+    meja!.kontrol.perbarui(meja!.info, null);
+    expect(dlg.querySelector('[data-siap-lanjut-terkirim]')).not.toBeNull();
+    meja!.info = { ...meja!.info, lanjut: undefined };
+    meja!.kontrol.perbarui(meja!.info, null);
+    expect(dlg.querySelector('[data-lanjut-wadah]')!.textContent).toContain('Menunggu host memulai putaran berikutnya…');
+  });
+
+  it('bukan host yang sudah siap dari HP lain/sambung ulang: langsung "Menunggu host…"', async () => {
+    const dlg = await hasilOnline({ host: 1, lanjut: { sisaMs: 10_000, siap: [0] } });
+    expect(dlg.querySelector('[data-siap-lanjut]')).toBeNull();
+    expect(dlg.querySelector('[data-siap-lanjut-terkirim]')).not.toBeNull();
+  });
+
+  it('Siap hilang di jalan: dikirim ulang sekali per sambungan baru selama meja belum mencatatnya', async () => {
+    let status: StatusKoneksi = 'tersambung';
+    let sambungan = 1;
+    meja = await mejaSiapMentung(undefined, { jenis: 'online', statusKoneksi: () => status, nomorSambungan: () => sambungan });
+    meja.info = { ...meja.info, host: 1, lanjut: { sisaMs: 10_000, siap: [] } };
+    const dlg = await sampaiHasil(meja);
+    const siapTerkirim = () => meja!.terkirim.filter((p) => p.t === 'siapLanjut').length;
+    const infoLanjut = (sisaMs: number, siap: number[]) => meja!.kontrol.perbarui({ ...meja!.info, lanjut: { sisaMs, siap } }, null);
+    dlg.querySelector<HTMLButtonElement>('[data-siap-lanjut]')!.click();
+    expect(siapTerkirim()).toBe(1);
+    // Sambungan yang sama, meja belum sempat mencatat: tidak dikirim ulang.
+    infoLanjut(9_000, []);
+    expect(siapTerkirim()).toBe(1);
+    // Sinyal putus (pesannya hilang): selama putus tidak dikirim.
+    status = 'terputus';
+    infoLanjut(8_000, []);
+    expect(siapTerkirim()).toBe(1);
+    // Tersambung lagi dan meja masih menunggu aku: dikirim ulang, sekali saja di sambungan ini.
+    status = 'tersambung';
+    sambungan = 2;
+    infoLanjut(6_000, []);
+    infoLanjut(5_500, []);
+    expect(siapTerkirim()).toBe(2);
+    expect(dlg.querySelector('[data-siap-lanjut-terkirim]')!.textContent).toBe('Menunggu host…');
+    // Meja sudah mencatat: sambungan baru tidak memicu kirim ulang.
+    sambungan = 3;
+    infoLanjut(5_000, [0]);
+    expect(siapTerkirim()).toBe(2);
+  });
+
+  it('Siap ditekan saat sinyal putus: tombolnya tetap ada supaya bisa ditekan lagi', async () => {
+    let status: StatusKoneksi = 'tersambung';
+    meja = await mejaSiapMentung(undefined, { jenis: 'online', statusKoneksi: () => status, nomorSambungan: () => 1 });
+    meja.info = { ...meja.info, host: 1, lanjut: { sisaMs: 10_000, siap: [] } };
+    const dlg = await sampaiHasil(meja);
+    status = 'terputus';
+    dlg.querySelector<HTMLButtonElement>('[data-siap-lanjut]')!.click();
+    // Aplikasi yang menolak dan memberi tahu ("Sinyalnya lagi putus…"); di HP tombol Siap tetap ada.
+    expect(meja.terkirim.filter((p) => p.t === 'siapLanjut')).toHaveLength(1);
+    expect(dlg.querySelector('[data-siap-lanjut]')).not.toBeNull();
+    expect(dlg.querySelector('[data-siap-lanjut-terkirim]')).toBeNull();
+    // Tersambung lagi: ditekan lagi, kali ini tercatat.
+    status = 'tersambung';
+    dlg.querySelector<HTMLButtonElement>('[data-siap-lanjut]')!.click();
+    expect(meja.terkirim.filter((p) => p.t === 'siapLanjut')).toHaveLength(2);
+    expect(dlg.querySelector('[data-siap-lanjut-terkirim]')).not.toBeNull();
+  });
+
+  it('offline: info lanjut (seharusnya tidak pernah ada) diabaikan', async () => {
+    meja = await mejaSiapMentung();
+    meja.info = { ...meja.info, lanjut: { sisaMs: 10_000, siap: [] } };
+    await sampaiHasil(meja);
+    expect(terkunci(tombolKocok())).toBe(false);
+  });
+});
+
+describe('ledekan (meja online)', () => {
+  let geser = 0;
+  beforeEach(() => {
+    geser = 0;
+    const asli = Date.now.bind(Date);
+    vi.spyOn(Date, 'now').mockImplementation(() => asli() + geser);
+  });
+  afterEach(() => vi.mocked(Date.now).mockRestore());
+
+  const ledekTerkirim = () => meja!.terkirim.filter((p) => p.t === 'ledek');
+  const bagian = () => document.querySelector<HTMLElement>('#modal [data-ledek-wadah] .bagian-ledek');
+  const tombolIsi = (isi: string) => document.querySelector<HTMLButtonElement>(`#modal [data-ledek-isi="${isi}"]`)!;
+  const lapisan = () => document.getElementById('lapisan-ledek');
+  /** Kursi 2 (warga kedai di mejaSiapMentung) diganti manusia: dua orang lain di meja. */
+  const kursi2Manusia = (m: MejaUji) => {
+    m.info = { ...m.info, kursi: m.info.kursi.map((k, i) => (i === 2 ? { ...k, jenis: 'manusia' as const } : k)) };
+  };
+
+  it('bagian Ledek: sasaran bawaan yang kepentung; ketuk ledekan = kirim ke sasaran; tombol dikunci sebentar', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    await sampaiHasil(meja);
+    const sasaran = [...bagian()!.querySelectorAll<HTMLButtonElement>('[data-ledek-ke]')];
+    expect(sasaran.map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Pemain 2', 'true']]);
+    tombolIsi('Makan tuh!').click();
+    expect(ledekTerkirim()).toEqual([{ t: 'ledek', ke: 1, isi: 'Makan tuh!' }]);
+    // Batas 1,2 detik meja: tombol dikunci, ketukan berikutnya tidak terkirim.
+    expect(tombolIsi('😂').getAttribute('aria-disabled')).toBe('true');
+    tombolIsi('😂').click();
+    expect(ledekTerkirim()).toHaveLength(1);
+    await sampai(() => tombolIsi('😂').getAttribute('aria-disabled') !== 'true', 3000);
+    tombolIsi('😂').click();
+    expect(ledekTerkirim().at(-1)).toEqual({ t: 'ledek', ke: 1, isi: '😂' });
+  });
+
+  it('jatah 12 per putaran: sesudahnya tombol hilang, diganti catatan', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    await sampaiHasil(meja);
+    for (let i = 0; i < 12; i++) {
+      // Lewat batas 1,2 detik; info baru dari meja menyegarkan modal.
+      geser += 2_000;
+      meja.kontrol.perbarui(meja.info, null);
+      tombolIsi('Rasain!').click();
+    }
+    expect(ledekTerkirim()).toHaveLength(12);
+    geser += 2_000;
+    meja.kontrol.perbarui(meja.info, null);
+    expect(document.querySelector('#modal [data-ledek-isi]')).toBeNull();
+    expect(bagian()!.textContent).toContain(TEKS_LEDEK.habis);
+  });
+
+  it('pilih sasaran lain di meja dengan dua orang lain', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    kursi2Manusia(meja);
+    await sampaiHasil(meja);
+    bagian()!.querySelector<HTMLButtonElement>('[data-ledek-ke="2"]')!.click();
+    expect(bagian()!.querySelector('[data-ledek-ke="2"]')!.getAttribute('aria-pressed')).toBe('true');
+    expect(bagian()!.querySelector('[data-ledek-ke="1"]')!.getAttribute('aria-pressed')).toBe('false');
+    tombolIsi('Kok bisa, Bos?').click();
+    expect(ledekTerkirim()).toEqual([{ t: 'ledek', ke: 2, isi: 'Kok bisa, Bos?' }]);
+  });
+
+  it('tidak ada di meja offline dan di meja tanpa manusia lain yang terhubung', async () => {
+    meja = await mejaSiapMentung();
+    await sampaiHasil(meja);
+    expect(bagian()).toBeNull();
+    meja.hancurkan();
+    tutupModal();
+
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    meja.info = { ...meja.info, kursi: meja.info.kursi.map((k, i) => (i === 1 ? { ...k, terhubung: false } : k)) };
+    await sampaiHasil(meja);
+    expect(bagian()).toBeNull();
+    // Tersambung lagi: bagian Ledek muncul di modal yang sama.
+    meja.info = { ...meja.info, kursi: meja.info.kursi.map((k) => ({ ...k, terhubung: true })) };
+    meja.kontrol.perbarui(meja.info, null);
+    expect(bagian()).not.toBeNull();
+  });
+
+  it('ledekan untukku: besar di atas modal, nama pengirim, isi sebagai teks, pembaca layar; ketuk menutup', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    await sampaiHasil(meja);
+    vi.mocked(umumkan).mockClear();
+    meja.kontrol.terimaLedek(1, 0, 'Pulang aja, Bos.');
+    const besar = lapisan()!.querySelector<HTMLElement>('.ledek-besar')!;
+    expect(besar.querySelector('.ledek-dari')!.textContent).toBe('Pemain 2 ngeledek kamu');
+    expect(besar.querySelector('.ledek-isi')!.textContent).toBe('Pulang aja, Bos.');
+    expect(umumkan).toHaveBeenCalledWith('Pemain 2 ngeledek kamu: Pulang aja, Bos.');
+    // Di luar #ui dan #modal (keduanya inert selama modal terbuka), jadi bisa diketuk.
+    expect(besar.closest('#ui, #modal')).toBeNull();
+    expect(besar.closest('[inert]')).toBeNull();
+    besar.click();
+    expect(lapisan()!.querySelector('.ledek-besar')).toBeNull();
+    expect(document.querySelector('#modal [data-hasil]')).not.toBeNull();
+  });
+
+  it('ledekan ke orang lain: gelembung "isi → nama" di kursi pengirim, di atas modal', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    kursi2Manusia(meja);
+    await sampaiHasil(meja);
+    vi.mocked(umumkan).mockClear();
+    meja.kontrol.terimaLedek(1, 2, '<i>Rasain!</i>');
+    const g = lapisan()!.querySelector<HTMLElement>('.gelembung.ledek')!;
+    expect(g.textContent).toBe('<i>Rasain!</i> → Pemain 3');
+    expect(g.querySelector('i')).toBeNull();
+    expect(lapisan()!.querySelector('.ledek-besar')).toBeNull();
+    expect(umumkan).toHaveBeenCalledWith('Pemain 2 ngeledek Pemain 3: <i>Rasain!</i>');
+    // Ledekanku sendiri: gelembung milikku, tanpa pengumuman.
+    vi.mocked(umumkan).mockClear();
+    meja.kontrol.terimaLedek(0, 1, 'Makan tuh!');
+    expect(lapisan()!.querySelector('.gelembung.ledek.milikku')!.textContent).toBe('Makan tuh! → Pemain 2');
+    expect(umumkan).not.toHaveBeenCalled();
+    // Ledekan pendek di kursi tepi layar (scene palsu: posisi 0,0): tetap digeser sejauh setengah lebar
+    // maksimal gelembung ledekan, jadi "isi → nama" tidak terpotong.
+    meja.kontrol.terimaLedek(1, 2, 'Rasain!');
+    const pendek = [...lapisan()!.querySelectorAll<HTMLElement>('.gelembung.ledek')].at(-1)!;
+    expect(pendek.textContent).toBe('Rasain! → Pemain 3');
+    expect(pendek.style.left).toBe(`${Math.min(136, window.innerWidth / 2)}px`);
+  });
+
+  it('gaya bagian Ledek di modal tidak ikut mengenai gelembung ledekan orang lain', async () => {
+    // Dulu bagian Ledek dan gelembung sama-sama berkelas "ledek": panel gelap bagian itu menimpa latar
+    // krem gelembung, jadi tulisan gelap di atas kotak gelap (tidak terbaca bagi orang ketiga).
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    kursi2Manusia(meja);
+    await sampaiHasil(meja);
+    meja.kontrol.terimaLedek(1, 2, 'Rasain!');
+    const gelembung = lapisan()!.querySelector<HTMLElement>('.gelembung')!;
+    expect(gelembung.classList.contains('milikku')).toBe(false);
+    const panel = bagian()!;
+    const cocok = (el: Element, sel: string) => {
+      try {
+        return el.matches(sel);
+      } catch {
+        return false;
+      }
+    };
+    const untukPanel = selektorCssLedek().filter((sel) => cocok(panel, sel));
+    expect(untukPanel.length).toBeGreaterThan(0);
+    expect(untukPanel.filter((sel) => cocok(gelembung, sel))).toEqual([]);
+  });
+
+  it('putaran berikutnya dimulai: ledekan yang masih antri dan gelembung ledekan dibuang, popup joker tidak tertutup', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    kursi2Manusia(meja);
+    await sampaiHasil(meja);
+    meja.kontrol.terimaLedek(1, 0, 'Rasain!');
+    meja.kontrol.terimaLedek(1, 0, 'Makan tuh!');
+    meja.kontrol.terimaLedek(1, 0, 'Kasihan deh.');
+    meja.kontrol.terimaLedek(2, 1, 'Cup cup cup…');
+    expect(lapisan()!.querySelector('.ledek-besar .ledek-isi')!.textContent).toBe('Rasain!');
+    expect(lapisan()!.querySelector('.gelembung')).not.toBeNull();
+    // Aku host: mulai putaran berikutnya.
+    document.querySelector<HTMLButtonElement>('#modal [data-kocok="acak"]')!.click();
+    await sampai(() => meja!.g.status === 'putaranBerjalan');
+    expect(lapisan()!.querySelector('.ledek-besar')).toBeNull();
+    expect(lapisan()!.querySelector('.gelembung')).toBeNull();
+    await sampai(() => !!document.querySelector('#modal [data-joker]'));
+    // Lewat waktu tampil satu ledekan dan jeda cek antrian: tidak ada sisa yang menyusul.
+    await new Promise((r) => setTimeout(r, 600));
+    geser += LAMA_LEDEK_MS;
+    await new Promise((r) => setTimeout(r, 600));
+    expect(lapisan()!.querySelector('.ledek-besar')).toBeNull();
+    expect(document.querySelector('#modal [data-joker]')).not.toBeNull();
+    // Ledekan yang (seharusnya tidak pernah) datang sesudah hasil putaran ditinggalkan diabaikan.
+    meja.kontrol.terimaLedek(1, 0, 'Rasain!');
+    meja.kontrol.terimaLedek(1, 2, 'Rasain!');
+    await new Promise((r) => setTimeout(r, 450));
+    expect(lapisan()!.querySelector('.ledek-besar, .gelembung')).toBeNull();
+  });
+
+  it('ledekan yang datang selagi aku masih di panel mentung baru tampil sesudah hasil putaran terpasang', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    tekan('ArrowRight');
+    tekan(' ');
+    tekan('b');
+    await sampai(() => !!document.querySelector('#modal [data-mentung]'));
+    // Meja sudah di hasil putaran: view susun akhir lain lalu view hasilnya antri di belakang panel
+    // mentung. Pemain 2 (sudah melihat hasilnya) ngeledek aku.
+    meja.kontrol.perbarui(meja.info, meja.view());
+    meja.g = semuaSelesaiSusun(meja.g);
+    meja.kontrol.perbarui(meja.info, meja.view());
+    meja.kontrol.terimaLedek(1, 0, 'Makan tuh!');
+    // Panel mentung menunggu aku menekan Lanjut: ledekan ikut menunggu, walau lewat batas tunggu animasi.
+    geser += 7_000;
+    await new Promise((r) => setTimeout(r, 500));
+    expect(lapisan()?.querySelector('.ledek-besar') ?? null).toBeNull();
+    expect(document.querySelector('#modal [data-mentung]')).not.toBeNull();
+    document.querySelector<HTMLButtonElement>('#modal [data-lanjut]')!.click();
+    await sampai(() => !!document.querySelector('#modal [data-hasil]'));
+    await sampai(() => !!lapisan()?.querySelector('.ledek-besar'));
+    expect(lapisan()!.querySelector('.ledek-besar .ledek-isi')!.textContent).toBe('Makan tuh!');
+  });
+
+  it('meja dibongkar: lapisan ledekan ikut hilang', async () => {
+    meja = await mejaSiapMentung(undefined, { jenis: 'online' });
+    await sampaiHasil(meja);
+    meja.kontrol.terimaLedek(1, 0, 'Rasain!');
+    expect(lapisan()).not.toBeNull();
+    meja.hancurkan();
+    meja = null;
+    expect(lapisan()).toBeNull();
+  });
+});

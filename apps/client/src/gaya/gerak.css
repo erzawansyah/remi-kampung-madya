@@ -236,6 +236,28 @@
     transform: rotateY(90deg) scale(0.8);
   }
 }
+/* Ledekan besar (hasil putaran online): melompat masuk, diam selama --durasi, lalu pudar. */
+@keyframes ledek-masuk {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  12% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  20% {
+    transform: scale(1);
+  }
+  85% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
 @keyframes gelembung {
   0% {
     opacity: 0;
@@ -284,7 +306,8 @@
   html:not([data-gerak='penuh']) .serpih {
     display: none;
   }
-  html:not([data-gerak='penuh']) .sorak {
+  html:not([data-gerak='penuh']) .sorak,
+  html:not([data-gerak='penuh']) .ledek-kotak {
     animation-name: sorak-pudar;
     animation-timing-function: linear;
   }
@@ -323,7 +346,8 @@ html[data-gerak='kurang'] .serpih {
 html[data-gerak='kurang'] .serpih {
   display: none;
 }
-html[data-gerak='kurang'] .sorak {
+html[data-gerak='kurang'] .sorak,
+html[data-gerak='kurang'] .ledek-kotak {
   animation-name: sorak-pudar;
   animation-timing-function: linear;
 }

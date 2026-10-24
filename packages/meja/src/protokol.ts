@@ -119,6 +119,29 @@ export const EMOTE_LAMA: ReadonlyMap<string, Emote> = new Map<string, Emote>([
 /** Panjang maksimal pesan yang diketik sendiri (huruf yang tampil). */
 export const MAKS_PESAN = 60;
 
+/**
+ * Ledekan (keputusan pemilik, 24 Okt 2026): hanya selama hasil putaran tampil di meja online, dikirim
+ * langsung ke satu pemain dan tampil besar di layarnya. Siapa pun boleh ngeledek siapa pun (yang
+ * kepentung boleh membalas). Isinya daftar ini atau DAFTAR_EMOTE (EMOTE_LAMA dipetakan); tidak ada
+ * teks bebas untuk ledekan. Warga kedai tidak pernah ngeledek. Daftar ini dipilih pengembang (pemilik:
+ * "tentukan"); urutan menentukan susunan tombol.
+ */
+export const DAFTAR_LEDEKAN = [
+  'Kepentung, rek!',
+  'Makan tuh!',
+  'Cup cup cup…',
+  'Pulang aja, Bos.',
+  'Kok bisa, Bos?',
+  'Sabar ya 😂',
+  'Kasihan deh.',
+  'Rasain!',
+] as const;
+
+export type Ledekan = (typeof DAFTAR_LEDEKAN)[number];
+
+/** Ledekan paling banyak per kursi di satu hasil putaran (di luar batas 1,2 detik bersama emote). */
+export const MAKS_LEDEK_PER_PUTARAN = 12;
+
 export type JenisKursi = 'kosong' | 'manusia' | 'bot';
 
 export interface InfoKursi {
@@ -178,6 +201,14 @@ export interface InfoMeja {
   botMikir: number | null;
   /** Hanya ada di meja kompetisi (#51). */
   kompetisi?: KompetisiMeja;
+  /**
+   * Jeda lanjut (keputusan pemilik, 24 Okt 2026): hasil putaran di meja online, host belum bisa
+   * memulai putaran berikutnya supaya yang lain sempat melihat kartu. Hanya ada selama terkunci
+   * (OpsiMeja.jedaLanjutMs, pemain manusia lain yang terhubung belum semuanya menekan Siap).
+   * `sisaMs` relatif terhadap saat pesan dikirim (jam HP sering melenceng; client mengubahnya jadi
+   * waktu lokal saat menerima). `siap`: kursi yang sudah menekan Siap. Aplikasi lama mengabaikannya.
+   */
+  lanjut?: { sisaMs: number; siap: number[] };
 }
 
 /** Klasemen akhir satu permainan (disimpan server ke database saat permainan selesai). */
@@ -239,7 +270,11 @@ export type PesanKlien =
   /** Mode kaldu (#42): setuju/batal "putaran berikutnya terakhir". Hanya di antara putaran. */
   | { t: 'putaranTerakhir'; setuju: boolean }
   | { t: 'siapJoker' }
+  /** Jeda lanjut: pemain selain host sudah selesai melihat hasil putaran. */
+  | { t: 'siapLanjut' }
   | { t: 'emote'; isi: string }
+  /** Ledekan ke kursi `ke`; hanya di hasil putaran. Isi dari DAFTAR_LEDEKAN atau DAFTAR_EMOTE. */
+  | { t: 'ledek'; ke: number; isi: string }
   | { t: 'mainLagi' }
   | { t: 'ping' };
 
@@ -251,4 +286,6 @@ export type PesanServer =
   | { t: 'daftar'; meja: RingkasanMeja[] }
   | { t: 'keluar'; alasan: string }
   | { t: 'emote'; kursi: number; isi: string }
+  /** Ledekan dari kursi `dari` ke kursi `ke`; dikirim ke semua manusia yang terhubung. */
+  | { t: 'ledek'; dari: number; ke: number; isi: string }
   | { t: 'pong' };

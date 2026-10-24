@@ -8,6 +8,7 @@ import sirv from 'sirv';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   GalatMeja,
+  JEDA_LANJUT_MS,
   Meja,
   namaLawanAcak,
   penjadwalNyata,
@@ -39,6 +40,12 @@ export interface OpsiServer {
   folderStatis?: string;
   penjadwal?: Penjadwal;
   jedaBotMs?: number;
+  /**
+   * Jeda lanjut di hasil putaran (ms): host baru bisa memulai putaran berikutnya sesudah sekian ms,
+   * atau begitu semua pemain manusia lain yang terhubung menekan Siap. Bawaan JEDA_LANJUT_MS (10 detik);
+   * 0 = tanpa jeda.
+   */
+  jedaLanjutMs?: number;
   /** Meja tanpa manusia terhubung dihapus setelah sekian ms. */
   hapusMejaKosongMs?: number;
   maksMeja?: number;
@@ -486,6 +493,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     kirim,
     penjadwal: penjadwalAman(kode),
     jedaBotMs: opsi.jedaBotMs,
+    jedaLanjutMs: opsi.jedaLanjutMs ?? JEDA_LANJUT_MS,
     buatSeed: () => randomBytes(4).readInt32LE(0),
     // Nama warga kedai: urutan acak per meja, supaya lawan pertama tidak selalu "Kipas Dua".
     namaLawan: namaLawanAcak(),
