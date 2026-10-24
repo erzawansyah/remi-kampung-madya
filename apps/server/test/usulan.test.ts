@@ -336,6 +336,103 @@ describe('pengirim usulan ke Notion', () => {
     expect(log.filter((l) => l.endsWith('terkirim ke Notion'))).toHaveLength(3);
   });
 
+  /** Klien Notion yang jawabannya dilepas manual satu per satu (dibatalkan kalau pengirim berhenti). */
+  const notionTertahan = () => {
+    const tahan: { h: HalamanUsulan; lepas: () => void }[] = [];
+    const k: KlienNotion = {
+      buatHalaman: (h, s) =>
+        new Promise((ok, gagal) => {
+          tahan.push({ h, lepas: () => ok({ id: `halaman-${h.idServer}` }) });
+          s?.addEventListener('abort', () => gagal(new GalatNotion('dibatalkan', null)));
+        }),
+    };
+    return { k, tahan };
+  };
+
+  it('daftar putaran yang basi tidak membuat usulan terkirim dua kali (kirimBaru selesai selagi putaran menunggu usulan lain)', async () => {
+    mulai();
+    const jam = jamPalsu();
+    const { k, tahan } = notionTertahan();
+    // A masuk selagi Notion belum diatur; B masuk sesudah pengirim jalan dan langsung dikirim.
+    const a = u.simpan(usulanAni, T0 - 1000);
+    const p = jalankanPengirimUsulan({ penyimpan: u, notion: k, log: catat, penjadwal: jam });
+    berhenti.push(() => p.hentikan());
+    const b = u.simpan(usulanBudi, T0);
+    const kirimB = p.kirimBaru(b);
+    // Putaran pertama membaca daftar [A, B] selagi B masih di jalan, lalu menunggu A.
+    await jam.maju(10_000);
+    expect(tahan.map((x) => x.h.idServer)).toEqual([b, a]);
+    tahan[0]!.lepas();
+    await kirimB;
+    expect(u.ambil(b)!.terkirimPada).not.toBeNull();
+    tahan[1]!.lepas();
+    await tunggu();
+    // Sesudah A, putaran sampai di B (yang di daftarnya masih "belum terkirim"): tidak dikirim lagi.
+    expect(tahan.map((x) => x.h.idServer)).toEqual([b, a]);
+    expect(u.belumTerkirim(MAKS_PERCOBAAN_USULAN)).toEqual([]);
+    expect(log.sort()).toEqual([`usulan #${a} terkirim ke Notion`, `usulan #${b} terkirim ke Notion`]);
+    await p.putaran();
+    await jam.maju(JEDA_PUTARAN_USULAN_MS);
+    expect(tahan).toHaveLength(2);
+  });
+
+  it('kirimBaru dan putaran bersamaan untuk usulan yang sama: Notion dipanggil sekali', async () => {
+    mulai();
+    const jam = jamPalsu();
+    const { k, tahan } = notionTertahan();
+    const p = jalankanPengirimUsulan({ penyimpan: u, notion: k, log: catat, penjadwal: jam });
+    berhenti.push(() => p.hentikan());
+    const id = u.simpan(usulanAni, T0);
+    const kirim = p.kirimBaru(id);
+    const putar = p.putaran();
+    const lagi = p.kirimBaru(id);
+    expect(tahan).toHaveLength(1);
+    tahan[0]!.lepas();
+    await Promise.all([kirim, putar, lagi]);
+    await p.putaran();
+    expect(tahan).toHaveLength(1);
+    expect(log).toEqual([`usulan #${id} terkirim ke Notion`]);
+  });
+
+  it('halaman yang sudah dibuat tetap dicatat terkirim walau server sedang berhenti', async () => {
+    mulai();
+    const jam = jamPalsu();
+    let lepas!: () => void;
+    // Jawaban Notion sudah sampai saat server mulai berhenti (pembatalan datang terlambat).
+    const k: KlienNotion = { buatHalaman: () => new Promise((ok) => (lepas = () => ok({ id: 'halaman-ani' }))) };
+    const p = jalankanPengirimUsulan({ penyimpan: u, notion: k, log: catat, penjadwal: jam });
+    const id = u.simpan(usulanAni, T0);
+    const jalan = p.kirimBaru(id);
+    await tunggu();
+    const henti = p.hentikan();
+    lepas();
+    await Promise.all([henti, jalan]);
+    expect(u.ambil(id)).toMatchObject({ notionHalaman: 'halaman-ani', percobaan: 0 });
+    expect(u.ambil(id)!.terkirimPada).not.toBeNull();
+    expect(jam.aktif()).toBe(0);
+  });
+
+  it('gagal mencatat ke database sesudah halaman dibuat: tidak dikirim lagi selama server jalan', async () => {
+    mulai();
+    const jam = jamPalsu();
+    const { k, panggil } = notionPalsu((h) => ({ id: `halaman-${h.idServer}` }));
+    const rusak: PenyimpanUsulan = {
+      ...u,
+      tandaiTerkirim: () => {
+        throw new Error('database is locked');
+      },
+    };
+    const p = jalankanPengirimUsulan({ penyimpan: rusak, notion: k, log: catat, penjadwal: jam });
+    berhenti.push(() => p.hentikan());
+    const id = u.simpan(usulanAni, T0);
+    await p.kirimBaru(id);
+    expect(log).toEqual([`usulan #${id} terkirim ke Notion, tapi galat mencatatnya di database database is locked`]);
+    await p.kirimBaru(id);
+    await jam.maju(JEDA_PUTARAN_USULAN_MS * 3);
+    expect(panggil).toHaveLength(1);
+    expect(u.ambil(id)).toMatchObject({ percobaan: 0, terkirimPada: null });
+  });
+
   it('hentikan: timer dibatalkan, permintaan yang sedang jalan dibatalkan tanpa dihitung gagal', async () => {
     mulai();
     const jam = jamPalsu();

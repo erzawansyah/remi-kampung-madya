@@ -145,26 +145,34 @@ export function jalankanPengirimUsulan(opsi: OpsiPengirimUsulan): PengirimUsulan
   const cobaLagiPada = new Map<number, number>();
   /** Permintaan yang sedang jalan (id → selesainya), supaya satu usulan tidak terkirim dua kali. */
   const sedang = new Map<number, Promise<boolean>>();
+  /**
+   * Yang sudah jadi halaman Notion selama proses ini. Cadangan kalau tandaiTerkirim gagal menulis ke
+   * database: usulan itu tidak dikirim lagi sampai server jalan ulang.
+   */
+  const sudahTerkirim = new Set<number>();
   const batal = new AbortController();
   let berhenti = false;
   let timer: unknown = null;
   let putaranJalan: Promise<void> | null = null;
 
-  /** Kirim satu usulan. false = galat menyeluruh (putaran sebaiknya berhenti). */
-  const kirimSatu = (u: UsulanTersimpan): Promise<boolean> => {
-    const ada = sedang.get(u.id);
+  /**
+   * Kirim satu usulan. Barisnya dibaca ulang dari database tepat sebelum dikirim, karena daftar putaran
+   * bisa basi: usulan yang sama baru saja terkirim lewat kirimBaru() selagi putaran menunggu usulan
+   * lain, dan Notion tidak menolak halaman kembar. false = galat menyeluruh (putaran sebaiknya berhenti).
+   */
+  const kirimSatu = (id: number): Promise<boolean> => {
+    const ada = sedang.get(id);
     if (ada) return ada;
+    if (sudahTerkirim.has(id)) return Promise.resolve(true);
+    const u = penyimpan.ambil(id);
+    if (!u || u.terkirimPada !== null || u.percobaan >= MAKS_PERCOBAAN_USULAN) return Promise.resolve(true);
     const p = (async () => {
+      let halaman: string;
       try {
-        const { id: halaman } = await notion.buatHalaman(
+        ({ id: halaman } = await notion.buatHalaman(
           { idServer: u.id, judul: u.judul, isi: u.isi, pengusul: u.nama, jenis: u.jenis },
           batal.signal,
-        );
-        if (berhenti) return true;
-        penyimpan.tandaiTerkirim(u.id, halaman, jadwal.sekarang());
-        cobaLagiPada.delete(u.id);
-        log(`usulan #${u.id} terkirim ke Notion`);
-        return true;
+        ));
       } catch (e) {
         // Dibatalkan karena server berhenti: bukan kegagalan usulannya, tidak dihitung.
         if (berhenti) return true;
@@ -184,6 +192,18 @@ export function jalankanPengirimUsulan(opsi: OpsiPengirimUsulan): PengirimUsulan
         }
         return !galat.menyeluruh;
       }
+      // Halamannya sudah dibuat: dicatat walau server sedang berhenti (database baru ditutup sesudah
+      // hentikan() selesai), supaya tidak dikirim lagi sesudah server jalan ulang.
+      sudahTerkirim.add(u.id);
+      cobaLagiPada.delete(u.id);
+      try {
+        penyimpan.tandaiTerkirim(u.id, halaman, jadwal.sekarang());
+      } catch (e) {
+        log(`usulan #${u.id} terkirim ke Notion, tapi galat mencatatnya di database`, e instanceof Error ? e.message : e);
+        return true;
+      }
+      log(`usulan #${u.id} terkirim ke Notion`);
+      return true;
     })();
     // Dihapus sesudah selesai (bukan di dalam fungsinya: bisa selesai sebelum sempat dicatat).
     sedang.set(u.id, p);
@@ -197,12 +217,12 @@ export function jalankanPengirimUsulan(opsi: OpsiPengirimUsulan): PengirimUsulan
     if (putaranJalan) return putaranJalan;
     const p = (async () => {
       try {
-        const sekarang = jadwal.sekarang();
-        for (const u of penyimpan.belumTerkirim(MAKS_PERCOBAAN_USULAN)) {
+        // Daftar ini bisa basi selagi putaran menunggu Notion; kirimSatu membaca ulang tiap barisnya.
+        for (const { id } of penyimpan.belumTerkirim(MAKS_PERCOBAAN_USULAN)) {
           if (berhenti) return;
-          if ((cobaLagiPada.get(u.id) ?? 0) > sekarang) continue;
+          if ((cobaLagiPada.get(id) ?? 0) > jadwal.sekarang()) continue;
           // Galat menyeluruh (token salah, Notion gangguan): sisanya menunggu putaran berikutnya.
-          if (!(await kirimSatu(u))) return;
+          if (!(await kirimSatu(id))) return;
         }
       } catch (e) {
         if (!berhenti) log('galat putaran kirim usulan', e instanceof Error ? e.message : e);
@@ -229,8 +249,7 @@ export function jalankanPengirimUsulan(opsi: OpsiPengirimUsulan): PengirimUsulan
     async kirimBaru(id) {
       if (berhenti) return;
       try {
-        const u = penyimpan.ambil(id);
-        if (u && u.terkirimPada === null) await kirimSatu(u);
+        await kirimSatu(id);
       } catch (e) {
         if (!berhenti) log(`galat mengirim usulan #${id}`, e instanceof Error ? e.message : e);
       }
