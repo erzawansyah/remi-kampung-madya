@@ -1682,6 +1682,20 @@ export function buatRingkasanAkhir(
 }
 
 /**
+ * Ringkasan permainan meja kompetisi yang DITINGGAL (tidak akan pernah selesai): semua peserta menekan
+ * Keluar, mejanya dihapus karena lama kosong, atau simpanannya tidak dipulihkan sesudah restart.
+ * Bentuknya sama dengan klasemen akhir (skor saat ditinggal, alasan null); server hanya mencatat
+ * yang keluar (kursiDicatatKompetisi(…, true)). Null = bukan permainan kompetisi yang sedang berjalan,
+ * atau tidak ada peserta yang keluar. `data` tidak diubah (boleh data mentah dari simpanan).
+ */
+export function ringkasanDitinggal(data: DataMeja, waktu: number): RingkasanAkhir | null {
+  const k = data.kompetisi;
+  if (!k || !data.game || data.game.status === 'selesai') return null;
+  if (!data.kursi.some((x) => x.keluar && x.peserta !== undefined)) return null;
+  return buatRingkasanAkhir(data.kode, data.kursi, migrasiState(data.game), waktu, k.kode, k.mulaiPada);
+}
+
+/**
  * Cadangan terakhir kalau strategi warga kedai galat: aksi sah paling sederhana, dipilih dari view
  * dengan validator engine yang sama (tidak ada aturan baru). Tahap ambil = ambil dari deck, tahap
  * main = buang kartu pertama yang sah (joker hidup paling akhir, supaya tidak kena −25 kalau masih

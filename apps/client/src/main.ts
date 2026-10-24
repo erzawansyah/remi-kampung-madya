@@ -634,8 +634,12 @@ class Aplikasi implements AppUntukMeja {
           }
           // Meja hilang (mis. server baru dinyalakan ulang) padahal layar lobi/meja masih tampil.
           if (this.layar === 'lobi' || this.layar === 'meja') {
-            toast('Mejanya sudah bubar, Bos. Balik ke beranda ya.', true);
-            return this.keluarMeja();
+            // Meja kompetisi (lobi dibubarkan selagi HP terkunci, simpanannya dibuang saat server mulai
+            // ulang, atau dihapus karena lama kosong): ke detail kompetisinya, seperti pesan keluar
+            // {kompetisi} dari server.
+            const kompetisi = this.info?.kompetisi?.kode;
+            toast(kompetisi ? TEKS_LOBI_KOMPETISI_BUBAR : 'Mejanya sudah bubar, Bos. Balik ke beranda ya.', true);
+            return this.keluarMeja(true, kompetisi);
           }
         }
         // Meja: aksi atau tombol yang menunggu jawaban sudah dijawab (ditolak), kuncinya lepas sekarang.

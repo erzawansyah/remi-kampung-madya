@@ -4,7 +4,8 @@
 // - laken biru (html[data-laken="kompetisi"]) selama di lobi/meja kompetisi, dilepas saat meninggalkannya;
 // - pesan kompetisiHasil sampai ke KontrolMeja, juga kalau datang sebelum meja selesai dimuat;
 // - Kembali ke kompetisi: keluar dari meja lalu detail kompetisinya terbuka;
-// - lobi kompetisi yang dibubarkan server langsung membuka detail kompetisinya;
+// - lobi kompetisi yang dibubarkan server langsung membuka detail kompetisinya, juga kalau mejanya sudah
+//   hilang waktu aplikasi menyambung lagi ("Meja X nggak ketemu.");
 // - sambung ulang membawa tiket kompetisi; kursi lobi yang sudah dilepas = detail kompetisinya terbuka;
 // - Duduk dan Buka meja baru dari detail: gabung (dengan tiket) dan buat meja kompetisi.
 
@@ -338,5 +339,38 @@ describe('Aplikasi: duduk dari detail kompetisi', () => {
     WsPalsu.terakhir().buka();
     const buat = WsPalsu.terakhir().terkirim.find((p) => p.t === 'buat');
     expect(buat).toEqual({ t: 'buat', nama: 'Aku', pengaturan: {}, kompetisi: { kode: 'KOMPA', token: 'tiket-aku' } });
+  });
+});
+
+// Meja kompetisi yang sudah tidak ada di server (lobi dibubarkan selagi HP terkunci, simpanannya dibuang
+// saat server mulai ulang, atau ditutup karena semua pesertanya keluar): ke detail kompetisinya, seperti
+// pesan keluar {kompetisi} dari server. Meja biasa tetap ke beranda.
+describe('Aplikasi: meja kompetisi yang sudah hilang', () => {
+  for (const status of ['lobi', 'main'] as const) {
+    it(`${status === 'lobi' ? 'lobi' : 'meja'} kompetisi tampil, server menjawab "Meja nggak ketemu": toast, sesi dihapus, detail kompetisinya terbuka`, async () => {
+      const { ws } = await diMejaKompetisi({ status });
+      const url = pasangFetch();
+      ws.kirimDariServer({ t: 'error', pesan: 'Meja MJKOM nggak ketemu.' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(toastTeks()).toContain(TEKS_LOBI_KOMPETISI_BUBAR);
+      expect(toastTeks()).not.toContain('Mejanya sudah bubar, Bos. Balik ke beranda ya.');
+      expect(localStorage.getItem(KUNCI_SESI)).toBeNull();
+      expect(url).toContain('/api/kompetisi/KOMPA');
+      expect(document.querySelector('#ui .layar-kompetisi #isi-detail h2')!.textContent).toBe('Remi Jumat');
+      expect(document.querySelector('#ui .layar.beranda')).toBeNull();
+      expect(laken()).toBeNull();
+    });
+  }
+
+  it('meja biasa yang hilang tetap ke beranda dengan toast lama', async () => {
+    const { ws } = await diMejaKompetisi({ kompetisi: undefined });
+    const url = pasangFetch();
+    ws.kirimDariServer({ t: 'error', pesan: 'Meja MJKOM nggak ketemu.' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(toastTeks()).toContain('Mejanya sudah bubar, Bos. Balik ke beranda ya.');
+    expect(toastTeks()).not.toContain(TEKS_LOBI_KOMPETISI_BUBAR);
+    expect(localStorage.getItem(KUNCI_SESI)).toBeNull();
+    expect(url.some((u) => u.startsWith('/api/kompetisi'))).toBe(false);
+    expect(document.querySelector('#ui .layar.beranda')).not.toBeNull();
   });
 });

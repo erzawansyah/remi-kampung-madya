@@ -22,7 +22,13 @@ import {
   type SaringanPeringkat,
   type UrutanPeringkat,
 } from '@remi/meja';
-import { buatPenyimpanKompetisi, perbaikiSkemaKompetisiPraRilis, SKEMA_KOMPETISI, type PenyimpanKompetisi } from './kompetisi.js';
+import {
+  buatPenyimpanKompetisi,
+  perbaikiSkemaKompetisiPraRilis,
+  SKEMA_HASIL_DITINGGAL,
+  SKEMA_KOMPETISI,
+  type PenyimpanKompetisi,
+} from './kompetisi.js';
 import { buatPenyimpanUsulan, SKEMA_USULAN, type PenyimpanUsulan } from './usulan.js';
 import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, type PenyimpanMejaAktif } from './mejaAktif.js';
 
@@ -85,6 +91,14 @@ export interface PermintaanPapan {
 
 export interface PenyimpanRiwayat {
   simpan(r: RingkasanAkhir): number;
+  /**
+   * Permainan meja kompetisi yang ditinggal (tidak pernah selesai, `ringkasanDitinggal`): hanya yang
+   * keluar dicatat (kompetisi.catatDitinggal), dan simpanan meja_aktif meja itu dihapus di transaksi
+   * yang sama. Tidak menulis baris permainan/klasemen (Riwayat dan leaderboard umum hanya memuat
+   * permainan yang selesai). Melempar kalau database galat (semuanya dibatalkan, simpanannya tetap ada).
+   * Mengembalikan banyaknya baris yang dicatat.
+   */
+  simpanDitinggal(r: RingkasanAkhir): number;
   /** Permainan terbaru dulu. */
   daftar(batas: number): PermainanTersimpan[];
   /**
@@ -158,6 +172,10 @@ export const MIGRASI: readonly string[] = [
   // v4 (24 Okt 2026, keputusan pemilik): meja online yang masih ada, supaya selamat dari restart/deploy.
   // Memuat token pemain: database hanya di volume privat.
   SKEMA_MEJA_AKTIF,
+  // v5 (24 Okt 2026, keputusan pemilik "Yang keluar selalu dicatat 0"): nilai 0 yang keluar dari
+  // permainan meja kompetisi yang ditinggal. Tabel sendiri: permainan/klasemen, Riwayat, dan
+  // leaderboard umum tidak berubah.
+  SKEMA_HASIL_DITINGGAL,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */
@@ -350,6 +368,14 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
       });
       cache.clear();
       return id;
+    },
+    simpanDitinggal(r) {
+      // Tanpa cache.clear(): leaderboard umum tidak berubah.
+      return transaksi(db, () => {
+        const n = kompetisi.catatDitinggal(r);
+        mejaAktif.hapus(r.kode);
+        return n;
+      });
     },
     daftar(batas) {
       const baris = ambilPermainan.all(Math.max(1, Math.min(100, Math.floor(batas)))) as {
