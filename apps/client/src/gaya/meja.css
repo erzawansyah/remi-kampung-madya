@@ -635,6 +635,9 @@ details.akordion.saya > summary .nama-skor b {
 .kaki-dialog.aksi-hasil {
   flex-direction: column;
   flex-wrap: nowrap;
+  /* Pudar hanya di celah atasnya: baris teks di kaki (kaldu, "Belum siap: …", "Menunggu host…") tidak
+     menimpa rincian yang digulir di belakangnya. */
+  background: linear-gradient(180deg, rgba(12, 39, 22, 0), var(--dialog-bawah) var(--ruang-3));
 }
 .kaki-dialog.aksi-hasil > * {
   flex: none;
@@ -954,7 +957,7 @@ html[data-gerak='kurang'] .status-koneksi .titik {
     calc(var(--ruang-4) + var(--aman-bawah)) calc(var(--ruang-4) + var(--aman-kiri));
   pointer-events: auto;
   cursor: pointer;
-  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.3) 55%, rgba(0, 0, 0, 0) 80%);
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.45) 50%, rgba(0, 0, 0, 0.12) 85%);
 }
 .ledek-kotak {
   max-width: min(92vw, 36rem);

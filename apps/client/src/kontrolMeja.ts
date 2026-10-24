@@ -2055,7 +2055,8 @@ export class KontrolMeja implements AksiAdegan {
       return `${belum}<p class="redup rapat">Skor terendah sama. Pilih pengocok berikutnya${terkunci ? ` (${hitung})` : ''}:</p>
            <div class="deret">${kandidat.map((i) => `<button type="button" data-kocok="${i}"${atribut}>${esc(v.pemain[i].nama)}</button>`).join('')}<button type="button" class="utama" data-kocok="acak"${atribut}>Acak</button></div>`;
     }
-    if (terkunci) return `${belum}<button type="button" class="utama" data-kocok="acak"${atribut}>${esc(TEKS_LANJUT.tombolTerkunci)} (${hitung})</button>`;
+    // Satu <span> pembungkus: tombol itu flex dengan gap, jadi teks dan angka yang terpisah jadi "( 8 )".
+    if (terkunci) return `${belum}<button type="button" class="utama" data-kocok="acak"${atribut}><span>${esc(TEKS_LANJUT.tombolTerkunci)} (${hitung})</span></button>`;
     return `<button type="button" class="utama" data-kocok="acak"${atribut}${sibuk ? ' aria-busy="true"' : ''}>${
       sibuk ? this.labelSibuk('kocok') : `Putaran berikutnya (${esc(v.pemain[kandidat[0]].nama)} ngocok)`
     }</button>`;
