@@ -51,8 +51,8 @@ export const MAKS_ID_AKSI = 32;
 export const BAWAAN_HAPUS_MEJA_KOSONG_MS = 10 * 60_000;
 /**
  * Meja yang permainannya sedang berjalan lebih lama: 45 menit (keputusan pemilik 24 Okt 2026), supaya
- * pemain sempat kembali sesudah deploy, Wi-Fi kedai mati, atau HP mati sebentar. Bisa ditimpa lewat
- * `OpsiServer.hapusMejaMainKosongMs`.
+ * pemain sempat kembali sesudah deploy, Wi-Fi kedai mati, atau HP mati sebentar. Hanya selama masih ada
+ * kursi manusia (lihat {@link batasMejaKosongMs}). Bisa ditimpa lewat `OpsiServer.hapusMejaMainKosongMs`.
  */
 export const BAWAAN_HAPUS_MEJA_MAIN_KOSONG_MS = 45 * 60_000;
 
@@ -66,9 +66,16 @@ export const JEDA_SIMPAN_MEJA_MS = 1_000;
 /** Simpanan meja yang tidak diperbarui selama ini tidak dipulihkan lagi (server mati lama). */
 export const UMUR_MAKS_SIMPANAN_MEJA_MS = 24 * 60 * 60_000;
 
-/** Lama meja tanpa manusia terhubung boleh dibiarkan sebelum dihapus, menurut statusnya. */
-export function batasMejaKosongMs(status: StatusMeja, opsi: Pick<OpsiServer, 'hapusMejaKosongMs' | 'hapusMejaMainKosongMs'> = {}): number {
-  return status === 'main'
+/**
+ * Lama meja tanpa manusia terhubung boleh dibiarkan sebelum dihapus. 45 menit hanya untuk meja yang
+ * sedang main dan masih punya kursi manusia (ada yang memegang token dan bisa kembali). Meja yang semua
+ * manusianya sudah menekan Keluar tidak bisa didatangi siapa pun lagi, jadi ikut batas lobi.
+ */
+export function batasMejaKosongMs(
+  meja: { status: StatusMeja; adaKursiManusia: boolean },
+  opsi: Pick<OpsiServer, 'hapusMejaKosongMs' | 'hapusMejaMainKosongMs'> = {},
+): number {
+  return meja.status === 'main' && meja.adaKursiManusia
     ? (opsi.hapusMejaMainKosongMs ?? BAWAAN_HAPUS_MEJA_MAIN_KOSONG_MS)
     : (opsi.hapusMejaKosongMs ?? BAWAAN_HAPUS_MEJA_KOSONG_MS);
 }
@@ -85,7 +92,10 @@ export interface OpsiServer {
    * ms. Bawaan {@link BAWAAN_HAPUS_MEJA_KOSONG_MS}.
    */
   hapusMejaKosongMs?: number;
-  /** Sama, untuk meja yang permainannya sedang berjalan. Bawaan {@link BAWAAN_HAPUS_MEJA_MAIN_KOSONG_MS}. */
+  /**
+   * Sama, untuk meja yang permainannya sedang berjalan dan masih punya kursi manusia. Bawaan
+   * {@link BAWAAN_HAPUS_MEJA_MAIN_KOSONG_MS}.
+   */
   hapusMejaMainKosongMs?: number;
   /**
    * Simpan meja yang masih ada ke database `riwayat` (tabel meja_aktif) dan pulihkan saat server mulai,
@@ -273,11 +283,14 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   /** Meja yang perubahannya belum ditulis: timer tulis dan data terbaru (referensi hidup dari Meja). */
   const simpanTertunda = new Map<string, { timer: unknown; data: DataMeja }>();
 
-  /** Tulis keadaan meja ke database sekarang. Permainan yang sudah selesai tidak disimpan (dibuang). */
+  /**
+   * Tulis keadaan meja ke database sekarang. Yang tidak akan dipulihkan juga tidak disimpan (dibuang):
+   * permainan yang sudah selesai, dan meja tanpa kursi manusia (tidak ada yang bisa kembali).
+   */
   const tulisMeja = (kode: string, data: DataMeja) => {
     if (!simpananMeja) return;
     try {
-      if (data.game?.status === 'selesai') simpananMeja.hapus(kode);
+      if (data.game?.status === 'selesai' || !data.kursi.some((k) => k.jenis === 'manusia')) simpananMeja.hapus(kode);
       else simpananMeja.simpan(kode, JSON.stringify(data), pembuatMeja.get(kode) ?? null, penjadwalDasar.sekarang());
     } catch (e) {
       log(`galat menyimpan meja ${kode}`, e);
@@ -371,9 +384,14 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     return c.id;
   };
 
+  /**
+   * Meja yang permainannya sedang dimainkan: status main dengan paling sedikit satu manusia terhubung.
+   * Meja yang ditinggal semua orang (dijeda, dipulihkan tapi belum didatangi, atau tinggal warga kedai)
+   * tidak dihitung, supaya skrip deploy yang menunggu angka ini 0 tidak tertahan sampai 45 menit.
+   */
   const jumlahMejaMain = () => {
     let n = 0;
-    for (const m of daftarMeja.values()) if (m.status === 'main') n++;
+    for (const m of daftarMeja.values()) if (m.status === 'main' && m.jumlahManusiaTerhubung > 0) n++;
     return n;
   };
 
@@ -399,7 +417,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       // Publik: cukup untuk healthcheck & cek versi deploy. Angka operasional (sambungan, galat) hanya
       // dengan HEALTHZ_DETAIL=1; selain itu tercatat di log (ringkasan berkala & tiap galat).
       const isi: Record<string, unknown> = { ok: true, meja: daftarMeja.size, versi: VERSI, sha: SHA };
-      // mejaMain: meja yang permainannya sedang berjalan (skrip deploy bisa menunggu sampai 0).
+      // mejaMain: meja yang sedang dimainkan, yaitu status main dengan manusia terhubung (skrip deploy
+      // bisa menunggu sampai 0; meja yang ditinggal semua orang tidak ikut dihitung).
       if (opsi.healthzDetail) Object.assign(isi, { sambungan: semuaSambungan.size, galatMeja, mejaMain: jumlahMejaMain() });
       res.end(JSON.stringify(isi));
       return;
@@ -881,7 +900,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         log('galat ping sambungan', e);
       }
     }
-    const sekarang = Date.now();
+    // Jam yang sama dengan meja dan jeda simpan (penjadwal), supaya bisa diuji dengan jam palsu.
+    const sekarang = penjadwalDasar.sekarang();
     for (const [kode, meja] of daftarMeja) {
       try {
         if (meja.jumlahManusiaTerhubung > 0) {
@@ -890,8 +910,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         }
         const sejak = kosongSejak.get(kode) ?? sekarang;
         kosongSejak.set(kode, sejak);
-        // Meja yang sedang main ditunggu lebih lama (45 menit) daripada lobi (10 menit).
-        if (sekarang - sejak >= batasMejaKosongMs(meja.status, opsi)) {
+        // Meja yang sedang main dan masih bisa didatangi pemainnya ditunggu lebih lama (45 menit)
+        // daripada lobi, meja selesai, atau meja yang tinggal warga kedai (10 menit).
+        if (sekarang - sejak >= batasMejaKosongMs(meja, opsi)) {
           hapusMeja(kode);
           log(`meja ${kode} dihapus (kosong)`);
         }
@@ -942,7 +963,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     daftarMeja.set(kode, meja);
     if (b.pembuatJaringan) pembuatMeja.set(kode, b.pembuatJaringan);
     // Batas hapus meja kosong dihitung sejak server jalan lagi.
-    kosongSejak.set(kode, Date.now());
+    kosongSejak.set(kode, penjadwalDasar.sekarang());
     const manusia = terbaca.kursi.filter((k) => k.jenis === 'manusia').length;
     log(`meja ${kode} dipulihkan (${meja.status}, ${manusia} manusia${terbaca.kompetisi ? `, kompetisi ${terbaca.kompetisi.kode}` : ''})`);
     return null;

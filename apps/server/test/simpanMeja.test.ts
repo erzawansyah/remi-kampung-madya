@@ -17,6 +17,7 @@ import {
   BAWAAN_HAPUS_MEJA_KOSONG_MS,
   BAWAAN_HAPUS_MEJA_MAIN_KOSONG_MS,
   batasMejaKosongMs,
+  JEDA_PUTUS_MS,
   JEDA_SIMPAN_MEJA_MS,
   jalankanServer,
   UMUR_MAKS_SIMPANAN_MEJA_MS,
@@ -219,6 +220,22 @@ describe('meja selamat dari restart server', () => {
     while (viewTerakhir(a2).putaran!.giliran === 0) await langkahSendiri(a2, rng);
     expect(a2.pesan.filter((p) => p.t === 'error')).toEqual([]);
     for (const k of [a2, b2, tamu]) k.ws.close();
+  });
+
+  it('sesudah restart, pemain lain yang kembali duluan tidak merebut host; host pindah kalau host belum kembali sampai tenggang habis', async () => {
+    const path = dbBaru();
+    const jam = new JamUji();
+    const s1 = await nyalakan(path, { penjadwal: jam });
+    const { kode, tokenB } = await mejaMain(s1.server.port, { detikGiliran: 0 }, 2);
+    await s1.matikan();
+    const s2 = await nyalakan(path, { penjadwal: jam });
+    const { k: b2 } = await kembali(s2.server.port, kode, 'Siti', tokenB);
+    expect(info(await tungguPesan(b2, (p) => p.t === 'meja')).host).toBe(0);
+    b2.kirim({ t: 'pengaturan', pengaturan: { tempoBot: 'cepat' } });
+    expect((await tungguPesan(b2, (p) => p.t === 'error')).pesan).toBe('Cuma host yang bisa melakukan ini.');
+    jam.maju(TENGGANG_SAMBUNG_MS);
+    await tungguPesan(b2, (p) => p.t === 'meja' && info(p).host === 1);
+    b2.ws.close();
   });
 
   it('meja di lobi ikut dipulihkan; host kembali dan bisa memulai', async () => {
@@ -506,27 +523,140 @@ describe('meja selamat dari restart server', () => {
   });
 });
 
+/** Tunggu (waktu sungguhan) sampai syaratnya terpenuhi. */
+async function sampai(syarat: () => boolean, ms = 3000) {
+  const mulai = Date.now();
+  while (!syarat()) {
+    if (Date.now() - mulai > ms) throw new Error('syarat tidak terpenuhi');
+    await tunggu(5);
+  }
+}
+
+const healthz = async (port: number) => (await (await fetch(`http://127.0.0.1:${port}/healthz`)).json()) as Record<string, unknown>;
+
+/** Semua pemain manusia di meja menekan Keluar: kursinya diteruskan warga kedai, tidak ada yang bisa kembali. */
+async function semuaKeluar(...k: Klien[]) {
+  for (const x of k) x.kirim({ t: 'keluar' });
+  for (const x of k) await tungguPesan(x, (p) => p.t === 'keluar');
+}
+
 describe('/healthz dan meja kosong', () => {
-  it('HEALTHZ_DETAIL melaporkan mejaMain', async () => {
-    const s = await nyalakan(dbBaru(), { healthzDetail: true });
-    const { a, b } = await mejaMain(s.server.port, { detikGiliran: 0 }, 2);
-    const k = await klien(s.server.port);
+  it('HEALTHZ_DETAIL: mejaMain hanya menghitung meja main yang sedang dimainkan (ada manusia terhubung)', async () => {
+    const jam = new JamUji();
+    const s = await nyalakan(dbBaru(), { healthzDetail: true, penjadwal: jam });
+    const port = s.server.port;
+    const dimainkan = await mejaMain(port, { detikGiliran: 0 }, 2);
+    const k = await klien(port);
     k.kirim({ t: 'buat', nama: 'Lobi' });
     await tungguPesan(k, (p) => p.t === 'masuk');
-    const isi = await (await fetch(`http://127.0.0.1:${s.server.port}/healthz`)).json();
-    expect(isi).toMatchObject({ ok: true, meja: 2, mejaMain: 1 });
-    for (const x of [a, b, k]) x.ws.close();
+    expect(await healthz(port)).toMatchObject({ ok: true, meja: 2, mejaMain: 1 });
+    // Semua pemainnya menekan Keluar (tinggal warga kedai): tidak dihitung.
+    const ditinggal = await mejaMain(port, { detikGiliran: 0 }, 2);
+    await semuaKeluar(ditinggal.a, ditinggal.b);
+    // Semua pemainnya terputus (sinyal): tidak dihitung lagi sesudah jeda putus.
+    const putus = await mejaMain(port, { detikGiliran: 0 }, 2);
+    const sebelum = s.server.jumlahSambungan();
+    for (const x of [putus.a, putus.b]) x.ws.close();
+    await sampai(() => s.server.jumlahSambungan() === sebelum - 2);
+    expect(await healthz(port)).toMatchObject({ meja: 4, mejaMain: 2 });
+    jam.maju(JEDA_PUTUS_MS);
+    expect(await healthz(port)).toMatchObject({ meja: 4, mejaMain: 1 });
+    for (const x of [dimainkan.a, dimainkan.b, k, ditinggal.a, ditinggal.b]) x.ws.close();
   });
 
-  it('meja yang sedang main ditunggu 45 menit, lobi dan yang sudah selesai 10 menit; bisa ditimpa', () => {
+  it('meja yang dipulihkan sesudah restart baru dihitung mejaMain begitu ada yang kembali', async () => {
+    const path = dbBaru();
+    const s1 = await nyalakan(path);
+    const { kode, tokenA } = await mejaMain(s1.server.port, { detikGiliran: 0 }, 2);
+    await s1.matikan();
+    const s2 = await nyalakan(path, { healthzDetail: true });
+    expect(await healthz(s2.server.port)).toMatchObject({ meja: 1, mejaMain: 0 });
+    const { k } = await kembali(s2.server.port, kode, 'Budi', tokenA);
+    expect(await healthz(s2.server.port)).toMatchObject({ meja: 1, mejaMain: 1 });
+    k.ws.close();
+  });
+
+  it('meja yang semua pemainnya menekan Keluar tidak disimpan lagi (tidak ada yang bisa kembali)', async () => {
+    const jam = new JamUji();
+    const s = await nyalakan(dbBaru(), { penjadwal: jam });
+    const { a, b, kode } = await mejaMain(s.server.port, { detikGiliran: 0 }, 2);
+    jam.maju(JEDA_SIMPAN_MEJA_MS);
+    expect(barisMeja(s.riwayat, kode)).toBeDefined();
+    await semuaKeluar(a, b);
+    jam.maju(JEDA_SIMPAN_MEJA_MS);
+    expect(barisMeja(s.riwayat, kode)).toBeUndefined();
+    // Mejanya sendiri masih ada sampai dibersihkan (10 menit, lihat test pembersih).
+    expect(s.server.jumlahMeja()).toBe(1);
+    for (const x of [a, b]) x.ws.close();
+  });
+
+  it('meja yang sedang main ditunggu 45 menit selama masih ada kursi manusia; lobi, selesai, dan yang tinggal warga kedai 10 menit; bisa ditimpa', () => {
+    const main = { status: 'main' as const, adaKursiManusia: true };
     expect(BAWAAN_HAPUS_MEJA_MAIN_KOSONG_MS).toBe(45 * 60_000);
     expect(BAWAAN_HAPUS_MEJA_KOSONG_MS).toBe(10 * 60_000);
-    expect(batasMejaKosongMs('main')).toBe(45 * 60_000);
-    expect(batasMejaKosongMs('lobi')).toBe(10 * 60_000);
-    expect(batasMejaKosongMs('selesai')).toBe(10 * 60_000);
-    expect(batasMejaKosongMs('main', { hapusMejaKosongMs: 1 })).toBe(45 * 60_000);
-    expect(batasMejaKosongMs('lobi', { hapusMejaKosongMs: 1, hapusMejaMainKosongMs: 2 })).toBe(1);
-    expect(batasMejaKosongMs('main', { hapusMejaKosongMs: 1, hapusMejaMainKosongMs: 2 })).toBe(2);
+    expect(batasMejaKosongMs(main)).toBe(45 * 60_000);
+    expect(batasMejaKosongMs({ status: 'main', adaKursiManusia: false })).toBe(10 * 60_000);
+    expect(batasMejaKosongMs({ status: 'lobi', adaKursiManusia: true })).toBe(10 * 60_000);
+    expect(batasMejaKosongMs({ status: 'selesai', adaKursiManusia: true })).toBe(10 * 60_000);
+    expect(batasMejaKosongMs(main, { hapusMejaKosongMs: 1 })).toBe(45 * 60_000);
+    expect(batasMejaKosongMs({ status: 'lobi', adaKursiManusia: true }, { hapusMejaKosongMs: 1, hapusMejaMainKosongMs: 2 })).toBe(1);
+    expect(batasMejaKosongMs(main, { hapusMejaKosongMs: 1, hapusMejaMainKosongMs: 2 })).toBe(2);
+  });
+});
+
+describe('pembersih meja kosong (timer server sungguhan)', () => {
+  // Hanya setInterval yang dipalsukan (pembersih jalan tiap 30 detik); jam meja, jeda putus, jeda
+  // simpan, dan jam pembersih memakai JamUji. setTimeout tetap asli supaya WebSocket jalan biasa.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('lobi dihapus sesudah 10 menit, meja main yang ditinggal sesudah 45 menit, meja yang tinggal warga kedai sesudah 10 menit; simpanannya ikut hilang', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const jam = new JamUji();
+    const s = await nyalakan(dbBaru(), { penjadwal: jam });
+    const port = s.server.port;
+    const detak = () => vi.advanceTimersByTime(30_000);
+
+    const lobi = await klien(port);
+    lobi.kirim({ t: 'buat', nama: 'Lobi' });
+    const kodeLobi = String((await tungguPesan(lobi, (p) => p.t === 'masuk')).kode);
+    const main = await mejaMain(port, { detikGiliran: 0 }, 2);
+    const keluar = await mejaMain(port, { detikGiliran: 0 }, 2);
+    jam.maju(JEDA_SIMPAN_MEJA_MS);
+    await semuaKeluar(keluar.a, keluar.b);
+    for (const x of [lobi, main.a, main.b, keluar.a, keluar.b]) x.ws.close();
+    await sampai(() => s.server.jumlahSambungan() === 0);
+    // Jeda putus lewat (semua dianggap terputus) dan simpanan terakhir sudah ditulis.
+    jam.maju(JEDA_PUTUS_MS + JEDA_SIMPAN_MEJA_MS);
+    const kodeTersimpan = () => s.riwayat.mejaAktif.semua().map((b) => b.kode).sort();
+    expect(kodeTersimpan()).toEqual([kodeLobi, main.kode].sort());
+    expect(s.server.jumlahMeja()).toBe(3);
+
+    // Detak pertama mencatat sejak kapan kosong; 10 menit kemudian lobi dan meja tanpa manusia dihapus.
+    detak();
+    jam.maju(BAWAAN_HAPUS_MEJA_KOSONG_MS - 1);
+    detak();
+    expect(s.server.jumlahMeja()).toBe(3);
+    jam.maju(1);
+    detak();
+    expect(s.server.jumlahMeja()).toBe(1);
+    expect(s.log).toContain(`meja ${kodeLobi} dihapus (kosong)`);
+    expect(s.log).toContain(`meja ${keluar.kode} dihapus (kosong)`);
+    expect(kodeTersimpan()).toEqual([main.kode]);
+
+    // Meja main yang masih bisa didatangi pemainnya baru dihapus sesudah 45 menit, beserta simpanannya.
+    jam.maju(BAWAAN_HAPUS_MEJA_MAIN_KOSONG_MS - BAWAAN_HAPUS_MEJA_KOSONG_MS - 1);
+    detak();
+    expect(s.server.jumlahMeja()).toBe(1);
+    jam.maju(1);
+    detak();
+    expect(s.server.jumlahMeja()).toBe(0);
+    expect(s.log).toContain(`meja ${main.kode} dihapus (kosong)`);
+    expect(kodeTersimpan()).toEqual([]);
+    // Tidak ada yang tersisa untuk dipulihkan: token lama tidak bisa kembali.
+    const { masuk } = await kembali(port, main.kode, 'Budi', main.tokenA);
+    expect(masuk).toEqual({ t: 'error', pesan: `Meja ${main.kode} nggak ketemu.` });
   });
 });
 
