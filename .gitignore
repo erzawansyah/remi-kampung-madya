@@ -8,3 +8,5 @@ apps/server/data
 *.db-shm
 # Hasil E2E smoke (screenshot, build sementara)
 apps/client/e2e/hasil/
+# Local secrets written by `elevenlabs onboard`
+/.env.local
