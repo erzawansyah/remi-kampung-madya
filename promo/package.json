@@ -8,17 +8,23 @@
     "aset": "node scripts/ambil-aset.mjs",
     "studio": "remotion studio src/index.ts",
     "render": "remotion render src/index.ts Teaser out/mentah.mp4 && remotion ffmpeg -loglevel error -y -i out/mentah.mp4 -af loudnorm=I=-14:TP=-1.5:LRA=11 -ar 48000 -c:v copy -c:a aac -b:a 192k out/teaser-reels.mp4",
+    "render:b": "remotion render src/index.ts TeaserB out/teaser-b-mentah.mp4 --color-space=bt709 && node scripts/normalkan-audio.mjs out/teaser-b-mentah.mp4 out/teaser-b.mp4",
+    "qa:b": "node scripts/qa-teaser-b.mjs out/teaser-b.mp4",
     "still": "remotion still src/index.ts Teaser",
+    "still:b": "remotion still src/index.ts TeaserB",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
     "@remotion/cli": "4.0.535",
+    "qrcode": "^1.5.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "remotion": "4.0.535"
   },
   "devDependencies": {
     "@types/react": "18.3.12",
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
     "typescript": "5.8.3"
   }
 }

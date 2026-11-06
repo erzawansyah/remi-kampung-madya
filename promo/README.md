@@ -32,3 +32,29 @@ npm run render         # out/teaser-reels.mp4 (suara dinormalkan ke -14 LUFS unt
 ```
 
 Chromium: `npm run aset` memakai `CHROME_PATH`, lalu `/opt/pw-browsers/chromium`, lalu bawaan Playwright. Remotion memakai `CHROME_PATH` kalau diisi (sebaiknya Chrome Headless Shell); kalau kosong ia mengunduh sendiri.
+
+## Teaser B "Info room?" (`TeaserB`)
+
+Teaser kedua (1080 × 1920, 30 fps, 44 detik) mengikuti brief final di [BRIEF-teaser-b.md](BRIEF-teaser-b.md): chat grup tokoh karangan (Kamu, Dimas, Ayu, Rendi), tiga putaran rekaman game asli (dipentung teman, dipentung warga kedai, lalu menang di Kedai Madya tapi yang dipentung ternyata warga kedai), penutup ajakan, stempel BUKAN JUDI ONLINE, lalu loop. Komposisinya di `src/b/` (`TeaserB.tsx` alur dan audio, `Chat.tsx`, `Hp.tsx`, `Lokasi.tsx`, `MejaKedai.tsx` termasuk papan QR, `Stempel.tsx`, `efek.tsx` kamera dan lapisan, `waktu.ts` semua konstanta frame, `rekam.ts` titik waktu di rekaman).
+
+### Merekam game asli (`scripts/rekam/`)
+
+Semua visual game adalah rekaman aplikasi sungguhan, bukan tiruan. Alatnya:
+
+- `meja-rekam.ts`: server game asli dengan seed permainan tetap (`SEED_REKAM`, mengganti `randomBytes(4)`) **dan** `Math.random` ber-seed (mulberry32), karena nama warga kedai diacak dengan `Math.random` dan gaya mainnya mengikuti nama. Batas pesan per detik dilonggarkan supaya pencari seed bisa memainkan satu putaran dalam sedetik.
+- `otomatis.ts`: pemain otomatis (strategi Normal, Rng tetap) yang hanya bergantung pada view, dipakai pencari seed dan browser.
+- `konfig.ts`: tiga klip (R1 empat manusia, R2/R3 kursi 3 warga kedai) beserta siapa yang mentung dan kepentung.
+- `cari-seed.ts`: `npx tsx promo/scripts/rekam/cari-seed.ts r1 1 1500` mencari seed yang putaran pertamanya cocok, diurutkan dari yang terpendek (env `PORT_CARI` untuk menjalankan beberapa pencarian sekaligus).
+- `rekam-browser.mjs`: `node promo/scripts/rekam/rekam-browser.mjs r1 41` menyalakan server rekam, Vite dev client, dan HP tiruan Chromium 390 × 844 untuk tiap kursi manusia, memainkan putarannya, lalu menulis `public/rekam/r1-kamu.mp4` (1170 × 2532, 30 fps), jepretan PNG momen kunci (lobi, retak, panel, hasil; R3 juga layar Dimas dengan panel warga kedai yang retak), dan `rekam.json` (kode meja, seed, hasil, momen dalam detik video). Hasilnya diperiksa cocok dengan pencarian seed.
+  - Halaman "Kamu" direkam di Chrome Headless Shell dengan `--enable-begin-frame-control` + virtual time: tiap frame waktu halaman dimajukan tepat 1/30 detik lalu digambar dan dijepret, jadi videonya mulus 30 fps berapa pun kecepatan CPU. Aplikasi dimuat di `<iframe>` 390 × 844 dengan CSS `zoom: 3` di halaman 1170 × 2532 supaya jepretannya resolusi penuh (screencast dan jepretan BeginFrame hanya seukuran CSS halaman).
+- `momen.mjs`: `node promo/scripts/rekam/momen.mjs r1` mencetak momen kunci dari `rekam.json` (kartu dibuang, dipungut, pentungan, retak) untuk diisi ke `src/b/rekam.ts`.
+
+Seed yang dipakai sekarang: R1 41, R2 16, R3 133 (lihat `src/b/rekam.ts`). Rekaman (`public/rekam/`) dan hasil render (`out/`) diabaikan git.
+
+### Render
+
+```bash
+npm run still:b -- out/still.png --frame=450 --scale=0.5   # cek satu frame
+npm run render:b                                           # out/teaser-b.mp4 (loudnorm -14 LUFS, TP -1,5)
+```
+
