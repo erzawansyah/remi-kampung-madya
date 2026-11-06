@@ -19,3 +19,5 @@ apps/server/data
 **/*.db-*
 # Hasil smoke E2E (screenshot, hasil.json, build dist) tidak perlu ikut ke build context.
 apps/client/e2e/hasil
+# Proyek video promosi (Remotion), terpisah dari aplikasi.
+promo

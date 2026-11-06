@@ -33,7 +33,7 @@ const POLA_COMMIT = /^[0-9a-f]{7,40}$/i;
 /** Folder yang dilewati di mana pun letaknya (selaras .dockerignore). */
 const FOLDER_DILEWATI = new Set(['.git', 'node_modules', 'dist', 'dev-dist', 'coverage', '.github', '.claude', '.vscode']);
 /** Folder yang dilewati menurut path relatif akar: hasil E2E dan database lokal saat dev. */
-const PATH_DILEWATI = new Set(['apps/client/e2e/hasil', 'apps/server/data']);
+const PATH_DILEWATI = new Set(['apps/client/e2e/hasil', 'apps/server/data', 'promo']);
 
 function fileDilewati(nama) {
   return (

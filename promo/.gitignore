@@ -1,0 +1,4 @@
+node_modules
+# Aset diambil dari kode game oleh `npm run aset`, hasil render di out/.
+public/aset
+out
