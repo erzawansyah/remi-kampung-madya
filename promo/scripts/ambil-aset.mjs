@@ -50,6 +50,21 @@ const BUNYI = {
   jotos: 'jotos',
   sorak: 'sorak',
   klik: 'klik',
+  // Teaser B: chat, ketegangan, pentungan, dan kabar menang.
+  notifikasi: 'notifikasi',
+  pop: 'pop',
+  tegang: 'tegang',
+  mentung: 'mentung',
+  mentungJoker: 'mentungJoker',
+  kepentung: 'kepentung',
+  jotosLain: 'jotosLain',
+  bahaya: 'bahaya',
+  menang: 'menang',
+  kartu: 'kartu',
+  geser: 'geser',
+  angkat: 'angkat',
+  kepentungLain: 'kepentungLain',
+  detak: 'detak',
 };
 
 const DETIK_MUSIK = 48;
@@ -172,6 +187,8 @@ try {
       const audio = {};
       for (const [nama, jenis] of Object.entries(BUNYI)) audio[`bunyi-${nama}.wav`] = wav(await suara.rekamBunyi(jenis));
       audio['musik.wav'] = wav(await musik.rekamMusik('beranda', DETIK_MUSIK));
+      // Teaser B: musik meja untuk bagian tegang.
+      audio['musik-meja.wav'] = wav(await musik.rekamMusik('meja', DETIK_MUSIK));
 
       return { gambar, svg, audio };
     },

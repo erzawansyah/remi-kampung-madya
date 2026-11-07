@@ -32,3 +32,26 @@ npm run render         # out/teaser-reels.mp4 (suara dinormalkan ke -14 LUFS unt
 ```
 
 Chromium: `npm run aset` memakai `CHROME_PATH`, lalu `/opt/pw-browsers/chromium`, lalu bawaan Playwright. Remotion memakai `CHROME_PATH` kalau diisi (sebaiknya Chrome Headless Shell); kalau kosong ia mengunduh sendiri.
+
+## Teaser A "Aman, aku seng menang" (animasi 2D)
+
+Brief: [BRIEF-teaser-a.md](BRIEF-teaser-a.md) (bagian teknis merujuk [BRIEF-teaser-b.md](BRIEF-teaser-b.md)). Komposisi `TeaserA` (1080 × 1920, 30 fps, 1200 frame) di `src/a/`: rig SVG tiga warga kedai (`tokoh/`), meja dan latar kedai (`MejaKedai.tsx`), lintasan pose/kamera (`Adegan.tsx`, `animasi.ts`), balon kata, sisipan layar HP berisi rekaman game asli, stempel, dan semua konstanta waktu di `waktu.ts`. Still lineup tokoh: komposisi `LineupA`.
+
+Rekaman game (3 pemain, 1 deck, batas 2 putaran) direkam dari halaman Bang IT dengan virtual time (teknik sama dengan Teaser B):
+
+```bash
+# dari akar repo; seed dicari dulu (A1: Cak Owner mentung dan memungut kartu buangan Bang IT; A2: warga kedai mentung)
+npx tsx promo/scripts/rekam/cari-seed-a.ts a1 1 200
+npx tsx promo/scripts/rekam/cari-seed-a.ts a2 1 200
+node promo/scripts/rekam/rekam-browser-a.mjs a1 174   # → promo/public/rekam/a1-*.{mp4,png}, rekam-a.json
+node promo/scripts/rekam/rekam-browser-a.mjs a2 135
+node promo/scripts/rekam/momen-a.mjs                  # momen kunci (detik video) → salin ke src/a/rekam.ts
+
+cd promo
+npm run aset      # aset dasar (kartu, logo, retak, font, musik, bunyi)
+npm run aset:a    # bunyi tambahan Teaser A (kursi terjengkang, gebrak, seruput, krak gelas, dok) dari sintesis game
+npm run render:a  # out/teaser-a.mp4 (render + loudnorm −14 LUFS, true peak ≤ −1,5 dBTP)
+npm run qa:a      # format, loudness, pindai QR dari still 34–38 dtk, hold diam, contact sheet
+```
+
+`meja-rekam-a.ts` sama dengan `meja-rekam.ts` tapi jeda lanjut 10 detik, supaya hasil putaran 1 bertahan saat Mas Sampul mengirim ledekan (`{t:'ledek'}`) yang direkam di layar Bang IT. Sesudah seed berubah, perbarui `src/a/rekam.ts` (detik buang, pungut, retak, ledek, dan posisi panel di layar HP dari still rekaman).
