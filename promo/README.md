@@ -35,7 +35,7 @@ Chromium: `npm run aset` memakai `CHROME_PATH`, lalu `/opt/pw-browsers/chromium`
 
 ## Teaser B "Info room?" (`TeaserB`)
 
-Teaser kedua (1080 × 1920, 30 fps, 44 detik) mengikuti brief final di [BRIEF-teaser-b.md](BRIEF-teaser-b.md): chat grup tokoh karangan (Kamu, Dimas, Ayu, Rendi), tiga putaran rekaman game asli (dipentung teman, dipentung warga kedai, lalu menang di Kedai Madya tapi yang dipentung ternyata warga kedai), penutup ajakan, stempel BUKAN JUDI ONLINE, lalu loop. Komposisinya di `src/b/` (`TeaserB.tsx` alur dan audio, `Chat.tsx`, `Hp.tsx`, `Lokasi.tsx`, `MejaKedai.tsx` termasuk papan QR, `Stempel.tsx`, `efek.tsx` kamera dan lapisan, `waktu.ts` semua konstanta frame, `rekam.ts` titik waktu di rekaman).
+Teaser kedua (1080 × 1920, 30 fps, 47 detik) mengikuti brief final di [BRIEF-teaser-b.md](BRIEF-teaser-b.md): chat grup tokoh karangan (Kamu, Dimas, Ayu, Rendi), tiga putaran rekaman game asli (dipentung teman, dipentung warga kedai, lalu menang di Kedai Madya tapi yang dipentung ternyata warga kedai), penutup ajakan, stempel BUKAN JUDI ONLINE, lalu loop. Komposisinya di `src/b/` (`TeaserB.tsx` alur dan audio, `Chat.tsx`, `Hp.tsx`, `Lokasi.tsx`, `MejaKedai.tsx` termasuk papan QR, `Stempel.tsx`, `efek.tsx` kamera dan lapisan, `waktu.ts` semua konstanta frame, `rekam.ts` titik waktu di rekaman).
 
 ### Merekam game asli (`scripts/rekam/`)
 
@@ -53,6 +53,15 @@ Semua visual game adalah rekaman aplikasi sungguhan, bukan tiruan. Alatnya:
 - `momen.mjs`: `node promo/scripts/rekam/momen.mjs r1` mencetak momen kunci dari `rekam.json` (kartu dibuang, dipungut, pentungan, retak) untuk diisi ke `src/b/rekam.ts`.
 
 Seed yang dipakai sekarang: R1 41, R2 16, R3 133 (lihat `src/b/rekam.ts`). Rekaman (`public/rekam/`) dan hasil render (`out/`) diabaikan git.
+
+### Efek suara ElevenLabs
+
+Bunyi game (kartu, pentungan, retak, notifikasi, pop) tetap diambil dari kode game lewat `npm run aset`. Untuk bunyi non-game (whoosh transisi, stempel "DOK", flash pindah ke kedai, dan suasana kedai malam) dipakai sound generation ElevenLabs: `ELEVENLABS_API_KEY=... npm run sfx` menulis `public/aset/el-*.wav` (diabaikan git; `--ulang` untuk membuat ulang). Tanpa voice over, sesuai brief.
+
+### Tambahan di luar brief
+
+- Kartu khusus QR 3 detik (42–45 dtk) sesudah stempel, QR ±720 px di tengah zona aman, supaya bisa dipindai dari layar lain. Durasi jadi 47 detik (brief: 44).
+- Bubble "Info room?" penutup muncul 1 detik sebelum akhir (brief: 0,2 detik) supaya sempat terbaca sebagai loop.
 
 ### Render
 

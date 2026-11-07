@@ -5,13 +5,13 @@ import type { ReactNode } from 'react';
 import { AbsoluteFill, Audio, Img, interpolate, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from 'remotion';
 import { FONT, Logo, Sorak, WARNA } from '../bagian';
 import { BubbleGame, BubbleTumpuk, Chat } from './Chat';
-import { Bunyi, Caption, Cincin, Flash, Grain, Kamera, LogoPojok, Panah, Pil, Retak, SplitTone, Vinyet, Whip, burst, glide, halus, jepit, noise } from './efek';
+import { Bunyi, Sfx, Caption, Cincin, Flash, Grain, Kamera, LogoPojok, Panah, Pil, Retak, SplitTone, Vinyet, Whip, burst, glide, halus, jepit, noise } from './efek';
 import { LayarHp } from './Hp';
 import { Lokasi } from './Lokasi';
-import { MejaKedai, POSE, lerpPose } from './MejaKedai';
+import { MejaKedai, POSE, Qr, lerpPose } from './MejaKedai';
 import { REKAM } from './rekam';
 import { Stempel } from './Stempel';
-import { BUBBLE_GAME, CAPTION1, CHAT1, CHAT2, CHAT3, DURASI, FPS, H, M, STATUS, T, TEKS_PIL, TEKS_STEMPEL, TEKS_TUTUP_BESAR, TEKS_TUTUP_KECIL, W } from './waktu';
+import { BUBBLE_GAME, CAPTION1, CHAT1, CHAT2, CHAT3, DURASI, FPS, H, M, STATUS, T, TEKS_PIL, TEKS_STEMPEL, TEKS_QR_AJAK, TEKS_QR_JUDUL, TEKS_QR_URL, TEKS_TUTUP_BESAR, TEKS_TUTUP_KECIL, W } from './waktu';
 
 export { DURASI as DURASI_TEASER_B, FPS as FPS_TEASER_B };
 
@@ -81,7 +81,8 @@ const ColdOpen: React.FC = () => {
   return (
     <AbsoluteFill style={{ background: '#000' }}>
       <Kamera pose={{ skala: 1.12, y: 1000 }} pushPerFrame={0.004} shakeDari={retakDi} shakeKuat={26} shakeLama={8}>
-        <Klip klip="r1" mulai={0} lama={T.buka[1]} dari={r.retak - retakDi / FPS} />
+        {/* Diperlambat 0,8× supaya 2 dtk cold open berhenti sebelum panel MENTUNG di rekaman muncul. */}
+        <Klip klip="r1" mulai={0} lama={T.buka[1]} dari={r.retak - (retakDi / FPS) * 0.8} rate={0.8} />
       </Kamera>
       <Vinyet kuat={0.75} warna="rgba(10,20,50,1)" />
       <Kepentung dari={retakDi} kuat={1} lama={52} />
@@ -215,7 +216,9 @@ const AdeganRonde2: React.FC = () => {
   const retak = M.retak2;
   // Kartu tertutup diperlambat/dipercepat secukupnya supaya terbuka tepat di bukaDi.
   const tertutup = r.tertutup ?? r.retak - 1.5;
-  const bukaKlip = r.retak - (retak - bukaDi) / FPS;
+  // Ekor sesudah dibuka diperlambat 0,7× supaya berhenti sebelum panel MENTUNG di rekaman muncul.
+  const RATE_KENA = 0.7;
+  const bukaKlip = r.retak - ((retak - bukaDi) / FPS) * RATE_KENA;
   const rateTegang = Math.max(0.3, (bukaKlip - tertutup) / ((bukaDi - tegangDi) / FPS));
   const pile = { x: cssX(330), y: cssY(430) };
   const panelBot = { x: cssX(195), y: cssY(100) };
@@ -233,7 +236,7 @@ const AdeganRonde2: React.FC = () => {
         {f < pungutDi && <Klip klip="r2" mulai={a0} lama={pungutDi - a0} dari={(r.buang ?? 0) - 0.7} rate={2} />}
         {f >= pungutDi && f < tegangDi && <Klip klip="r2" mulai={pungutDi} lama={tegangDi - pungutDi} dari={(r.pungut ?? 0) - 0.3} rate={2} />}
         {tegang && f < bukaDi && <Klip klip="r2" mulai={tegangDi} lama={bukaDi - tegangDi} dari={tertutup} rate={rateTegang} />}
-        {f >= bukaDi && <Klip klip="r2" mulai={bukaDi} lama={b1 - bukaDi} dari={bukaKlip} />}
+        {f >= bukaDi && <Klip klip="r2" mulai={bukaDi} lama={b1 - bukaDi} dari={bukaKlip} rate={RATE_KENA} />}
         <Cincin x={pile.x + 90} y={pile.y} r={70} dari={a0 + 4} sampai={pungutDi + 6} />
         <Panah dari={pungutDi + 5} lama={8} x1={pile.x + 40} y1={pile.y - 110} x2={panelBot.x + 120} y2={panelBot.y + 110} lengkung={-0.28} sampai={tegangDi} />
       </Kamera>
@@ -316,7 +319,36 @@ const AdeganKedai: React.FC = () => {
   );
 };
 
-/** 42–44 dtk: kembali ke chat gelap, satu notifikasi masuk, lalu potong (loop ke frame 0). */
+/** 42–45 dtk: kartu khusus QR (besar, diam cukup lama supaya bisa dipindai dari layar lain). */
+const AdeganQr: React.FC = () => {
+  const f = useCurrentFrame();
+  const [a] = T.qr;
+  const masuk = halus((f - a) / 10);
+  // Dorongan kamera sangat pelan (±4% selama 3 dtk) supaya tidak diam, tapi QR tetap tajam.
+  const skala = 0.96 + 0.04 * masuk + Math.max(0, f - a) * 0.0004;
+  const SISI = 680;
+  return (
+    <AbsoluteFill style={{ background: 'radial-gradient(ellipse 80% 60% at 50% 45%, #6a4512 0%, #3a2408 55%, #170e04 100%)' }}>
+      {/* Kolom isi dipusatkan di zona aman Reels (x 70–940). */}
+      <div style={{ position: 'absolute', left: 70, width: 870, top: 0, height: H, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 34, transform: `scale(${skala})`, opacity: Math.min(1, (f - a + 1) / 4) }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, fontFamily: FONT, fontWeight: 800, fontSize: 60, color: WARNA.krem, textShadow: '0 4px 14px rgba(0,0,0,0.5)' }}>
+          <Logo varian="maskot" lebar={86} warna={WARNA.kuning} />
+          {TEKS_QR_JUDUL}
+        </div>
+        <div style={{ padding: 22, background: WARNA.krem, borderRadius: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.55), 0 0 60px 10px rgba(241,166,21,0.35)' }}>
+          <Qr sisi={SISI} />
+        </div>
+        <div style={{ textAlign: 'center', fontFamily: FONT }}>
+          <div style={{ fontSize: 62, fontWeight: 800, color: '#fff', WebkitTextStroke: '5px #000', paintOrder: 'stroke fill', lineHeight: 1.1 }}>{TEKS_QR_AJAK}</div>
+          <div style={{ fontSize: 40, fontWeight: 700, color: WARNA.emasMuda, marginTop: 14, letterSpacing: 0.5, textShadow: '0 3px 10px rgba(0,0,0,0.6)' }}>{TEKS_QR_URL}</div>
+        </div>
+      </div>
+      <Vinyet kuat={0.35} />
+    </AbsoluteFill>
+  );
+};
+
+/** 45–47 dtk: kembali ke chat gelap, satu notifikasi masuk, lalu potong (loop ke frame 0). */
 const AdeganLoop: React.FC = () => {
   const f = useCurrentFrame();
   const [a] = T.loop;
@@ -357,12 +389,12 @@ const AudioTeaser: React.FC<{ kode: string }> = ({ kode }) => {
       <Bunyi nama="jotos" dari={3} />
       <Bunyi nama="kepentung" dari={4} volume={0.7} />
       {/* Whip ke chat, pop tiap bubble, whoosh kode terbang, HP menyala. */}
-      <Bunyi nama="kocok" dari={T.whip[0]} volume={0.7} rate={1.6} />
+      <Sfx nama="whoosh" dari={T.whip[0] - 2} volume={0.9} />
       {semuaBubble.map((p) => (
         <Bunyi key={`${p.frame}-${p.teks}`} nama="pop" dari={p.frame} volume={0.9} />
       ))}
-      <Bunyi nama="geser" dari={T.kodeTerbang[0]} volume={1} rate={0.8} />
-      <Bunyi nama="geser" dari={T.kodeTerbang[0] + 14} volume={0.9} rate={1.2} />
+      <Sfx nama="whoosh" dari={T.kodeTerbang[0]} volume={0.8} />
+      <Sfx nama="whoosh-kecil" dari={T.kodeTerbang[0] + 14} volume={0.8} />
       {[0, 1, 2, 3].map((i) => (
         <Bunyi key={i} nama="notifikasi" dari={T.kodeTerbang[0] + 16 + i * 13} volume={0.55} rate={1 + i * 0.06} />
       ))}
@@ -386,7 +418,8 @@ const AudioTeaser: React.FC<{ kode: string }> = ({ kode }) => {
       <Bunyi nama="jotos" dari={M.retak2 + 2} volume={0.6} rate={0.85} />
       <Bunyi nama="kepentung" dari={M.retak2 + 1} />
       {/* Ronde 3: flash ke kedai, menang, sorak, panel bot retak. */}
-      <Bunyi nama="kartu" dari={M.flashKedai} volume={0.7} />
+      <Sfx nama="flash" dari={M.flashKedai - 2} volume={0.8} />
+      <Sfx nama="kedai" dari={M.flashKedai} lama={T.stempel[0] - M.flashKedai} volume={(f) => 0.32 * interpolate(f, [0, 15, T.stempel[0] - M.flashKedai - 20, T.stempel[0] - M.flashKedai], [0, 1, 1, 0], jepit) * (f + M.flashKedai >= M.heningMulai3 && f + M.flashKedai < M.chatBot ? 0.4 : 1)} />
       <Bunyi nama="geser" dari={T.menang[0]} volume={0.8} rate={0.9} />
       <Bunyi nama="mentung" dari={M.mentung3 - 1} />
       <Bunyi nama="menang" dari={M.mentung3} />
@@ -395,9 +428,9 @@ const AudioTeaser: React.FC<{ kode: string }> = ({ kode }) => {
       <Bunyi nama="geser" dari={T.lawanBot[0]} volume={0.7} rate={0.9} />
       {/* Penutup, stempel DOK, notifikasi loop. */}
       <Bunyi nama="giliran" dari={T.tutup[0] + 2} volume={0.7} />
-      <Bunyi nama="jotos" dari={M.stempelKena} volume={1} rate={0.6} />
-      <Bunyi nama="letak" dari={M.stempelKena} volume={0.9} rate={0.5} />
-      <Bunyi nama="kocok" dari={T.loop[0] - 4} volume={0.6} rate={1.6} />
+      <Sfx nama="dok" dari={M.stempelKena - 1} volume={1} />
+      <Sfx nama="whoosh" dari={T.qr[0] - 5} volume={0.7} />
+      <Sfx nama="whoosh-kecil" dari={T.loop[0] - 5} volume={0.7} />
       <Bunyi nama="notifikasi" dari={M.notifAkhir} volume={1} />
     </>
   );
@@ -427,6 +460,7 @@ export const TeaserB: React.FC = () => {
   else if (f < T.chat3[0]) isi = <AdeganRonde2 />;
   else if (di(T.chat3)) isi = <AdeganChat3 />;
   else if (f < T.stempel[1]) isi = <AdeganKedai />;
+  else if (f < T.qr[1]) isi = <AdeganQr />;
   else isi = <AdeganLoop />;
 
   return (
@@ -434,6 +468,7 @@ export const TeaserB: React.FC = () => {
       {isi}
       {/* Lapisan tetap: whip, flash, stempel, pil, logo pojok, grain. */}
       <Whip dari={T.whip[0]} lama={8} />
+      <Whip dari={T.qr[0] - 4} lama={8} />
       <Whip dari={T.loop[0] - 4} lama={8} />
       <Flash dari={M.flashKedai} lama={4} />
       <Stempel teks={TEKS_STEMPEL} kena={M.stempelKena} sampai={T.stempel[1]} />

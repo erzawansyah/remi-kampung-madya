@@ -294,6 +294,13 @@ export const Bunyi: React.FC<{ nama: string; dari: number; volume?: number; rate
   </Sequence>
 );
 
+/** Efek suara ElevenLabs (aset/el-<nama>.wav, dibuat scripts/ambil-sfx.mjs), mulai di frame `dari`. */
+export const Sfx: React.FC<{ nama: string; dari: number; volume?: number | ((f: number) => number); lama?: number }> = ({ nama, dari, volume = 1, lama }) => (
+  <Sequence from={dari} durationInFrames={lama} layout="none">
+    <Audio src={staticFile(`aset/el-${nama}.wav`)} volume={volume} />
+  </Sequence>
+);
+
 /** Whip/rewind: blur gerak + garis pindai selama `lama` frame dari `dari`. */
 export const Whip: React.FC<{ dari: number; lama?: number }> = ({ dari, lama = 8 }) => {
   const f = useCurrentFrame();

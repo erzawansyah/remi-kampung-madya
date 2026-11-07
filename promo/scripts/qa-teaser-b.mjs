@@ -17,7 +17,7 @@ const v = probe.streams.find((s) => s.codec_type === 'video');
 const a = probe.streams.find((s) => s.codec_type === 'audio');
 const durasi = Number(probe.format.duration);
 console.log(`format: ${v.width}x${v.height} ${v.codec_name} ${v.pix_fmt} ${v.r_frame_rate} fps, audio ${a.codec_name} ${a.sample_rate} Hz, durasi ${durasi.toFixed(3)} dtk`);
-console.log(`  durasi 43,5–44,5: ${durasi >= 43.5 && durasi <= 44.5 ? 'OK' : 'GAGAL'}; 1080x1920: ${v.width === 1080 && v.height === 1920 ? 'OK' : 'GAGAL'}; h264 yuv420p: ${v.codec_name === 'h264' && v.pix_fmt === 'yuv420p' ? 'OK' : 'GAGAL'}; aac 48k: ${a.codec_name === 'aac' && a.sample_rate === '48000' ? 'OK' : 'GAGAL'}`);
+console.log(`  durasi 46,5–47,5: ${durasi >= 46.5 && durasi <= 47.5 ? 'OK' : 'GAGAL'}; 1080x1920: ${v.width === 1080 && v.height === 1920 ? 'OK' : 'GAGAL'}; h264 yuv420p: ${v.codec_name === 'h264' && v.pix_fmt === 'yuv420p' ? 'OK' : 'GAGAL'}; aac 48k: ${a.codec_name === 'aac' && a.sample_rate === '48000' ? 'OK' : 'GAGAL'}`);
 
 // 2. Loudness (ebur128).
 const keluar = String(spawnSync('ffmpeg', ['-hide_banner', '-nostdin', '-i', video, '-af', 'ebur128=peak=true', '-f', 'null', '-'], { encoding: 'utf8' }).stderr);
@@ -26,8 +26,8 @@ const lufs = Number(/I:\s+(-?[\d.]+) LUFS/.exec(ringkas)?.[1]);
 const tp = Number(/Peak:\s+(-?[\d.]+) dBFS/.exec(ringkas)?.[1]);
 console.log(`loudness: ${lufs} LUFS (target -14 ±1: ${Math.abs(lufs + 14) <= 1 ? 'OK' : 'GAGAL'}), true peak ${tp} dBTP (≤ -1,5: ${tp <= -1.5 ? 'OK' : 'GAGAL'})`);
 
-// 3. QR dari still 37–40 dtk (frame 1125, 1155, 1185).
-for (const detik of [37.5, 38.5, 39.5]) {
+// 3. QR dari still: papan di meja (37–40 dtk) dan kartu khusus QR (42–45 dtk).
+for (const detik of [38.5, 42.6, 43.5, 44.6]) {
   const berkas = join(tmp, `qr-${detik}.png`);
   ff(['-y', '-loglevel', 'error', '-ss', String(detik), '-i', video, '-frames:v', '1', berkas]);
   const png = PNG.sync.read(readFileSync(berkas));

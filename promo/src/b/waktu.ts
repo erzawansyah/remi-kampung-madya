@@ -1,6 +1,7 @@
 // Semua konstanta waktu Teaser B (frame = detik × 30), mengikuti storyboard promo/BRIEF-teaser-b.md §3.
 export const FPS = 30;
-export const DURASI = 1320;
+// Brief: 44 dtk. Ditambah 3 dtk kartu khusus QR (permintaan pengguna, 7 Nov 2026) supaya QR bisa dipindai.
+export const DURASI = 1410;
 export const W = 1080;
 export const H = 1920;
 
@@ -26,7 +27,9 @@ export const T = {
   lawanBot: [1050, 1110],
   tutup: [1110, 1200],
   stempel: [1200, 1260],
-  loop: [1260, 1320],
+  /** Kartu khusus QR, 3 dtk (tambahan di luar brief, permintaan pengguna). */
+  qr: [1260, 1350],
+  loop: [1350, 1410],
   /** Pil "gratis · tanpa login · tanpa top up" (detik 2–37). */
   pil: [60, 1110],
 } as const satisfies Record<string, readonly [number, number]>;
@@ -49,7 +52,7 @@ export const M = {
   // Penutup
   stempelKena: 1205,
   // Brief meminta potong 0,2 dtk sesudah bubble; dilonggarkan jadi 1 dtk supaya bubble sempat terbaca.
-  notifAkhir: 1290,
+  notifAkhir: 1380,
 } as const;
 
 /** Pesan chat: frame muncul, pengirim, teks. Ejaan Jawa Malangan apa adanya (brief §3). */
@@ -102,6 +105,9 @@ export const TEKS_TUTUP_KECIL = 'Main dari mana ae. Mau melu grup? DM @kedaimady
 export const TEKS_STEMPEL = 'BUKAN JUDI ONLINE';
 export const TEKS_PIL = 'gratis · tanpa login · tanpa top up';
 export const URL_GAME = 'https://remi-madya.likrea.biz.id';
+export const TEKS_QR_JUDUL = 'Remi Kampung Madya';
+export const TEKS_QR_AJAK = 'Pindai buat main';
+export const TEKS_QR_URL = 'remi-madya.likrea.biz.id';
 
 /** Jam dan baterai status bar per adegan chat. */
 export const STATUS = {

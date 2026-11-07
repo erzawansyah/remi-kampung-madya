@@ -6,6 +6,7 @@
   "description": "Video promosi Remi Kampung Madya (Remotion). Bukan workspace; tidak ikut build/test aplikasi.",
   "scripts": {
     "aset": "node scripts/ambil-aset.mjs",
+    "sfx": "node scripts/ambil-sfx.mjs",
     "studio": "remotion studio src/index.ts",
     "render": "remotion render src/index.ts Teaser out/mentah.mp4 && remotion ffmpeg -loglevel error -y -i out/mentah.mp4 -af loudnorm=I=-14:TP=-1.5:LRA=11 -ar 48000 -c:v copy -c:a aac -b:a 192k out/teaser-reels.mp4",
     "render:b": "remotion render src/index.ts TeaserB out/teaser-b-mentah.mp4 --color-space=bt709 && node scripts/normalkan-audio.mjs out/teaser-b-mentah.mp4 out/teaser-b.mp4",
