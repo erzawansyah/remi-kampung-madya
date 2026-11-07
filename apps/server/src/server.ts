@@ -197,6 +197,8 @@ interface Sambungan {
    * jawabannya lewat sambungan baru.
    */
   digantikan?: { pemainId: string; kode: string };
+  /** Nonton (#60): sambungan ini sedang menonton meja `kode` dengan alamat kirim `alamat`. */
+  penonton?: { alamat: string; kode: string };
 }
 
 export { alamatKlien, alamatLokal, kunciIp, originDiizinkan } from './keamanan.js';
@@ -302,6 +304,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
    */
   const ditinggalTertunda = new Map<string, { kompetisi: string; data: DataMeja; waktu: number }>();
   const sambunganPemain = new Map<string, Sambungan>();
+  /** Nonton (#60): alamat kirim penonton → sambungannya. Terpisah dari pemain (penonton tidak punya kursi). */
+  const sambunganPenonton = new Map<string, Sambungan>();
   const semuaSambungan = new Set<Sambungan>();
   /** Pemain yang sambungannya tertutup tapi belum dikabarkan terputus ke meja (jeda JEDA_PUTUS_MS). */
   const putusTertunda = new Map<string, { kode: string; timer: unknown; sejak: number }>();
@@ -468,6 +472,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
    */
   const hapusMeja = (kode: string, buangSimpanan = true) => {
     try {
+      // Penonton diberi tahu, kecuali server sedang dimatikan (mereka menyambung ulang ke meja yang dipulihkan).
+      if (!menutup) daftarMeja.get(kode)?.bubarkanPenonton('Mejanya sudah bubar.');
       daftarMeja.get(kode)?.hentikan();
     } catch (e) {
       log(`galat menghentikan meja ${kode}`, e);
@@ -891,6 +897,16 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   });
 
   const kirim = (pemainId: string, pesan: PesanServer) => {
+    const penonton = sambunganPenonton.get(pemainId);
+    if (penonton) {
+      if (penonton.ws.readyState === penonton.ws.OPEN) penonton.ws.send(JSON.stringify(pesan));
+      // Tontonan berakhir (meja kembali ke lobi, bubar, atau penontonnya keluar): lepas tautannya.
+      if (pesan.t === 'tontonSelesai') {
+        sambunganPenonton.delete(pemainId);
+        if (penonton.penonton?.alamat === pemainId) delete penonton.penonton;
+      }
+      return;
+    }
     const s = sambunganPemain.get(pemainId);
     if (!s) return;
     if (s.ws.readyState === s.ws.OPEN) s.ws.send(JSON.stringify(pesan));
@@ -982,6 +998,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       lama.kode = null;
       lama.ws.close(4000, 'Dibuka di tempat lain');
     }
+    // Duduk di meja (buat/gabung) mengakhiri tontonan sambungan ini (#60).
+    lepasPenonton(s);
     const idLama = s.pemainId;
     const kodeLama = s.kode;
     s.pemainId = pemainId;
@@ -994,6 +1012,19 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       } catch (e) {
         log(`galat saat pemain pindah dari meja ${kodeLama}`, e);
       }
+    }
+  };
+
+  /** Nonton (#60): sambungan ini berhenti menonton (keluar, ganti meja, atau tertutup). */
+  const lepasPenonton = (s: Sambungan) => {
+    const p = s.penonton;
+    if (!p) return;
+    delete s.penonton;
+    if (sambunganPenonton.get(p.alamat) === s) sambunganPenonton.delete(p.alamat);
+    try {
+      daftarMeja.get(p.kode)?.lepasPenonton(p.alamat);
+    } catch (e) {
+      log(`galat saat penonton meja ${p.kode} pergi`, e);
     }
   };
 
@@ -1011,15 +1042,50 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       case 'ping':
         // `w` = jam server, supaya client bisa mengoreksi jam HP yang meleset untuk bar waktu giliran.
         return kirimKe(s, { t: 'pong', w: penjadwalDasar.sekarang() });
-      case 'daftar':
-        return kirimKe(s, {
-          t: 'daftar',
-          meja: [...daftarMeja.values()]
-            // Meja kompetisi tidak pernah masuk daftar publik: duduknya lewat daftar meja di kompetisinya.
-            .filter((m) => m.publik && !m.kompetisi && m.status === 'lobi')
-            .map((m) => m.ringkasan())
-            .filter((r) => r.terisi < r.jumlahPemain),
-        });
+      case 'daftar': {
+        const lobi = [...daftarMeja.values()]
+          // Meja kompetisi tidak pernah masuk daftar publik: duduknya lewat daftar meja di kompetisinya.
+          .filter((m) => m.publik && !m.kompetisi && m.status === 'lobi')
+          .map((m) => m.ringkasan())
+          .filter((r) => r.terisi < r.jumlahPemain);
+        // Nonton (#60): meja yang sedang main ikut, hanya untuk aplikasi yang memintanya.
+        const tonton = pesan.tonton
+          ? [...daftarMeja.values()].filter((m) => m.bisaDitonton).map((m) => ({ ...m.ringkasan(), tonton: true as const }))
+          : [];
+        return kirimKe(s, { t: 'daftar', meja: [...lobi, ...tonton] });
+      }
+      case 'tonton': {
+        const kode = pesan.kode.trim().toUpperCase();
+        const meja = daftarMeja.get(kode);
+        if (!meja) return kirimKe(s, { t: 'error', pesan: `Meja ${kode} nggak ketemu.` });
+        if (s.pemainId && s.kode === kode) return kirimKe(s, { t: 'error', pesan: 'Kamu duduk di meja ini, Bos. Nggak perlu nonton.' });
+        const alamat = randomUUID();
+        sambunganPenonton.set(alamat, s);
+        try {
+          meja.tonton(alamat, pesan.nama, pesan.token);
+        } catch (e) {
+          sambunganPenonton.delete(alamat);
+          if (e instanceof GalatMeja) return kirimKe(s, { t: 'error', pesan: e.message });
+          throw e;
+        }
+        // Berhasil: tontonan lama sambungan ini dilepas, dan kursi yang dipegangnya dianggap terputus
+        // (sama seperti pindah ke meja lain lewat gabung).
+        lepasPenonton(s);
+        s.penonton = { alamat, kode };
+        if (s.pemainId) {
+          const idLama = s.pemainId;
+          const kodeLama = s.kode;
+          if (sambunganPemain.get(idLama) === s) sambunganPemain.delete(idLama);
+          s.pemainId = null;
+          s.kode = null;
+          try {
+            if (kodeLama) daftarMeja.get(kodeLama)?.terputus(idLama);
+          } catch (e) {
+            log(`galat saat pemain pindah dari meja ${kodeLama} untuk nonton`, e);
+          }
+        }
+        return;
+      }
       case 'buat': {
         if (daftarMeja.size >= (opsi.maksMeja ?? 500)) {
           return kirimKe(s, { t: 'error', pesan: 'Server lagi penuh, coba lagi nanti.' });
@@ -1104,6 +1170,19 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         return;
       }
       default: {
+        // Nonton (#60): pesan dari sambungan penonton ke mejanya (meja menolak yang bukan untuk penonton).
+        if (s.penonton && !s.pemainId) {
+          const { alamat, kode: kodeTonton } = s.penonton;
+          const mejaTonton = daftarMeja.get(kodeTonton);
+          if (!mejaTonton) {
+            lepasPenonton(s);
+            return kirimKe(s, { t: 'tontonSelesai', alasan: 'Mejanya sudah bubar.' });
+          }
+          if (pesan.t === 'aksi' && pesan.id !== undefined) kirimKe(s, { t: 'aksiDiterima', id: pesan.id });
+          mejaTonton.terimaPenonton(alamat, pesan);
+          if (pesan.t === 'keluar') lepasPenonton(s);
+          return;
+        }
         let pemainId = s.pemainId;
         let kode = s.kode;
         // Aksi yang terkirim lewat sambungan lama sebelum client pindah ke sambungan baru: tetap
@@ -1185,6 +1264,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       }
     });
     ws.on('close', () => {
+      lepasPenonton(s);
       if (semuaSambungan.delete(s)) {
         const sisa = (sambunganPerJaringan.get(s.jaringan) ?? 1) - 1;
         if (sisa > 0) sambunganPerJaringan.set(s.jaringan, sisa);
