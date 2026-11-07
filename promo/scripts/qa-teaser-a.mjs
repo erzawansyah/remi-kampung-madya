@@ -26,8 +26,8 @@ const lufs = Number(/I:\s+(-?[\d.]+) LUFS/.exec(ringkas)?.[1]);
 const tp = Number(/Peak:\s+(-?[\d.]+) dBFS/.exec(ringkas)?.[1]);
 console.log(`loudness: ${lufs} LUFS (target -14 ±1: ${Math.abs(lufs + 14) <= 1 ? 'OK' : 'GAGAL'}), true peak ${tp} dBTP (≤ -1,5: ${tp <= -1.5 ? 'OK' : 'GAGAL'})`);
 
-// 3. QR dari still 35–37 dtk (penutup) dan 40,5–42,5 dtk (bagian khusus QR).
-for (const detik of [35.6, 36.6, 40.6, 41.6, 42.6]) {
+// 3. QR dari still 40,5–42,5 dtk (bagian khusus QR; di meja tidak ada papan QR).
+for (const detik of [40.4, 41.0, 41.6, 42.2, 42.8]) {
   const berkas = join(tmp, `qr-${detik}.png`);
   ff(['-y', '-loglevel', 'error', '-ss', String(detik), '-i', video, '-frames:v', '1', berkas]);
   const png = PNG.sync.read(readFileSync(berkas));

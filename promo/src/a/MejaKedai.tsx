@@ -203,11 +203,12 @@ export interface PropsMeja {
   tanpaDepan?: boolean;
 }
 
-/** Benda di tepi depan meja (lapisan paralaks depan): satu kartu dan papan QR berdiri. */
-export const BendaDepan: React.FC<{ lompatKartu?: number; glowQr?: number }> = ({ lompatKartu = 0, glowQr = 0 }) => (
+/** Benda di tepi depan meja (lapisan paralaks depan): dua kartu. Papan QR sengaja tidak ada di meja (keputusan pemilik:
+ * QR hanya di kartu penutup), jadi `glowQr` tidak dipakai lagi di sini. */
+export const BendaDepan: React.FC<{ lompatKartu?: number; glowQr?: number }> = ({ lompatKartu = 0 }) => (
   <>
     <KartuMeja x={610} y={1470} rot={58} lebar={100} lompat={lompatKartu * 0.6} />
-    <PapanQr x={BENDA.qr.x} y={BENDA.qr.y} lebar={300} glow={glowQr} />
+    <KartuMeja x={470} y={1540} rot={-34} lebar={96} lompat={lompatKartu * 0.5} />
   </>
 );
 
