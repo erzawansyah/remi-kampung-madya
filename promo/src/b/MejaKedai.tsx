@@ -26,15 +26,16 @@ export const lerpPose = (a: PoseHp, b: PoseHp, t: number): PoseHp => {
 
 /** Posisi benda di meja (koordinat frame). */
 export const POSE = {
-  kamuRebah: { x: 330, y: 1540, lebar: 300, rot: -14, pipih: 0.62 } as PoseHp,
+  // Kamu di sisi kamera (HP paling dekat), Dimas dan Ayu di seberang meja, warga kedai = kursi kosong di kanan.
+  kamuRebah: { x: 360, y: 1580, lebar: 300, rot: -12, pipih: 0.62 } as PoseHp,
   kamuAngkat: { x: 540, y: 1070, lebar: 700, rot: 0, pipih: 1 } as PoseHp,
-  lawanRebah: { x: 250, y: 1120, lebar: 232, rot: 18, pipih: 0.6 } as PoseHp,
+  lawanRebah: { x: 800, y: 1450, lebar: 240, rot: 16, pipih: 0.6 } as PoseHp,
   lawanAngkat: { x: 540, y: 1160, lebar: 700, rot: 0, pipih: 1 } as PoseHp,
-  hp3: { x: 600, y: 1040, lebar: 228, rot: -22, pipih: 0.6 } as PoseHp,
-  hp4: { x: 680, y: 1640, lebar: 240, rot: 32, pipih: 0.62 } as PoseHp,
-  qr: { x: 820, y: 1330 },
-  cangkir1: { x: 420, y: 1260 },
-  cangkir2: { x: 500, y: 1420 },
+  hpDimas: { x: 290, y: 1050, lebar: 210, rot: 10, pipih: 0.58 } as PoseHp,
+  hpAyu: { x: 610, y: 1060, lebar: 210, rot: -8, pipih: 0.58 } as PoseHp,
+  qr: { x: 890, y: 960 },
+  cangkir1: { x: 450, y: 1190 },
+  cangkir2: { x: 600, y: 1440 },
 };
 
 /** QR menuju URL_GAME: koreksi galat M, modul hitam di atas krem, zona tenang 4 modul. Ukuran = sisi (px). */
@@ -139,6 +140,57 @@ const KartuMeja: React.FC<{ x: number; y: number; rot: number; muka?: string; le
   </div>
 );
 
+/**
+ * Pemain di seberang meja: siluet ilustrasi tanpa wajah (bukan orang asli, brief §2), disinari lampu dari
+ * atas. Badan digambar sebelum bidang meja (tertutup meja), lengan digambar sesudahnya (bertumpu di meja).
+ */
+const Badan: React.FC<{ x: number; bahu: number; k?: number; sanggul?: boolean }> = ({ x, bahu, k = 1, sanggul }) => (
+  <svg width={W} height={H} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', filter: 'blur(1.5px)' }}>
+    <defs>
+      <linearGradient id={`badan${x}`} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#4a3218" />
+        <stop offset="0.25" stopColor="#24170b" />
+        <stop offset="1" stopColor="#120b05" />
+      </linearGradient>
+    </defs>
+    {/* Sandaran kursi di belakang. */}
+    <rect x={x - 175 * k} y={bahu - 40 * k} width={350 * k} height={260 * k} rx={30 * k} fill="#1a1007" />
+    {/* Bahu dan badan (bawahnya tertutup meja). */}
+    <path
+      d={`M ${x - 165 * k} ${bahu + 300 * k} C ${x - 170 * k} ${bahu + 40 * k}, ${x - 120 * k} ${bahu}, ${x - 40 * k} ${bahu - 8 * k} L ${x + 40 * k} ${bahu - 8 * k} C ${x + 120 * k} ${bahu}, ${x + 170 * k} ${bahu + 40 * k}, ${x + 165 * k} ${bahu + 300 * k} Z`}
+      fill={`url(#badan${x})`}
+      stroke="#8a6230"
+      strokeOpacity={0.55}
+      strokeWidth={3}
+    />
+    <rect x={x - 26 * k} y={bahu - 50 * k} width={52 * k} height={60 * k} rx={14 * k} fill="#2a1b0c" />
+    {/* Kepala tanpa wajah, diterangi dari atas. */}
+    <ellipse cx={x} cy={bahu - 110 * k} rx={62 * k} ry={74 * k} fill={`url(#badan${x})`} stroke="#9a7038" strokeOpacity={0.6} strokeWidth={3} />
+    {sanggul && <circle cx={x + 30 * k} cy={bahu - 180 * k} r={30 * k} fill="#2e1e0d" stroke="#9a7038" strokeOpacity={0.5} strokeWidth={2} />}
+  </svg>
+);
+
+/** Lengan bertumpu di meja menuju HP di depannya. */
+const Lengan: React.FC<{ x: number; bahu: number; ke: { x: number; y: number }; k?: number }> = ({ x, bahu, ke, k = 1 }) => (
+  <svg width={W} height={H} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', filter: 'blur(1.5px)' }}>
+    {[-1, 1].map((sisi) => (
+      <g key={sisi}>
+        <path d={`M ${x + sisi * 130 * k} ${bahu + 150 * k} Q ${x + sisi * 150 * k} ${930} ${ke.x + sisi * 70 * k} ${ke.y - 10}`} stroke="#1c1208" strokeWidth={58 * k} strokeLinecap="round" fill="none" />
+        <path d={`M ${x + sisi * 130 * k} ${bahu + 150 * k} Q ${x + sisi * 150 * k} ${930} ${ke.x + sisi * 70 * k} ${ke.y - 10}`} stroke="#8a6230" strokeOpacity={0.35} strokeWidth={3} fill="none" transform={`translate(0 ${-26 * k})`} />
+      </g>
+    ))}
+  </svg>
+);
+
+/** Kursi kosong (tempat warga kedai): sandaran kayu di tepi kanan depan. */
+const KursiKosong: React.FC = () => (
+  <svg width={W} height={H} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', filter: 'blur(2px)' }}>
+    <rect x={960} y={1260} width={230} height={420} rx={26} fill="#3a230e" stroke="#9a6a34" strokeOpacity={0.5} strokeWidth={4} />
+    <rect x={990} y={1300} width={170} height={60} rx={12} fill="#24160a" />
+    <rect x={990} y={1400} width={170} height={60} rx={12} fill="#24160a" />
+  </svg>
+);
+
 /** HP tergeletak/diangkat sesuai pose. */
 export const HpMeja: React.FC<{ pose: PoseHp; children?: ReactNode; nyala?: number }> = ({ pose, children, nyala = 1 }) => (
   <Hp lebar={pose.lebar} x={pose.x} y={pose.y} rot={pose.rot} transform={`scaleY(${pose.pipih})`} nyala={nyala} style={{ transformOrigin: 'center' }}>
@@ -187,6 +239,9 @@ export const MejaKedai: React.FC<PropsMeja> = ({ turun, terang, poseKamu, poseLa
         <div style={{ position: 'absolute', left: W / 2 - 40, top: 160, width: 80, height: 80, borderRadius: 40, background: '#fff3cf', boxShadow: '0 0 60px 30px rgba(255,214,130,0.75)', opacity: kedip }} />
         {/* Kerucut cahaya ke meja. */}
         <div style={{ position: 'absolute', left: W / 2 - 700, top: 200, width: 1400, height: 1700, background: 'radial-gradient(ellipse 50% 60% at 50% 70%, rgba(255,200,100,0.34), rgba(255,200,100,0) 70%)', pointerEvents: 'none' }} />
+        {/* Dimas dan Ayu di seberang meja (badan di belakang meja). */}
+        <Badan x={260} bahu={760} />
+        <Badan x={600} bahu={772} k={0.96} sanggul />
         {/* Bidang meja kayu (melebar ke bawah). */}
         <div
           style={{
@@ -210,19 +265,23 @@ export const MejaKedai: React.FC<PropsMeja> = ({ turun, terang, poseKamu, poseLa
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.5) 100%)' }} />
         </div>
         {/* Benda di meja. */}
-        <KartuMeja x={420} y={1330} rot={-28} />
-        <KartuMeja x={470} y={1348} rot={-14} />
-        <KartuMeja x={512} y={1320} rot={6} />
-        <KartuMeja x={240} y={1360} rot={62} />
-        <KartuMeja x={400} y={1150} rot={-70} />
-        <KartuMeja x={560} y={1480} rot={22} muka="wajik-8" />
+        <KartuMeja x={480} y={1310} rot={-28} />
+        <KartuMeja x={530} y={1328} rot={-14} />
+        <KartuMeja x={572} y={1300} rot={6} />
+        <KartuMeja x={200} y={1330} rot={62} />
+        <KartuMeja x={760} y={1200} rot={-70} />
+        <KartuMeja x={680} y={1600} rot={22} muka="wajik-8" />
         <Cangkir x={POSE.cangkir1.x} y={POSE.cangkir1.y} benih={1} skala={0.95} />
         <Cangkir x={POSE.cangkir2.x} y={POSE.cangkir2.y} benih={2} skala={1.05} />
-        <HpMeja pose={POSE.hp3}>{layarLain}</HpMeja>
-        <HpMeja pose={POSE.hp4}>{layarLain}</HpMeja>
+        <Lengan x={260} bahu={760} ke={POSE.hpDimas} />
+        <Lengan x={600} bahu={772} ke={POSE.hpAyu} k={0.96} />
+        <HpMeja pose={POSE.hpDimas}>{layarLain}</HpMeja>
+        <HpMeja pose={POSE.hpAyu}>{layarLain}</HpMeja>
+        <KursiKosong />
+        {/* Papan QR kecil di sudut belakang meja, tidak menutupi pemain dan HP. */}
+        <PapanQr x={POSE.qr.x} y={POSE.qr.y} lebar={300} glow={glowQr} />
         {!angkatLawan && hpLawan}
         {!angkatKamu && hpKamu}
-        <PapanQr x={POSE.qr.x} y={POSE.qr.y} lebar={500} glow={glowQr} />
         {angkatLawan && hpLawan}
         {angkatKamu && hpKamu}
       </AbsoluteFill>

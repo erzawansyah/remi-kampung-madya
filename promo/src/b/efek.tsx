@@ -65,8 +65,11 @@ export const Kamera: React.FC<{
     <AbsoluteFill style={{ overflow: 'hidden', ...style }}>
       <AbsoluteFill
         style={{
-          transform: `translate(${W / 2 - cx * s}px, ${H / 2 - cy * s}px) scale(${s}) rotate(${rot}deg)`,
-          transformOrigin: `${cx}px ${cy}px`,
+          // Titik (cx, cy) dipindah ke pusat frame, lalu diputar dan diskalakan di sana. Origin harus 0 0:
+          // versi lama memakai origin (cx, cy) sambil tetap mengurangi cx·s, sehingga gambar bergeser ke kiri
+          // atas setiap kali zoom (pentungan hanya kelihatan seperempat, panah keluar layar).
+          transform: `translate(${W / 2}px, ${H / 2}px) rotate(${rot}deg) scale(${s}) translate(${-cx}px, ${-cy}px)`,
+          transformOrigin: '0 0',
         }}
       >
         {children}
@@ -74,7 +77,6 @@ export const Kamera: React.FC<{
     </AbsoluteFill>
   );
 };
-// Catatan: translate dihitung supaya titik (cx, cy) berada di tengah frame sesudah skala.
 
 /** Vinyet: `kuat` 0..1, `warna` bayangan (biru untuk low-key). */
 export const Vinyet: React.FC<{ kuat?: number; warna?: string; style?: CSSProperties }> = ({ kuat = 0.5, warna = 'rgba(0,0,0,1)', style }) => (

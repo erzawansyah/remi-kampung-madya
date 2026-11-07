@@ -19,9 +19,6 @@ export { DURASI as DURASI_TEASER_B, FPS as FPS_TEASER_B };
 const SKALA_REKAM = W / 1170;
 const TINGGI_REKAM = 2532 * SKALA_REKAM;
 const GESER_REKAM = -200;
-/** Koordinat CSS rekaman (390 × 844) → koordinat frame. */
-const cssX = (x: number) => x * (W / 390);
-const cssY = (y: number) => y * (W / 390) + GESER_REKAM;
 
 /** Potongan rekaman layar penuh: `dari` detik di rekaman, mulai di frame `mulai` komposisi. */
 const Klip: React.FC<{ klip: 'r1' | 'r2' | 'r3'; mulai: number; lama: number; dari: number; rate?: number; style?: React.CSSProperties }> = ({ klip, mulai, lama, dari, rate = 1, style }) => (
@@ -131,7 +128,7 @@ const AdeganChat1: React.FC<{ kode: string }> = ({ kode }) => {
   const skala = 1 + Math.max(0, f - a) * 0.0007 + jauh * 0.25;
   return (
     <AbsoluteFill>
-      <Kamera pose={{ skala, y: 900 + 40 * jauh }} pushPerFrame={0} style={{ opacity: 1 - jauh }}>
+      <Kamera pose={{ skala, y: 960 }} pushPerFrame={0} style={{ opacity: 1 - jauh }}>
         <Chat jam={STATUS.chat1.jam} baterai={STATUS.chat1.baterai} pesan={CHAT1(kode)} />
       </Kamera>
       {f >= akhir && <Lokasi mulai={akhir + 16} jarak={13} still="rekam/r1-lobi.png" />}
@@ -146,7 +143,7 @@ const AdeganLobi: React.FC<{ still: string; bubble: { frame: number; dari: 'Kamu
   const lama = 60;
   return (
     <AbsoluteFill style={{ background: '#0c2a18' }}>
-      <Kamera pose={{ skala: glide(f, mulai, mulai + lama, 1.0, 1.1), y: glide(f, mulai, mulai + lama, 790, 760) }} pushPerFrame={0}>
+      <Kamera pose={{ skala: glide(f, mulai, mulai + lama, 1.0, 1.08), y: glide(f, mulai, mulai + lama, 830, 810) }} pushPerFrame={0}>
         {klip ? <Klip klip={klip.klip} mulai={mulai} lama={lama} dari={klip.dari} style={{ top: 0 }} /> : <Still nama={still} geser={0} />}
       </Kamera>
       <Vinyet kuat={0.45} />
@@ -168,30 +165,30 @@ const AdeganRonde1: React.FC = () => {
   const tertutup = r.tertutup ?? r.retak - 1.5;
   const bukaKlip = r.retak - (retak - bukaDi) / FPS;
   const rateTegang = Math.max(0.25, (bukaKlip - tertutup) / ((bukaDi - b0) / FPS));
-  // Posisi di rekaman (CSS 390 × 844): tumpukan buangan kanan tengah, panel Ayu = panel kedua dari atas.
-  const pile = { x: cssX(330), y: cssY(430) };
-  const panelAyu = { x: cssX(195), y: cssY(190) };
+  // Posisi di frame (diukur dari rekaman dengan grid): kartu teratas buangan, kartu Ayu di panel kedua.
+  const buangan = { x: 870, y: 930 };
+  const kartuAyu = { x: 300, y: 340 };
   const tegang = f >= b0;
-  // Kamera (pusat dijaga di dalam gambar): dekat ke buangan, meluncur supaya buangan dan panel Ayu
-  // sama-sama terlihat saat dipungut, lalu ke tengah saat tegang.
+  // Kamera: tangan + buangan saat membuang, lalu naik supaya buangan dan panel Ayu sama-sama terlihat saat
+  // dipungut, lalu ke kartu pentungan saat tegang. Pusat dijaga supaya tepi rekaman tidak ikut tampil.
   const pose = !tegang
     ? f < pungutDi
-      ? { skala: 1.4, x: glide(f, a0, pungutDi, 560, 690), y: glide(f, a0, pungutDi, 1250, 1000) }
-      : { skala: glide(f, pungutDi, pungutDi + 30, 1.4, 1.3), x: glide(f, pungutDi + 4, pungutDi + 30, 690, 620), y: glide(f, pungutDi + 4, pungutDi + 30, 1000, 620) }
-    : { skala: glide(f, b0, b0 + 30, 1.3, 1.2), x: glide(f, b0, b0 + 30, 620, W / 2), y: glide(f, b0, b0 + 30, 620, 980) };
+      ? { skala: 1.2, x: 620, y: 1180 }
+      : { skala: glide(f, pungutDi, pungutDi + 16, 1.2, 0.98), x: glide(f, pungutDi, pungutDi + 16, 620, 540), y: glide(f, pungutDi, pungutDi + 16, 1180, 720) }
+    : { skala: glide(f, b0, b0 + 30, 1.08, 1.02), x: W / 2, y: glide(f, b0, b0 + 30, 720, 900) };
   // Kartu terakhir Ayu bergetar (jitter kamera kecil) sampai dibuka.
   const getar = tegang && f < retak ? noise(f, 3) * 3 * Math.min(1, (f - b0) / 20) : 0;
   const biru = tegang ? interpolate(f, [b0, b0 + 24, retak, retak + 6], [0, 1, 1, 0.3], jepit) : 0;
   return (
     <AbsoluteFill style={{ background: '#06140c' }}>
-      <Kamera pose={{ ...pose, x: pose.x + getar, rot: tegang ? glide(f, b0, b0 + 30, 0, 4) - (f >= retak ? 4 : 0) : 0 }} pushPerFrame={0.0025} pushDari={f < b0 ? a0 : b0} shakeDari={retak} shakeKuat={24} shakeLama={8}>
+      <Kamera pose={{ ...pose, x: pose.x + getar, rot: tegang ? glide(f, b0, b0 + 30, 0, 4) - (f >= retak ? 4 : 0) : 0 }} pushPerFrame={tegang ? 0.0012 : 0.0018} pushDari={f < b0 ? a0 : b0} shakeDari={retak} shakeKuat={24} shakeLama={8}>
         {f < pungutDi && <Klip klip="r1" mulai={a0} lama={pungutDi - a0} dari={(r.buang ?? 0) - 0.9} />}
         {f >= pungutDi && f < b0 && <Klip klip="r1" mulai={pungutDi} lama={b0 - pungutDi} dari={(r.pungut ?? 0) - 0.5} />}
         {tegang && f < bukaDi && <Klip klip="r1" mulai={b0} lama={bukaDi - b0} dari={tertutup} rate={rateTegang} />}
         {f >= bukaDi && <Klip klip="r1" mulai={bukaDi} lama={b1 - bukaDi} dari={bukaKlip} />}
         {/* Cincin cahaya di kartu yang dibuang, lalu panah kuning dari buangan ke panel Ayu. */}
-        <Cincin x={pile.x + 90} y={pile.y} r={70} dari={a0 + 16} sampai={pungutDi + 10} />
-        <Panah dari={pungutDi + 10} lama={14} x1={pile.x + 40} y1={pile.y - 110} x2={panelAyu.x + 120} y2={panelAyu.y + 110} lengkung={-0.28} sampai={b0} />
+        <Cincin x={buangan.x} y={buangan.y} r={72} dari={a0 + 30} sampai={pungutDi + 10} />
+        <Panah dari={pungutDi + 10} lama={14} x1={buangan.x - 90} y1={buangan.y - 70} x2={kartuAyu.x + 40} y2={kartuAyu.y + 40} lengkung={-0.25} sampai={b0} />
       </Kamera>
       <SplitTone hangat={tegang ? 0.04 : 0.12} dingin={0.16 + 0.25 * biru} />
       <Vinyet kuat={0.45 + 0.5 * biru} warna={biru > 0.2 ? 'rgba(8,16,48,1)' : 'rgba(0,0,0,1)'} />
@@ -220,25 +217,26 @@ const AdeganRonde2: React.FC = () => {
   const RATE_KENA = 0.7;
   const bukaKlip = r.retak - ((retak - bukaDi) / FPS) * RATE_KENA;
   const rateTegang = Math.max(0.3, (bukaKlip - tertutup) / ((bukaDi - tegangDi) / FPS));
-  const pile = { x: cssX(330), y: cssY(430) };
-  const panelBot = { x: cssX(195), y: cssY(100) };
+  // Posisi di frame (diukur dari rekaman dengan grid): kartu teratas buangan, kartu Bajigur di panel paling atas.
+  const buangan = { x: 870, y: 840 };
+  const kartuBot = { x: 300, y: 130 };
   const tegang = f >= tegangDi;
   const pose = !tegang
     ? f < pungutDi
-      ? { skala: 1.45, x: glide(f, a0, pungutDi, 560, 690), y: glide(f, a0, pungutDi, 1250, 1000) }
-      : { skala: 1.3, x: glide(f, pungutDi, pungutDi + 12, 690, 620), y: glide(f, pungutDi, pungutDi + 12, 1000, 500) }
-    : { skala: glide(f, tegangDi, tegangDi + 18, 1.3, 1.22), x: glide(f, tegangDi, tegangDi + 18, 620, W / 2), y: glide(f, tegangDi, tegangDi + 18, 500, 980) };
+      ? { skala: 1.25, x: 620, y: 1150 }
+      : { skala: glide(f, pungutDi, pungutDi + 10, 1.25, 1.0), x: glide(f, pungutDi, pungutDi + 10, 620, 540), y: glide(f, pungutDi, pungutDi + 10, 1150, 640) }
+    : { skala: glide(f, tegangDi, tegangDi + 16, 1.06, 1.03), x: W / 2, y: glide(f, tegangDi, tegangDi + 16, 640, 900) };
   const getar = tegang && f < retak ? noise(f, 5) * 4 * Math.min(1, (f - tegangDi) / 14) : 0;
   const biru = tegang ? interpolate(f, [tegangDi, tegangDi + 16, retak, retak + 6], [0, 1, 1, 0.35], jepit) : 0.3;
   return (
     <AbsoluteFill style={{ background: '#06140c' }}>
-      <Kamera pose={{ ...pose, x: pose.x + getar, rot: tegang ? glide(f, tegangDi, tegangDi + 18, 0, -5) + (f >= retak ? 5 : 0) : 0 }} pushPerFrame={0.0035} pushDari={tegang ? tegangDi : a0} shakeDari={retak} shakeKuat={44} shakeLama={9}>
+      <Kamera pose={{ ...pose, x: pose.x + getar, rot: tegang ? glide(f, tegangDi, tegangDi + 18, 0, -5) + (f >= retak ? 5 : 0) : 0 }} pushPerFrame={tegang ? 0.0015 : 0.0025} pushDari={tegang ? tegangDi : a0} shakeDari={retak} shakeKuat={30} shakeLama={9}>
         {f < pungutDi && <Klip klip="r2" mulai={a0} lama={pungutDi - a0} dari={(r.buang ?? 0) - 0.7} rate={2} />}
         {f >= pungutDi && f < tegangDi && <Klip klip="r2" mulai={pungutDi} lama={tegangDi - pungutDi} dari={(r.pungut ?? 0) - 0.3} rate={2} />}
         {tegang && f < bukaDi && <Klip klip="r2" mulai={tegangDi} lama={bukaDi - tegangDi} dari={tertutup} rate={rateTegang} />}
         {f >= bukaDi && <Klip klip="r2" mulai={bukaDi} lama={b1 - bukaDi} dari={bukaKlip} rate={RATE_KENA} />}
-        <Cincin x={pile.x + 90} y={pile.y} r={70} dari={a0 + 4} sampai={pungutDi + 6} />
-        <Panah dari={pungutDi + 5} lama={8} x1={pile.x + 40} y1={pile.y - 110} x2={panelBot.x + 120} y2={panelBot.y + 110} lengkung={-0.28} sampai={tegangDi} />
+        <Cincin x={buangan.x} y={buangan.y} r={72} dari={a0 + 8} sampai={pungutDi + 6} />
+        <Panah dari={pungutDi + 4} lama={8} x1={buangan.x - 90} y1={buangan.y - 70} x2={kartuBot.x + 40} y2={kartuBot.y + 60} lengkung={-0.25} sampai={tegangDi} />
       </Kamera>
       <SplitTone hangat={0.03} dingin={0.2 + 0.3 * biru} />
       <Vinyet kuat={0.55 + 0.5 * biru} warna="rgba(6,12,40,1)" />
@@ -255,7 +253,7 @@ const AdeganChat3: React.FC = () => {
   const [a] = T.chat3;
   return (
     <AbsoluteFill>
-      <Kamera pose={{ skala: 1.0, y: 900 }} pushPerFrame={0.0007} pushDari={a}>
+      <Kamera pose={{ skala: 1.0, y: 960 }} pushPerFrame={0.0007} pushDari={a}>
         <Chat jam={STATUS.chat3.jam} baterai={STATUS.chat3.baterai} pesan={CHAT3} mengetik={[a + 4, CHAT3[0].frame - 2]} />
       </Kamera>
     </AbsoluteFill>
@@ -294,7 +292,7 @@ const AdeganKedai: React.FC = () => {
           glowQr={0.4 + 0.6 * terang}
           layarKamu={<KlipHp klip="r3" mulai={k0} lama={t1 - k0} dari={(r3.mentung ?? 0) - (M.mentung3 - k0) / FPS} />}
           layarLawan={<StillHp nama="r3-bot-retak.png" />}
-          layarLain={<StillHp nama="r3-lobi-bot.png" />}
+          layarLain={<StillHp nama="r3-lawan-retak.png" />}
         />
       </Kamera>
       <AbsoluteFill style={{ background: WARNA.kuning, mixBlendMode: 'screen', opacity: emas, pointerEvents: 'none' }} />
@@ -355,7 +353,7 @@ const AdeganLoop: React.FC = () => {
   const pesan = { frame: M.notifAkhir, dari: 'Kamu' as const, teks: 'Info room?' };
   return (
     <AbsoluteFill>
-      <Kamera pose={{ skala: 1.0, y: 900 }} pushPerFrame={0.0012} pushDari={a}>
+      <Kamera pose={{ skala: 1.0, y: 960 }} pushPerFrame={0.0012} pushDari={a}>
         <Chat jam={STATUS.loop.jam} baterai={STATUS.loop.baterai} pesan={[pesan]} mengetik={[a + 6, M.notifAkhir - 1]} redup={interpolate(f, [a, a + 8], [0.35, 0.08], jepit)} />
       </Kamera>
       <Vinyet kuat={0.45} warna="rgba(5,10,30,1)" />
@@ -452,7 +450,7 @@ export const TeaserB: React.FC = () => {
   else if (f < T.chat2[0]) isi = <AdeganRonde1 />;
   else if (di(T.chat2))
     isi = (
-      <Kamera pose={{ skala: 1.0, y: 900 }} pushPerFrame={0.0009} pushDari={c2a}>
+      <Kamera pose={{ skala: 1.0, y: 960 }} pushPerFrame={0.0009} pushDari={c2a}>
         <Chat jam={STATUS.chat2.jam} baterai={STATUS.chat2.baterai} pesan={CHAT2} />
       </Kamera>
     );
