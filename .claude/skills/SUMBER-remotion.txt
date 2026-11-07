@@ -1,0 +1,4 @@
+Sumber: https://github.com/remotion-dev/skills/tree/main/skills
+Commit: a2824c67f8b4585c294a8101db9f9f0ad3c643f8
+Dipasang: 2026-11-07, untuk pekerjaan video di promo/ (Remotion 4.0.535). Skill ini resmi dari tim Remotion.
+Perbarui dengan menyalin ulang folder skills/* dari sumber, lalu ganti commit di atas.
