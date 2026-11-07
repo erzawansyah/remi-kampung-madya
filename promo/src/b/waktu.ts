@@ -48,7 +48,8 @@ export const M = {
   chatBot: 1080,
   // Penutup
   stempelKena: 1205,
-  notifAkhir: 1314,
+  // Brief meminta potong 0,2 dtk sesudah bubble; dilonggarkan jadi 1 dtk supaya bubble sempat terbaca.
+  notifAkhir: 1290,
 } as const;
 
 /** Pesan chat: frame muncul, pengirim, teks. Ejaan Jawa Malangan apa adanya (brief §3). */

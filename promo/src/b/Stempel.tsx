@@ -16,11 +16,13 @@ export const Stempel: React.FC<{ teks: string; kena: number; sampai: number }> =
   const debu = burst(t / 10);
   return (
     <AbsoluteFill style={{ pointerEvents: 'none' }}>
+      {/* Latar diredupkan supaya cap terbaca jelas di atas papan QR dan teks ajakan. */}
+      <AbsoluteFill style={{ background: '#140a04', opacity: 0.62 * Math.min(1, t / 3) }} />
       <svg width={W} height={H} style={{ position: 'absolute', left: 0, top: 0 }}>
         <defs>
           <filter id="tinta" x="-20%" y="-30%" width="140%" height="160%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="3" seed="7" result="n" />
-            <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.2 2.3" result="m" />
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n" />
+            <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.1 1.55" result="m" />
             <feComposite in="SourceGraphic" in2="m" operator="in" />
           </filter>
         </defs>

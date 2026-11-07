@@ -3,7 +3,7 @@
 import type { TitikRekam } from './waktu';
 
 export const REKAM: Record<'r1' | 'r2' | 'r3', TitikRekam> = {
-  r1: { kode: 'GZHU4', buang: 27.5, pungut: 29.7, tertutup: 31.0, retak: 32.4 },
-  r2: { kode: 'FVTES', lobi: 1.9, buang: 38.7, pungut: 39.2, tertutup: 40.5, retak: 42.24 },
+  r1: { kode: '648VW', buang: 52.9, pungut: 59.0, tertutup: 61.6, retak: 63.5 },
+  r2: { kode: '7H74V', lobi: 0.1, buang: 81.3, pungut: 83.0, tertutup: 85.3, retak: 87.5 },
   r3: { kode: 'KZADE', mentung: 39.5, retak: 40.0 },
 };

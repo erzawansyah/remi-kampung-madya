@@ -3,16 +3,17 @@
 // dimainkan pemain otomatis yang logikanya sama dengan otomatis.ts (pilihAksiBot normal + Rng tetap),
 // jadi hasilnya sama dengan pencarian seed (cari-seed.ts).
 //
-// Cara merekam halaman "Kamu": CDP Page.startScreencast dan jepretan BeginFrame hanya memberi gambar
-// seukuran CSS halaman (DIP), dan Page.captureScreenshot terlalu lambat untuk 30 fps. Jadi halaman Kamu
-// dibuka di Chrome Headless Shell dengan --enable-begin-frame-control dan virtual time: tiap frame, waktu
-// halaman dimajukan tepat 1/30 detik (Emulation.setVirtualTimePolicy) lalu satu frame digambar dan dijepret
-// (HeadlessExperimental.beginFrame) dan dialirkan ke ffmpeg. Supaya jepretannya 1170 × 2532, aplikasi
-// dimuat di <iframe> 390 × 844 yang diperbesar 3× (CSS zoom; transform scale terpotong 844 px di headless)
-// di halaman luar 1170 × 2532 @1x. CSS zoom membuat devicePixelRatio di iframe jadi 3, jadi kanvas Phaser
-// dan kartu HTML digambar tajam.
-// Hasilnya video 30 fps yang mulus dan tidak bergantung pada kecepatan CPU. Halaman pemain lain memakai
-// Chromium biasa (waktu nyata). Momen kunci juga dijepret PNG.
+// Cara merekam halaman "Kamu": Chrome biasa, waktu nyata. Aplikasi dimuat di <iframe> 390 × 844 dengan
+// CSS `zoom: 3` di halaman luar 1170 × 2532 @1x, jadi screencast CDP (Page.startScreencast, yang selalu
+// seukuran CSS halaman) memberi frame 1170 × 2532, dan devicePixelRatio di iframe jadi 3 sehingga kanvas
+// Phaser digambar tajam. Frame disimpan dengan cap waktunya lalu disusun jadi video 30 fps (ffmpeg concat).
+// Kanvas digambar renderer Canvas Phaser (WebGL software membuat kartu bolong, lihat bukaHp). Tanpa GPU,
+// kanvas 3× hanya tergambar ±6–9 fps, jadi halaman Kamu diperlambat DILASI kali (jam halaman,
+// timer, requestAnimationFrame lewat shim di iframe; animasi CSS lewat Animation.setPlaybackRate). Jeda warga
+// kedai di server dan jeda pemain lain ikut dikali DILASI, jadi tempo meja di video tetap seperti aslinya.
+// Cap waktu frame dibagi DILASI saat disusun.
+// Catatan: jangan kembali ke --enable-begin-frame-control + virtual time. Cara itu kadang menjepret kanvas
+// sebelum selesai digambar, sehingga kartu yang sedang bergerak tampil bolong/terpotong/berkedip.
 //
 // Pakai (dari akar repo): node promo/scripts/rekam/rekam-browser.mjs <r1|r2|r3> <seed>
 // Hasil: promo/public/rekam/<klip>-kamu.mp4, <klip>-*.png, dan rekam.json (digabung per klip).
@@ -50,17 +51,18 @@ const K = KLIP[klipNama];
 const PORT_SERVER = 2567;
 const PORT_VITE = 5173;
 const JEDA_BOT_MS = 1500;
+/** Halaman Kamu berjalan sekian kali lebih lambat dari waktu nyata (lihat catatan di atas). */
+const DILASI = Number(process.env.DILASI_REKAM ?? 8);
 /** Jeda pemain otomatis sesudah view berubah (ms, waktu nyata), supaya animasi selesai dulu. */
 const JEDA_PEMAIN_MS = 1400;
 const FPS = 30;
-const SHELL = process.env.CHROME_HEADLESS_SHELL ?? '/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell';
 
 const tunggu = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(`[rekam ${klipNama}]`, ...a);
 
 // 1. Server rekam ber-seed (proses sendiri lewat tsx, supaya penggantian randomBytes/Math.random
 //    tidak menyentuh proses ini).
-const server = spawn(process.execPath, [join(akar, 'node_modules/tsx/dist/cli.mjs'), join(promo, 'scripts/rekam/meja-rekam.ts'), String(PORT_SERVER), String(JEDA_BOT_MS)], {
+const server = spawn(process.execPath, [join(akar, 'node_modules/tsx/dist/cli.mjs'), join(promo, 'scripts/rekam/meja-rekam.ts'), String(PORT_SERVER), String(JEDA_BOT_MS * DILASI)], {
   cwd: akar,
   env: { ...process.env, SEED_REKAM: String(seed) },
   stdio: ['ignore', 'pipe', 'inherit'],
@@ -80,11 +82,6 @@ const asal = `http://127.0.0.1:${PORT_VITE}`;
 log('vite di', asal);
 
 const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
-// Halaman Kamu: headless shell dengan kendali BeginFrame (satu frame digambar per perintah).
-const browserKamu = await chromium.launch({
-  executablePath: SHELL,
-  args: ['--enable-begin-frame-control', '--run-all-compositor-stages-before-draw', '--disable-new-content-rendering-timeout', '--disable-threaded-animation', '--disable-threaded-scrolling', '--disable-checker-imaging', '--disable-image-animation-resync', '--autoplay-policy=no-user-gesture-required'],
-});
 
 /** Skrip pemain otomatis + pencatat momen, dijalankan di tiap halaman manusia. */
 const SKRIP_PEMAIN = `
@@ -182,7 +179,7 @@ const enginePath = join(akar, 'packages/engine/src/index.ts');
 /** Buka satu HP tiruan dengan nama tersimpan, preferensi video, dan tanpa kartu "Warga baru". */
 const SKALA_KAMU = 3;
 async function bukaHp(nama, dpr, kamu = false) {
-  const context = await (kamu ? browserKamu : browser).newContext({
+  const context = await browser.newContext({
     viewport: kamu ? { width: 390 * SKALA_KAMU, height: 844 * SKALA_KAMU } : { width: 390, height: 844 },
     deviceScaleFactor: kamu ? 1 : dpr,
     isMobile: true,
@@ -197,12 +194,40 @@ async function bukaHp(nama, dpr, kamu = false) {
     localStorage.setItem('remi.preferensi', JSON.stringify({ tutorialSelesai: true, suara: false, musik: false, getar: false, kecepatan: 'normal', efek: 'lengkap' }));
     localStorage.setItem('remi.tawaranPasang', JSON.stringify({ sudahPasang: Date.now(), tundaSampai: Date.now() + 2 * 24 * 3600e3 }));
   }, nama);
+  // Phaser memakai renderer Canvas, bukan WebGL. Tanpa GPU, WebGL jatuh ke rasterizer software yang kadang
+  // hanya menggambar separuh segitiga tiap kartu (kartu bolong/terpotong/berkedip). Canvas adalah jalur
+  // cadangan Phaser.AUTO yang sama dengan di HP tanpa WebGL, dan menggambar kartunya utuh.
+  await context.addInitScript(() => {
+    const asli = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (jenis, ...a) {
+      return /webgl/i.test(String(jenis)) ? null : asli.call(this, jenis, ...a);
+    };
+  });
+  if (kamu) {
+    // Jam halaman diperlambat (hanya di iframe aplikasi; halaman luar dan perekam tetap waktu nyata).
+    await context.addInitScript((k) => {
+      if (window.top === window || window.__dilasi) return;
+      window.__dilasi = k;
+      const pn = performance.now.bind(performance);
+      const dn = Date.now.bind(Date);
+      const p0 = pn();
+      const d0 = dn();
+      performance.now = () => p0 + (pn() - p0) / k;
+      Date.now = () => d0 + (dn() - d0) / k;
+      const st = window.setTimeout.bind(window);
+      const si = window.setInterval.bind(window);
+      window.setTimeout = (fn, ms = 0, ...a) => st(fn, Number(ms) * k, ...a);
+      window.setInterval = (fn, ms = 0, ...a) => si(fn, Number(ms) * k, ...a);
+      const raf = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = (cb) => raf((t) => cb(p0 + (t - p0) / k));
+    }, DILASI);
+  }
   const page = await context.newPage();
   page.on('pageerror', (e) => console.error(`[${nama}] galat halaman:`, e.message));
   const cdp = await context.newCDPSession(page);
   if (kamu) {
-    await cdp.send('HeadlessExperimental.enable');
-    await cdp.send('Emulation.setVirtualTimePolicy', { policy: 'pause' });
+    await cdp.send('Animation.enable');
+    await cdp.send('Animation.setPlaybackRate', { playbackRate: 1 / DILASI });
   }
   return { page, cdp };
 }
@@ -240,80 +265,47 @@ await host.evaluate((p) => window.__remiApp.kirim({ t: 'pengaturan', pengaturan:
 await tunggu(300);
 
 // 4. Pemain lain masuk berurutan lewat ?meja=KODE (urutan = nomor kursi, sama dengan cari-seed.ts).
-//    Halaman Kamu: virtual time hanya maju lewat putaran frame di bawah, jadi putaran itu dinyalakan dulu
-//    (frame dibuang sampai `rekamAktif`), dan interaksinya memakai evaluate (bukan click/waitFor Playwright).
+//    Halaman Kamu: halaman luar 1170 × 2532 berisi iframe aplikasi yang diperbesar 3×; screencast-nya
+//    dinyalakan sebelum aplikasi dimuat, frame baru disimpan sejak `rekamAktif`.
 const video = join(keluar, `${klipNama}-kamu.mp4`);
-const ffmpeg = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-i', '-', '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', video], { stdio: ['pipe', 'inherit', 'inherit'] });
-let jumlahFrame = 0;
+const folderFrame = join(keluar, `${klipNama}-frame`);
+rmSync(folderFrame, { recursive: true, force: true });
+mkdirSync(folderFrame, { recursive: true });
+/** Frame tersimpan: cap waktu (detik sejak epoch, dari Chrome) dan nama berkas. */
+const frames = [];
 let rekamAktif = false;
-let putaranJalan = true;
 let ukuranFrame = '';
 let cdpKamu = null;
 let pageKamu = null;
 let frameKamu = null;
-let tickKamu = 0;
-/** Permintaan jepretan halaman Kamu: dipenuhi putaran frame pada frame berikutnya (JPEG q100 → PNG). */
-let mintaJepret = null;
-const tulisFrame = (buf) =>
-  new Promise((r) => {
-    if (ffmpeg.stdin.write(buf)) r();
-    else ffmpeg.stdin.once('drain', r);
-  });
-/** Satu langkah: majukan virtual time 1/FPS detik, gambar satu frame, (opsional) jepret. */
-async function langkahFrame(jepret) {
-  const interval = 1000 / FPS;
-  const habis = new Promise((r) => cdpKamu.once('Emulation.virtualTimeBudgetExpired', r));
-  await cdpKamu.send('Emulation.setVirtualTimePolicy', { policy: 'advance', budget: interval, maxVirtualTimeTaskStarvationCount: 10000 });
-  await habis;
-  tickKamu += interval;
-  const p = { frameTimeTicks: tickKamu, interval, noDisplayUpdates: false };
-  if (jepret) p.screenshot = jepret;
-  return cdpKamu.send('HeadlessExperimental.beginFrame', p);
-}
-let putaranFrame = null;
-function nyalakanPutaranFrame() {
-  putaranFrame = (async () => {
-    let lapor = 0;
-    while (putaranJalan) {
-      const t0 = Date.now();
-      try {
-        const minta = mintaJepret;
-        const r = await langkahFrame(rekamAktif || minta ? { format: 'jpeg', quality: minta ? 100 : 92 } : undefined);
-        if (r.screenshotData) {
-          const buf = Buffer.from(r.screenshotData, 'base64');
-          if (!ukuranFrame) {
-            ukuranFrame = ukuranJpeg(buf);
-            log('ukuran frame', ukuranFrame);
-          }
-          if (minta) {
-            mintaJepret = null;
-            writeFileSync(minta.berkas, buf);
-            minta.selesai(jumlahFrame / FPS);
-          }
-          if (rekamAktif) {
-            await tulisFrame(buf);
-            jumlahFrame++;
-          }
-        }
-      } catch (e) {
-        if (putaranJalan) console.error('langkah frame gagal:', e.message);
-      }
-      // Kalau jepretan cepat, tempo virtual disamakan dengan waktu nyata (1 frame = 1/FPS detik nyata).
-      const sisa = 1000 / FPS - (Date.now() - t0);
-      if (sisa > 0) await tunggu(sisa);
-      if (rekamAktif && Date.now() - lapor > 15_000) {
-        lapor = Date.now();
-        log(`${jumlahFrame} frame (${(jumlahFrame / FPS).toFixed(0)} dtk video, langkah terakhir ${Date.now() - t0} ms)`);
-      }
+function pasangScreencast() {
+  cdpKamu.on('Page.screencastFrame', async (f) => {
+    try {
+      await cdpKamu.send('Page.screencastFrameAck', { sessionId: f.sessionId });
+    } catch {
+      /* screencast sudah berhenti */
     }
-  })();
+    if (!rekamAktif) return;
+    const buf = Buffer.from(f.data, 'base64');
+    if (!ukuranFrame) {
+      ukuranFrame = ukuranJpeg(buf);
+      log('ukuran frame', ukuranFrame);
+    }
+    const berkas = `f${String(frames.length).padStart(6, '0')}.jpg`;
+    frames.push({ t: f.metadata.timestamp, berkas });
+    writeFileSync(join(folderFrame, berkas), buf);
+  });
+  return cdpKamu.send('Page.startScreencast', { format: 'jpeg', quality: 92, everyNthFrame: 1 });
 }
-
-/** Tunggu sampai video halaman Kamu maju `detik` detik (virtual time), bukan waktu nyata. */
-async function tungguVirtual(detik) {
-  const target = jumlahFrame + Math.round(detik * FPS);
-  while (jumlahFrame < target) await tunggu(50);
-}
+/** Detik video sekarang (sejak frame pertama). */
+const detikVideo = () => (frames.length ? (Date.now() / 1000 - frames[0].t) / DILASI : 0);
+let laporFrame = 0;
+setInterval(() => {
+  if (!rekamAktif || Date.now() - laporFrame < 15_000) return;
+  laporFrame = Date.now();
+  const d = detikVideo();
+  log(`${frames.length} frame, ${d.toFixed(1)} dtk video (${(frames.length / Math.max(1, d)).toFixed(1)} fps)`);
+}, 1000).unref();
 
 for (let i = 1; i < K.nama.length; i++) {
   const nama = K.nama[i];
@@ -323,11 +315,10 @@ for (let i = 1; i < K.nama.length; i++) {
   if (sayaKamu) {
     cdpKamu = cdp;
     pageKamu = page;
-    tickKamu = await page.evaluate(() => performance.timeOrigin + performance.now());
-    nyalakanPutaranFrame();
+    await pasangScreencast();
     // Halaman luar di origin Vite (supaya iframe-nya satu origin), lalu diisi iframe aplikasi yang diperbesar.
     await page.goto(`${asal}/@vite/client`, { waitUntil: 'commit' });
-    await page.waitForFunction(() => document.readyState !== 'loading', null, { timeout: 60_000, polling: 100 });
+    await page.waitForFunction(() => document.readyState !== 'loading', null, { timeout: 300_000, polling: 100 });
     await page.evaluate(({ url, k }) => {
       document.open();
       document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;background:#000;overflow:hidden}iframe{display:block;width:390px;height:844px;border:0;zoom:${k}}</style></head><body><iframe id="hp" src="${url}" allow="autoplay"></iframe></body></html>`);
@@ -342,9 +333,9 @@ for (let i = 1; i < K.nama.length; i++) {
       throw new Error('iframe aplikasi tidak muncul');
     })();
     frameKamu = frame;
-    await frame.waitForFunction(() => !!document.querySelector('#gabung'), null, { timeout: 60_000, polling: 100 });
+    await frame.waitForFunction(() => !!document.querySelector('#gabung'), null, { timeout: 300_000, polling: 100 });
     await frame.evaluate(() => document.querySelector('#gabung').click());
-    await frame.waitForFunction((k) => window.__remiApp && window.__remiApp.info && window.__remiApp.info.kode === k, kode, { timeout: 60_000, polling: 100 });
+    await frame.waitForFunction((k) => window.__remiApp && window.__remiApp.info && window.__remiApp.info.kode === k, kode, { timeout: 300_000, polling: 100 });
     log(nama, 'masuk kursi', await frame.evaluate(() => window.__remiApp.info.kursiSaya));
     halaman[i] = frame;
     continue;
@@ -353,29 +344,26 @@ for (let i = 1; i < K.nama.length; i++) {
     await page.locator('#gabung').waitFor({ state: 'visible', timeout: 30_000 });
     await page.locator('#gabung').click();
   }
-  await page.waitForFunction((k) => window.__remiApp && window.__remiApp.info && window.__remiApp.info.kode === k, kode, { timeout: 60_000, polling: 100 });
+  await page.waitForFunction((k) => window.__remiApp && window.__remiApp.info && window.__remiApp.info.kode === k, kode, { timeout: 300_000, polling: 100 });
   log(nama, 'masuk kursi', await page.evaluate(() => window.__remiApp.info.kursiSaya));
 }
 const kamu = halaman[K.kamu]; // Frame iframe aplikasi (halaman Kamu)
 await tunggu(800);
 
 // 5. Mulai menulis frame halaman Kamu ke ffmpeg (sejak lobi).
-const d0Kamu = await kamu.evaluate(() => Date.now());
 rekamAktif = true;
+// Jam halaman Kamu (diperlambat) dan jam nyata pada saat yang sama, untuk memetakan catatan ke detik video.
+const jamHalamanAwal = (await kamu.evaluate(() => Date.now())) / 1000;
+const jamNyataAwal = Date.now() / 1000;
 const mulaiRekam = Date.now() / 1000;
 catatLuar('mulaiRekam');
 
-const jepretanKamu = [];
 const jepret = async (page, nama) => {
   const berkas = join(keluar, `${klipNama}-${nama}.png`);
   if (page === frameKamu) {
-    // Halaman Kamu: diambil putaran frame (JPEG kualitas 100), dikonversi ke PNG di akhir.
-    const sementara = berkas.replace(/\.png$/, '.jpg');
-    const detikVideo = await new Promise((selesai) => {
-      mintaJepret = { berkas: sementara, selesai };
-    });
-    jepretanKamu.push({ sementara, berkas });
-    catatLuar('jepret', { nama, detikVideo: Number(detikVideo.toFixed(3)) });
+    // Halaman Kamu: jepret halaman luar (1170 × 2532, iframe diperbesar 3×).
+    await pageKamu.screenshot({ path: berkas, type: 'png' });
+    catatLuar('jepret', { nama, detikVideo: Number(detikVideo().toFixed(3)) });
   } else {
     await page.screenshot({ path: berkas, type: 'png' });
     catatLuar('jepret', { nama });
@@ -386,23 +374,25 @@ const jepret = async (page, nama) => {
 // Pemain otomatis dipasang di semua halaman manusia (Kamu menahan popup/panel lebih lama supaya terekam).
 for (let i = 0; i < halaman.length; i++) {
   const sayaKamu = i === K.kamu;
-  await pasangPemain(halaman[i], { jedaAksi: JEDA_PEMAIN_MS, jedaJoker: sayaKamu ? 2600 : 1200, jedaLanjut: sayaKamu ? 6500 : 2500 });
+  // Kamu: jeda dalam jam halaman (sudah diperlambat). Pemain lain: waktu nyata, dikali DILASI.
+  const k = sayaKamu ? 1 : DILASI;
+  await pasangPemain(halaman[i], { jedaAksi: JEDA_PEMAIN_MS * k, jedaJoker: (sayaKamu ? 2600 : 1200) * k, jedaLanjut: (sayaKamu ? 6500 : 2500) * k });
 }
 
-await tungguVirtual(1.6);
+await tunggu(1000 * 1.6 * DILASI);
 await jepret(kamu, 'lobi');
 // 6. Kursi bot diisi host (R2, R3), lalu mulai dengan pengocok 0: urutan sama persis dengan cari-seed.ts.
 //    Jeda dihitung dalam waktu video (virtual) supaya lobi dan kursi bot terlihat cukup lama di rekaman.
 if (K.bot) {
-  await tungguVirtual(0.8);
+  await tunggu(1000 * 0.8 * DILASI);
   await host.evaluate((b) => window.__remiApp.kirim({ t: 'aturKursi', kursi: b.kursi, jenis: 'bot', level: b.level }), K.bot);
-  catatLuar('isiBot', { detikVideo: Number((jumlahFrame / FPS).toFixed(3)) });
-  await tungguVirtual(2.6);
+  catatLuar('isiBot', { detikVideo: Number(detikVideo().toFixed(3)) });
+  await tunggu(1000 * 2.6 * DILASI);
   await jepret(kamu, 'lobi-bot');
-  await tungguVirtual(0.6);
-} else await tungguVirtual(1.2);
+  await tunggu(1000 * 0.6 * DILASI);
+} else await tunggu(1000 * 1.2 * DILASI);
 await host.evaluate(() => window.__remiApp.kirim({ t: 'mulai', pengocok: 0 }));
-catatLuar('mulai', { detikVideo: Number((jumlahFrame / FPS).toFixed(3)) });
+catatLuar('mulai', { detikVideo: Number(detikVideo().toFixed(3)) });
 log('mulai');
 
 // 7. Tunggu sampai putaran selesai dan layar hasil tampil di halaman Kamu, sambil menjepret momen kunci.
@@ -410,7 +400,7 @@ let sudahRetak = false;
 let sudahPanel = false;
 let sudahHostPanel = false;
 let sudahHostSusun = false;
-const batas = Date.now() + Number(process.env.BATAS_REKAM_MENIT ?? 25) * 60_000;
+const batas = Date.now() + Number(process.env.BATAS_REKAM_MENIT ?? 50) * 60_000;
 let hasilAkhir = null;
 let lapor = 0;
 while (Date.now() < batas) {
@@ -421,7 +411,16 @@ while (Date.now() < batas) {
     const akhir = c.catatan.slice(-3).map((x) => x.jenis + (x.aksi ? ':' + x.aksi : '')).join(' ');
     log('progres', JSON.stringify({ status: c.status, catatan: c.catatan.length, akhir }));
   }
-  if (klipNama === 'r3' && !sudahHostPanel) {
+  // R3: layar Dimas sesaat sesudah pentungan Kamu terbuka (panel warga kedai retak, sebelum panel mentung).
+  if (klipNama === 'r3' && !sudahHostSusun) {
+    const h = await host.evaluate(() => (window.__rekamCatatan ?? []).some((x) => x.jenis === 'log' && /mentung pakai/.test(x.log ?? '')));
+    if (h) {
+      sudahHostSusun = true;
+      await tunggu(1700);
+      await jepret(host, 'lawan-retak');
+    }
+  }
+  if (klipNama === 'r3' && sudahHostSusun && !sudahHostPanel) {
     const h = await host.evaluate(() => (window.__rekamCatatan ?? []).some((x) => x.jenis === 'panelMentung'));
     if (h) {
       sudahHostPanel = true;
@@ -429,44 +428,28 @@ while (Date.now() < batas) {
       await jepret(host, 'lawan-panel');
     }
   }
-  if (klipNama === 'r3' && sudahHostPanel && !sudahHostSusun) {
-    const s = await host.evaluate(() => !document.querySelector('#modal [data-mentung]'));
-    if (s) {
-      sudahHostSusun = true;
-      await tunggu(700);
-      await jepret(host, 'lawan-retak');
-    }
-  }
   if (!sudahRetak && c.catatan.some((x) => x.jenis === 'retak')) {
     sudahRetak = true;
-    await tunggu(350);
+    await tunggu(350 * DILASI);
     await jepret(kamu, 'retak');
   }
   if (!sudahPanel && c.catatan.some((x) => x.jenis === 'panelMentung')) {
     sudahPanel = true;
-    await tunggu(900);
+    await tunggu(900 * DILASI);
     await jepret(kamu, 'panel');
   }
   if (c.hasil) {
-    await tunggu(2500);
+    await tunggu(2500 * DILASI);
     await jepret(kamu, 'hasil');
     hasilAkhir = c.riwayat[0] ?? null;
     break;
   }
 }
-await tunggu(300);
+await tunggu(300 * DILASI);
 const catatanKamu = await kamu.evaluate(() => window.__rekamCatatan ?? []);
 const catatanHost = await host.evaluate(() => window.__rekamCatatan ?? []);
 rekamAktif = false;
-putaranJalan = false;
-await putaranFrame;
-ffmpeg.stdin.end();
-await new Promise((r) => ffmpeg.on('exit', r));
-for (const j of jepretanKamu) {
-  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', j.sementara, j.berkas]);
-  rmSync(j.sementara, { force: true });
-}
-await browserKamu.close();
+await cdpKamu.send('Page.stopScreencast').catch(() => {});
 await browser.close();
 await vite.close();
 server.kill();
@@ -478,11 +461,25 @@ if (!hasilAkhir) {
 }
 const cocok = hasilAkhir.cara === 'mentung' && hasilAkhir.pementung === K.pementung && hasilAkhir.kepentung.includes(K.korban);
 log(`hasil: ${hasilAkhir.cara}, pementung ${hasilAkhir.pementung}, kepentung ${hasilAkhir.kepentung.join(',')}, joker ${hasilAkhir.pentunganJoker} → ${cocok ? 'COCOK' : 'TIDAK COCOK dengan cari-seed'}`);
-log(`${jumlahFrame} frame = ${(jumlahFrame / FPS).toFixed(1)} dtk video, ${ukuranFrame} → ${video}`);
 
-// 8. rekam.json: kode, seed, hasil, dan momen kunci dalam detik video. Halaman Kamu memakai virtual time
-//    (Date.now di halaman maju tepat 1/FPS per frame), jadi detik video = Date.now halaman − awal rekam.
-const relatif = (xs) => xs.map(({ t, ...sisa }) => ({ detik: Number((t - d0Kamu / 1000).toFixed(3)), ...sisa }));
+// 8. Frame → video 30 fps: concat demuxer dengan durasi tiap frame dari selisih cap waktu, lalu fps=30.
+const daftar = [];
+for (let i = 0; i < frames.length; i++) {
+  const lama = i + 1 < frames.length ? Math.max(0.0005, (frames[i + 1].t - frames[i].t) / DILASI) : 1 / FPS;
+  daftar.push(`file '${join(folderFrame, frames[i].berkas)}'`, `duration ${lama.toFixed(5)}`);
+}
+daftar.push(`file '${join(folderFrame, frames[frames.length - 1].berkas)}'`);
+writeFileSync(join(folderFrame, 'daftar.txt'), daftar.join('\n'));
+execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', join(folderFrame, 'daftar.txt'), '-vf', `fps=${FPS},scale=trunc(iw/2)*2:trunc(ih/2)*2`, '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', video]);
+const lamaRekam = (frames.at(-1).t - frames[0].t) / DILASI;
+const selang = frames.slice(1).map((f, i) => (f.t - frames[i].t) / DILASI).sort((a, b) => a - b);
+log(`${frames.length} frame dalam ${lamaRekam.toFixed(1)} dtk (${(frames.length / lamaRekam).toFixed(1)} fps rata-rata waktu video, selang p90 ${(selang[Math.floor(selang.length * 0.9)] * 1000).toFixed(0)} ms, terpanjang ${(selang.at(-1) * 1000).toFixed(0)} ms), ${ukuranFrame} → ${video}`);
+rmSync(folderFrame, { recursive: true, force: true });
+
+// 9. rekam.json: kode, seed, hasil, dan momen kunci dalam detik video (waktu nyata sejak frame pertama).
+// Detik video 0 = frame pertama. Catatan halaman Kamu memakai jam halaman (diperlambat).
+const jamHalamanNol = jamHalamanAwal + (frames[0].t - jamNyataAwal) / DILASI;
+const relatif = (xs) => xs.map(({ t, ...sisa }) => ({ detik: Number((t - jamHalamanNol).toFixed(3)), ...sisa }));
 const relatifNyata = (xs) => xs.map(({ t, ...sisa }) => ({ detikNyata: Number((t - mulaiRekam).toFixed(3)), ...sisa }));
 const jalurJson = join(keluar, 'rekam.json');
 const semua = existsSync(jalurJson) ? JSON.parse(readFileSync(jalurJson, 'utf8')) : {};
@@ -494,7 +491,9 @@ semua[klipNama] = {
   nama: K.nama,
   kamu: K.kamu,
   video: `${klipNama}-kamu.mp4`,
-  lamaDetik: Number((jumlahFrame / FPS).toFixed(3)),
+  lamaDetik: Number(lamaRekam.toFixed(3)),
+  fpsRekam: Number((frames.length / lamaRekam).toFixed(1)),
+  dilasi: DILASI,
   // Momen di halaman Kamu (detik video): 'tampil' = log yang sudah tampil di layar (sesudah animasi),
   // 'retak', 'panelMentung', 'popupJoker', 'hasilTampil' dari DOM; 'aksi'/'log'/'peristiwa' = saat view diterima.
   momen: relatif(catatanKamu),

@@ -55,7 +55,7 @@ const StillHp: React.FC<{ nama: string }> = ({ nama }) => (
 const Still: React.FC<{ nama: string; geser?: number }> = ({ nama, geser = GESER_REKAM }) => <Img src={staticFile(`rekam/${nama}`)} style={{ position: 'absolute', left: 0, top: geser, width: W, height: TINGGI_REKAM }} />;
 
 /** Kilat merah + guncangan + KEPENTUNG! besar (menguatkan retak asli rekaman). */
-const Kepentung: React.FC<{ dari: number; kuat?: number; lama?: number }> = ({ dari, kuat = 1, lama = 60 }) => {
+const Kepentung: React.FC<{ dari: number; kuat?: number; lama?: number; y?: number }> = ({ dari, kuat = 1, lama = 60, y = 720 }) => {
   const f = useCurrentFrame();
   if (f < dari || f >= dari + lama) return null;
   const t = f - dari;
@@ -64,7 +64,7 @@ const Kepentung: React.FC<{ dari: number; kuat?: number; lama?: number }> = ({ d
   return (
     <>
       <Retak dari={dari} kuat={kuat} lama={lama} skala={0.9 + 0.25 * kuat} />
-      <Sorak teks="KEPENTUNG!" ukuran={118 + 22 * kuat} x={W / 2} y={1000} skala={s} rot={-6} warna={WARNA.merah} opacity={o} />
+      <Sorak teks="KEPENTUNG!" ukuran={118 + 22 * kuat} x={W / 2} y={y} skala={s} rot={-6} warna={WARNA.merah} opacity={o} />
     </>
   );
 };
@@ -161,8 +161,12 @@ const AdeganRonde1: React.FC = () => {
   const [a0] = T.buang1;
   const pungutDi = a0 + 36; // 10,2 dtk: potong ke Ayu memungut
   const [b0, b1] = T.tegang1;
-  const bukaDi = b0 + 60; // kartu tertutup diperlambat 0,45× selama 2 dtk, lalu dibuka
+  const bukaDi = b0 + 50; // kartu tertutup diperlambat selama ±1,7 dtk, lalu dibuka
   const retak = M.retak1;
+  // Retak di rekaman jatuh tepat di M.retak1; bagian tertutup diperlambat secukupnya sampai bukaDi.
+  const tertutup = r.tertutup ?? r.retak - 1.5;
+  const bukaKlip = r.retak - (retak - bukaDi) / FPS;
+  const rateTegang = Math.max(0.25, (bukaKlip - tertutup) / ((bukaDi - b0) / FPS));
   // Posisi di rekaman (CSS 390 × 844): tumpukan buangan kanan tengah, panel Ayu = panel kedua dari atas.
   const pile = { x: cssX(330), y: cssY(430) };
   const panelAyu = { x: cssX(195), y: cssY(190) };
@@ -182,8 +186,8 @@ const AdeganRonde1: React.FC = () => {
       <Kamera pose={{ ...pose, x: pose.x + getar, rot: tegang ? glide(f, b0, b0 + 30, 0, 4) - (f >= retak ? 4 : 0) : 0 }} pushPerFrame={0.0025} pushDari={f < b0 ? a0 : b0} shakeDari={retak} shakeKuat={24} shakeLama={8}>
         {f < pungutDi && <Klip klip="r1" mulai={a0} lama={pungutDi - a0} dari={(r.buang ?? 0) - 0.9} />}
         {f >= pungutDi && f < b0 && <Klip klip="r1" mulai={pungutDi} lama={b0 - pungutDi} dari={(r.pungut ?? 0) - 0.5} />}
-        {tegang && f < bukaDi && <Klip klip="r1" mulai={b0} lama={bukaDi - b0} dari={r.tertutup ?? 0} rate={0.45} />}
-        {f >= bukaDi && <Klip klip="r1" mulai={bukaDi} lama={b1 - bukaDi} dari={(r.tertutup ?? 0) + ((bukaDi - b0) / FPS) * 0.45} />}
+        {tegang && f < bukaDi && <Klip klip="r1" mulai={b0} lama={bukaDi - b0} dari={tertutup} rate={rateTegang} />}
+        {f >= bukaDi && <Klip klip="r1" mulai={bukaDi} lama={b1 - bukaDi} dari={bukaKlip} />}
         {/* Cincin cahaya di kartu yang dibuang, lalu panah kuning dari buangan ke panel Ayu. */}
         <Cincin x={pile.x + 90} y={pile.y} r={70} dari={a0 + 16} sampai={pungutDi + 10} />
         <Panah dari={pungutDi + 10} lama={14} x1={pile.x + 40} y1={pile.y - 110} x2={panelAyu.x + 120} y2={panelAyu.y + 110} lengkung={-0.28} sampai={b0} />
@@ -320,9 +324,9 @@ const AdeganLoop: React.FC = () => {
   return (
     <AbsoluteFill>
       <Kamera pose={{ skala: 1.0, y: 900 }} pushPerFrame={0.0012} pushDari={a}>
-        <Chat jam={STATUS.loop.jam} baterai={STATUS.loop.baterai} pesan={[pesan]} redup={interpolate(f, [a, M.notifAkhir, M.notifAkhir + 3], [0.5, 0.5, 0.2], jepit)} />
+        <Chat jam={STATUS.loop.jam} baterai={STATUS.loop.baterai} pesan={[pesan]} mengetik={[a + 6, M.notifAkhir - 1]} redup={interpolate(f, [a, a + 8], [0.35, 0.08], jepit)} />
       </Kamera>
-      <Vinyet kuat={0.6} warna="rgba(5,10,30,1)" />
+      <Vinyet kuat={0.45} warna="rgba(5,10,30,1)" />
     </AbsoluteFill>
   );
 };
@@ -393,6 +397,7 @@ const AudioTeaser: React.FC<{ kode: string }> = ({ kode }) => {
       <Bunyi nama="giliran" dari={T.tutup[0] + 2} volume={0.7} />
       <Bunyi nama="jotos" dari={M.stempelKena} volume={1} rate={0.6} />
       <Bunyi nama="letak" dari={M.stempelKena} volume={0.9} rate={0.5} />
+      <Bunyi nama="kocok" dari={T.loop[0] - 4} volume={0.6} rate={1.6} />
       <Bunyi nama="notifikasi" dari={M.notifAkhir} volume={1} />
     </>
   );
@@ -429,6 +434,7 @@ export const TeaserB: React.FC = () => {
       {isi}
       {/* Lapisan tetap: whip, flash, stempel, pil, logo pojok, grain. */}
       <Whip dari={T.whip[0]} lama={8} />
+      <Whip dari={T.loop[0] - 4} lama={8} />
       <Flash dari={M.flashKedai} lama={4} />
       <Stempel teks={TEKS_STEMPEL} kena={M.stempelKena} sampai={T.stempel[1]} />
       <Pil teks={TEKS_PIL} dari={T.pil[0]} sampai={T.pil[1]} />
