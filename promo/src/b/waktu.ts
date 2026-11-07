@@ -27,9 +27,9 @@ export const T = {
   lawanBot: [1050, 1110],
   tutup: [1110, 1200],
   stempel: [1200, 1260],
-  /** Kartu khusus QR, 3 dtk (tambahan di luar brief, permintaan pengguna). */
-  qr: [1260, 1350],
-  loop: [1350, 1410],
+  loop: [1260, 1320],
+  /** Kartu khusus QR, 3 dtk di paling akhir (tambahan di luar brief, permintaan pengguna). */
+  qr: [1320, 1410],
   /** Pil "gratis · tanpa login · tanpa top up" (detik 2–37). */
   pil: [60, 1110],
 } as const satisfies Record<string, readonly [number, number]>;
@@ -52,7 +52,7 @@ export const M = {
   // Penutup
   stempelKena: 1205,
   // Brief meminta potong 0,2 dtk sesudah bubble; dilonggarkan jadi 1 dtk supaya bubble sempat terbaca.
-  notifAkhir: 1380,
+  notifAkhir: 1288,
 } as const;
 
 /** Pesan chat: frame muncul, pengirim, teks. Ejaan Jawa Malangan apa adanya (brief §3). */

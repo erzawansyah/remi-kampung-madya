@@ -60,7 +60,7 @@ Bunyi game (kartu, pentungan, retak, notifikasi, pop) tetap diambil dari kode ga
 
 ### Tambahan di luar brief
 
-- Kartu khusus QR 3 detik (42–45 dtk) sesudah stempel, QR ±720 px di tengah zona aman, supaya bisa dipindai dari layar lain. Durasi jadi 47 detik (brief: 44).
+- Kartu khusus QR 3 detik di paling akhir (44–47 dtk, sesudah stempel dan chat "Info room?"), QR ±720 px di tengah zona aman, supaya bisa dipindai dari layar lain. Durasi jadi 47 detik (brief: 44).
 - Bubble "Info room?" penutup muncul 1 detik sebelum akhir (brief: 0,2 detik) supaya sempat terbaca sebagai loop.
 
 ### Render

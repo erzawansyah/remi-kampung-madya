@@ -319,7 +319,7 @@ const AdeganKedai: React.FC = () => {
   );
 };
 
-/** 42–45 dtk: kartu khusus QR (besar, diam cukup lama supaya bisa dipindai dari layar lain). */
+/** 44–47 dtk (penutup): kartu khusus QR (besar, diam cukup lama supaya bisa dipindai dari layar lain). */
 const AdeganQr: React.FC = () => {
   const f = useCurrentFrame();
   const [a] = T.qr;
@@ -348,7 +348,7 @@ const AdeganQr: React.FC = () => {
   );
 };
 
-/** 45–47 dtk: kembali ke chat gelap, satu notifikasi masuk, lalu potong (loop ke frame 0). */
+/** 42–44 dtk: kembali ke chat gelap, satu notifikasi masuk, lalu potong (loop ke frame 0). */
 const AdeganLoop: React.FC = () => {
   const f = useCurrentFrame();
   const [a] = T.loop;
@@ -460,8 +460,8 @@ export const TeaserB: React.FC = () => {
   else if (f < T.chat3[0]) isi = <AdeganRonde2 />;
   else if (di(T.chat3)) isi = <AdeganChat3 />;
   else if (f < T.stempel[1]) isi = <AdeganKedai />;
-  else if (f < T.qr[1]) isi = <AdeganQr />;
-  else isi = <AdeganLoop />;
+  else if (f < T.loop[1]) isi = <AdeganLoop />;
+  else isi = <AdeganQr />;
 
   return (
     <AbsoluteFill style={{ background: '#000', fontFamily: FONT }}>
