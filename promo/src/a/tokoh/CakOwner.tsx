@@ -42,4 +42,5 @@ export const CAK_OWNER: Desain = {
   Wajah,
   Pakaian,
   kursi: '#5a3a1c',
+  hp: '#2b2b30',
 };

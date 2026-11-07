@@ -20,7 +20,7 @@ export const KURSI = {
 /** Benda di meja (titik tengah, panggung). */
 export const BENDA = {
   hpBang: { x: 575, y: 1372, rot: -8 },
-  hpOwner: { x: 190, y: 1395, rot: 14 },
+  hpOwner: { x: 205, y: 1290, rot: 10 },
   hpSampul: { x: 880, y: 1372, rot: -12 },
   cangkirBang: { x: 648, y: 1302 },
   cangkirOwner: { x: 345, y: 1300 },
@@ -200,7 +200,7 @@ export interface PropsKedai {
   retakCangkirBang?: number;
 }
 
-export const Kedai: React.FC<PropsKedai> = ({ hangat, dingin, tokoh, diMeja, lompatKartu = 0, glowQr = 0, layarHpBang = 'rekam/a1-lobi.png', layarHpOwner = 'rekam/a1-lobi.png', layarHpSampul = 'rekam/a1-sampul-lobi.png', tampilHpSampul = false, tampilHpBang = true, tampilCangkirBang = true, tampilCangkirOwner = true, retakCangkirBang = 0 }) => {
+export const Kedai: React.FC<PropsKedai> = ({ hangat, dingin, tokoh, diMeja, lompatKartu = 0, glowQr = 0, layarHpBang = 'rekam/a1-lobi.png', layarHpOwner = 'rekam/a1-lobi.png', layarHpSampul = 'rekam/a1-sampul-lobi.png', tampilHpSampul = false, tampilHpBang = false, tampilCangkirBang = true, tampilCangkirOwner = true, retakCangkirBang = 0 }) => {
   const f = useCurrentFrame();
   const kedip = 1 + noise(f, 2) * 0.025;
   return (
@@ -260,7 +260,7 @@ export const Kedai: React.FC<PropsKedai> = ({ hangat, dingin, tokoh, diMeja, lom
       <KartuMeja x={BENDA.kartu.x + 30} y={BENDA.kartu.y + 30} rot={10} lompat={lompatKartu * 1.2} />
       <KartuMeja x={BENDA.kartu.x + 80} y={BENDA.kartu.y + 50} rot={26} muka="wajik-8" lompat={lompatKartu * 0.9} />
       <KartuMeja x={420} y={1480} rot={60} lompat={lompatKartu * 0.6} />
-      {layarHpOwner !== null && <HpMeja x={BENDA.hpOwner.x} y={BENDA.hpOwner.y} rot={BENDA.hpOwner.rot} layar={layarHpOwner ?? undefined} />}
+      {layarHpOwner !== null && <HpMeja x={BENDA.hpOwner.x} y={BENDA.hpOwner.y} rot={BENDA.hpOwner.rot} lebar={78} layar={layarHpOwner ?? undefined} />}
       {tampilHpBang && layarHpBang !== null && <HpMeja x={BENDA.hpBang.x} y={BENDA.hpBang.y} rot={BENDA.hpBang.rot} layar={layarHpBang ?? undefined} lebar={104} />}
       {tampilHpSampul && <HpMeja x={BENDA.hpSampul.x} y={BENDA.hpSampul.y} rot={BENDA.hpSampul.rot} layar={layarHpSampul ?? undefined} />}
       {tampilCangkirOwner && <CangkirMeja x={BENDA.cangkirOwner.x} y={BENDA.cangkirOwner.y} benih={1} skala={0.95} />}

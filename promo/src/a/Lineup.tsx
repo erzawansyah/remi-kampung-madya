@@ -21,29 +21,43 @@ export const Lineup: React.FC = () => {
         layarHpSampul={null}
         tokoh={
           <>
-            <TokohDiKursi
+            <TokohDiKursi lapisan="badan"
               kursi={KURSI.owner}
               desain={CAK_OWNER}
               ekspresi="datar"
               kedip={kedipDi(f, 2)}
               napas={napasDi(f, 2)}
-              pose={pose({ kepalaRot: -4, lihat: { x: 0.3, y: 0.2 }, kiri: { siku: { x: 70, y: 430 }, tangan: { x: 160, y: 500 }, isi: 'kosong' }, kanan: { siku: { x: 400, y: 400 }, tangan: { x: 300, y: 250 }, isi: 'cangkir', rot: -8 } })}
+              pose={pose({ kepalaY: 4, kepalaRot: -3, lihat: { x: 0.2, y: 0.6 }, kiri: { tangan: { x: 156, y: 520 }, isi: 'kosong' }, kanan: { tangan: { x: 292, y: 300 }, isi: 'cangkir' } })}
             />
-            <TokohDiKursi
-              kursi={KURSI.sampul}
-              desain={MAS_SAMPUL}
-              ekspresi="tertawa"
-              kedip={0}
-              napas={napasDi(f, 3)}
-              pose={pose({ kepalaRot: 8, badanRot: 3, kiri: { siku: { x: 40, y: 430 }, tangan: { x: 120, y: 470 }, isi: 'telapak' }, kanan: { siku: { x: 400, y: 440 }, tangan: { x: 330, y: 380 }, isi: 'hp', rot: 10 } })}
-            />
-            <TokohDiKursi
+            <TokohDiKursi lapisan="badan" kursi={KURSI.sampul} desain={MAS_SAMPUL} ekspresi="tertawa" kedip={0} napas={napasDi(f, 3)} pose={pose({ kepalaRot: 6, kepalaY: 4 })} />
+            <TokohDiKursi lapisan="badan"
               kursi={KURSI.bang}
               desain={BANG_IT}
               ekspresi="sombong"
               kedip={kedipDi(f, 1)}
               napas={napasDi(f, 1)}
-              pose={pose({ badanRot: -3, badanY: 10, kepalaRot: -6, lihat: { x: -0.4, y: 0 }, kiri: { siku: { x: 20, y: 420 }, tangan: { x: 110, y: 500 }, isi: 'kosong' }, kanan: { siku: { x: 430, y: 420 }, tangan: { x: 330, y: 500 }, isi: 'kosong' } })}
+              pose={pose({ badanRot: -4, badanY: 10, kepalaY: 0, kepalaRot: -6, lihat: { x: -0.4, y: 0.1 }, kiri: { tangan: { x: 130, y: 480 }, isi: 'kosong' }, kanan: { tangan: { x: 310, y: 420 }, isi: 'hp', rot: 8 } })}
+            />
+          </>
+        }
+        diMeja={
+          <>
+            <TokohDiKursi lapisan="lengan"
+              kursi={KURSI.owner}
+              desain={CAK_OWNER}
+              ekspresi="datar"
+              kedip={kedipDi(f, 2)}
+              napas={napasDi(f, 2)}
+              pose={pose({ kepalaY: 4, kepalaRot: -3, lihat: { x: 0.2, y: 0.6 }, kiri: { tangan: { x: 156, y: 520 }, isi: 'kosong' }, kanan: { tangan: { x: 292, y: 300 }, isi: 'cangkir' } })}
+            />
+            <TokohDiKursi lapisan="lengan" kursi={KURSI.sampul} desain={MAS_SAMPUL} ekspresi="tertawa" kedip={0} napas={napasDi(f, 3)} pose={pose({ kepalaRot: 6, kepalaY: 4 })} />
+            <TokohDiKursi lapisan="lengan"
+              kursi={KURSI.bang}
+              desain={BANG_IT}
+              ekspresi="sombong"
+              kedip={kedipDi(f, 1)}
+              napas={napasDi(f, 1)}
+              pose={pose({ badanRot: -4, badanY: 10, kepalaY: 0, kepalaRot: -6, lihat: { x: -0.4, y: 0.1 }, kiri: { tangan: { x: 130, y: 480 }, isi: 'kosong' }, kanan: { tangan: { x: 310, y: 420 }, isi: 'hp', rot: 8 } })}
             />
           </>
         }

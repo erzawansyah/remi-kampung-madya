@@ -44,4 +44,5 @@ export const BANG_IT: Desain = {
   RambutDepan,
   Pakaian,
   kursi: '#5a3a1c',
+  hp: '#e9e1cf',
 };

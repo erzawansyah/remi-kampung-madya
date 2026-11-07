@@ -70,4 +70,6 @@ export const MAS_SAMPUL: Desain = {
   RambutDepan,
   Pakaian,
   kursi: '#5a3a1c',
+  hp: '#b5473c',
+  lengan: '#a9b99c',
 };

@@ -25,7 +25,7 @@ export interface PoseKamera {
 }
 
 const K_X: Kunci<number>[] = [
-  [M.burstWajah, BENDA.hpBang.x],
+  [M.burstWajah, 566],
   [M.burstWajah + 10, 566, 'burst'],
   [T.rewind[0], 566],
   [T.datang[0], 540, 'tajam'],
@@ -54,7 +54,7 @@ const K_X: Kunci<number>[] = [
   [1200, 640],
 ];
 const K_Y: Kunci<number>[] = [
-  [M.burstWajah, BENDA.hpBang.y],
+  [M.burstWajah, 1154],
   [M.burstWajah + 10, 905, 'burst'],
   [T.rewind[0], 905],
   [T.datang[0], 1060, 'tajam'],
@@ -157,7 +157,6 @@ export const KameraA: React.FC<{ k: PoseKamera; children?: ReactNode }> = ({ k, 
 // Titik-titik lokal tiap tokoh untuk benda di meja (dihitung dari BENDA dan KURSI).
 // ---------------------------------------------------------------------------------------------
 const lokal = (kursi: { x: number; y: number; skala: number }, bx: number, by: number) => ({ x: (bx - kursi.x) / kursi.skala + 220, y: 600 - (kursi.y - by) / kursi.skala });
-const L_HP_BANG = lokal(KURSI.bang, BENDA.hpBang.x, BENDA.hpBang.y);
 const L_CANGKIR_BANG = lokal(KURSI.bang, BENDA.cangkirBang.x, BENDA.cangkirBang.y);
 const L_HP_OWNER = lokal(KURSI.owner, BENDA.hpOwner.x, BENDA.hpOwner.y);
 const L_CANGKIR_OWNER = lokal(KURSI.owner, BENDA.cangkirOwner.x, BENDA.cangkirOwner.y);
@@ -167,28 +166,28 @@ const L_WAJAH_BANG_DARI_SAMPUL = lokal(KURSI.sampul, KURSI.bang.x + 80, 905);
 // ---------------------------------------------------------------------------------------------
 // Bang IT
 // ---------------------------------------------------------------------------------------------
-const bangKaget = pose({ badanY: -6, bahu: -12, kepalaRot: 2, lihat: { x: 0, y: 0.55 }, kiri: { siku: { x: 30, y: 430 }, tangan: { x: 150, y: 575 }, isi: 'telapak' }, kanan: { siku: { x: 420, y: 430 }, tangan: { x: 300, y: 575 }, isi: 'telapak' } });
-const bangJalan = pose({ badanRot: 0, kepalaRot: 2, lihat: { x: -0.5, y: 0.1 }, kiri: { siku: { x: 70, y: 450 }, tangan: { x: 130, y: 520 }, isi: 'kosong' }, kanan: { siku: { x: 390, y: 430 }, tangan: { x: 330, y: 330 }, isi: 'cangkir', rot: -6 } });
-const bangTaruhCangkir = pose({ badanRot: 2, badanY: 4, kepalaRot: 4, lihat: { x: 0.3, y: 0.5 }, kiri: { siku: { x: 50, y: 450 }, tangan: { x: 140, y: 520 }, isi: 'kosong' }, kanan: { siku: { x: 410, y: 460 }, tangan: L_CANGKIR_BANG, isi: 'cangkir', rot: 0 } });
-const bangSombong = pose({ badanRot: -4, badanY: 10, kepalaRot: -7, lihat: { x: -0.35, y: 0.05 }, kiri: { siku: { x: 10, y: 420 }, tangan: { x: 110, y: 505 }, isi: 'kosong' }, kanan: { siku: { x: 440, y: 420 }, tangan: { x: 335, y: 505 }, isi: 'kosong' } });
-const bangJariTinggi = pose({ badanRot: -2, badanY: 4, kepalaRot: -10, lihat: { x: 0.55, y: -0.65 }, kiri: { siku: { x: 10, y: 420 }, tangan: { x: 110, y: 505 }, isi: 'kosong' }, kanan: { siku: { x: 420, y: 300 }, tangan: { x: 340, y: 130 }, isi: 'tunjuk', rot: 8 } });
-const bangJariAntisipasi = pose({ ...bangJariTinggi, badanY: -4, kanan: { siku: { x: 430, y: 280 }, tangan: { x: 350, y: 96 }, isi: 'tunjuk', rot: 12 } });
-const bangKetuk = pose({ badanRot: 2, badanY: 14, kepalaRot: 6, lihat: { x: 0.05, y: 0.7 }, kiri: { siku: { x: 10, y: 420 }, tangan: { x: 110, y: 505 }, isi: 'kosong' }, kanan: { siku: { x: 410, y: 470 }, tangan: { x: L_HP_BANG.x + 10, y: L_HP_BANG.y - 20 }, isi: 'tunjuk', rot: 178 } });
-const bangTolehKamera = pose({ badanRot: -3, badanY: 8, kepalaRot: 5, lihat: { x: 0, y: 0.12 }, kiri: { siku: { x: 10, y: 420 }, tangan: { x: 110, y: 505 }, isi: 'kosong' }, kanan: { siku: { x: 420, y: 430 }, tangan: { x: 320, y: 500 }, isi: 'kosong' } });
-const bangCondong = pose({ badanRot: 0, badanY: -14, kepalaY: 14, kepalaRot: 0, lihat: { x: 0, y: 0.6 }, kiri: { siku: { x: 30, y: 430 }, tangan: { x: 140, y: 560 }, isi: 'kepal' }, kanan: { siku: { x: 410, y: 430 }, tangan: { x: 300, y: 560 }, isi: 'kepal' } });
-const bangAntisipasiJatuh = pose({ ...bangCondong, badanY: 6, kepalaY: 22, bahu: -8 });
-const bangTerpental = pose({ badanRot: -6, badanY: -26, bahu: -16, kepalaRot: -16, kepalaY: -10, lihat: { x: 0, y: -0.4 }, kiri: { siku: { x: -40, y: 300 }, tangan: { x: -70, y: 160 }, isi: 'telapak', rot: -30 }, kanan: { siku: { x: 480, y: 300 }, tangan: { x: 500, y: 150 }, isi: 'telapak', rot: 30 } });
-const bangMendarat = pose({ ...bangTerpental, badanY: -8, bahu: -6, kepalaRot: -10, kepalaY: 0, kiri: { siku: { x: -50, y: 360 }, tangan: { x: -60, y: 250 }, isi: 'telapak', rot: -40 }, kanan: { siku: { x: 490, y: 360 }, tangan: { x: 500, y: 240 }, isi: 'telapak', rot: 40 } });
-const bangDatar = pose({ badanRot: 0, badanY: 2, kepalaRot: 0, lihat: { x: 0.9, y: 0.1 }, kiri: { siku: { x: 40, y: 440 }, tangan: { x: 150, y: 520 }, isi: 'kosong' }, kanan: { siku: { x: 400, y: 440 }, tangan: { x: 290, y: 520 }, isi: 'kosong' } });
+const bangKaget = pose({ badanY: -6, bahu: -12, kepalaY: 0, lihat: { x: 0, y: 0.1 } });
+const bangJalan = pose({ kepalaY: 0, kepalaRot: 2, lihat: { x: -0.5, y: 0.1 }, kiri: { tangan: { x: 150, y: 500 }, isi: 'hp' }, kanan: { tangan: { x: 320, y: 380 }, isi: 'cangkir' } });
+const bangTaruhCangkir = pose({ badanRot: 2, kepalaY: 4, kepalaRot: 4, lihat: { x: 0.3, y: 0.5 }, kiri: { tangan: { x: 160, y: 470 }, isi: 'hp' }, kanan: { tangan: L_CANGKIR_BANG, isi: 'cangkir' } });
+const bangSombong = pose({ badanRot: -4, badanY: 10, kepalaY: 0, kepalaRot: -7, lihat: { x: -0.35, y: 0.05 }, kiri: { tangan: { x: 130, y: 470 }, isi: 'kosong' }, kanan: { tangan: { x: 320, y: 420 }, isi: 'hp', rot: 6 } });
+const bangJariTinggi = pose({ badanRot: -2, badanY: 4, kepalaY: -2, kepalaRot: -8, lihat: { x: 0.55, y: -0.65 }, kiri: { tangan: { x: 175, y: 450 }, isi: 'hp' }, kanan: { tangan: { x: 292, y: 96 }, isi: 'tunjuk', arahJari: -80 } });
+const bangJariAntisipasi = pose({ ...bangJariTinggi, badanY: -4, kanan: { tangan: { x: 300, y: 70 }, isi: 'tunjuk', arahJari: -80 } });
+const bangKetuk = pose({ badanRot: 2, badanY: 12, kepalaY: 14, kepalaRot: 4, lihat: { x: -0.1, y: 0.9 }, kiri: { tangan: { x: 185, y: 455 }, isi: 'hp' }, kanan: { tangan: { x: 222, y: 360 }, isi: 'tunjuk', arahJari: 120 } });
+const bangTolehKamera = pose({ badanRot: -3, badanY: 8, kepalaY: 0, kepalaRot: 5, lihat: { x: 0, y: 0.12 }, kiri: { tangan: { x: 170, y: 455 }, isi: 'hp' }, kanan: { tangan: { x: 300, y: 480 }, isi: 'kosong' } });
+const bangCondong = pose({ badanY: -14, kepalaY: 18, lihat: { x: 0, y: 0.95 } });
+const bangAntisipasiJatuh = pose({ ...bangCondong, badanY: 6, kepalaY: 24, bahu: -8 });
+const bangTerpental = pose({ badanRot: -6, badanY: -26, bahu: -16, kepalaRot: -16, kepalaY: -10, lihat: { x: 0, y: -0.4 }, kiri: { tangan: { x: 70, y: 170 }, isi: 'telapak' }, kanan: { tangan: { x: 370, y: 170 }, isi: 'telapak' } });
+const bangMendarat = pose({ ...bangTerpental, badanY: -8, bahu: -6, kepalaRot: -10, kepalaY: 0, kiri: { tangan: { x: 40, y: 260 }, isi: 'telapak' }, kanan: { tangan: { x: 400, y: 260 }, isi: 'telapak' } });
+const bangDatar = pose({ badanY: 2, kepalaY: 0, lihat: { x: 0.9, y: 0.1 }, kiri: { tangan: { x: 170, y: 470 }, isi: 'kosong' }, kanan: { tangan: { x: 290, y: 470 }, isi: 'kosong' } });
 const bangDatarKamera = pose({ ...bangDatar, kepalaRot: 3, lihat: { x: 0, y: 0.15 } });
-const bangKesal = pose({ badanRot: 0, badanY: -6, kepalaRot: -3, lihat: { x: 0.2, y: 0.5 }, kiri: { siku: { x: 30, y: 430 }, tangan: { x: 150, y: 560 }, isi: 'kepal' }, kanan: { siku: { x: 410, y: 460 }, tangan: { x: L_HP_BANG.x + 10, y: L_HP_BANG.y - 20 }, isi: 'tunjuk', rot: 178 } });
-const bangTerlonjak = pose({ ...bangKesal, badanY: -24, bahu: -14, kepalaY: -6 });
-const bangMerem = pose({ ...bangKesal, badanY: -2, kepalaRot: 4, kiri: { siku: { x: 30, y: 430 }, tangan: { x: 150, y: 560 }, isi: 'kepal' }, kanan: { siku: { x: 410, y: 440 }, tangan: { x: 300, y: 555 }, isi: 'kepal' } });
-const bangPasrah = pose({ badanRot: 0, badanY: 14, bahu: 12, kepalaRot: 5, kepalaY: 6, lihat: { x: 0.1, y: 0.3 }, kiri: { siku: { x: 40, y: 450 }, tangan: { x: 150, y: 560 }, isi: 'kosong' }, kanan: { siku: { x: 420, y: 470 }, tangan: L_CANGKIR_BANG, isi: 'cangkir', rot: 0 } });
-const bangSeruput = pose({ ...bangPasrah, kepalaRot: 2, lihat: { x: 0.3, y: 0.45 }, kanan: { siku: { x: 400, y: 380 }, tangan: { x: 258, y: 232 }, isi: 'cangkir', rot: -12 } });
-const bangLihatGelas = pose({ ...bangSeruput, kepalaRot: 6, lihat: { x: 0.6, y: 0.6 }, kanan: { siku: { x: 410, y: 400 }, tangan: { x: 290, y: 262 }, isi: 'cangkir', rot: -4 } });
-const bangTertawa = pose({ badanRot: -2, badanY: 4, kepalaRot: -5, lihat: { x: 0, y: 0 }, kiri: { siku: { x: 30, y: 430 }, tangan: { x: 150, y: 540 }, isi: 'telapak' }, kanan: { siku: { x: 420, y: 470 }, tangan: L_CANGKIR_BANG, isi: 'cangkir', rot: 0 } });
-const bangTertawaLepas = pose({ ...bangTertawa, kanan: { siku: { x: 420, y: 440 }, tangan: { x: 300, y: 540 }, isi: 'telapak' } });
+const bangKesal = pose({ badanY: -6, kepalaY: 16, kepalaRot: -3, lihat: { x: 0, y: 0.85 } });
+const bangTerlonjak = pose({ ...bangKesal, badanY: -24, bahu: -14, kepalaY: 6 });
+const bangMerem = pose({ ...bangKesal, badanY: -2, kepalaRot: 4 });
+const bangPasrah = pose({ badanY: 14, bahu: 12, kepalaRot: 5, kepalaY: 8, lihat: { x: 0.1, y: 0.3 }, kiri: { tangan: { x: 165, y: 470 }, isi: 'hp' }, kanan: { tangan: L_CANGKIR_BANG, isi: 'cangkir' } });
+const bangSeruput = pose({ ...bangPasrah, kepalaRot: 2, lihat: { x: 0.3, y: 0.45 }, kanan: { tangan: { x: 262, y: 262 }, isi: 'cangkir', rot: -10 } });
+const bangLihatGelas = pose({ ...bangSeruput, kepalaRot: 6, lihat: { x: 0.6, y: 0.6 }, kanan: { tangan: { x: 292, y: 300 }, isi: 'cangkir', rot: -4 } });
+const bangTertawa = pose({ badanRot: -2, badanY: 4, kepalaY: 0, kepalaRot: -5, lihat: { x: 0, y: 0 }, kiri: { tangan: { x: 155, y: 470 }, isi: 'telapak' }, kanan: { tangan: L_CANGKIR_BANG, isi: 'cangkir' } });
+const bangTertawaLepas = pose({ ...bangTertawa, kanan: { tangan: { x: 295, y: 470 }, isi: 'telapak' } });
 const bangLirikStempel = pose({ ...bangTertawaLepas, badanY: 2, kepalaRot: 0, lihat: { x: -0.1, y: 0.75 } });
 const bangLirikKamera = pose({ ...bangTertawaLepas, badanY: 2, kepalaRot: 6, lihat: { x: 0, y: 0.1 } });
 
@@ -261,17 +260,17 @@ const BANG_EKSPRESI: [number, Ekspresi][] = [
 // ---------------------------------------------------------------------------------------------
 // Cak Owner
 // ---------------------------------------------------------------------------------------------
-const ownerSantai = pose({ badanRot: 2, kepalaRot: -4, lihat: { x: 0.3, y: 0.25 }, kiri: { siku: { x: 70, y: 440 }, tangan: { x: 150, y: 535 }, isi: 'kosong' }, kanan: { siku: { x: 400, y: 410 }, tangan: { x: 300, y: 300 }, isi: 'cangkir', rot: -6 } });
-const ownerSeruput = pose({ ...ownerSantai, kepalaRot: -1, lihat: { x: 0.2, y: 0.4 }, kanan: { siku: { x: 390, y: 380 }, tangan: { x: 252, y: 238 }, isi: 'cangkir', rot: -14 } });
-const ownerKetukTanpaLihat = pose({ ...ownerSeruput, kepalaRot: 7, lihat: { x: 0.7, y: 0.2 }, kiri: { siku: { x: 50, y: 470 }, tangan: { x: L_HP_OWNER.x + 8, y: L_HP_OWNER.y - 18 }, isi: 'tunjuk', rot: 178 } });
-const ownerCondong = pose({ ...ownerSantai, badanRot: 3, badanY: -8, kepalaY: 8, lihat: { x: 0.35, y: 0.5 }, kanan: { siku: { x: 400, y: 420 }, tangan: { x: 300, y: 320 }, isi: 'cangkir', rot: -6 } });
-const ownerTaruhCangkir = pose({ ...ownerCondong, lihat: { x: 0.4, y: 0.6 }, kanan: { siku: { x: 410, y: 480 }, tangan: L_CANGKIR_OWNER, isi: 'cangkir', rot: 0 } });
-const ownerTanganLepas = pose({ ...ownerTaruhCangkir, kanan: { siku: { x: 400, y: 460 }, tangan: { x: 300, y: 560 }, isi: 'kosong' } });
-const ownerKetukNutup = pose({ ...ownerTanganLepas, kepalaRot: -2, lihat: { x: 0.3, y: 0.45 }, kiri: { siku: { x: 50, y: 470 }, tangan: { x: L_HP_OWNER.x + 8, y: L_HP_OWNER.y - 18 }, isi: 'tunjuk', rot: 178 } });
-const ownerSesudah = pose({ ...ownerTanganLepas, badanY: 0, kepalaY: 0, kepalaRot: -5, lihat: { x: 0.5, y: 0.1 }, kiri: { siku: { x: 70, y: 440 }, tangan: { x: 150, y: 535 }, isi: 'kosong' } });
-const ownerAmbilCangkir = pose({ ...ownerSesudah, kanan: { siku: { x: 410, y: 480 }, tangan: L_CANGKIR_OWNER, isi: 'cangkir', rot: 0 } });
-const ownerTertawa = pose({ ...ownerSantai, badanRot: 0, kepalaRot: -8, lihat: { x: 0, y: 0 }, kanan: { siku: { x: 400, y: 400 }, tangan: { x: 300, y: 290 }, isi: 'cangkir', rot: -6 } });
-const ownerAngkatCangkir = pose({ ...ownerTertawa, kepalaRot: -6, kanan: { siku: { x: 410, y: 360 }, tangan: { x: 330, y: 300 }, isi: 'cangkir', rot: -22 } });
+const ownerSantai = pose({ badanRot: 2, kepalaY: 4, kepalaRot: -4, lihat: { x: 0.3, y: 0.5 }, kiri: { tangan: { x: 178, y: 470 }, isi: 'kosong' }, kanan: { tangan: { x: 300, y: 340 }, isi: 'cangkir' } });
+const ownerSeruput = pose({ ...ownerSantai, kepalaY: 0, kepalaRot: -1, lihat: { x: 0.2, y: 0.4 }, kanan: { tangan: { x: 256, y: 252 }, isi: 'cangkir', rot: -12 } });
+const ownerKetukTanpaLihat = pose({ ...ownerSeruput, kepalaRot: 7, lihat: { x: 0.7, y: 0.2 }, kiri: { tangan: { x: L_HP_OWNER.x + 4, y: L_HP_OWNER.y - 52 }, isi: 'tunjuk', arahJari: 92 } });
+const ownerCondong = pose({ ...ownerSantai, badanRot: 3, badanY: -8, kepalaY: 14, lihat: { x: 0.35, y: 0.6 }, kanan: { tangan: { x: 300, y: 350 }, isi: 'cangkir' } });
+const ownerTaruhCangkir = pose({ ...ownerCondong, lihat: { x: 0.4, y: 0.7 }, kanan: { tangan: L_CANGKIR_OWNER, isi: 'cangkir' } });
+const ownerTanganLepas = pose({ ...ownerTaruhCangkir, kanan: { tangan: { x: 292, y: 470 }, isi: 'kosong' } });
+const ownerKetukNutup = pose({ ...ownerTanganLepas, kepalaRot: -2, lihat: { x: -0.2, y: 0.8 }, kiri: { tangan: { x: L_HP_OWNER.x + 4, y: L_HP_OWNER.y - 52 }, isi: 'tunjuk', arahJari: 92 } });
+const ownerSesudah = pose({ ...ownerTanganLepas, badanY: 0, kepalaY: 0, kepalaRot: -5, lihat: { x: 0.5, y: 0.1 }, kiri: { tangan: { x: 178, y: 470 }, isi: 'kosong' } });
+const ownerAmbilCangkir = pose({ ...ownerSesudah, kanan: { tangan: L_CANGKIR_OWNER, isi: 'cangkir' } });
+const ownerTertawa = pose({ ...ownerSantai, badanRot: 0, kepalaY: 0, kepalaRot: -8, lihat: { x: 0, y: 0 }, kanan: { tangan: { x: 300, y: 330 }, isi: 'cangkir' } });
+const ownerAngkatCangkir = pose({ ...ownerTertawa, kepalaRot: -6, kanan: { tangan: { x: 345, y: 230 }, isi: 'cangkir', rot: -16 } });
 
 const OWNER_POSE: Kunci<Pose>[] = [
   [0, ownerTertawa],
@@ -318,15 +317,15 @@ const OWNER_EKSPRESI: [number, Ekspresi][] = [
 // ---------------------------------------------------------------------------------------------
 // Mas Sampul
 // ---------------------------------------------------------------------------------------------
-const sampulMainHp = pose({ badanRot: -2, kepalaRot: 7, lihat: { x: 0.45, y: 0.6 }, kiri: { siku: { x: 40, y: 440 }, tangan: { x: 130, y: 540 }, isi: 'kosong' }, kanan: { siku: { x: 400, y: 440 }, tangan: { x: 330, y: 380 }, isi: 'hp', rot: 10 } });
-const sampulArahkanQr = pose({ badanRot: 4, badanY: -4, kepalaRot: 12, kepalaY: 6, lihat: { x: 0.3, y: 0.85 }, kiri: { siku: { x: 40, y: 440 }, tangan: { x: 130, y: 540 }, isi: 'kosong' }, kanan: { siku: { x: 400, y: 500 }, tangan: { x: 215, y: 650 }, isi: 'hp', rot: -40 } });
-const sampulLihatBang = pose({ ...sampulMainHp, kepalaRot: -6, lihat: { x: -0.85, y: 0.1 } });
-const sampulCondong = pose({ ...sampulMainHp, badanRot: -5, badanY: -10, kepalaY: 8, kepalaRot: -4, lihat: { x: -0.5, y: 0.55 }, kanan: { siku: { x: 400, y: 440 }, tangan: { x: 300, y: 500 }, isi: 'hp', rot: 60 } });
-const sampulAngkatTangan = pose({ ...sampulCondong, badanY: -16, kepalaRot: -10, lihat: { x: -0.8, y: 0 }, kiri: { siku: { x: 10, y: 360 }, tangan: { x: 90, y: 260 }, isi: 'telapak', rot: -20 } });
-const sampulGebrak = pose({ ...sampulCondong, badanRot: -3, badanY: 4, kepalaRot: -8, kepalaY: 6, lihat: { x: -0.8, y: 0.2 }, kiri: { siku: { x: 30, y: 470 }, tangan: { x: 120, y: 585 }, isi: 'telapak', rot: 0 } });
-const sampulTertawa = pose({ ...sampulGebrak, badanY: 0, kepalaRot: -6, kiri: { siku: { x: 40, y: 450 }, tangan: { x: 130, y: 560 }, isi: 'telapak', rot: 0 }, kanan: { siku: { x: 400, y: 440 }, tangan: { x: 320, y: 420 }, isi: 'hp', rot: 20 } });
-const sampulSodorHp = pose({ ...sampulTertawa, badanRot: -9, badanY: -4, kepalaRot: -12, lihat: { x: -0.9, y: 0.1 }, kiri: { siku: { x: 30, y: 320 }, tangan: L_WAJAH_BANG_DARI_SAMPUL, isi: 'hp', rot: -80 }, kanan: { siku: { x: 400, y: 440 }, tangan: { x: 300, y: 540 }, isi: 'telapak', rot: 0 } });
-const sampulSantai = pose({ ...sampulMainHp, kepalaRot: -3, lihat: { x: -0.6, y: 0.2 }, kanan: { siku: { x: 400, y: 440 }, tangan: { x: 320, y: 440 }, isi: 'hp', rot: 20 } });
+const sampulMainHp = pose({ badanRot: -2, kepalaRot: 6 });
+const sampulArahkanQr = pose({ badanRot: 4, badanY: -4, kepalaRot: 12, kepalaY: 14, lihat: { x: 0.4, y: 0.9 }, kiri: { tangan: { x: 160, y: 470 }, isi: 'kosong' }, kanan: { tangan: { x: 345, y: 515 }, isi: 'hp', rot: -24 } });
+const sampulLihatBang = pose({ ...sampulMainHp, kepalaY: 0, kepalaRot: -6, lihat: { x: -0.85, y: 0.1 } });
+const sampulCondong = pose({ badanRot: -5, badanY: -10, kepalaY: 16, kepalaRot: -4, lihat: { x: -0.5, y: 0.6 } });
+const sampulAngkatTangan = pose({ ...sampulCondong, badanY: -16, kepalaY: 0, kepalaRot: -10, lihat: { x: -0.8, y: 0 }, kiri: { tangan: { x: 95, y: 210 }, isi: 'telapak' }, kanan: { tangan: { x: 320, y: 420 }, isi: 'hp', rot: 10 } });
+const sampulGebrak = pose({ ...sampulAngkatTangan, badanRot: -3, badanY: 4, kepalaY: 6, kepalaRot: -8, lihat: { x: -0.8, y: 0.2 }, kiri: { tangan: { x: 130, y: 505 }, isi: 'telapak' } });
+const sampulTertawa = pose({ ...sampulGebrak, badanY: 0, kepalaY: 0, kepalaRot: -6, kiri: { tangan: { x: 140, y: 480 }, isi: 'telapak' }, kanan: { tangan: { x: 320, y: 420 }, isi: 'hp', rot: 10 } });
+const sampulSodorHp = pose({ ...sampulTertawa, badanRot: -9, badanY: -4, kepalaRot: -12, lihat: { x: -0.9, y: 0.1 }, kiri: { tangan: L_WAJAH_BANG_DARI_SAMPUL, isi: 'hpLayar', rot: -20 }, kanan: { tangan: { x: 300, y: 480 }, isi: 'telapak' } });
+const sampulSantai = pose({ ...sampulMainHp, kepalaY: 0, kepalaRot: -3, lihat: { x: -0.6, y: 0.2 }, kiri: { tangan: { x: 150, y: 480 }, isi: 'kosong' }, kanan: { tangan: { x: 320, y: 430 }, isi: 'hp', rot: 10 } });
 const sampulTertawaTutup = pose({ ...sampulTertawa, badanRot: -2, kepalaRot: -9, lihat: { x: 0, y: 0 } });
 const sampulLihatStempel = pose({ ...sampulTertawaTutup, kepalaRot: -3, lihat: { x: -0.4, y: 0.4 } });
 
@@ -509,11 +508,11 @@ export function mulutDi(f: number, siapa: 'bang' | 'owner' | 'sampul'): { x: num
   if (siapa === 'bang') {
     const b = keadaanBang(f);
     const k = KURSI.bang;
-    return { x: k.x + b.geserX + (b.pose.kepalaX + b.pose.badanX) * k.skala, y: k.y + b.geserY - (600 - 170 - 44) * k.skala + (b.pose.kepalaY + b.pose.badanY) * k.skala };
+    return { x: k.x + b.geserX + (b.pose.kepalaX + b.pose.badanX) * k.skala, y: k.y + b.geserY - (600 - 170 - 52) * k.skala + (b.pose.kepalaY + b.pose.badanY) * k.skala };
   }
   const k = siapa === 'owner' ? KURSI.owner : KURSI.sampul;
   const p = siapa === 'owner' ? keadaanOwner(f).pose : keadaanSampul(f).pose;
-  return { x: k.x + (p.kepalaX + p.badanX) * k.skala, y: k.y - (600 - 170 - 44) * k.skala + (p.kepalaY + p.badanY) * k.skala };
+  return { x: k.x + (p.kepalaX + p.badanX) * k.skala, y: k.y - (600 - 170 - 52) * k.skala + (p.kepalaY + p.badanY) * k.skala };
 }
 
 /** Panggung 2D lengkap untuk frame kini (digambar di dalam KameraA oleh TeaserA). */
