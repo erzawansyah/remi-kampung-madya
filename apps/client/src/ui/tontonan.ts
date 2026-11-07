@@ -102,7 +102,7 @@ export function renderTontonan(akar: HTMLElement, awal: InfoTontonan, aksi: Aksi
     info = baru;
     const sekarang = Date.now();
     akhirJeda = new Map(baru.pemain.flatMap((p, i) => (p.minta === 'jeda' && p.jedaMs ? [[i, sekarang + p.jedaMs + CADANGAN_JEDA_MS] as const] : [])));
-    elJudul.textContent = T.judul(baru.kode);
+    elJudul.textContent = T.judul(baru.namaHost);
     elJumlah.textContent = T.jumlahPenonton(baru.jumlahPenonton);
     elStatus.textContent = baru.status === 'selesai' ? T.selesaiPermainan : '';
     gambarBuangan();

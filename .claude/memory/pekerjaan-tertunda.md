@@ -1,6 +1,6 @@
 # Pekerjaan tertunda
 
-Diperbarui: 24 Okt 2026. Hapus butir yang sudah selesai, tambahkan yang baru.
+Diperbarui: 7 Nov 2026. Hapus butir yang sudah selesai, tambahkan yang baru.
 
 ## Latar
 
@@ -17,6 +17,8 @@ Batch 14 Okt 2026 (level warga kedai Jago dan Suhu, 12 nama warga kedai baru, bu
 
 ## Belum selesai
 
+000. **Nonton (#60, keputusan pemilik 7 Nov 2026) sudah diterapkan di branch `claude/loving-goldberg-bhm3fp`, menunggu PR ke `main` dan merge pemilik.** Rincian dan tafsiran pengembang di `docs/keputusan-pemilik.md` #60; CHANGELOG masih di `[Belum dirilis]`. Versi naik ke **0.6.0** (minor, fitur baru) bersama PR-nya, sekalian memindah CHANGELOG ke `[0.6.0] - tanggal`. Tafsiran pengembang di #60 (permintaan tak dijawab 30 detik = ditolak, satu pemain sekaligus, Hentikan = jeda 3 menit, dll.) cukup dikabarkan ringkas bersama PR. Sesudah tayang: coba nonton dan minta lihat kartu dari dua HP sungguhan.
+001. **Menunggu keputusan pemilik: usulan Notion "Waktu giliran"** (45 detik, dari U.U, status "Perlu keputusan pemilik"). Rekomendasi agent: tambah pilihan 45 detik di waktu per giliran, bawaan tetap 60 detik. Waktu giliran menyentuh aturan meja, jadi jangan dikerjakan sebelum pemilik setuju.
 00. **Rilis 0.5.0 (pekerjaan 23–24 Okt 2026): PR #10 ke `main` dibuka 24 Okt 2026, menunggu pemilik merge.** Branch `ccr-681fc5be-tw8z13` (sudah memuat `origin/produksi`); versi sudah 0.5.0 dan CHANGELOG `[0.5.0] - 2026-10-24`. Isinya: kompetisi versi 2 (#51, termasuk keputusan 24 Okt: yang keluar tak dihitung dikalahkan tapi selalu dicatat 0, tanpa voting di meja kompetisi), nutup paling banyak 2 kartu (#52), pentungan bukan kembaran kartu pungutan (#53, kedua tafsirannya disetujui), jeda lanjut + Siap (#54), ledekan (#55), efek kepentung (#56), koneksi putus-putus (#57, mengubah #34, #35, #37), meja selamat dari restart (#58), usul fitur + peninjauan harian di Notion (#59).
    - Sesudah merge: pemilik memasang tag `v0.5.0` lewat GitHub Releases (push tag dari sesi Claude ditolak 403); judul dan deskripsinya sudah ada di deskripsi PR #10. Lalu fast-forward `produksi` ke `main`.
    - Database produksi masih v1, jadi deploy pertama menjalankan migrasi **v1 → v5** sekali (v2 kompetisi, v3 `usulan`, v4 `meja_aktif`, v5 `hasil_kompetisi_ditinggal`). Sesudah deploy minta pemilik (butuh akses server) mengecek log: `skema riwayat dimigrasi v1 → v5`, baris `usul fitur: …` (Notion belum diatur, atau diteruskan ke database `d31d1a9e…`), dan sesudah deploy berikutnya `meja KODE dipulihkan (…)` / `N dari M meja tersimpan dipulihkan`. Dari luar: `/healthz` = `"versi":"0.5.0"` (dengan `HEALTHZ_DETAIL` ada `mejaMain`), `/api/peringkat` masih array, dan respons handshake WebSocket di tab Network memuat `permessage-deflate` (Caddy meneruskan `Sec-WebSocket-Extensions`). Cadangan `VACUUM INTO` sebelum deploy dianjurkan; sesudah v4 database (dan cadangannya) memuat token pemain, jadi simpan di tempat privat.
@@ -26,9 +28,6 @@ Batch 14 Okt 2026 (level warga kedai Jago dan Suhu, 12 nama warga kedai baru, bu
    - Satu-satunya yang bertahan bisa menahan juara kompetisi yang sudah berakhir dengan tersambung sebentar kurang dari tiap 45 menit (sudah ada sebelumnya). Tanyakan: bolehkah meja seperti itu ditutup sesudah waktu tertentu? (Permainan yang ditinggal semua pesertanya sekarang tercatat: yang keluar 0, keputusan "Yang keluar selalu dicatat 0".)
    - Boneka (atau teman) yang tetap duduk lalu sengaja kalah tetap memberi nilai penuh; dari luar tidak bisa dibedakan dari kalah sungguhan.
    - Yang bertahan sendirian main melawan warga kedai sampai batas putaran, lalu baru tahu di klasemen akhir bahwa permainannya tidak dihitung untuknya. Bisa diberi tahu lebih awal kalau pemilik mau (perlu keputusan).
-02. **Token Notion:** minta pemilik membuat integrasi Notion, mengisi `NOTION_TOKEN` + `NOTION_USULAN_DB` di `.env` VPS, lalu membuat ulang container (`docker compose up -d`); langkahnya di `docs/deploy.md`, bagian "Usul fitur ke Notion". Sampai saat itu usulan tetap tersimpan di database, dan terkirim sendiri ±10 detik sesudah server jalan dengan token.
-03. **Routine peninjauan harian** (`trig_015vK8qskJmwRCC8mhjnLdZE`, "Tinjau usulan fitur Remi", 20.38 WIB) tersimpan **tanpa konektor** (dibuat lewat API, `mcp_connections` kosong). Prompt-nya berhenti kalau konektor Notion tidak ada, jadi sampai diperbaiki peninjauan tidak berjalan. Minta pemilik membuat ulang routine itu dari UI Routines di claude.ai dengan konektor Notion (prompt bisa disalin dari routine lama), atau menambahkan konektor Notion ke routine yang ada. Bantuan menulis "Usulanmu dibaca dan ditinjau tiap hari": baru benar kalau butir 02 dan 03 beres, jadi sebaiknya beres sebelum 0.5.0 tayang (kalau tidak, lunakkan kalimat itu).
-
 0. **Sisa cek sesudah Rilis A tayang** (yang dari luar sudah dicek, lihat Latar): minta pemilik melihat log server memuat `skema riwayat dimigrasi v0 → v1` (butuh akses server), lalu coba tombol pasang di HP sungguhan (lihat butir 5). Cadangan `VACUUM INTO` sebelum migrasi sudah terlambat; kalau pemilik sempat mengambilnya, simpan saja.
 1. **Sisa cek sesudah Rilis B tayang:** coba nutup pakai dua joker dan satu permainan mode kaldu di HP sungguhan (lihat butir 5).
 2. **Sesudah Rilis C tayang** (#47): tabel nama → gaya, catatan arena, dan ajakan mencoba sudah dikabarkan ke pemilik 17 Okt 2026. Tunggu tanggapan sesudah pemilik dan teman-teman main lawan warga kedai (masih gampang dibaca? ada yang terasa aneh?).
@@ -52,6 +51,7 @@ Batch 14 Okt 2026 (level warga kedai Jago dan Suhu, 12 nama warga kedai baru, bu
 
 ## Sudah selesai (dicek 16 Okt 2026, jangan dikerjakan ulang)
 
+- **Token Notion dan routine peninjauan harian (dulu butir 02 dan 03), dicek 7 Nov 2026:** usulan dari game sampai di database Notion "Permintaan Fitur", dan routine `trig_015vK8qskJmwRCC8mhjnLdZE` terbukti berjalan (baris ditinjau 1 Nov dan 6 Nov 2026), jadi kalimat Bantuan "Usulanmu dibaca dan ditinjau tiap hari" sudah benar.
 - Sub-teks sorakan "TINGGAL 1 KARTU!" sudah netral, tanpa "siap mentung" (keputusan #30).
 - FAQ masa tenggang sudah menyebut "dihitung sejak kamu terputus".
 - Momen "tidak" untuk pembaruan sudah mencakup panel mentung dan klasemen akhir yang sedang tampil.

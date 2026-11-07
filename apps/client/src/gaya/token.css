@@ -207,6 +207,8 @@
   --z-sorak: 15;
   /* Ledekan di hasil putaran: di atas modal hasil, di bawah dialog (Skor, Bantuan) dan toast. */
   --z-ledek: 16;
+  /* Kotak "X pengin lihat kartumu" (#60): di atas modal hasil dan ledekan, di bawah dialog dan toast. */
+  --z-minta: 17;
   --z-dialog: 18;
   --z-toast: 20;
   --z-tooltip: 25;

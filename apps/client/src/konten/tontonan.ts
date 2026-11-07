@@ -4,7 +4,12 @@
 import { teksSisaJeda } from '@remi/meja';
 
 export const TEKS_TONTONAN = {
-  judul: (kode: string) => `Nonton meja ${kode}`,
+  // Kode meja tidak pernah ditampilkan ke penonton (yang dipegangnya kode tonton): cukup nama host.
+  judul: (namaHost: string) => (namaHost ? `Nonton meja ${namaHost}` : 'Nonton meja'),
+  /** Lencana bar atas meja selama penonton melihat kartu pemain (tanpa kode meja). */
+  labelAtas: 'Nonton',
+  /** Keterangan menu ☰ selama penonton melihat kartu pemain (pengganti kode meja). */
+  menuPenonton: 'Kamu lagi nonton meja ini, jadi nggak bisa ikut main dari sini.',
   jumlahPenonton: (n: number) => `${n} penonton`,
   pengantar: 'Kamu cuma lihat kartu buangan. Mau lihat kartu seorang pemain? Minta izin dulu ke orangnya.',
   judulPemain: 'Pemain',
@@ -21,6 +26,11 @@ export const TEKS_TONTONAN = {
   // Mode lihat kartu (KontrolMeja penonton)
   melihat: (nama: string) => `Kamu lagi lihat kartu ${nama}.`,
   berhentiLihat: 'Berhenti lihat',
+  // Kabar ke penonton (toast + pembaca layar)
+  diizinkan: (nama: string) => `${nama} mengizinkan kamu lihat kartunya.`,
+  berhentiDibagi: (nama: string) => `${nama} berhenti membagi kartunya.`,
+  ditolak: (nama: string) => `${nama} belum mau kartunya dilihat.`,
+  izinLepasPutus: 'Sambunganmu sempat putus, jadi izin lihat kartunya lepas. Minta lagi ya.',
   // Pemain: permintaan yang masuk
   permintaan: (nama: string) => `${nama} pengin lihat kartumu.`,
   tolak: 'Tolak',

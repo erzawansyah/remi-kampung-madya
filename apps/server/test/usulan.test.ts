@@ -103,8 +103,8 @@ describe('tabel usulan (migrasi v3)', () => {
       ],
     });
     r.tutup();
-    // Seolah database dibuat server 0.5 (v2): tabel usulan belum ada.
-    db.exec('DROP TABLE usulan; PRAGMA user_version = 2;');
+    // Seolah database dibuat server pra-0.5 (v2): tabel usulan dan meja_aktif belum ada.
+    db.exec('DROP TABLE usulan; DROP TABLE meja_aktif; PRAGMA user_version = 2;');
     const log: string[] = [];
     const r2 = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
     expect(log).toContain(`skema riwayat dimigrasi v2 → v${MIGRASI.length}`);

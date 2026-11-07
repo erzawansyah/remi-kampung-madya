@@ -9,7 +9,9 @@
 
 import type { Bunga, Rank } from '@remi/engine';
 import {
+  BATAS_JAWAB_LIHAT_MS,
   JEDA_LANJUT_MS,
+  JEDA_TOLAK_LIHAT_MS,
   MAKS_LEDEK_PER_PUTARAN,
   MAKS_PESAN,
   MIN_MAIN_KOMPETISI,
@@ -30,6 +32,10 @@ const DETIK_TENGGANG = Math.round(TENGGANG_SAMBUNG_MS / 1000);
 const DETIK_SISA_MIN = Math.round(SISA_MIN_SAMBUNG_MS / 1000);
 /** Jeda sebelum host bisa memulai putaran berikutnya di meja online (keputusan #54). */
 const DETIK_JEDA_LANJUT = Math.round(JEDA_LANJUT_MS / 1000);
+/** Jeda sesudah permintaan lihat kartu ditolak, dalam menit (keputusan #60). */
+const MENIT_JEDA_TOLAK = Math.round(JEDA_TOLAK_LIHAT_MS / 60_000);
+/** Batas pemain menjawab permintaan lihat kartu, dalam detik (keputusan #60). */
+const DETIK_JAWAB_LIHAT = Math.round(BATAS_JAWAB_LIHAT_MS / 1000);
 
 export type KartuContoh = {
   bunga: Bunga;
@@ -790,7 +796,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
         butir: [
           'Isi nama, lalu tekan Buat meja baru. Kamu jadi host.',
           'Bagikan kode meja (5 karakter, huruf dan angka), atau salin dan bagikan link undangannya.',
-          'Atur kursi: tunggu teman masuk, atau ajak warga kedai (pemain komputer) lalu pilih levelnya. Host juga mengatur jumlah pemain, batas putaran, mode kaldu, batas skor, waktu per giliran, tempo warga kedai, dan apakah meja muncul di daftar meja publik.',
+          'Atur kursi: tunggu teman masuk, atau ajak warga kedai (pemain komputer) lalu pilih levelnya. Host juga mengatur jumlah pemain, batas putaran, mode kaldu, batas skor, waktu per giliran, tempo warga kedai, apakah meja muncul di daftar meja publik, dan apakah meja boleh ditonton.',
           'Kalau semua kursi sudah terisi, host menekan Mulai main.',
         ],
       },
@@ -839,6 +845,19 @@ export const BAB_BANTUAN: BabBantuan[] = [
           `Meja kompetisi selalu punya batas waktu per giliran. Di hasil putaran, kalau host belum memulai putaran berikutnya, putarannya mulai sendiri sebentar kemudian. Di meja kompetisi tidak ada Akhiri permainan maupun ${TEKS_KALDU.tombol}: permainan selesai sendiri di batas putaran (atau batas skor kalau diisi), dan kalau mode kaldu dipakai, putaran kaldu mulai sendiri di batas putaran.`,
           'Kompetisi bisa disudahi lebih awal kalau lebih dari separuh peserta setuju.',
           'Tiket peserta tersimpan di HP yang dipakai waktu ikut serta, jadi main kompetisi dari HP itu.',
+        ],
+      },
+      {
+        t: 'paragraf',
+        teks: '**Nonton:** buka Cari meja publik, lalu pilih Tonton di bagian Lagi main. Penonton cuma lihat nama pemain dan kartu buangan. Mau lihat kartu seorang pemain? Minta izin dulu ke orangnya.',
+      },
+      {
+        t: 'daftar',
+        butir: [
+          `Pemain boleh menolak. Ke tiap pemain cuma bisa ada satu permintaan yang menunggu. Kalau ditolak, tunggu ${MENIT_JEDA_TOLAK} menit sebelum minta lagi ke orang yang sama. Permintaan yang nggak dijawab ${DETIK_JAWAB_LIHAT} detik dihitung ditolak.`,
+          'Kalau diizinkan, kamu lihat persis yang dilihat pemain itu, sampai kamu berhenti atau dia menghentikannya.',
+          'Pemain melihat jumlah penonton di tombol 👀, dan bisa menghentikan siapa pun yang sedang lihat kartunya kapan saja.',
+          'Meja privat juga bisa ditonton, tapi kodenya tetap rahasia: penonton cuma lihat nama host. Host bisa mematikan Boleh ditonton di lobi. Meja kompetisi nggak bisa ditonton.',
         ],
       },
       {
@@ -929,6 +948,10 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   {
     tanya: 'Gimana cara ngeledek?',
     jawab: `Waktu hasil putaran tampil di meja online, buka bagian ${TEKS_LEDEK.judul} di bawah rincian skor, pilih orangnya, lalu ketuk ledekannya atau emoji. Ledekanmu muncul besar di layar dia. Tiap pemain paling banyak ${MAKS_LEDEK_PER_PUTARAN} ledekan per putaran. Di meja offline dan latihan tidak ada ledekan.`,
+  },
+  {
+    tanya: 'Ada yang nonton mejaku. Dia bisa lihat kartuku?',
+    jawab: `Nggak, kecuali kamu izinkan. Penonton cuma lihat nama pemain dan kartu buangan. Kalau ada yang minta lihat kartumu, kamu bisa Tolak atau Izinkan; nggak dijawab ${DETIK_JAWAB_LIHAT} detik dihitung ditolak. Yang sudah kamu izinkan bisa kamu hentikan kapan saja lewat tombol 👀. Nggak mau ditonton sama sekali? Host bisa mematikan Boleh ditonton di lobi.`,
   },
   {
     tanya: 'Kok namaku nggak bisa diganti?',

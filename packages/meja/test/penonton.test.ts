@@ -11,7 +11,7 @@ import { aksiManusia, siapkan, siapSemua } from './bantu.js';
 /** Meja 3 kursi: A (host), B, dan satu warga kedai, sudah main. */
 function mejaMain(extra: Parameters<typeof siapkan>[0] = {}, pengaturan: Partial<PengaturanMeja> = {}) {
   const s = siapkan({ namaLawan: ['Warga A'], ...extra });
-  const meja = Meja.buat(s.opsi, 'A', 'Ani', { jumlahPemain: 3, ...pengaturan });
+  const meja = Meja.buat(s.opsi, 'A', 'Ani', { jumlahPemain: 3, publik: true, ...pengaturan });
   meja.masuk('B', 'Budi');
   meja.terima('A', { t: 'aturKursi', kursi: 2, jenis: 'bot' });
   meja.terima('A', { t: 'mulai', pengocok: 0 });
@@ -46,14 +46,14 @@ describe('nonton (#60)', () => {
 
   it('meja kompetisi, meja yang ditutup host, dan lobi tidak bisa ditonton', () => {
     const s = siapkan();
-    const lobi = Meja.buat(s.opsi, 'A', 'Ani', { jumlahPemain: 2 });
+    const lobi = Meja.buat(s.opsi, 'A', 'Ani', { jumlahPemain: 2, publik: true });
     expect(lobi.bisaDitonton).toBe(false);
     expect(() => lobi.tonton('P1', 'X')).toThrow(/belum mulai/);
 
     const tutup = mejaMain({ kode: 'TUTUP' });
     expect(tutup.meja.bisaDitonton).toBe(true);
     const s2 = siapkan({ namaLawan: ['Warga A'] });
-    const m2 = Meja.buat(s2.opsi, 'A', 'Ani', { jumlahPemain: 2, tanpaPenonton: true });
+    const m2 = Meja.buat(s2.opsi, 'A', 'Ani', { jumlahPemain: 2, publik: true, tanpaPenonton: true });
     m2.terima('A', { t: 'aturKursi', kursi: 1, jenis: 'bot' });
     m2.terima('A', { t: 'mulai', pengocok: 0 });
     expect(m2.bisaDitonton).toBe(false);
@@ -208,6 +208,100 @@ describe('nonton (#60)', () => {
     expect(surat.terakhir('P0', 'tontonSelesai')?.alasan).toMatch(/sudah selesai/);
     expect(meja.jumlahPenonton).toBe(0);
     expect(surat.info('A').penonton).toBeUndefined();
+  });
+
+  it('meja privat juga bisa ditonton, dan penonton hanya menerima kode tonton, bukan kode meja', () => {
+    const { meja, surat } = mejaMain({ kode: 'RAHAS' }, { publik: false });
+    expect(meja.status).toBe('main');
+    expect(meja.bisaDitonton).toBe(true);
+    meja.tonton('P1', 'Tono', 'tok', 'TNTN2');
+    const info = tontonan(surat, 'P1');
+    expect(info.kode).toBe('TNTN2');
+    expect(info.namaHost).toBe('Ani');
+    // Diizinkan melihat kartu Budi: info meja yang diteruskan juga memakai kode tonton.
+    meja.terimaPenonton('P1', { t: 'mintaLihat', kursi: 1 });
+    meja.terima('B', { t: 'jawabLihat', penonton: 1, terima: true });
+    expect(surat.terakhir('P1', 'tontonMeja')!.info.kode).toBe('TNTN2');
+    expect(surat.terakhir('P1', 'tontonView')).toBeDefined();
+    // Pemainnya sendiri tetap menerima kode meja asli.
+    expect(surat.info('B').kode).toBe('RAHAS');
+    // Sampai tontonan selesai (Main lagi), tidak ada pesan ke penonton yang memuat kode meja asli.
+    meja.terimaPenonton('P1', { t: 'keluar' });
+    expect(JSON.stringify(surat.semua('P1'))).not.toContain('RAHAS');
+  });
+
+  it('keluar atau sambung ulang selagi permintaan menunggu dihitung ditolak (tidak bisa mengulang permintaan)', () => {
+    const { meja, surat } = mejaMain();
+    meja.tonton('P1', 'Spam', 'tok');
+    meja.terimaPenonton('P1', { t: 'mintaLihat', kursi: 0 });
+    meja.terimaPenonton('P1', { t: 'keluar' });
+    expect(surat.info('A').penonton).toBeUndefined();
+    meja.tonton('P2', 'Spam', 'tok');
+    expect(tontonan(surat, 'P2').pemain[0].minta).toBe('jeda');
+    meja.terimaPenonton('P2', { t: 'mintaLihat', kursi: 0 });
+    expect(surat.errors('P2').at(-1)).toMatch(/^Sabar, Bos/);
+    expect(surat.info('A').penonton?.minta).toBeUndefined();
+    // Sambungan tertutup (lepasPenonton dari server) juga sama.
+    meja.terimaPenonton('P2', { t: 'mintaLihat', kursi: 1 });
+    meja.lepasPenonton('P2');
+    meja.tonton('P3', 'Lain', 'tok');
+    expect(tontonan(surat, 'P3').pemain[1].minta).toBe('jeda');
+  });
+
+  it('HP yang sama dari sambungan lain mengambil alih tontonan: nomor, izin, dan permintaan ikut', () => {
+    const { meja, surat } = mejaMain();
+    meja.tonton('P1', 'Tono', 'tok');
+    meja.terimaPenonton('P1', { t: 'mintaLihat', kursi: 1 });
+    meja.terimaPenonton('P1', { t: 'mintaLihat', kursi: 0 });
+    meja.terima('A', { t: 'jawabLihat', penonton: 1, terima: true });
+    expect(tontonan(surat, 'P1').melihat).toBe(0);
+    // Sambung ulang: sambungan baru (alamat baru) dengan token sama, sambungan lama belum tertutup.
+    meja.tonton('P2', 'Tono', 'tok');
+    expect(surat.terakhir('P1', 'tontonSelesai')?.alasan).toMatch(/tempat lain/);
+    expect(meja.jumlahPenonton).toBe(1);
+    expect(tontonan(surat, 'P2').melihat).toBe(0);
+    expect(surat.terakhir('P2', 'tontonView')?.view.saya).toBe(0);
+    expect(surat.info('A').penonton?.melihat).toEqual([{ id: 1, nama: 'Tono' }]);
+    // Sambungan lama yang baru ketahuan tertutup tidak mengganggu tontonan baru.
+    meja.lepasPenonton('P1');
+    expect(meja.jumlahPenonton).toBe(1);
+    // Jawaban dan Hentikan memakai nomor yang sama.
+    meja.terima('A', { t: 'hentikanLihat', penonton: 1 });
+    expect(tontonan(surat, 'P2').melihat).toBeNull();
+    expect(tontonan(surat, 'P2').pemain[0].minta).toBe('jeda');
+  });
+
+  it('mengambil alih tidak dihitung penonton baru walau meja penuh', () => {
+    const { meja } = mejaMain();
+    for (let i = 0; i < MAKS_PENONTON; i++) meja.tonton(`P${i}`, `Penonton ${i}`, `tok${i}`);
+    expect(() => meja.tonton('Baru', 'Penonton 0', 'tok0')).not.toThrow();
+    expect(meja.jumlahPenonton).toBe(MAKS_PENONTON);
+  });
+
+  it('satu permintaan aktif per pemain juga lintas sambungan dengan nama yang sama', () => {
+    const { meja, surat } = mejaMain();
+    meja.tonton('P1', 'Tono', 'tokA');
+    meja.tonton('P2', 'Tono', 'tokB');
+    meja.terimaPenonton('P1', { t: 'mintaLihat', kursi: 0 });
+    meja.terimaPenonton('P2', { t: 'mintaLihat', kursi: 0 });
+    expect(surat.errors('P2').at(-1)).toMatch(/Masih nunggu/);
+    expect(surat.info('A').penonton?.minta).toEqual([{ id: 1, nama: 'Tono' }]);
+  });
+
+  it('catatan jeda tolak yang sudah lewat dibuang', () => {
+    const { meja, jam } = mejaMain();
+    for (let n = 0; n < 5; n++) {
+      meja.tonton(`P${n}`, `Penonton ${n}`, `tok${n}`);
+      meja.terimaPenonton(`P${n}`, { t: 'mintaLihat', kursi: 0 });
+      meja.lepasPenonton(`P${n}`);
+    }
+    const catatan = () => (meja as unknown as { tolakLihat: Map<string, unknown> }).tolakLihat;
+    expect(catatan().size).toBe(10);
+    jam.maju(JEDA_TOLAK_LIHAT_MS + 1);
+    meja.tonton('Q', 'Q', 'tokQ');
+    meja.terimaPenonton('Q', { t: 'mintaLihat', kursi: 0 });
+    meja.lepasPenonton('Q');
+    expect([...catatan().keys()].sort()).toEqual(['n:q', 't:tokQ']);
   });
 
   it('meja tanpa penonton tidak menulis field penonton (golden tetap)', () => {

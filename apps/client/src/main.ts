@@ -197,7 +197,19 @@ class Aplikasi implements AppUntukMeja {
    * Nonton (#60): tontonan yang sedang berjalan. `info` = keadaan terakhir dari server; `layar` = layar
    * penonton yang terpasang (null selagi melihat kartu pemain lewat meja biasa).
    */
-  private tontonan: { kode: string; info: InfoTontonan | null; layar: TontonanTerpasang | null; berhentiSendiri: boolean } | null = null;
+  private tontonan: {
+    kode: string;
+    info: InfoTontonan | null;
+    layar: TontonanTerpasang | null;
+    berhentiSendiri: boolean;
+    /** Nomor sambungan saat info terakhir datang: beda = sempat putus (izin lepas bukan karena pemainnya). */
+    sambungan: number;
+  } | null = null;
+  /**
+   * Nonton (#60): pesan tonton baru saja dikirim (dari Tonton, atau dikirim ulang koneksi sesudah sambung
+   * ulang) dan belum dijawab 'tontonan'. Error yang datang selama itu = tontonnya ditolak.
+   */
+  private menungguTonton = false;
 
   get jenis(): 'online' | 'offline' {
     return this.koneksi?.jenis ?? 'online';
@@ -515,7 +527,11 @@ class Aplikasi implements AppUntukMeja {
       if (this.koneksi !== k || k.jenis === 'offline') return;
       const sebelum = this.statusKini;
       this.statusKini = s;
-      if (s === 'tersambung' && sebelum !== 'tersambung') this.sambunganKe++;
+      if (s === 'tersambung' && sebelum !== 'tersambung') {
+        this.sambunganKe++;
+        // Koneksi mengirim ulang pesan tonton yang diingatnya (#60).
+        if (this.tontonan) this.menungguTonton = true;
+      }
       this.saatStatusBerubah(s, kabarKoneksi.status(s));
       // Meja: kunci aksi lewat sambungan lama dilepas, tombol aksi ikut status sambungan.
       if (this.layar === 'meja') this.kontrol?.koneksiBerubah();
@@ -617,7 +633,10 @@ class Aplikasi implements AppUntukMeja {
         if (this.tontonan) {
           this.tontonan.layar?.lepas();
           this.tontonan = null;
+          this.menungguTonton = false;
           this.view = null;
+          // Meja penonton (kalau sedang lihat kartu) dibongkar: meja pemain dibuat baru, bukan dipakai ulang.
+          if (this.layar === 'meja') this.sembunyikanGame();
         }
         // Pemain sendiri masuk meja (lagi): sesi ini miliknya, boleh disambung ulang otomatis lagi.
         this.sesiDitendang = false;
@@ -651,6 +670,15 @@ class Aplikasi implements AppUntukMeja {
         if (this.tontonan && p.pesan.includes('nggak ketemu') && p.pesan.includes(this.tontonan.kode)) {
           toast('Mejanya sudah bubar, Bos.', true);
           return this.keluarTontonan();
+        }
+        // Nonton (#60): pesan tonton ditolak (penuh, belum mulai, nggak bisa ditonton, meja hilang).
+        if (this.menungguTonton && p.pesan !== PESAN_TERTAHAN) {
+          this.menungguTonton = false;
+          this.koneksi?.lupakanTontonan();
+          if (this.tontonan) {
+            toast(p.pesan, true);
+            return this.keluarTontonan();
+          }
         }
         // Meja sesi ini (bukan kode lain yang salah ketik) sudah tidak ada. Sesi di memori koneksi dipakai
         // lebih dulu: localStorage bisa gagal ditulis atau ditimpa tab lain.
@@ -1015,6 +1043,7 @@ class Aplikasi implements AppUntukMeja {
   /** Mulai menonton meja `kode` dari daftar meja publik. */
   private mulaiTonton(kode: string) {
     this.tontonan = null;
+    this.menungguTonton = true;
     this.kirimOnline({ t: 'tonton', kode, nama: simpan.nama() || 'Penonton', token: simpan.tokenPenonton(idAcak) });
   }
 
@@ -1022,10 +1051,13 @@ class Aplikasi implements AppUntukMeja {
   private terimaTontonan(info: InfoTontonan) {
     const lama = this.tontonan?.kode === info.kode ? this.tontonan : null;
     const sebelum = lama?.info ?? null;
+    const sempatPutus = !!lama && lama.sambungan !== this.sambunganKe;
     this.niatOnline = null;
-    this.tontonan = lama ?? { kode: info.kode, info: null, layar: null, berhentiSendiri: false };
+    this.menungguTonton = false;
+    this.tontonan = lama ?? { kode: info.kode, info: null, layar: null, berhentiSendiri: false, sambungan: this.sambunganKe };
     this.tontonan.info = info;
-    this.kabarTontonan(sebelum, info);
+    this.tontonan.sambungan = this.sambunganKe;
+    this.kabarTontonan(sebelum, info, sempatPutus);
     // Meja pemain itu tampil begitu tontonMeja datang (dikirim bersamaan, sesudah pesan ini).
     if (info.melihat !== null) return;
     this.tontonan.berhentiSendiri = false;
@@ -1034,24 +1066,27 @@ class Aplikasi implements AppUntukMeja {
   }
 
   /** Kabar singkat saat permintaan dijawab atau izin dicabut (tanpa menyebut kartu apa pun). */
-  private kabarTontonan(sebelum: InfoTontonan | null, info: InfoTontonan) {
+  private kabarTontonan(sebelum: InfoTontonan | null, info: InfoTontonan, sempatPutus = false) {
     if (!sebelum) return;
     const nama = (i: number) => info.pemain[i]?.nama ?? '';
     if (sebelum.melihat === null && info.melihat !== null) {
-      const t = `${nama(info.melihat)} mengizinkan kamu lihat kartunya.`;
+      const t = TEKS_TONTONAN.diizinkan(nama(info.melihat));
       toast(t);
       umumkan(t);
       return;
     }
     if (sebelum.melihat !== null && info.melihat === null && !this.tontonan?.berhentiSendiri) {
-      const t = `${nama(sebelum.melihat)} berhenti membagi kartunya.`;
+      // Sambungan penonton sendiri yang putus: bukan pemainnya yang berhenti membagi.
+      const t = sempatPutus ? TEKS_TONTONAN.izinLepasPutus : TEKS_TONTONAN.berhentiDibagi(nama(sebelum.melihat));
       toast(t);
       umumkan(t);
       return;
     }
+    // Permintaan yang hangus karena sambungan putus juga bukan penolakan dari pemainnya.
+    if (sempatPutus) return;
     info.pemain.forEach((p, i) => {
       if (sebelum.pemain[i]?.minta === 'menunggu' && p.minta === 'jeda') {
-        const t = `${p.nama} belum mau kartunya dilihat.`;
+        const t = TEKS_TONTONAN.ditolak(p.nama);
         toast(t);
         umumkan(t);
       }
@@ -1091,14 +1126,20 @@ class Aplikasi implements AppUntukMeja {
   /** Berhenti menonton: kabari server, lalu ke daftar meja publik lagi. */
   private berhentiNonton() {
     if (!this.tontonan) return;
-    this.kirim({ t: 'keluar' });
+    // Sambungan belum siap: tidak perlu dikirim (server melepas penonton saat sambungannya tertutup, dan
+    // koneksi sudah tidak akan menonton lagi); jangan lewat jalur "kursi belum dilepas" milik pemain.
+    if (this.koneksi?.siapKirim()) this.kirim({ t: 'keluar' });
     this.keluarTontonan(true);
   }
 
   /** Tontonan berakhir (sendiri atau dari server): ke daftar meja publik (atau beranda kalau putus). */
   private keluarTontonan(keDaftar = true) {
     this.tontonan?.layar?.lepas();
+    // Meja penonton (kalau sedang lihat kartu) dibongkar selagi masih mode penonton.
+    if (this.tontonan && this.layar === 'meja') this.sembunyikanGame();
     this.tontonan = null;
+    this.menungguTonton = false;
+    this.koneksi?.lupakanTontonan();
     this.info = null;
     this.view = null;
     if (keDaftar && this.koneksi?.jenis === 'online') {

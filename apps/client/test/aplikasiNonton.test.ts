@@ -127,6 +127,7 @@ function infoMeja(g: GameState, kursiSaya: number): InfoMeja {
 
 const tontonan = (ubah: Partial<InfoTontonan> = {}): InfoTontonan => ({
   kode: 'TONTN',
+  namaHost: 'Ani',
   status: 'main',
   pemain: [
     { nama: 'Ani', minta: 'bisa' },
@@ -166,7 +167,7 @@ async function nonton() {
 describe('Aplikasi: nonton', () => {
   it('layar penonton, minta lihat, diizinkan, lalu berhenti lihat', async () => {
     const ws = await nonton();
-    expect(document.querySelector('.layar-tontonan h1')!.textContent).toBe('Nonton meja TONTN');
+    expect(document.querySelector('.layar-tontonan h1')!.textContent).toBe('Nonton meja Ani');
     document.querySelector<HTMLButtonElement>('[data-minta="1"]')!.click();
     expect(terakhir(ws)).toEqual({ t: 'mintaLihat', kursi: 1 });
 
@@ -225,6 +226,75 @@ describe('Aplikasi: nonton', () => {
     expect(ws.terkirim.filter((p) => p.t === 'daftar').length).toBe(nDaftar + 1);
   });
 
+  it('sambungan penonton sendiri yang putus: izin lepas tanpa menyalahkan pemainnya', async () => {
+    const ws = await nonton();
+    const g = permainan();
+    ws.kirimDariServer({ t: 'tontonan', info: tontonan({ melihat: 0 }) });
+    ws.kirimDariServer({ t: 'tontonMeja', info: infoMeja(g, 0) });
+    await vi.advanceTimersByTimeAsync(0);
+    ws.putus();
+    await vi.advanceTimersByTimeAsync(5000);
+    const baru = WsPalsu.terakhir();
+    baru.buka();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(baru.jenisTerkirim()).toContain('tonton');
+    // Server membuat penonton baru (izin lama hilang bersama sambungan lama).
+    baru.kirimDariServer({ t: 'tontonan', info: tontonan() });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(toastTeks()).not.toContain('Ani berhenti membagi kartunya.');
+    expect(toastTeks()).toContain('Sambunganmu sempat putus, jadi izin lihat kartunya lepas. Minta lagi ya.');
+    expect(document.querySelector('.layar-tontonan')).not.toBeNull();
+  });
+
+  it('Tonton yang ditolak server tidak diingat: sambung ulang berikutnya tidak menonton diam-diam', async () => {
+    await nyalakan();
+    document.querySelector<HTMLButtonElement>('#publik')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    const ws = WsPalsu.terakhir();
+    ws.buka();
+    await vi.advanceTimersByTimeAsync(0);
+    ws.kirimDariServer({ t: 'daftar', meja: [{ kode: 'TONTN', namaHost: 'Ani', jumlahPemain: 3, terisi: 3, status: 'main', tonton: true }] });
+    await vi.advanceTimersByTimeAsync(0);
+    document.querySelector<HTMLElement>('[data-tonton="TONTN"]')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    ws.kirimDariServer({ t: 'error', pesan: 'Penontonnya sudah penuh, Bos.' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(toastTeks()).toContain('Penontonnya sudah penuh, Bos.');
+    ws.putus();
+    await vi.advanceTimersByTimeAsync(5000);
+    const baru = WsPalsu.terakhir();
+    expect(baru).not.toBe(ws);
+    baru.buka();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(baru.jenisTerkirim()).not.toContain('tonton');
+  });
+
+  it('meja yang ditonton hilang atau tontonan selesai: sambung ulang berikutnya tidak menonton lagi', async () => {
+    const ws = await nonton();
+    ws.kirimDariServer({ t: 'error', pesan: 'Meja TONTN nggak ketemu.' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(terakhir(ws)).toEqual({ t: 'daftar', tonton: true });
+    ws.putus();
+    await vi.advanceTimersByTimeAsync(5000);
+    const baru = WsPalsu.terakhir();
+    baru.buka();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(baru.jenisTerkirim()).not.toContain('tonton');
+  });
+
+  it('Berhenti nonton selagi putus: tidak menonton lagi sesudah sambung dan tanpa kabar "kursi belum dilepas"', async () => {
+    const ws = await nonton();
+    ws.putus();
+    await vi.advanceTimersByTimeAsync(0);
+    document.querySelector<HTMLButtonElement>('#berhenti-nonton')!.click();
+    await vi.advanceTimersByTimeAsync(5000);
+    const baru = WsPalsu.terakhir();
+    baru.buka();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(baru.jenisTerkirim()).not.toContain('tonton');
+    expect(baru.jenisTerkirim()).toContain('daftar');
+  });
+
   it('sambung ulang mengirim tonton lagi, bukan sesi kursi tersimpan', async () => {
     localStorage.setItem('remi.sesiOnline', JSON.stringify({ kode: 'LAMA1', token: 'tok' }));
     const ws = await nonton();
@@ -235,6 +305,8 @@ describe('Aplikasi: nonton', () => {
     baru.buka();
     await vi.advanceTimersByTimeAsync(0);
     expect(baru.jenisTerkirim()).toContain('tonton');
+    // Kode tonton yang sama dari daftar (tetap selama meja hidup), bukan kode meja.
+    expect(baru.terkirim.find((p) => p.t === 'tonton')).toMatchObject({ kode: 'TONTN' });
     expect(baru.jenisTerkirim()).not.toContain('gabung');
   });
 });

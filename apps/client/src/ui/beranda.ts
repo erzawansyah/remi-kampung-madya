@@ -660,8 +660,9 @@ export function renderDaftarPublik(
   const itemLobi = (m: RingkasanMeja) => `<li><button type="button" class="daftar-item kursi" data-kode="${esc(m.kode)}" aria-label="Gabung meja ${esc(m.namaHost)}, kode ${esc(m.kode)}, ${m.terisi} dari ${m.jumlahPemain} kursi terisi">
                   <span class="nama"><b>${esc(m.namaHost)}</b> · <span class="angka">${esc(m.kode)}</span></span>
                   <span class="lencana">${m.terisi}/${m.jumlahPemain}</span><span class="lencana emas">Gabung</span></button></li>`;
-  const itemMain = (m: RingkasanMeja) => `<li><button type="button" class="daftar-item kursi" data-tonton="${esc(m.kode)}" aria-label="Tonton meja ${esc(m.namaHost)}, kode ${esc(m.kode)}, ${m.jumlahPemain} pemain">
-                  <span class="nama"><b>${esc(m.namaHost)}</b> · <span class="angka">${esc(m.kode)}</span></span>
+  // Entri tonton membawa kode tonton (bukan kode meja), jadi kodenya tidak ditampilkan: nama host saja.
+  const itemMain = (m: RingkasanMeja) => `<li><button type="button" class="daftar-item kursi" data-tonton="${esc(m.kode)}" aria-label="Tonton meja ${esc(m.namaHost)}, ${m.jumlahPemain} pemain">
+                  <span class="nama"><b>${esc(m.namaHost)}</b></span>
                   <span class="lencana">${m.jumlahPemain} pemain</span><span class="lencana emas">Tonton</span></button></li>`;
   akar.innerHTML = `
   <div class="layar layar-publik"><div class="kolom">

@@ -96,6 +96,8 @@ export interface Koneksi {
   sesiAktif(): SesiOnline | null;
   /** Lupakan sesi meja (meja sudah bubar): sambung ulang berikutnya tidak meminta kursi itu lagi. */
   lupakanSesi(): void;
+  /** Nonton (#60): lupakan tontonan (berhenti, ditolak, atau mejanya hilang); sambung ulang tidak menonton lagi. */
+  lupakanTontonan(): void;
   /** Nyalakan/matikan mode lanjut sesi (lihat OpsiKoneksiOnline.lanjutSesi). */
   aturLanjutSesi(aktif: boolean): void;
   /** Mode lanjut sesi sedang aktif. */
@@ -585,6 +587,11 @@ export class KoneksiOnline implements Koneksi {
     this.sesiMemori = null;
   }
 
+  lupakanTontonan() {
+    this.tontonMemori = null;
+    this.antrian = this.antrian.filter((a) => a.pesan.t !== 'tonton');
+  }
+
   aturLanjutSesi(aktif: boolean) {
     this.lanjutSesi = aktif;
   }
@@ -779,6 +786,10 @@ export class KoneksiOffline implements Koneksi {
 
   lupakanSesi() {
     // Tidak ada sesi online.
+  }
+
+  lupakanTontonan() {
+    // Tidak ada tontonan offline.
   }
 
   aturLanjutSesi() {

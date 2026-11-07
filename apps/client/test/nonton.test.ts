@@ -27,7 +27,8 @@ import { KontrolMeja, type AppUntukMeja } from '../src/kontrolMeja';
 import { TEKS_TONTONAN } from '../src/konten/tontonan';
 import { renderTontonan } from '../src/ui/tontonan';
 import { renderDaftarPublik } from '../src/ui/beranda';
-import { tutupSemuaJendela } from '../src/ui/dom';
+import { renderLobi } from '../src/ui/lobi';
+import { bukaModal, tutupSemuaJendela } from '../src/ui/dom';
 import type { MejaScene } from '../src/game/MejaScene';
 import type { PesanKeMeja } from '../src/koneksi';
 
@@ -73,6 +74,8 @@ function infoMeja(g: GameState, kursiSaya: number, ubah: Partial<InfoMeja> = {})
 }
 
 const tunggu = () => new Promise((r) => setTimeout(r, 0));
+/** Kotak permintaan lihat kartu: di lapisan anak <body>, bukan di #ui (supaya tidak ikut inert). */
+const kotakMinta = () => document.querySelector<HTMLElement>('#lapisan-minta .permintaan-lihat');
 
 let akar: HTMLDivElement;
 let kontrol: KontrolMeja | null = null;
@@ -107,6 +110,7 @@ describe('layar penonton', () => {
   const kartu = (id: string, rank: Kartu['rank'], bunga: Kartu['bunga']): Kartu => ({ id, rank, bunga, deck: 0 });
   const info = (ubah: Partial<InfoTontonan> = {}): InfoTontonan => ({
     kode: 'TONTN',
+    namaHost: 'Ani',
     status: 'main',
     pemain: [
       { nama: 'Ani', minta: 'bisa' },
@@ -123,7 +127,9 @@ describe('layar penonton', () => {
     const minta = vi.fn();
     const berhenti = vi.fn();
     const t = renderTontonan(akar, info(), { minta, berhenti });
-    expect(akar.querySelector('h1')!.textContent).toBe('Nonton meja TONTN');
+    // Judul pakai nama host; kode (kode tonton) tidak ditampilkan.
+    expect(akar.querySelector('h1')!.textContent).toBe('Nonton meja Ani');
+    expect(akar.textContent).not.toContain('TONTN');
     expect(akar.textContent).toContain('2 penonton');
     expect(akar.querySelectorAll('.buangan-tontonan canvas')).toHaveLength(2);
     const tombol = [...akar.querySelectorAll<HTMLButtonElement>('[data-minta]')];
@@ -166,13 +172,33 @@ describe('layar penonton', () => {
     const gabung = vi.fn();
     renderDaftarPublik(akar, daftar, gabung, vi.fn(), vi.fn(), tonton);
     expect(akar.querySelectorAll('[data-kode]')).toHaveLength(1);
-    akar.querySelector<HTMLElement>('[data-tonton="MAIN1"]')!.click();
+    // Entri tonton membawa kode tonton: tidak ditampilkan, cukup nama host dan jumlah pemain.
+    const item = akar.querySelector<HTMLElement>('[data-tonton="MAIN1"]')!;
+    expect(item.textContent).toContain('Budi');
+    expect(item.textContent).toContain('3 pemain');
+    expect(item.textContent).not.toContain('MAIN1');
+    expect(item.getAttribute('aria-label')).not.toContain('MAIN1');
+    item.click();
     expect(tonton).toHaveBeenCalledWith('MAIN1');
     expect(gabung).not.toHaveBeenCalled();
     // Tanpa penangan nonton (tidak pernah dari aplikasi ini), meja yang sedang main tidak tampil.
     renderDaftarPublik(akar, daftar, gabung, vi.fn(), vi.fn());
     expect(akar.querySelector('[data-tonton]')).toBeNull();
     expect(akar.textContent).not.toContain('Lagi main');
+  });
+});
+
+describe('lobi: Boleh ditonton', () => {
+  it('meja publik maupun privat bisa ditonton: keterangannya sama', () => {
+    const g = permainan();
+    const lobi = (publik: boolean) => {
+      const info = infoMeja(g, 0, { status: 'lobi' });
+      renderLobi(akar, { ...info, pengaturan: { ...info.pengaturan, publik } }, vi.fn(), vi.fn());
+      return akar.querySelector('#ket-ditonton')!.textContent!;
+    };
+    expect(lobi(false)).toBe(lobi(true));
+    expect(lobi(false)).not.toMatch(/meja publik/);
+    expect(akar.querySelector<HTMLInputElement>('#ditonton')!.checked).toBe(true);
   });
 });
 
@@ -184,6 +210,15 @@ describe('KontrolMeja mode penonton', () => {
     await tunggu();
     expect(document.documentElement.dataset.penonton).toBe('1');
     expect(akar.querySelector('.langkah')!.textContent).toBe(TEKS_TONTONAN.melihat('Budi'));
+    // Bar atas tanpa kode meja (penonton hanya memegang kode tonton).
+    expect(akar.querySelector('.bar-atas .info, .info')!.firstElementChild!.textContent).toBe(TEKS_TONTONAN.labelAtas);
+    expect(akar.querySelector('.info')!.textContent).not.toContain('TONTN');
+    // Menu ☰ juga tanpa kode meja.
+    if (!document.getElementById('modal')) document.body.appendChild(Object.assign(document.createElement('div'), { id: 'modal' }));
+    akar.querySelector<HTMLButtonElement>('[data-a="menu"]')!.click();
+    expect(document.body.textContent).toContain(TEKS_TONTONAN.menuPenonton);
+    expect(document.body.textContent).not.toContain('Kode meja: TONTN');
+    tutupSemuaJendela();
     const tombol = [...akar.querySelectorAll<HTMLButtonElement>('.tombol-aksi button')];
     expect(tombol.map((b) => b.dataset.a)).toEqual(['berhentiLihat']);
     // Ketuk deck, kartu, buangan, seret, dan pintasan keyboard tidak mengirim apa pun.
@@ -197,7 +232,7 @@ describe('KontrolMeja mode penonton', () => {
     expect(terkirim.filter((p) => p.t !== 'siapJoker')).toEqual([]);
     // Tidak ada tombol jumlah penonton maupun kotak permintaan di layar penonton.
     expect(akar.querySelector('.tombol-penonton')!.classList.contains('tersembunyi')).toBe(true);
-    expect(akar.querySelector('.permintaan-lihat')!.classList.contains('tersembunyi')).toBe(true);
+    expect(kotakMinta()!.classList.contains('tersembunyi')).toBe(true);
     tombol[0].click();
     expect(berhentiLihat).toHaveBeenCalled();
     kontrol!.hancurkan();
@@ -205,11 +240,39 @@ describe('KontrolMeja mode penonton', () => {
     expect(document.documentElement.dataset.penonton).toBeUndefined();
   });
 
+  it('penanda data-penonton dilepas walau tontonan sudah berakhir sebelum meja dibongkar', async () => {
+    const g = permainan();
+    let menonton = true;
+    pasang({ get penonton() { return menonton; } } as Partial<AppUntukMeja>, infoMeja(g, 1), g);
+    await tunggu();
+    expect(document.documentElement.dataset.penonton).toBe('1');
+    // main.ts keluarTontonan: tontonan dikosongkan, baru meja dibongkar.
+    menonton = false;
+    kontrol!.hancurkan();
+    kontrol = null;
+    expect(document.documentElement.dataset.penonton).toBeUndefined();
+  });
+
+  it('penonton tidak menimpa urutan tangan tersimpan dan tidak diberi petunjuk/deck giliran', async () => {
+    const g = permainan();
+    localStorage.setItem('remi.urutanTangan', JSON.stringify(['milikku-1', 'milikku-2']));
+    pasang({ penonton: true }, infoMeja(g, 1), g);
+    await tunggu();
+    expect(akar.querySelector('.petunjuk')!.textContent).toBe('');
+    // Pemain yang dilihat mengambil kartu dari deck: tangannya bertambah.
+    const h = terapkanAksi(g, { jenis: 'ambilDeck', pemain: 1 } as never);
+    expect(h.ok).toBe(true);
+    kontrol!.perbarui(null, viewUntuk((h as { state: GameState }).state, 1));
+    await tunggu();
+    expect(JSON.parse(localStorage.getItem('remi.urutanTangan')!)).toEqual(['milikku-1', 'milikku-2']);
+    localStorage.removeItem('remi.urutanTangan');
+  });
+
   it('permintaan untuk kursi yang dilihat tidak pernah tampil ke penonton', async () => {
     const g = permainan();
     pasang({ penonton: true }, infoMeja(g, 1, { penonton: { jumlah: 2, minta: [{ id: 5, nama: 'Tono' }] } }), g);
     await tunggu();
-    expect(akar.querySelector('.permintaan-lihat')!.textContent).toBe('');
+    expect(kotakMinta()!.textContent).toBe('');
   });
 });
 
@@ -218,7 +281,7 @@ describe('KontrolMeja pemain: penonton', () => {
     const g = permainan();
     pasang({}, infoMeja(g, 1, { penonton: { jumlah: 2, minta: [{ id: 3, nama: 'Tono' }, { id: 4, nama: 'Sari' }] } }), g);
     await tunggu();
-    const kotak = akar.querySelector<HTMLElement>('.permintaan-lihat')!;
+    const kotak = kotakMinta()!;
     expect(kotak.classList.contains('tersembunyi')).toBe(false);
     expect(kotak.textContent).toContain(TEKS_TONTONAN.permintaan('Tono'));
     kotak.querySelector<HTMLButtonElement>('[data-lihat="izinkan"]')!.click();
@@ -231,6 +294,61 @@ describe('KontrolMeja pemain: penonton', () => {
     const tombol = akar.querySelector<HTMLElement>('.tombol-penonton')!;
     expect(tombol.classList.contains('tersembunyi')).toBe(false);
     expect(tombol.textContent).toBe('👀 2');
+  });
+
+  it('kotak permintaan ada di lapisan di luar #ui, jadi tetap bisa dijawab selagi modal terbuka', async () => {
+    const g = permainan();
+    const ui = document.createElement('div');
+    ui.id = 'ui';
+    const modal = document.createElement('div');
+    modal.id = 'modal';
+    document.body.append(ui, modal);
+    try {
+      pasang({}, infoMeja(g, 1, { penonton: { jumlah: 1, minta: [{ id: 3, nama: 'Tono' }] } }), g);
+      await tunggu();
+      bukaModal('<p>Hasil putaran</p>');
+      expect(ui.inert).toBe(true);
+      const lapisan = document.getElementById('lapisan-minta')!;
+      expect(lapisan.parentElement).toBe(document.body);
+      expect(lapisan.closest('[inert]')).toBeNull();
+      kotakMinta()!.querySelector<HTMLButtonElement>('[data-lihat="izinkan"]')!.click();
+      expect(terkirim).toContainEqual({ t: 'jawabLihat', penonton: 3, terima: true });
+      kontrol!.hancurkan();
+      kontrol = null;
+      expect(document.getElementById('lapisan-minta')).toBeNull();
+    } finally {
+      tutupSemuaJendela();
+      ui.remove();
+      modal.remove();
+    }
+  });
+
+  it('jawaban dan Hentikan tidak dikirim selagi sambungan belum siap; kotaknya tetap', async () => {
+    const g = permainan();
+    let siap = false;
+    pasang(
+      { statusKoneksi: () => (siap ? 'tersambung' : 'terputus'), siapKirim: () => siap },
+      infoMeja(g, 1, { penonton: { jumlah: 2, minta: [{ id: 3, nama: 'Tono' }], melihat: [{ id: 7, nama: 'Sari' }] } }),
+      g,
+    );
+    await tunggu();
+    kotakMinta()!.querySelector<HTMLButtonElement>('[data-lihat="izinkan"]')!.click();
+    expect(terkirim.filter((p) => p.t === 'jawabLihat')).toEqual([]);
+    expect(kotakMinta()!.classList.contains('tersembunyi')).toBe(false);
+    akar.querySelector<HTMLButtonElement>('.tombol-penonton')!.click();
+    const hentikan = document.querySelector<HTMLButtonElement>('[data-hentikan="7"]')!;
+    hentikan.click();
+    expect(terkirim.filter((p) => p.t === 'hentikanLihat')).toEqual([]);
+    expect(hentikan.isConnected && !hentikan.disabled).toBe(true);
+    tutupSemuaJendela();
+
+    // Terkirim, tapi lalu ketahuan tidak berangkat (PESAN_TERTAHAN): kotaknya muncul lagi.
+    siap = true;
+    kotakMinta()!.querySelector<HTMLButtonElement>('[data-lihat="izinkan"]')!.click();
+    expect(terkirim).toContainEqual({ t: 'jawabLihat', penonton: 3, terima: true });
+    expect(kotakMinta()!.classList.contains('tersembunyi')).toBe(true);
+    kontrol!.saatError(false);
+    expect(kotakMinta()!.classList.contains('tersembunyi')).toBe(false);
   });
 
   it('dialog penonton menampilkan yang melihat kartuku dengan tombol Hentikan', async () => {
@@ -251,6 +369,6 @@ describe('KontrolMeja pemain: penonton', () => {
     pasang({}, infoMeja(g, 1), g);
     await tunggu();
     expect(akar.querySelector('.tombol-penonton')!.classList.contains('tersembunyi')).toBe(true);
-    expect(akar.querySelector('.permintaan-lihat')!.classList.contains('tersembunyi')).toBe(true);
+    expect(kotakMinta()!.classList.contains('tersembunyi')).toBe(true);
   });
 });

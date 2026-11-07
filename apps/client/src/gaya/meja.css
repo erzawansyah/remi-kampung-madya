@@ -112,6 +112,14 @@ html[data-efek='hemat'] .bar-atas button {
   border-color: var(--emas);
   color: var(--teks-emas);
 }
+/* #lapisan-minta: anak <body>, di luar #ui/#modal yang dibuat inert selama ada jendela, supaya permintaan
+   tetap bisa dijawab selagi hasil putaran, popup joker, atau panel mentung terbuka. */
+#lapisan-minta {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-minta);
+  pointer-events: none;
+}
 .permintaan-lihat {
   position: absolute;
   top: calc(var(--tinggi-bar-atas-ukur, 56px) + var(--ruang-1));
@@ -125,7 +133,6 @@ html[data-efek='hemat'] .bar-atas button {
   box-shadow: var(--bayangan-2, var(--bayangan-1));
   pointer-events: auto;
   touch-action: manipulation;
-  z-index: 2;
 }
 .permintaan-lihat p {
   margin: 0 0 var(--ruang-2);

@@ -18,6 +18,13 @@ export const SKEMA_MEJA_AKTIF = `
   );
 `;
 
+/**
+ * Migrasi v6 (Nov 2026, nonton #60): kode tonton meja ikut disimpan, supaya penonton yang menyambung
+ * ulang sesudah restart/deploy kembali ke tontonannya. Boleh NULL (meja yang belum pernah tampil di
+ * daftar "Lagi main", dan baris yang ditulis server versi sebelumnya).
+ */
+export const SKEMA_MEJA_AKTIF_TONTON = `ALTER TABLE meja_aktif ADD COLUMN kode_tonton TEXT;`;
+
 export interface BarisMejaAktif {
   kode: string;
   /** DataMeja dalam JSON (belum diperiksa; bisa rusak). */
@@ -26,11 +33,18 @@ export interface BarisMejaAktif {
   pembuatJaringan: string | null;
   /** ms epoch */
   diperbaruiPada: number;
+  /** Nonton (#60): kode tonton meja ini; null = belum pernah dibuat (atau ditulis server lama). */
+  kodeTonton: string | null;
 }
 
 export interface PenyimpanMejaAktif {
-  /** Tulis (atau timpa) simpanan satu meja. */
-  simpan(kode: string, dataJson: string, pembuatJaringan: string | null, waktu: number): void;
+  /**
+   * Tulis (atau timpa) simpanan satu meja. `kodeTonton` null tidak menghapus kode tonton yang sudah
+   * tersimpan.
+   */
+  simpan(kode: string, dataJson: string, pembuatJaringan: string | null, waktu: number, kodeTonton?: string | null): void;
+  /** Nonton (#60): catat kode tonton meja yang sudah tersimpan (tidak apa-apa kalau barisnya belum ada). */
+  aturKodeTonton(kode: string, kodeTonton: string): void;
   hapus(kode: string): void;
   /** Semua simpanan, yang paling lama diperbarui dulu. */
   semua(): BarisMejaAktif[];
@@ -75,14 +89,19 @@ export function bacaDataMeja(json: string, kode: string): DataMeja | string {
 
 export function buatPenyimpanMejaAktif(db: DatabaseSync): PenyimpanMejaAktif {
   const tulis = db.prepare(
-    `INSERT INTO meja_aktif (kode, data, pembuat_jaringan, diperbarui_pada) VALUES (?, ?, ?, ?)
-     ON CONFLICT (kode) DO UPDATE SET data = excluded.data, pembuat_jaringan = excluded.pembuat_jaringan, diperbarui_pada = excluded.diperbarui_pada`,
+    `INSERT INTO meja_aktif (kode, data, pembuat_jaringan, diperbarui_pada, kode_tonton) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (kode) DO UPDATE SET data = excluded.data, pembuat_jaringan = excluded.pembuat_jaringan,
+       diperbarui_pada = excluded.diperbarui_pada, kode_tonton = COALESCE(excluded.kode_tonton, meja_aktif.kode_tonton)`,
   );
+  const tulisTonton = db.prepare('UPDATE meja_aktif SET kode_tonton = ? WHERE kode = ?');
   const buang = db.prepare('DELETE FROM meja_aktif WHERE kode = ?');
-  const ambilSemua = db.prepare('SELECT kode, data, pembuat_jaringan, diperbarui_pada FROM meja_aktif ORDER BY diperbarui_pada, kode');
+  const ambilSemua = db.prepare('SELECT kode, data, pembuat_jaringan, diperbarui_pada, kode_tonton FROM meja_aktif ORDER BY diperbarui_pada, kode');
   return {
-    simpan(kode, dataJson, pembuatJaringan, waktu) {
-      tulis.run(kode, dataJson, pembuatJaringan, Math.floor(waktu));
+    simpan(kode, dataJson, pembuatJaringan, waktu, kodeTonton = null) {
+      tulis.run(kode, dataJson, pembuatJaringan, Math.floor(waktu), kodeTonton);
+    },
+    aturKodeTonton(kode, kodeTonton) {
+      tulisTonton.run(kodeTonton, kode);
     },
     hapus(kode) {
       buang.run(kode);
@@ -93,6 +112,7 @@ export function buatPenyimpanMejaAktif(db: DatabaseSync): PenyimpanMejaAktif {
         data: String(b.data),
         pembuatJaringan: typeof b.pembuat_jaringan === 'string' ? b.pembuat_jaringan : null,
         diperbaruiPada: Number(b.diperbarui_pada),
+        kodeTonton: typeof b.kode_tonton === 'string' ? b.kode_tonton : null,
       }));
     },
   };

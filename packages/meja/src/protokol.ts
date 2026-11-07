@@ -172,7 +172,10 @@ export type KeadaanMintaLihat = 'bisa' | 'menunggu' | 'jeda' | 'dilihat' | 'tida
 
 /** Yang dilihat penonton tanpa izin: nama pemain dan kartu buangan yang terlihat di meja. */
 export interface InfoTontonan {
+  /** Kode tonton meja ini (dari server), bukan kode meja asli; dipakai untuk menonton lagi. */
   kode: string;
+  /** Nama host, untuk judul layar penonton. */
+  namaHost: string;
   status: StatusMeja;
   /** Satu per kursi, urut kursi. `jedaMs` hanya ada untuk 'jeda' (relatif terhadap saat dikirim). */
   pemain: { nama: string; minta: KeadaanMintaLihat; jedaMs?: number }[];
@@ -352,6 +355,7 @@ export interface RingkasanMeja {
   /**
    * Nonton (#60): meja yang sedang main dan boleh ditonton. Hanya ada di daftar untuk aplikasi yang
    * memintanya (`daftar.tonton`), jadi aplikasi lama tidak pernah melihat meja yang sudah mulai.
+   * Entri tonton membawa kode tonton di `kode`, bukan kode meja asli (meja privat pun ikut daftar).
    */
   tonton?: true;
 }
