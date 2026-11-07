@@ -226,6 +226,8 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
           .map((t) => `<option value="${t}" ${t === (p.tempoBot ?? 'santai') ? 'selected' : ''}>${t[0]!.toUpperCase() + t.slice(1)}</option>`)
           .join('')}</select></label>
       <label class="baris">Meja publik (muncul di daftar)<input type="checkbox" id="publik" ${p.publik ? 'checked' : ''} ${dis} /></label>
+      <label class="baris">Boleh ditonton<input type="checkbox" id="ditonton" aria-describedby="ket-ditonton" ${p.tanpaPenonton === true ? '' : 'checked'} ${dis} /></label>
+      <p class="bantuan rapat" id="ket-ditonton">Penonton cuma lihat kartu buangan. Kartumu baru kelihatan kalau kamu izinkan.</p>
     </div>
 
     ${
@@ -266,6 +268,8 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   q('#jumlah')!.addEventListener('change', () => ubah({ jumlahPemain: Number(q<HTMLSelectElement>('#jumlah')!.value) }));
   q('#tempo')!.addEventListener('change', () => ubah({ tempoBot: q<HTMLSelectElement>('#tempo')!.value as PengaturanMeja['tempoBot'] }));
   q('#publik')!.addEventListener('change', () => ubah({ publik: q<HTMLInputElement>('#publik')!.checked }));
+  // Nonton (#60): bawaan boleh ditonton; host bisa menutupnya sebelum permainan mulai.
+  q('#ditonton')?.addEventListener('change', () => ubah({ tanpaPenonton: !q<HTMLInputElement>('#ditonton')!.checked }));
   q('#mulai')!.addEventListener('click', () => {
     if (kosong) return toast('Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.', true);
     const v = q<HTMLSelectElement>('#kocok')!.value;

@@ -983,6 +983,36 @@ Pilihan yang waktu itu ditawarkan dan **tidak dipilih**:
 
 **Test:** `packages/meja/test/usulan.test.ts`, `apps/server/test/usulan.test.ts`, `apps/client/test/usulan.test.ts`, `antislop.test.ts`.
 
+<a id="k60"></a>
+
+## 60. Nonton meja yang sedang main
+
+**Asal:** usulan pemain "Live Streaming" di Notion (24 Okt 2026), ditinjau agent 1 Nov 2026 sebagai "Perlu keputusan pemilik".
+
+**Keputusan pemilik (7 Nov 2026):** "Masuk lewat publik. Lihat cuma kartu buangan. Tapi, bisa request ke pemain. Nanti pemain bisa nolak. Tapi requestnya dibatasi 1 kali per pemain. Jika ditolak, harus nunggu 3 menit. Kalau diterima, apa yang dia lihat, itu yang dilihat oleh si pemain." Pertanyaan susulan yang dijawab pemilik di hari yang sama:
+- "1 kali per pemain" = **satu permintaan aktif** ke tiap pemain. Kalau ditolak, penonton boleh minta lagi ke pemain yang sama sesudah 3 menit.
+- Yang dilihat penonton tanpa izin: **nama pemain dan kartu buangan** yang juga terlihat pemain di meja ((jumlah pemain − 1) kartu teratas). Kartu jadi, skor, dan jumlah kartu di tangan tidak.
+- **Meja kompetisi tidak bisa ditonton.**
+- **Semua meja online yang sedang main otomatis bisa ditonton**; host bisa mematikannya di lobi ("Boleh ditonton").
+
+**Penerapan:**
+- Meja (`packages/meja/src/meja.ts`, bagian "nonton"): `tonton()`, `terimaPenonton()`, `lepasPenonton()`, `bisaDitonton`, `bubarkanPenonton()`. Penonton hanya di memori (tidak di `DataMeja`, jadi golden dan simpanan tidak berubah). `InfoMeja.penonton` hanya ditulis kalau ada penonton: `jumlah` untuk semua pemain, `minta`/`melihat` hanya di info milik pemain yang diminta/dilihat. Pengaturan `tanpaPenonton` (tidak ada = boleh ditonton, seperti `modeKaldu`).
+- Konstanta di `protokol.ts`: `MAKS_PENONTON` (30 per meja), `JEDA_TOLAK_LIHAT_MS` (3 menit), `BATAS_JAWAB_LIHAT_MS` (30 detik). Pesan baru: `daftar.tonton`, `tonton`, `mintaLihat`, `berhentiLihat`, `jawabLihat`, `hentikanLihat` dari client; `tontonan`, `tontonMeja`, `tontonView`, `tontonSelesai` dari server.
+- Server (`apps/server/src/server.ts`): sambungan penonton punya alamat kirim sendiri (`sambunganPenonton`), bukan kursi. Daftar meja publik memuat meja yang bisa ditonton hanya untuk aplikasi yang memintanya (`daftar.tonton`), jadi aplikasi lama tidak melihat meja yang sudah mulai. Menonton melepas kursi sambungan itu di meja lain (seperti pindah meja), dan menonton meja tempat ia duduk ditolak.
+- Aplikasi: bagian "Lagi main" di Meja publik (tombol Tonton), layar penonton `ui/tontonan.ts` (teks `konten/tontonan.ts`), dan meja pemain yang mengizinkan lewat `KontrolMeja` mode penonton (`AppUntukMeja.penonton`): semua aksi, ketuk, seret, pintasan keyboard, emote, ledekan, voting, dan tombol host dimatikan, bar bawah "Kamu lagi lihat kartu X" + Berhenti lihat. Pemain mendapat kotak "X pengin lihat kartumu" (Tolak/Izinkan) di bawah bar atas, dan tombol 👀 jumlah penonton yang membuka daftar yang sedang melihat kartunya dengan tombol Hentikan. `main.ts` membuang semua pesan meja selain milik penonton selama menonton, dan permainan yang ditonton tidak dicatat di Riwayat HP.
+
+**Tafsiran pengembang (dikabarkan ke pemilik bersama rilisnya):**
+- Permintaan yang tidak dijawab 30 detik dianggap ditolak (jeda 3 menit), supaya pemain yang sedang sibuk tidak dikejar permintaan.
+- Penonton hanya melihat kartu **satu pemain** sekaligus. Begitu satu pemain mengizinkan, permintaan lain yang masih menunggu dibatalkan tanpa jeda.
+- Izin berlaku sampai penonton berhenti sendiri, pemainnya menekan Hentikan (dihitung seperti ditolak: jeda 3 menit), pemainnya keluar meja, atau permainan kembali ke lobi (Main lagi; semua penonton diberi tahu tontonannya selesai). Antarputaran izinnya tetap.
+- Jeda tolak dicatat per nama penonton dan per penanda HP-nya (`remi.tokenPenonton`), jadi menyambung ulang atau ganti nama saja tidak melewati jeda.
+- Warga kedai, kursi kosong, dan pemain yang sedang terputus tidak bisa dimintai.
+- "Yang dilihat pemain" = info meja dan view yang dikirim ke pemain itu: kartu tangan, kartu jadi, skor, Log, dan popup joker kalau pemainnya juga sedang melihat popup itu. Urutan tangan yang diatur pemain di HP-nya sendiri tidak ikut terkirim, jadi urutan kartu di layar penonton bisa beda.
+- Penonton hanya bisa masuk selagi permainan berjalan (bukan di lobi). "Boleh ditonton" hanya bisa diubah di lobi.
+- Penonton memakai nama di HP-nya (kalau kosong: "Penonton"), tanpa wajib isi nama.
+
+**Test:** `packages/meja/test/penonton.test.ts`, `apps/server/test/nonton.test.ts`, `apps/client/test/nonton.test.ts`, `apps/client/test/aplikasiNonton.test.ts`.
+
 ---
 
 ## Catatan lain (belum masuk tabel)

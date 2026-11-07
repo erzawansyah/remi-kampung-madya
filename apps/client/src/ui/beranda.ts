@@ -651,26 +651,44 @@ export function renderDaftarPublik(
   gabung: (kode: string) => void,
   segarkan: () => void,
   kembali: () => void,
+  tonton?: (kode: string) => void,
 ) {
+  // Nonton (#60): meja yang sedang main dan boleh ditonton ada di bagian sendiri. Server lama tidak
+  // pernah mengirimnya; entri bertanda `tonton` tanpa penangan (tidak mungkin dari aplikasi ini) disembunyikan.
+  const lobi = daftar.filter((m) => !m.tonton);
+  const main = tonton ? daftar.filter((m) => m.tonton) : [];
+  const itemLobi = (m: RingkasanMeja) => `<li><button type="button" class="daftar-item kursi" data-kode="${esc(m.kode)}" aria-label="Gabung meja ${esc(m.namaHost)}, kode ${esc(m.kode)}, ${m.terisi} dari ${m.jumlahPemain} kursi terisi">
+                  <span class="nama"><b>${esc(m.namaHost)}</b> · <span class="angka">${esc(m.kode)}</span></span>
+                  <span class="lencana">${m.terisi}/${m.jumlahPemain}</span><span class="lencana emas">Gabung</span></button></li>`;
+  const itemMain = (m: RingkasanMeja) => `<li><button type="button" class="daftar-item kursi" data-tonton="${esc(m.kode)}" aria-label="Tonton meja ${esc(m.namaHost)}, kode ${esc(m.kode)}, ${m.jumlahPemain} pemain">
+                  <span class="nama"><b>${esc(m.namaHost)}</b> · <span class="angka">${esc(m.kode)}</span></span>
+                  <span class="lencana">${m.jumlahPemain} pemain</span><span class="lencana emas">Tonton</span></button></li>`;
   akar.innerHTML = `
   <div class="layar layar-publik"><div class="kolom">
-    <div class="judul"><h1>Meja publik</h1><p>Meja yang masih menunggu pemain.</p></div>
+    <div class="judul"><h1>Meja publik</h1><p>Meja yang masih menunggu pemain${tonton ? ', dan meja yang sedang main untuk ditonton' : ''}.</p></div>
     <div class="kartu-panel daftar-meja">
       ${
-        daftar.length
-          ? `<ul class="daftar">${daftar
-              .map(
-                (m) => `<li><button type="button" class="daftar-item kursi" data-kode="${esc(m.kode)}" aria-label="Gabung meja ${esc(m.namaHost)}, kode ${esc(m.kode)}, ${m.terisi} dari ${m.jumlahPemain} kursi terisi">
-                  <span class="nama"><b>${esc(m.namaHost)}</b> · <span class="angka">${esc(m.kode)}</span></span>
-                  <span class="lencana">${m.terisi}/${m.jumlahPemain}</span><span class="lencana emas">Gabung</span></button></li>`,
-              )
-              .join('')}</ul>`
+        lobi.length
+          ? `<ul class="daftar">${lobi.map(itemLobi).join('')}</ul>`
           : '<p class="redup rapat">Belum ada meja publik. Buat meja sendiri lalu centang "Meja publik" di lobi.</p>'
       }
     </div>
+    ${
+      tonton
+        ? `<div class="kartu-panel daftar-meja daftar-tonton">
+      <h2>Lagi main</h2>
+      ${
+        main.length
+          ? `<ul class="daftar">${main.map(itemMain).join('')}</ul><p class="redup rapat catatan-tonton">Penonton cuma lihat kartu buangan. Mau lihat kartu pemain, minta izin dulu ke orangnya.</p>`
+          : '<p class="redup rapat">Belum ada meja yang lagi main.</p>'
+      }
+    </div>`
+        : ''
+    }
     <div class="deret"><button type="button" id="segarkan">Segarkan</button><button type="button" id="kembali">← Kembali</button></div>
   </div></div>`;
   akar.querySelectorAll<HTMLElement>('[data-kode]').forEach((b) => b.addEventListener('click', () => gabung(b.dataset.kode!)));
+  if (tonton) akar.querySelectorAll<HTMLElement>('[data-tonton]').forEach((b) => b.addEventListener('click', () => tonton(b.dataset.tonton!)));
   akar.querySelector('#kembali')!.addEventListener('click', kembali);
   akar.querySelector('#segarkan')!.addEventListener('click', segarkan);
 }
