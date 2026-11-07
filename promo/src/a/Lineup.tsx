@@ -2,7 +2,7 @@
 // (menyeruput kopi), Mas Sampul `tertawa`. Dipakai untuk memeriksa tampilan tokoh sebelum menyusun adegan.
 import { AbsoluteFill, useCurrentFrame } from 'remotion';
 import { FONT, WARNA } from '../bagian';
-import { Kedai, KURSI } from './MejaKedai';
+import { KURSI, Latar, Meja } from './MejaKedai';
 import { TokohDiKursi } from './Panggung';
 import { BANG_IT } from './tokoh/BangIT';
 import { CAK_OWNER } from './tokoh/CakOwner';
@@ -13,52 +13,23 @@ export const Lineup: React.FC = () => {
   const f = useCurrentFrame();
   return (
     <AbsoluteFill>
-      <Kedai
+      <Latar />
+      <Meja
         hangat={0.15}
         dingin={0}
-        layarHpBang={null}
         layarHpOwner={null}
-        layarHpSampul={null}
-        tokoh={
+        bangBadan={<TokohDiKursi kursi={KURSI.bang} desain={BANG_IT} ekspresi="sombong" kedip={kedipDi(f, 1)} napas={napasDi(f, 1)} lapisan="badan" pose={pose({ badanRot: -4, badanY: 10, kepalaY: 0, tunduk: 0, hadap: -0.4, kepalaRot: -6, lihat: { x: -0.2, y: 0.1 }, kiri: { tangan: { x: 130, y: 480 }, isi: 'kosong' }, kanan: { tangan: { x: 310, y: 420 }, isi: 'hp', rot: 8 } })} />}
+        bangLengan={<TokohDiKursi kursi={KURSI.bang} desain={BANG_IT} ekspresi="sombong" kedip={kedipDi(f, 1)} napas={napasDi(f, 1)} lapisan="lengan" pose={pose({ badanRot: -4, badanY: 10, kepalaY: 0, tunduk: 0, hadap: -0.4, kepalaRot: -6, lihat: { x: -0.2, y: 0.1 }, kiri: { tangan: { x: 130, y: 480 }, isi: 'kosong' }, kanan: { tangan: { x: 310, y: 420 }, isi: 'hp', rot: 8 } })} />}
+        sisiBadan={
           <>
-            <TokohDiKursi lapisan="badan"
-              kursi={KURSI.owner}
-              desain={CAK_OWNER}
-              ekspresi="datar"
-              kedip={kedipDi(f, 2)}
-              napas={napasDi(f, 2)}
-              pose={pose({ kepalaY: 4, kepalaRot: -3, lihat: { x: 0.2, y: 0.6 }, kiri: { tangan: { x: 156, y: 520 }, isi: 'kosong' }, kanan: { tangan: { x: 292, y: 300 }, isi: 'cangkir' } })}
-            />
-            <TokohDiKursi lapisan="badan" kursi={KURSI.sampul} desain={MAS_SAMPUL} ekspresi="tertawa" kedip={0} napas={napasDi(f, 3)} pose={pose({ kepalaRot: 6, kepalaY: 4 })} />
-            <TokohDiKursi lapisan="badan"
-              kursi={KURSI.bang}
-              desain={BANG_IT}
-              ekspresi="sombong"
-              kedip={kedipDi(f, 1)}
-              napas={napasDi(f, 1)}
-              pose={pose({ badanRot: -4, badanY: 10, kepalaY: 0, kepalaRot: -6, lihat: { x: -0.4, y: 0.1 }, kiri: { tangan: { x: 130, y: 480 }, isi: 'kosong' }, kanan: { tangan: { x: 310, y: 420 }, isi: 'hp', rot: 8 } })}
-            />
+            <TokohDiKursi lapisan="badan" kursi={KURSI.owner} desain={CAK_OWNER} ekspresi="datar" kedip={kedipDi(f, 2)} napas={napasDi(f, 2)} pose={pose({ hadapBadan: 0.8, hadap: 0.5, tunduk: 0.2, kepalaRot: -3, lihat: { x: 0.4, y: 0.3 }, kiri: { tangan: { x: 250, y: 500 }, isi: 'kosong' }, kanan: { tangan: { x: 330, y: 330 }, isi: 'cangkir' } })} />
+            <TokohDiKursi lapisan="badan" kursi={KURSI.sampul} desain={MAS_SAMPUL} ekspresi="tertawa" kedip={0} napas={napasDi(f, 3)} pose={pose({ hadapBadan: -0.8, hadap: -0.5, tunduk: 0.3, kepalaRot: 6, kiri: { tangan: { x: 130, y: 440 }, isi: 'kosong' }, kanan: { tangan: { x: 200, y: 450 }, isi: 'hpDua' } })} />
           </>
         }
-        diMeja={
+        sisiLengan={
           <>
-            <TokohDiKursi lapisan="lengan"
-              kursi={KURSI.owner}
-              desain={CAK_OWNER}
-              ekspresi="datar"
-              kedip={kedipDi(f, 2)}
-              napas={napasDi(f, 2)}
-              pose={pose({ kepalaY: 4, kepalaRot: -3, lihat: { x: 0.2, y: 0.6 }, kiri: { tangan: { x: 156, y: 520 }, isi: 'kosong' }, kanan: { tangan: { x: 292, y: 300 }, isi: 'cangkir' } })}
-            />
-            <TokohDiKursi lapisan="lengan" kursi={KURSI.sampul} desain={MAS_SAMPUL} ekspresi="tertawa" kedip={0} napas={napasDi(f, 3)} pose={pose({ kepalaRot: 6, kepalaY: 4 })} />
-            <TokohDiKursi lapisan="lengan"
-              kursi={KURSI.bang}
-              desain={BANG_IT}
-              ekspresi="sombong"
-              kedip={kedipDi(f, 1)}
-              napas={napasDi(f, 1)}
-              pose={pose({ badanRot: -4, badanY: 10, kepalaY: 0, kepalaRot: -6, lihat: { x: -0.4, y: 0.1 }, kiri: { tangan: { x: 130, y: 480 }, isi: 'kosong' }, kanan: { tangan: { x: 310, y: 420 }, isi: 'hp', rot: 8 } })}
-            />
+            <TokohDiKursi lapisan="lengan" kursi={KURSI.owner} desain={CAK_OWNER} ekspresi="datar" kedip={kedipDi(f, 2)} napas={napasDi(f, 2)} pose={pose({ hadapBadan: 0.8, hadap: 0.5, tunduk: 0.2, kepalaRot: -3, lihat: { x: 0.4, y: 0.3 }, kiri: { tangan: { x: 250, y: 500 }, isi: 'kosong' }, kanan: { tangan: { x: 330, y: 330 }, isi: 'cangkir' } })} />
+            <TokohDiKursi lapisan="lengan" kursi={KURSI.sampul} desain={MAS_SAMPUL} ekspresi="tertawa" kedip={0} napas={napasDi(f, 3)} pose={pose({ hadapBadan: -0.8, hadap: -0.5, tunduk: 0.3, kepalaRot: 6, kiri: { tangan: { x: 130, y: 440 }, isi: 'kosong' }, kanan: { tangan: { x: 200, y: 450 }, isi: 'hpDua' } })} />
           </>
         }
       />

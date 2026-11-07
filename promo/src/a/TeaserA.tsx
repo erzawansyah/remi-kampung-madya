@@ -5,7 +5,7 @@
 
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from 'remotion';
 import { FONT, Logo, Sorak, WARNA } from '../bagian';
-import { Adegan, KameraA, kameraDi, mulutDi, proyeksi, type PoseKamera } from './Adegan';
+import { Adegan, AdeganLatar, KameraA, kameraDi, kameraLapisan, mulutDi, proyeksi, type PoseKamera } from './Adegan';
 import { Balon } from './Balon';
 import { Bunyi, burst, Caption, Flash, Grain, jepit, LogoPojok, Pil, Retak, SplitTone, Vinyet, Whip } from './efek';
 import { LayarHp } from './Hp';
@@ -108,9 +108,14 @@ export const TeaserA: React.FC = () => {
     <AbsoluteFill style={{ background: '#17110a' }}>
       {/* 1. Adegan 2D di dalam kamera virtual (mulai burst wajah; sebelum itu cold open layar penuh). */}
       {f >= M.burstWajah && (
-        <KameraA k={k}>
-          <Adegan />
-        </KameraA>
+        <>
+          <KameraA k={kameraLapisan(k, 0.78)}>
+            <AdeganLatar />
+          </KameraA>
+          <KameraA k={k}>
+            <Adegan />
+          </KameraA>
+        </>
       )}
       {f < M.burstWajah && (
         <AbsoluteFill style={{ background: '#000' }}>
@@ -175,7 +180,7 @@ export const TeaserA: React.FC = () => {
           <RetakLayar dari={M.montaseA + 28} kuat={0.9} />
         </LayarHp>
       </Sisipan>
-      <Sisipan dari={M.montaseB + 4} sampai={M.montaseC} x={790} y={640} lebar={360} rot={-6} masukDari={{ x: 50, y: -20 }}>
+      <Sisipan dari={M.montaseB + 4} sampai={M.montaseC} x={880} y={560} lebar={300} rot={-6} masukDari={{ x: 50, y: -20 }}>
         <LayarStill berkas="a2-retak.png">
           <AvatarMaskot x={LAYAR_A2.panelBot.x} y={LAYAR_A2.panelBot.y} />
           <RetakLayar dari={M.montaseB + 12} kuat={1} />
@@ -195,18 +200,18 @@ export const TeaserA: React.FC = () => {
       )}
       {/* Penutup: logo besar, ajakan, DM. */}
       {f >= T.tutup[0] + 16 && (
-        <div style={{ position: 'absolute', left: 0, right: 0, top: 250, display: 'flex', justifyContent: 'center', opacity: Math.min(1, (f - T.tutup[0] - 16) / 8), transform: `scale(${0.9 + 0.1 * burst((f - T.tutup[0] - 16) / 10)})` }}>
-          <Logo varian="lengkap" lebar={560} warna={WARNA.kuning} style={{ filter: 'drop-shadow(0 8px 0 rgba(0,0,0,0.35))' }} />
+        <div style={{ position: 'absolute', left: 0, right: 0, top: 232, display: 'flex', justifyContent: 'center', opacity: Math.min(1, (f - T.tutup[0] - 16) / 8), transform: `scale(${0.9 + 0.1 * burst((f - T.tutup[0] - 16) / 10)})` }}>
+          <Logo varian="lengkap" lebar={420} warna={WARNA.kuning} style={{ filter: 'drop-shadow(0 8px 0 rgba(0,0,0,0.35))' }} />
         </div>
       )}
       {f >= M.teksAjak && (
-        <div style={{ position: 'absolute', left: 70, width: 620, top: 1130, textAlign: 'left', fontFamily: FONT, opacity: Math.min(1, (f - M.teksAjak) / 5), transform: `scale(${0.92 + 0.08 * burst((f - M.teksAjak) / 7)})`, transformOrigin: '0 50%' }}>
-          <div style={{ fontSize: 76, fontWeight: 800, color: '#fff', WebkitTextStroke: '7px #000', paintOrder: 'stroke fill', lineHeight: 1.08, textShadow: '0 8px 0 rgba(0,0,0,0.35)' }}>{TEKS_TUTUP_BESAR}</div>
+        <div style={{ position: 'absolute', left: 70, right: 100, top: 436, textAlign: 'center', fontFamily: FONT, opacity: Math.min(1, (f - M.teksAjak) / 5), transform: `scale(${0.92 + 0.08 * burst((f - M.teksAjak) / 7)})`, whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 62, fontWeight: 800, color: '#fff', WebkitTextStroke: '7px #000', paintOrder: 'stroke fill', lineHeight: 1.08, textShadow: '0 8px 0 rgba(0,0,0,0.35)' }}>{TEKS_TUTUP_BESAR}</div>
         </div>
       )}
       {f >= M.teksAjak + 8 && (
-        <div style={{ position: 'absolute', left: 70, width: 620, top: 1320, textAlign: 'left', fontFamily: FONT, opacity: Math.min(1, (f - M.teksAjak - 8) / 5), transform: `translateY(${(1 - burst((f - M.teksAjak - 8) / 8)) * 14}px)` }}>
-          <div style={{ fontSize: 42, fontWeight: 700, color: WARNA.krem, WebkitTextStroke: '5px #000', paintOrder: 'stroke fill', lineHeight: 1.2, textShadow: '0 6px 0 rgba(0,0,0,0.3)' }}>{TEKS_TUTUP_KECIL}</div>
+        <div style={{ position: 'absolute', left: 70, right: 100, top: 522, textAlign: 'center', fontFamily: FONT, opacity: Math.min(1, (f - M.teksAjak - 8) / 5), transform: `translateY(${(1 - burst((f - M.teksAjak - 8) / 8)) * 14}px)` }}>
+          <div style={{ fontSize: 38, fontWeight: 700, color: WARNA.krem, WebkitTextStroke: '5px #000', paintOrder: 'stroke fill', lineHeight: 1.2, textShadow: '0 6px 0 rgba(0,0,0,0.3)' }}>{TEKS_TUTUP_KECIL}</div>
         </div>
       )}
       <Stempel teks={TEKS_STEMPEL} kena={M.stempelKena} sampai={1200} />

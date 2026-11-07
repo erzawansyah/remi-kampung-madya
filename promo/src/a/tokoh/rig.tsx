@@ -52,6 +52,12 @@ export interface Pose {
   kepalaY: number;
   /** Arah pandang pupil (−1..1). */
   lihat: Titik;
+  /** Arah hadap kepala (−1 kiri layar .. 1 kanan layar, 0 ke kamera). */
+  hadap: number;
+  /** Arah hadap badan (−1..1). */
+  hadapBadan: number;
+  /** Menunduk (0..1): wajah turun, dahi/rambut lebih terlihat. */
+  tunduk: number;
   kiri: Lengan;
   kanan: Lengan;
 }
@@ -77,6 +83,9 @@ export function lerpPose(a: Pose, b: Pose, t: number): Pose {
     kepalaX: lerpN(a.kepalaX, b.kepalaX, t),
     kepalaY: lerpN(a.kepalaY, b.kepalaY, t),
     lihat: lerpT(a.lihat, b.lihat, t),
+    hadap: lerpN(a.hadap, b.hadap, t),
+    hadapBadan: lerpN(a.hadapBadan, b.hadapBadan, t),
+    tunduk: lerpN(a.tunduk, b.tunduk, t),
     kiri: lengan(a.kiri, b.kiri),
     kanan: lengan(a.kanan, b.kanan),
   };
@@ -92,6 +101,9 @@ export const POSE_DASAR: Pose = {
   kepalaX: 0,
   kepalaY: 10,
   lihat: { x: 0, y: 0.9 },
+  hadap: 0,
+  hadapBadan: 0,
+  tunduk: 0.55,
   kiri: { tangan: { x: 184, y: 446 }, isi: 'kosong' },
   kanan: { tangan: { x: 256, y: 446 }, isi: 'hpDua' },
 };
@@ -254,13 +266,13 @@ export function hitungLengan(bahu: Titik, tangan: Titik, arah: 1 | -1): { siku: 
 }
 
 /** Ruas lengan meruncing, bergaris tinta. */
-const Ruas: React.FC<{ dari: Titik; ke: Titik; warna: string; t1: number; t2: number }> = ({ dari, ke, warna, t1, t2 }) => {
+const Ruas: React.FC<{ dari: Titik; ke: Titik; warna: string; t1: number; t2: number; tanpaGaris?: boolean; geser?: number; opacity?: number }> = ({ dari, ke, warna, t1, t2, tanpaGaris, geser = 0, opacity = 1 }) => {
   const sudut = Math.atan2(ke.y - dari.y, ke.x - dari.x);
   const nx = -Math.sin(sudut);
   const ny = Math.cos(sudut);
-  const p = (q: Titik, t: number) => `${(q.x + nx * t).toFixed(1)} ${(q.y + ny * t).toFixed(1)}`;
+  const p = (q: Titik, t: number) => `${(q.x + nx * (t + geser)).toFixed(1)} ${(q.y + ny * (t + geser)).toFixed(1)}`;
   const d = `M ${p(dari, t1 / 2)} L ${p(ke, t2 / 2)} A ${t2 / 2} ${t2 / 2} 0 0 1 ${p(ke, -t2 / 2)} L ${p(dari, -t1 / 2)} A ${t1 / 2} ${t1 / 2} 0 0 1 ${p(dari, t1 / 2)} Z`;
-  return <path d={d} fill={warna} stroke={TINTA} strokeWidth={6} strokeLinejoin="round" />;
+  return <path d={d} fill={warna} stroke={tanpaGaris ? 'none' : TINTA} strokeWidth={6} strokeLinejoin="round" opacity={opacity} />;
 };
 
 /** HP: punggung (casing + kamera) atau layar (hijau meja game). */
@@ -295,7 +307,16 @@ const Tangan: React.FC<{ di: Titik; sudut: number; isi: IsiTangan; rot: number; 
       <path d="M -10 18 Q 0 24 10 18" fill="none" stroke={D.kulitGelap} strokeWidth={3} />
     </g>
   );
-  let isiGambar: ReactNode = kepal;
+  const santai = (
+    <g transform={`rotate(${deg})`}>
+      {[-15, -5, 5, 15].map((x, i) => (
+        <rect key={i} x={x - 6} y={12} width={12} height={30 - Math.abs(x) * 0.4} rx={6} fill={kulit} stroke={TINTA} strokeWidth={5} />
+      ))}
+      <ellipse cx={0} cy={6} rx={22} ry={18} fill={kulit} stroke={TINTA} strokeWidth={6} />
+      <ellipse cx={arah * 20} cy={2} rx={7} ry={12} fill={kulit} stroke={TINTA} strokeWidth={5} transform={`rotate(${-arah * 35} ${arah * 20} 2)`} />
+    </g>
+  );
+  let isiGambar: ReactNode = isi === 'kosong' ? santai : kepal;
   switch (isi) {
     case 'hp':
     case 'hpLayar':
@@ -366,33 +387,72 @@ export const Tokoh: React.FC<PropsTokoh> = ({ desain: D, pose: P, ekspresi, kedi
   const napasS = 1 + Math.sin(napas * Math.PI * 2) * 0.015;
   const bahuY = 300 + P.bahu;
   const lb = D.lebarBadan;
-  const kx = KOTAK.kepala.x + P.kepalaX;
-  const ky = KOTAK.kepala.y + P.kepalaY + napasY * 0.5 + P.bahu * 0.5;
+  const hb = P.hadapBadan;
+  const hk = P.hadap;
+  const tk = P.tunduk;
+  // Kepala ikut badan menoleh sedikit, dan menunduk menurunkan wajah.
+  const kx = KOTAK.kepala.x + P.kepalaX + hb * 14;
+  const ky = KOTAK.kepala.y + P.kepalaY + napasY * 0.5 + P.bahu * 0.5 + tk * 14;
   const id = D.nama.replace(/\W/g, '');
   const { x: dx, y: dy } = KOTAK.duduk;
-  const lenganWarna = D.lenganPendek ? D.kulit : (D.lengan ?? D.baju);
+  const lenganWarna = D.lenganPendek ? D.kulit : D.lengan ?? D.baju;
   const hpDua = P.kanan.isi === 'hpDua';
+  // Geser fitur wajah saat menoleh (fx) dan menunduk (fy); sisi jauh wajah menyempit.
+  const fx = hk * 30;
+  const fy = tk * 22;
+  const sempitJauh = 1 - Math.abs(hk) * 0.35;
 
-  const bahu = (arah: 1 | -1): Titik => ({ x: 220 + arah * 82 * lb, y: bahuY + 12 });
+  // Bahu: sisi yang menjauh dari kamera menyempit saat badan menoleh.
+  const bahu = (arah: 1 | -1): Titik => {
+    const jauh = arah * hb < 0 ? 1 - Math.abs(hb) * 0.28 : 1 + Math.abs(hb) * 0.06;
+    return { x: 220 + arah * 82 * lb * jauh + hb * 10, y: bahuY + 12 + (arah * hb < 0 ? Math.abs(hb) * 6 : 0) };
+  };
   const lk = hitungLengan(bahu(-1), P.kiri.tangan, -1);
   const lka = hitungLengan(bahu(1), P.kanan.tangan, 1);
+  /** Satu lengan sebagai satu bentuk: garis tinta kedua ruas dulu, lalu isian + sendi, supaya tidak tampak tempelan. */
   const lengan = (L: Lengan, arah: 1 | -1, g: { siku: Titik; tangan: Titik }) => {
     const b = bahu(arah);
     const sudut = Math.atan2(g.tangan.y - g.siku.y, g.tangan.x - g.siku.x);
     const isi: IsiTangan = L.isi === 'hpDua' ? 'kepal' : hpDua && L.isi === 'kosong' ? 'kepal' : L.isi;
-    const manset = (t: number) => ({ x: g.tangan.x - Math.cos(sudut) * 16 + -Math.sin(sudut) * t, y: g.tangan.y - Math.sin(sudut) * 16 + Math.cos(sudut) * t });
+    const tA1 = 44;
+    const tA2 = 36;
+    const tB1 = D.lenganPendek ? 30 : 36;
+    const tB2 = D.lenganPendek ? 24 : 30;
+    const manset = (t: number) => ({ x: g.tangan.x - Math.cos(sudut) * 18 - Math.sin(sudut) * t, y: g.tangan.y - Math.sin(sudut) * 18 + Math.cos(sudut) * t });
     return (
       <g>
-        <Ruas dari={b} ke={g.siku} warna={D.lengan ?? D.baju} t1={48} t2={40} />
-        <Ruas dari={g.siku} ke={g.tangan} warna={lenganWarna} t1={D.lenganPendek ? 32 : 40} t2={D.lenganPendek ? 26 : 34} />
-        {D.lenganPendek && <circle cx={g.siku.x} cy={g.siku.y} r={22} fill={D.baju} stroke={TINTA} strokeWidth={6} />}
-        {!D.lenganPendek && <path d={`M ${manset(17).x} ${manset(17).y} L ${manset(-17).x} ${manset(-17).y}`} stroke={D.bajuGelap} strokeWidth={10} strokeLinecap="round" />}
+        <Ruas dari={b} ke={g.siku} warna={TINTA} t1={tA1 + 12} t2={tA2 + 12} tanpaGaris />
+        <Ruas dari={g.siku} ke={g.tangan} warna={TINTA} t1={tB1 + 12} t2={tB2 + 12} tanpaGaris />
+        <circle cx={b.x} cy={b.y} r={tA1 / 2 + 8} fill={TINTA} />
+        <Ruas dari={b} ke={g.siku} warna={D.lengan ?? D.baju} t1={tA1} t2={tA2} tanpaGaris />
+        <circle cx={b.x} cy={b.y} r={tA1 / 2 + 2} fill={D.lengan ?? D.baju} />
+        {D.lenganPendek ? (
+          <g>
+            <Ruas dari={g.siku} ke={g.tangan} warna={lenganWarna} t1={tB1} t2={tB2} tanpaGaris />
+            <circle cx={g.siku.x} cy={g.siku.y} r={tA2 / 2 + 1} fill={D.baju} />
+            <path d={`M ${g.siku.x - 14} ${g.siku.y + 16} Q ${g.siku.x} ${g.siku.y + 26} ${g.siku.x + 14} ${g.siku.y + 16}`} fill="none" stroke={TINTA} strokeWidth={4} strokeLinecap="round" opacity={0.6} />
+          </g>
+        ) : (
+          <g>
+            <Ruas dari={g.siku} ke={g.tangan} warna={lenganWarna} t1={tB1} t2={tB2} tanpaGaris />
+            <circle cx={g.siku.x} cy={g.siku.y} r={tA2 / 2 - 1} fill={lenganWarna} />
+            <path d={`M ${g.siku.x - 10} ${g.siku.y - 6} Q ${g.siku.x - 2} ${g.siku.y + 2} ${g.siku.x - 10} ${g.siku.y + 10}`} fill="none" stroke={TINTA} strokeWidth={3.5} strokeLinecap="round" opacity={0.5} />
+            <path d={`M ${manset(16).x} ${manset(16).y} L ${manset(-16).x} ${manset(-16).y}`} stroke={D.bajuGelap} strokeWidth={10} strokeLinecap="round" />
+          </g>
+        )}
+        {/* Bayangan lengan sisi kanan supaya tetap satu tingkat bayangan dengan badan. */}
+        <Ruas dari={b} ke={g.siku} warna="#000" t1={tA1 * 0.35} t2={tA2 * 0.35} tanpaGaris geser={arah * tA1 * 0.3} opacity={0.14} />
         <Tangan di={g.tangan} sudut={sudut} isi={isi} rot={L.rot ?? 0} D={D} arah={arah} retak={retakCangkir} arahJari={L.arahJari} />
       </g>
     );
   };
   const tengahHp = { x: (lk.tangan.x + lka.tangan.x) / 2, y: (lk.tangan.y + lka.tangan.y) / 2 - 26 };
   const miringHp = (Math.atan2(lka.tangan.y - lk.tangan.y, lka.tangan.x - lk.tangan.x) * 180) / Math.PI + (P.kanan.rot ?? 0);
+
+  // Badan 3/4: sisi jauh menyempit lewat skala-X ringan dan geser detail pakaian.
+  const badanSkew = -hb * 5;
+  const telingaKiri = hk <= 0.35;
+  const telingaKanan = hk >= -0.35;
 
   return (
     <g transform={`translate(${dx} ${dy}) rotate(${rot}) scale(${sx} ${sy}) translate(${-dx} ${-dy})`}>
@@ -408,12 +468,12 @@ export const Tokoh: React.FC<PropsTokoh> = ({ desain: D, pose: P, ekspresi, kedi
           {lapisan !== 'lengan' && (
             <g>
               {D.RambutBelakang && (
-                <g transform={`translate(${kx} ${ky + ayun}) rotate(${P.kepalaRot}) scale(${D.kepala})`}>
+                <g transform={`translate(${kx - hk * 10} ${ky + ayun}) rotate(${P.kepalaRot}) scale(${D.kepala})`}>
                   <D.RambutBelakang />
                 </g>
               )}
-              {/* Badan: bahu membulat, sedikit menyempit ke pinggang (bagian bawah tertutup meja). */}
-              <g transform={`translate(220 ${bahuY}) scale(${lb} 1) translate(-220 ${-bahuY})`}>
+              {/* Badan: bahu membulat, menyempit ke pinggang; miring sedikit saat menoleh. */}
+              <g transform={`translate(220 ${bahuY}) skewX(${badanSkew}) scale(${lb} 1) translate(-220 ${-bahuY})`}>
                 <path
                   d={`M ${220 - 104} ${bahuY + 40} Q ${220 - 108} ${bahuY - 22} ${220 - 56} ${bahuY - 30} L ${220 + 56} ${bahuY - 30} Q ${220 + 108} ${bahuY - 22} ${220 + 104} ${bahuY + 40} L ${220 + 96} 600 L ${220 - 96} 600 Z`}
                   fill={D.baju}
@@ -423,11 +483,11 @@ export const Tokoh: React.FC<PropsTokoh> = ({ desain: D, pose: P, ekspresi, kedi
                 />
                 <path d={`M ${220 + 34} ${bahuY - 28} Q ${220 + 106} ${bahuY - 20} ${220 + 104} ${bahuY + 40} L ${220 + 96} 600 L ${220 + 34} 600 Z`} fill="#000" opacity={0.18} />
                 <ellipse cx={220 - 52} cy={bahuY + 34} rx={34} ry={54} fill="#ffd27a" opacity={0.2} />
-                {D.Pakaian && <D.Pakaian />}
+                <g transform={`translate(${hb * 18} 0)`}>{D.Pakaian && <D.Pakaian />}</g>
               </g>
               {/* Leher. */}
               <path
-                d={`M ${220 - 24 + P.kepalaX * 0.4} ${236 + P.kepalaY * 0.5} L ${220 - 26} ${bahuY - 22} Q 220 ${bahuY - 8} ${220 + 26} ${bahuY - 22} L ${220 + 24 + P.kepalaX * 0.4} ${236 + P.kepalaY * 0.5} Z`}
+                d={`M ${kx - 24} ${ky + 62 * D.kepala} L ${220 - 26 + hb * 10} ${bahuY - 22} Q ${220 + hb * 10} ${bahuY - 8} ${220 + 26 + hb * 10} ${bahuY - 22} L ${kx + 24} ${ky + 62 * D.kepala} Z`}
                 fill={D.kulitGelap}
                 stroke={TINTA}
                 strokeWidth={TEBAL}
@@ -435,32 +495,51 @@ export const Tokoh: React.FC<PropsTokoh> = ({ desain: D, pose: P, ekspresi, kedi
               />
               {/* Kepala. */}
               <g transform={`translate(${kx} ${ky}) rotate(${P.kepalaRot}) scale(${D.kepala})`}>
-                <ellipse cx={-78} cy={10} rx={14} ry={20} fill={D.kulit} stroke={TINTA} strokeWidth={6} />
-                <ellipse cx={78} cy={10} rx={14} ry={20} fill={D.kulit} stroke={TINTA} strokeWidth={6} />
-                <path d="M -78 -20 Q -80 -92 0 -94 Q 80 -92 78 -20 Q 78 50 50 78 Q 24 98 0 98 Q -24 98 -50 78 Q -78 50 -78 -20 Z" fill={D.kulit} stroke={TINTA} strokeWidth={TEBAL} strokeLinejoin="round" />
+                {telingaKiri && <ellipse cx={-78 - hk * 8} cy={10 + fy * 0.5} rx={14} ry={20} fill={D.kulit} stroke={TINTA} strokeWidth={6} />}
+                {telingaKanan && <ellipse cx={78 - hk * 8} cy={10 + fy * 0.5} rx={14} ry={20} fill={D.kulit} stroke={TINTA} strokeWidth={6} />}
+                {/* Wajah: lonjong dengan rahang membulat; saat menoleh, dagu bergeser ke arah hadap. */}
+                <path
+                  d={`M -78 -20 Q -80 -92 0 -94 Q 80 -92 78 -20 Q 78 50 ${50 + hk * 14} 78 Q ${24 + hk * 16} 98 ${hk * 16} 98 Q ${-24 + hk * 16} 98 ${-50 + hk * 14} 78 Q -78 50 -78 -20 Z`}
+                  fill={D.kulit}
+                  stroke={TINTA}
+                  strokeWidth={TEBAL}
+                  strokeLinejoin="round"
+                />
                 <path d="M 34 -88 Q 82 -50 76 20 Q 72 60 40 88 Q 62 40 58 -10 Q 54 -60 34 -88 Z" fill="#000" opacity={0.13} />
                 <ellipse cx={-36} cy={-46} rx={20} ry={28} fill="#ffd27a" opacity={0.18} />
-                {hpDua && <ellipse cx={0} cy={80} rx={52} ry={22} fill="#9fe0c8" opacity={0.18} />}
-                {w.pipi && (
-                  <g>
-                    <ellipse cx={-44} cy={30} rx={17} ry={10} fill="#e2655a" opacity={0.6} />
-                    <ellipse cx={44} cy={30} rx={17} ry={10} fill="#e2655a" opacity={0.6} />
+                {hpDua && <ellipse cx={fx} cy={80} rx={52} ry={22} fill="#9fe0c8" opacity={0.18} />}
+                {/* Fitur wajah bergeser bersama arah hadap dan tunduk. */}
+                <g transform={`translate(${fx} ${fy})`}>
+                  {w.pipi && (
+                    <g>
+                      <ellipse cx={-44} cy={30} rx={17} ry={10} fill="#e2655a" opacity={0.6} />
+                      <ellipse cx={44} cy={30} rx={17} ry={10} fill="#e2655a" opacity={0.6} />
+                    </g>
+                  )}
+                  {/* Mata: yang di sisi jauh menyempit. */}
+                  <g transform={`translate(${-30 - Math.max(0, hk) * 6} -2) scale(${hk > 0 ? sempitJauh : 1} 1)`}>
+                    <Mata x={0} buka={bukaMata} lihat={P.lihat} id={`m-${id}-kiri`} lengkung={lengkung} kulit={D.kulit} />
                   </g>
-                )}
-                <g transform="translate(0 -2)">
-                  <Mata x={-30} buka={bukaMata} lihat={P.lihat} id={`m-${id}-kiri`} lengkung={lengkung} kulit={D.kulit} />
-                  <Mata x={30} buka={bukaMata} lihat={P.lihat} id={`m-${id}-kanan`} lengkung={lengkung} kulit={D.kulit} />
+                  <g transform={`translate(${30 + Math.min(0, hk) * 6} -2) scale(${hk < 0 ? sempitJauh : 1} 1)`}>
+                    <Mata x={0} buka={bukaMata} lihat={P.lihat} id={`m-${id}-kanan`} lengkung={lengkung} kulit={D.kulit} />
+                  </g>
+                  <g transform={`translate(${-30 - Math.max(0, hk) * 6} ${-36 + w.alisKiri[0] - tk * 4}) rotate(${w.alisKiri[1]}) scale(${hk > 0 ? sempitJauh : 1} 1)`}>
+                    <path d="M -20 4 Q 0 -8 20 2" fill="none" stroke={TINTA} strokeWidth={9} strokeLinecap="round" />
+                  </g>
+                  <g transform={`translate(${30 + Math.min(0, hk) * 6} ${-36 + w.alisKanan[0] - tk * 4}) rotate(${w.alisKanan[1]}) scale(${hk < 0 ? sempitJauh : 1} 1)`}>
+                    <path d="M -20 2 Q 0 -8 20 4" fill="none" stroke={TINTA} strokeWidth={9} strokeLinecap="round" />
+                  </g>
+                  {/* Hidung: makin menoleh makin tampak samping. */}
+                  <path d={`M ${2 + hk * 6} 10 Q ${12 + hk * 14} 26 ${hk * 6} 30`} fill="none" stroke={TINTA} strokeWidth={5} strokeLinecap="round" />
+                  <g transform={`translate(${hk * 4} 52) scale(${1 - Math.abs(hk) * 0.18} 1)`}>{MULUT[w.mulut]}</g>
+                  {D.Wajah && (
+                    <g transform={`translate(${hk * 2} 0) scale(${1 - Math.abs(hk) * 0.15} 1)`}>
+                      <D.Wajah />
+                    </g>
+                  )}
                 </g>
-                <g transform={`translate(-30 ${-36 + w.alisKiri[0]}) rotate(${w.alisKiri[1]})`}>
-                  <path d="M -20 4 Q 0 -8 20 2" fill="none" stroke={TINTA} strokeWidth={9} strokeLinecap="round" />
-                </g>
-                <g transform={`translate(30 ${-36 + w.alisKanan[0]}) rotate(${w.alisKanan[1]})`}>
-                  <path d="M -20 2 Q 0 -8 20 4" fill="none" stroke={TINTA} strokeWidth={9} strokeLinecap="round" />
-                </g>
-                <path d="M 2 10 Q 12 26 0 30" fill="none" stroke={TINTA} strokeWidth={5} strokeLinecap="round" />
-                <g transform="translate(0 52)">{MULUT[w.mulut]}</g>
-                {D.Wajah && <D.Wajah />}
-                <g transform={`translate(${ayun * 0.6} 0) rotate(${ayun * 0.15})`}>
+                {/* Rambut depan: ikut arah hadap sebagian, dan turun sedikit saat menunduk (dahi lebih terlihat). */}
+                <g transform={`translate(${ayun * 0.6 + hk * 12} ${-tk * 6}) rotate(${ayun * 0.15}) scale(${1 - Math.abs(hk) * 0.06} ${1 + tk * 0.08})`}>
                   <D.RambutDepan />
                 </g>
               </g>
@@ -473,8 +552,9 @@ export const Tokoh: React.FC<PropsTokoh> = ({ desain: D, pose: P, ekspresi, kedi
                   <BendaHp w={70} h={124} casing={D.hp ?? '#2b2b30'} />
                 </g>
               )}
-              {lengan(P.kiri, -1, lk)}
-              {lengan(P.kanan, 1, lka)}
+              {/* Lengan sisi jauh digambar dulu. */}
+              {hb >= 0 ? lengan(P.kiri, -1, lk) : lengan(P.kanan, 1, lka)}
+              {hb >= 0 ? lengan(P.kanan, 1, lka) : lengan(P.kiri, -1, lk)}
               {children}
             </g>
           )}

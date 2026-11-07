@@ -10,23 +10,28 @@ import { noise } from './efek';
 import { TINTA } from './tokoh/rig';
 import { H, URL_GAME, W } from './waktu';
 
-/** Posisi kursi tokoh (titik duduk di panggung) dan skala. */
+/**
+ * Kursi melingkar (titik duduk di panggung, skala, arah hadap badan/kepala): Bang IT di seberang meja menghadap
+ * kamera, Cak Owner di sisi kiri menghadap kanan, Mas Sampul di sisi kanan menghadap kiri. Yang di sisi lebih dekat
+ * ke kamera, jadi lebih besar dan lebih rendah di layar.
+ */
 export const KURSI = {
-  owner: { x: 262, y: 1318, skala: 0.98 },
-  bang: { x: 566, y: 1352, skala: 1.1 },
-  sampul: { x: 862, y: 1318, skala: 0.98 },
+  owner: { x: 118, y: 1446, skala: 1.15, hadapBadan: 0.8, hadap: 0.55 },
+  bang: { x: 540, y: 1262, skala: 0.92, hadapBadan: 0, hadap: 0 },
+  sampul: { x: 962, y: 1446, skala: 1.15, hadapBadan: -0.8, hadap: -0.55 },
 } as const;
+
+/** Meja oval (panggung). */
+export const MEJA = { x: 540, y: 1330, rx: 480, ry: 255, tebal: 44 } as const;
 
 /** Benda di meja (titik tengah, panggung). */
 export const BENDA = {
-  hpBang: { x: 575, y: 1372, rot: -8 },
-  hpOwner: { x: 205, y: 1290, rot: 10 },
-  hpSampul: { x: 880, y: 1372, rot: -12 },
-  cangkirBang: { x: 648, y: 1302 },
-  cangkirOwner: { x: 345, y: 1300 },
-  cangkirSampul: { x: 748, y: 1284 },
-  qr: { x: 930, y: 1540 },
-  kartu: { x: 520, y: 1290 },
+  hpOwner: { x: 300, y: 1255, rot: 22 },
+  cangkirBang: { x: 690, y: 1150 },
+  cangkirOwner: { x: 360, y: 1175 },
+  cangkirSampul: { x: 720, y: 1265 },
+  qr: { x: 470, y: 1655 },
+  kartu: { x: 560, y: 1225 },
 } as const;
 
 /** QR menuju URL_GAME: koreksi galat M, modul hitam di atas krem, zona tenang 4 modul. Ukuran = sisi (px). */
@@ -177,40 +182,34 @@ const RakBuku: React.FC<{ x: number; y: number; lebar: number; benih: number }> 
   );
 };
 
-export interface PropsKedai {
+export interface PropsMeja {
   /** 0 = malam biasa, 1 = penutup keemasan paling hangat. */
   hangat: number;
   /** 0..1: adegan tegang, cahaya meredup kebiruan. */
   dingin: number;
-  /** Tokoh dan benda tambahan di panggung (koordinat 1080 × 1920), digambar sesudah latar, sebelum meja. */
-  tokoh: ReactNode;
-  /** Benda di atas meja (dan tokoh yang harus di depan meja). */
-  diMeja?: ReactNode;
-  /** Kartu melompat (gebrak), 0..1. */
+  /** Bang IT: badan (sebelum meja) dan lengan (sesudah meja). */
+  bangBadan: ReactNode;
+  bangLengan: ReactNode;
+  /** Tokoh di sisi meja: badan sebelum meja (pangkuan tertutup meja), lengan sesudahnya. */
+  sisiBadan: ReactNode;
+  sisiLengan: ReactNode;
   lompatKartu?: number;
   glowQr?: number;
-  /** Still untuk layar HP di meja (jalur staticFile) atau null untuk layar mati. */
-  layarHpBang?: string | null;
   layarHpOwner?: string | null;
-  tampilHpSampul?: boolean;
-  layarHpSampul?: string | null;
-  tampilHpBang?: boolean;
   tampilCangkirBang?: boolean;
   tampilCangkirOwner?: boolean;
   retakCangkirBang?: number;
 }
 
-export const Kedai: React.FC<PropsKedai> = ({ hangat, dingin, tokoh, diMeja, lompatKartu = 0, glowQr = 0, layarHpBang = 'rekam/a1-lobi.png', layarHpOwner = 'rekam/a1-lobi.png', layarHpSampul = 'rekam/a1-sampul-lobi.png', tampilHpSampul = false, tampilHpBang = false, tampilCangkirBang = true, tampilCangkirOwner = true, retakCangkirBang = 0 }) => {
+/** Latar kedai (lapisan paralaks belakang): dinding, rak buku samar, lampu senar, lampu gantung. */
+export const Latar: React.FC = () => {
   const f = useCurrentFrame();
   const kedip = 1 + noise(f, 2) * 0.025;
   return (
     <AbsoluteFill style={{ background: '#17110a', overflow: 'hidden' }}>
-      {/* Dinding kedai: plester hangat, lebih gelap ke tepi. */}
-      <div style={{ position: 'absolute', left: -200, top: -200, width: W + 400, height: 1500, background: 'radial-gradient(ellipse 70% 55% at 50% 50%, #5a3d1e 0%, #3a2712 48%, #1c1309 85%)' }} />
-      {/* Rak buku samar kiri dan kanan. */}
-      <RakBuku x={-40} y={430} lebar={360} benih={1} />
-      <RakBuku x={760} y={400} lebar={380} benih={4} />
-      {/* Lampu senar: bokeh kuning. */}
+      <div style={{ position: 'absolute', left: -300, top: -300, width: W + 600, height: 1700, background: 'radial-gradient(ellipse 70% 55% at 50% 50%, #5a3d1e 0%, #3a2712 48%, #1c1309 85%)' }} />
+      <RakBuku x={-60} y={420} lebar={380} benih={1} />
+      <RakBuku x={760} y={390} lebar={400} benih={4} />
       {Array.from({ length: 12 }, (_, i) => {
         const x = 40 + i * 92 + noise(i, 3) * 30;
         const y = 300 + Math.sin(i * 0.9) * 70 + 40;
@@ -220,7 +219,6 @@ export const Kedai: React.FC<PropsKedai> = ({ hangat, dingin, tokoh, diMeja, lom
       <svg width={W} height={500} style={{ position: 'absolute', left: 0, top: 0 }}>
         <path d="M 0 300 Q 270 420 540 330 Q 810 240 1080 360" fill="none" stroke="#120c05" strokeWidth={3} opacity={0.6} />
       </svg>
-      {/* Lampu gantung: kabel, kap, bohlam, kerucut cahaya. */}
       <div style={{ position: 'absolute', left: W / 2 - 4, top: -20, width: 8, height: 250, background: TINTA }} />
       <svg width={420} height={200} style={{ position: 'absolute', left: W / 2 - 210, top: 225 }}>
         <path d="M 150 0 L 270 0 L 410 150 L 10 150 Z" fill="#2e1d0b" stroke={TINTA} strokeWidth={7} strokeLinejoin="round" />
@@ -230,52 +228,59 @@ export const Kedai: React.FC<PropsKedai> = ({ hangat, dingin, tokoh, diMeja, lom
       </svg>
       <div style={{ position: 'absolute', left: W / 2 - 60, top: 350, width: 120, height: 120, borderRadius: 60, background: '#fff3cf', filter: 'blur(28px)', opacity: 0.9 * kedip }} />
       <div style={{ position: 'absolute', left: W / 2 - 760, top: 360, width: 1520, height: 1500, background: 'radial-gradient(ellipse 48% 56% at 50% 64%, rgba(255,205,110,0.36), rgba(255,205,110,0) 70%)', pointerEvents: 'none' }} />
-      {/* Tokoh (di belakang meja). */}
-      {tokoh}
-      {/* Meja kayu bersudut 3/4: bidang atas melebar ke depan, bagian depan lebih gelap. */}
+    </AbsoluteFill>
+  );
+};
+
+/** Meja oval dan semua yang ada di atasnya, plus tokoh (lapisan paralaks tengah). */
+export const Meja: React.FC<PropsMeja> = ({ hangat, dingin, bangBadan, bangLengan, sisiBadan, sisiLengan, lompatKartu = 0, glowQr = 0, layarHpOwner = 'rekam/a1-lobi.png', tampilCangkirBang = true, tampilCangkirOwner = true, retakCangkirBang = 0 }) => {
+  const { x: mx, y: my, rx, ry, tebal } = MEJA;
+  return (
+    <AbsoluteFill style={{ overflow: 'visible' }}>
+      {bangBadan}
+      {sisiBadan}
+      {/* Meja oval: bidang atas, lalu sisi tebal di bawah lengkung depan. */}
       <svg width={W} height={H} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }}>
         <defs>
-          <linearGradient id="kayu" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#9a6130" />
-            <stop offset="0.5" stopColor="#8a5527" />
+          <radialGradient id="kayuOval" cx="50%" cy="35%" r="70%">
+            <stop offset="0" stopColor="#a4682f" />
+            <stop offset="0.55" stopColor="#8a5527" />
             <stop offset="1" stopColor="#5c3614" />
-          </linearGradient>
-          <radialGradient id="kolam" cx="50%" cy="35%" r="55%">
-            <stop offset="0" stopColor="#ffd98a" stopOpacity={0.55} />
+          </radialGradient>
+          <radialGradient id="kolamOval" cx="50%" cy="30%" r="55%">
+            <stop offset="0" stopColor="#ffd98a" stopOpacity={0.5} />
             <stop offset="1" stopColor="#ffd98a" stopOpacity={0} />
           </radialGradient>
+          <clipPath id="atasMeja">
+            <ellipse cx={mx} cy={my} rx={rx} ry={ry} />
+          </clipPath>
         </defs>
-        <path d="M 110 1215 Q 540 1150 970 1215 Q 1140 1420 1160 1700 L -80 1700 Q -60 1420 110 1215 Z" fill="url(#kayu)" stroke={TINTA} strokeWidth={8} strokeLinejoin="round" />
-        {Array.from({ length: 14 }, (_, i) => {
-          const y = 1250 + i * 32;
-          return <path key={i} d={`M -60 ${y} Q 300 ${y + noise(i, 7) * 14} 540 ${y + noise(i, 8) * 10} Q 800 ${y - noise(i, 9) * 14} 1140 ${y}`} stroke="#5c3614" strokeWidth={2 + Math.abs(noise(i, 10)) * 2} fill="none" opacity={0.45} />;
-        })}
-        <path d="M 110 1215 Q 540 1150 970 1215 Q 1140 1420 1160 1700 L -80 1700 Q -60 1420 110 1215 Z" fill="url(#kolam)" />
-        <path d="M -80 1700 L 1160 1700 L 1160 1920 L -80 1920 Z" fill="#3a2410" stroke={TINTA} strokeWidth={8} />
-        <path d="M -80 1700 L 1160 1700 L 1160 1760 L -80 1760 Z" fill="#000" opacity={0.25} />
+        <path d={`M ${mx - rx} ${my} A ${rx} ${ry} 0 0 0 ${mx + rx} ${my} L ${mx + rx} ${my + tebal} A ${rx} ${ry} 0 0 1 ${mx - rx} ${my + tebal} Z`} fill="#4a2a10" stroke={TINTA} strokeWidth={8} strokeLinejoin="round" />
+        <ellipse cx={mx} cy={my} rx={rx} ry={ry} fill="url(#kayuOval)" stroke={TINTA} strokeWidth={8} />
+        <g clipPath="url(#atasMeja)" opacity={0.4}>
+          {Array.from({ length: 16 }, (_, i) => {
+            const y = my - ry + 20 + i * 32;
+            return <path key={i} d={`M ${mx - rx} ${y} Q ${mx - 200} ${y + noise(i, 7) * 12} ${mx} ${y + noise(i, 8) * 8} Q ${mx + 240} ${y - noise(i, 9) * 12} ${mx + rx} ${y}`} stroke="#5c3614" strokeWidth={2 + Math.abs(noise(i, 10)) * 2} fill="none" />;
+          })}
+        </g>
+        <ellipse cx={mx} cy={my} rx={rx} ry={ry} fill="url(#kolamOval)" />
+        <ellipse cx={mx} cy={my} rx={rx - 4} ry={ry - 4} fill="none" stroke="#000" strokeWidth={10} opacity={0.12} />
       </svg>
-      {/* Benda di meja. */}
+      {/* Benda di meja (belakang → depan). */}
       <KartuMeja x={BENDA.kartu.x - 70} y={BENDA.kartu.y + 30} rot={-24} lompat={lompatKartu} />
       <KartuMeja x={BENDA.kartu.x - 20} y={BENDA.kartu.y + 44} rot={-8} lompat={lompatKartu * 0.8} />
       <KartuMeja x={BENDA.kartu.x + 30} y={BENDA.kartu.y + 30} rot={10} lompat={lompatKartu * 1.2} />
       <KartuMeja x={BENDA.kartu.x + 80} y={BENDA.kartu.y + 50} rot={26} muka="wajik-8" lompat={lompatKartu * 0.9} />
-      <KartuMeja x={420} y={1480} rot={60} lompat={lompatKartu * 0.6} />
-      {layarHpOwner !== null && <HpMeja x={BENDA.hpOwner.x} y={BENDA.hpOwner.y} rot={BENDA.hpOwner.rot} lebar={78} layar={layarHpOwner ?? undefined} />}
-      {tampilHpBang && layarHpBang !== null && <HpMeja x={BENDA.hpBang.x} y={BENDA.hpBang.y} rot={BENDA.hpBang.rot} layar={layarHpBang ?? undefined} lebar={104} />}
-      {tampilHpSampul && <HpMeja x={BENDA.hpSampul.x} y={BENDA.hpSampul.y} rot={BENDA.hpSampul.rot} layar={layarHpSampul ?? undefined} />}
+      {tampilCangkirBang && <CangkirMeja x={BENDA.cangkirBang.x} y={BENDA.cangkirBang.y} benih={2} skala={0.9} retak={retakCangkirBang} />}
+      {bangLengan}
       {tampilCangkirOwner && <CangkirMeja x={BENDA.cangkirOwner.x} y={BENDA.cangkirOwner.y} benih={1} skala={0.95} />}
-      {tampilCangkirBang && <CangkirMeja x={BENDA.cangkirBang.x} y={BENDA.cangkirBang.y} benih={2} skala={1} retak={retakCangkirBang} />}
-      <CangkirMeja x={BENDA.cangkirSampul.x} y={BENDA.cangkirSampul.y} benih={3} skala={0.95} />
-      {diMeja}
-      <PapanQr x={BENDA.qr.x} y={BENDA.qr.y} lebar={290} glow={glowQr} />
-      {/* Vinyet lampu: tepi lebih gelap. */}
-      <AbsoluteFill style={{ background: 'radial-gradient(ellipse 62% 55% at 50% 52%, rgba(0,0,0,0) 40%, rgba(10,6,2,0.55) 100%)', pointerEvents: 'none' }} />
-      {/* Adegan tegang: meredup kebiruan. */}
+      {layarHpOwner !== null && <HpMeja x={BENDA.hpOwner.x} y={BENDA.hpOwner.y} rot={BENDA.hpOwner.rot} lebar={84} layar={layarHpOwner ?? undefined} />}
+      <CangkirMeja x={BENDA.cangkirSampul.x} y={BENDA.cangkirSampul.y} benih={3} skala={1} />
+      {sisiLengan}
+      <KartuMeja x={610} y={1470} rot={58} lebar={100} lompat={lompatKartu * 0.6} />
+      <PapanQr x={BENDA.qr.x} y={BENDA.qr.y} lebar={300} glow={glowQr} />
       {dingin > 0 && <AbsoluteFill style={{ background: '#0a1a33', mixBlendMode: 'multiply', opacity: 0.75 * dingin, pointerEvents: 'none' }} />}
-      {dingin > 0 && <AbsoluteFill style={{ background: 'radial-gradient(ellipse 50% 45% at 50% 50%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.85) 100%)', opacity: dingin, pointerEvents: 'none' }} />}
-      {/* Penutup keemasan paling hangat. */}
       {hangat > 0 && <AbsoluteFill style={{ background: '#ffb63a', mixBlendMode: 'soft-light', opacity: 0.45 * hangat, pointerEvents: 'none' }} />}
-      {hangat > 0 && <AbsoluteFill style={{ background: 'rgba(255,230,180,1)', mixBlendMode: 'overlay', opacity: 0.2 * hangat, pointerEvents: 'none' }} />}
     </AbsoluteFill>
   );
 };
