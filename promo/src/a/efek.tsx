@@ -1,7 +1,8 @@
 // Alat sinematografi Teaser A (brief B §5, dipakai juga di A): kamera yang tidak pernah diam (push-in, glide,
 // burst, shake, dutch roll), vinyet/grain/split tone, flash putih, caption, pil, logo pojok, retak, panah, bunyi.
 import type { CSSProperties, ReactNode } from 'react';
-import { AbsoluteFill, Audio, Img, interpolate, Sequence, staticFile, useCurrentFrame } from 'remotion';
+import { Audio } from '@remotion/media';
+import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from 'remotion';
 import { FONT, Logo, WARNA } from '../bagian';
 import { H, W } from './waktu';
 
@@ -287,11 +288,9 @@ export const Cincin: React.FC<{ x: number; y: number; r: number; dari: number; s
   );
 };
 
-/** Bunyi dari aset game (bunyi-<nama>.wav), mulai di frame `dari`. */
+/** Bunyi mulai di frame `dari` (lokal adegan): aset game (bunyi-<nama>.wav) atau ElevenLabs ('e:<nama>' → aset/eleven/<nama>.mp3). */
 export const Bunyi: React.FC<{ nama: string; dari: number; volume?: number; rate?: number; lama?: number }> = ({ nama, dari, volume = 1, rate = 1, lama }) => (
-  <Sequence from={dari} durationInFrames={lama} layout="none">
-    <Audio src={staticFile(`aset/bunyi-${nama}.wav`)} volume={volume} playbackRate={rate} />
-  </Sequence>
+  <Audio name={`bunyi ${nama}`} src={staticFile(nama.startsWith('e:') ? `aset/eleven/${nama.slice(2)}.mp3` : `aset/bunyi-${nama}.wav`)} from={dari} volume={volume} playbackRate={rate} durationInFrames={lama} />
 );
 
 /** Whip/rewind: blur gerak + garis pindai selama `lama` frame dari `dari`. */

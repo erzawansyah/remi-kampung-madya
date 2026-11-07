@@ -7,6 +7,7 @@
   "scripts": {
     "aset": "node scripts/ambil-aset.mjs",
     "aset:a": "node scripts/ambil-aset-a.mjs",
+    "aset:eleven": "node scripts/ambil-eleven.mjs",
     "render:a": "remotion render src/index.ts TeaserA out/teaser-a-mentah.mp4 --color-space=bt709 && node scripts/normalkan-audio.mjs out/teaser-a-mentah.mp4 out/teaser-a.mp4",
     "qa:a": "node scripts/qa-teaser-a.mjs out/teaser-a.mp4",
     "still:a": "remotion still src/index.ts TeaserA",
@@ -16,11 +17,15 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@remotion/cli": "4.0.535",
+    "@remotion/cli": "4.0.541",
+    "@remotion/effects": "4.0.541",
+    "@remotion/media": "4.0.541",
+    "@remotion/motion-blur": "4.0.541",
+    "@remotion/transitions": "4.0.541",
     "qrcode": "^1.5.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "remotion": "4.0.535"
+    "remotion": "4.0.541"
   },
   "devDependencies": {
     "@types/react": "18.3.12",

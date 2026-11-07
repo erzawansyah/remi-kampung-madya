@@ -1,79 +1,45 @@
-// Semua konstanta waktu Teaser A (frame = detik × 30), mengikuti storyboard promo/BRIEF-teaser-a.md §4.
+// Konstanta Teaser A (brief A): ukuran, teks, dan panjang tiap adegan dalam frame. Video disusun sebagai
+// TransitionSeries (satu komponen per adegan, frame lokal mulai 0), jadi momen di dalam adegan ditulis di
+// komponennya masing-masing. Transisi memendekkan total, maka adegan sebelum transisi ditambah panjangnya.
 export const FPS = 30;
-export const DURASI = 1200;
 export const W = 1080;
 export const H = 1920;
 
-/** Detik → frame. */
-export const d = (detik: number): number => Math.round(detik * FPS);
-
-/** Batas adegan [mulai, selesai) dalam frame (§4). */
-export const T = {
-  coldOpen: [0, 60],
-  rewind: [52, 60],
-  datang: [60, 150],
-  qr: [150, 270],
-  buang: [270, 390],
-  pungut: [390, 510],
-  tegang: [510, 690],
-  kena: [690, 780],
-  ledek: [780, 900],
-  montase: [900, 1020],
-  tutup: [1020, 1140],
-  stempel: [1140, 1200],
-  /** Pil "gratis · tanpa login · tanpa top up" (detik 2–34). */
-  pil: [60, 1020],
-} as const satisfies Record<string, readonly [number, number]>;
-
-/** Momen di dalam adegan (frame absolut). */
-export const M = {
-  // Cold open: retak di frame 0, burst ke wajah Bang IT.
-  burstWajah: 14,
-  // Adegan 2: Bang IT masuk dari kanan, duduk, bersandar.
-  bangDatang: 60,
-  bangDuduk: 92,
-  balonAman: 104,
-  // Adegan 3: pindai QR → beranda → nama → lobi.
-  qrPindai: 160,
-  qrBeranda: 192,
-  qrNama: 214,
-  qrLobi: 236,
-  // Adegan 4: antisipasi → ketuk → menoleh ke kamera.
-  balonBuang: 282,
-  angkatJari: 288,
-  ketukHp: 318,
-  tolehKamera: 332,
-  // Adegan 5: seruput, ketuk tanpa melihat, panah pungut.
-  seruput: 396,
-  ketukOwner: 424,
-  captionPungut: 450,
-  // Adegan 6: hening 0,4 dtk (12 frame) lalu ketukan Cak Owner.
-  letakCangkir: 630,
-  heningMulai: 666,
-  ketukNutup: 678,
-  // Adegan 7: retak di layar, terpental, gebrak.
-  retak: 690,
-  terpental: 702,
-  mendarat: 711,
-  gebrak: 726,
-  // Adegan 8: ledekan besar di HP, "Noob.", reaksi telat 8 frame.
-  sodorHp: 786,
-  balonNoob: 800,
-  tolehDatar: 840,
-  // Adegan 9: montase tiga potongan ±1,2 dtk.
-  montaseA: 900,
-  montaseB: 940,
-  montaseC: 978,
-  krakGelas: 1004,
-  // Adegan 10: tarik mundur keemasan, teks ajakan.
-  teksAjak: 1050,
-  // Adegan 11: stempel.
-  stempelKena: 1146,
-  lirikStempel: 1156,
-  lirikKamera: 1174,
+/** Panjang adegan (frame) dan transisi sesudahnya. Total = Σ adegan − Σ transisi = 1200. */
+export const ADEGAN = {
+  coldOpen: 68, // 60 + rewind 8
+  datang: 90,
+  pindaiQr: 120,
+  buang: 120,
+  pungut: 120,
+  tegang: 180,
+  kepentung: 90,
+  ledek: 120,
+  montase: 126, // 120 + fade 6
+  penutup: 120,
+  stempel: 66, // 60 + fade 6
+  qrAkhir: 90, // 3 dtk khusus QR (permintaan pemilik), di luar ±40 dtk brief
 } as const;
+export const TRANSISI = { rewind: 8, fadePenutup: 6, fadeQr: 6 } as const;
+export const DURASI = Object.values(ADEGAN).reduce((a, b) => a + b, 0) - TRANSISI.rewind - TRANSISI.fadePenutup - TRANSISI.fadeQr;
 
-/** Balon kata (teks persis dari §4). */
+/** Awal tiap adegan di garis waktu global (untuk pil, logo, musik). */
+export const MULAI = (() => {
+  const m = {} as Record<keyof typeof ADEGAN, number>;
+  let t = 0;
+  const urut = Object.keys(ADEGAN) as (keyof typeof ADEGAN)[];
+  urut.forEach((k, i) => {
+    m[k] = t;
+    t += ADEGAN[k];
+    if (k === 'coldOpen') t -= TRANSISI.rewind;
+    if (k === 'montase') t -= TRANSISI.fadePenutup;
+    if (k === 'stempel') t -= TRANSISI.fadeQr;
+    void i;
+  });
+  return m;
+})();
+
+/** Balon kata (teks persis dari brief §4). */
 export const BALON = {
   aman: 'Aman, aku seng menang.',
   buang: 'Buang iki ae.',

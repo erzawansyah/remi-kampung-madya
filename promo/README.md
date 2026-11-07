@@ -35,7 +35,15 @@ Chromium: `npm run aset` memakai `CHROME_PATH`, lalu `/opt/pw-browsers/chromium`
 
 ## Teaser A "Aman, aku seng menang" (animasi 2D)
 
-Brief: [BRIEF-teaser-a.md](BRIEF-teaser-a.md) (bagian teknis merujuk [BRIEF-teaser-b.md](BRIEF-teaser-b.md)). Komposisi `TeaserA` (1080 × 1920, 30 fps, 1200 frame) di `src/a/`: rig SVG tiga warga kedai (`tokoh/`), meja dan latar kedai (`MejaKedai.tsx`), lintasan pose/kamera (`Adegan.tsx`, `animasi.ts`), balon kata, sisipan layar HP berisi rekaman game asli, stempel, dan semua konstanta waktu di `waktu.ts`. Still lineup tokoh: komposisi `LineupA`.
+Brief: [BRIEF-teaser-a.md](BRIEF-teaser-a.md) (bagian teknis merujuk [BRIEF-teaser-b.md](BRIEF-teaser-b.md)). Komposisi `TeaserA` (1080 × 1920, 30 fps, 43 dtk: 40 dtk cerita + 3 dtk khusus QR atas permintaan pemilik) di `src/a/`, disusun mengikuti skill Remotion di `.claude/skills/remotion-*`:
+
+- `adegan/*.tsx`: satu komponen per adegan dengan frame lokal (`useCurrentFrame()` mulai 0 di tiap adegan), dirangkai `TransitionSeries` di `TeaserA.tsx` (transisi rewind sesudah cold open, fade ke penutup dan ke bagian QR). Panjang tiap adegan di `waktu.ts`.
+- `kamera.tsx`: kamera 2.5D (CSS `perspective`, lapisan latar/meja/depan di `translateZ` berbeda), jadi dolly dan glide menghasilkan paralaks. `Panggung.tsx` merangkai lapisan itu, balon kata diproyeksikan dari mulut tokoh.
+- `tokoh/rig.tsx` rig SVG (hadap kepala/badan, tunduk, IK lengan, ekspresi), `tokoh/pose.ts` kumpulan pose, `MejaKedai.tsx` meja oval, latar, benda, papan QR.
+- Rekaman game lewat `<Video>` dan bunyi lewat `<Audio>` dari `@remotion/media` (`trimBefore`, `from`, `volume` inline). Efek WebGL `@remotion/effects` tidak dipakai karena menghasilkan frame kosong di Chrome headless lingkungan ini; vinyet dan warna memakai CSS.
+- Musik latar dan bunyi fisik dari ElevenLabs (`npm run aset:eleven`, butuh `ELEVENLABS_API_KEY`): Eleven Music untuk musik kedai (bukan musik game) dan Sound Effects untuk tawa, kursi jatuh, gebrak, seruput, gelas retak, stempel, whoosh, dan suasana kedai. Bunyi game (buang, mulung, mentung, jotos, retak) tetap dari aplikasi.
+
+Still lineup tokoh: komposisi `LineupA`.
 
 Rekaman game (3 pemain, 1 deck, batas 2 putaran) direkam dari halaman Bang IT dengan virtual time (teknik sama dengan Teaser B):
 
@@ -49,7 +57,8 @@ node promo/scripts/rekam/momen-a.mjs                  # momen kunci (detik video
 
 cd promo
 npm run aset      # aset dasar (kartu, logo, retak, font, musik, bunyi)
-npm run aset:a    # bunyi tambahan Teaser A (kursi terjengkang, gebrak, seruput, krak gelas, dok) dari sintesis game
+npm run aset:a    # bunyi sintesis cadangan (dipakai kalau aset ElevenLabs tidak ada)
+npm run aset:eleven  # musik + bunyi dari ElevenLabs (ELEVENLABS_API_KEY)
 npm run render:a  # out/teaser-a.mp4 (render + loudnorm −14 LUFS, true peak ≤ −1,5 dBTP)
 npm run qa:a      # format, loudness, pindai QR dari still 34–38 dtk, hold diam, contact sheet
 ```

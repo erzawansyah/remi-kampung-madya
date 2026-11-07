@@ -199,7 +199,17 @@ export interface PropsMeja {
   tampilCangkirBang?: boolean;
   tampilCangkirOwner?: boolean;
   retakCangkirBang?: number;
+  /** Benda depan (kartu depan, papan QR) digambar pemanggil di lapisan depan kamera. */
+  tanpaDepan?: boolean;
 }
+
+/** Benda di tepi depan meja (lapisan paralaks depan): satu kartu dan papan QR berdiri. */
+export const BendaDepan: React.FC<{ lompatKartu?: number; glowQr?: number }> = ({ lompatKartu = 0, glowQr = 0 }) => (
+  <>
+    <KartuMeja x={610} y={1470} rot={58} lebar={100} lompat={lompatKartu * 0.6} />
+    <PapanQr x={BENDA.qr.x} y={BENDA.qr.y} lebar={300} glow={glowQr} />
+  </>
+);
 
 /** Latar kedai (lapisan paralaks belakang): dinding, rak buku samar, lampu senar, lampu gantung. */
 export const Latar: React.FC = () => {
@@ -233,7 +243,7 @@ export const Latar: React.FC = () => {
 };
 
 /** Meja oval dan semua yang ada di atasnya, plus tokoh (lapisan paralaks tengah). */
-export const Meja: React.FC<PropsMeja> = ({ hangat, dingin, bangBadan, bangLengan, sisiBadan, sisiLengan, lompatKartu = 0, glowQr = 0, layarHpOwner = 'rekam/a1-lobi.png', tampilCangkirBang = true, tampilCangkirOwner = true, retakCangkirBang = 0 }) => {
+export const Meja: React.FC<PropsMeja> = ({ hangat, dingin, bangBadan, bangLengan, sisiBadan, sisiLengan, lompatKartu = 0, glowQr = 0, layarHpOwner = 'rekam/a1-lobi.png', tampilCangkirBang = true, tampilCangkirOwner = true, retakCangkirBang = 0, tanpaDepan = false }) => {
   const { x: mx, y: my, rx, ry, tebal } = MEJA;
   return (
     <AbsoluteFill style={{ overflow: 'visible' }}>
@@ -277,8 +287,7 @@ export const Meja: React.FC<PropsMeja> = ({ hangat, dingin, bangBadan, bangLenga
       {layarHpOwner !== null && <HpMeja x={BENDA.hpOwner.x} y={BENDA.hpOwner.y} rot={BENDA.hpOwner.rot} lebar={84} layar={layarHpOwner ?? undefined} />}
       <CangkirMeja x={BENDA.cangkirSampul.x} y={BENDA.cangkirSampul.y} benih={3} skala={1} />
       {sisiLengan}
-      <KartuMeja x={610} y={1470} rot={58} lebar={100} lompat={lompatKartu * 0.6} />
-      <PapanQr x={BENDA.qr.x} y={BENDA.qr.y} lebar={300} glow={glowQr} />
+      {!tanpaDepan && <BendaDepan lompatKartu={lompatKartu} glowQr={glowQr} />}
       {dingin > 0 && <AbsoluteFill style={{ background: '#0a1a33', mixBlendMode: 'multiply', opacity: 0.75 * dingin, pointerEvents: 'none' }} />}
       {hangat > 0 && <AbsoluteFill style={{ background: '#ffb63a', mixBlendMode: 'soft-light', opacity: 0.45 * hangat, pointerEvents: 'none' }} />}
     </AbsoluteFill>

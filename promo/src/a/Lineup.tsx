@@ -3,7 +3,7 @@
 import { AbsoluteFill, useCurrentFrame } from 'remotion';
 import { FONT, WARNA } from '../bagian';
 import { KURSI, Latar, Meja } from './MejaKedai';
-import { TokohDiKursi } from './Panggung';
+import { TokohDiKursi } from './PanggungTokoh';
 import { BANG_IT } from './tokoh/BangIT';
 import { CAK_OWNER } from './tokoh/CakOwner';
 import { MAS_SAMPUL } from './tokoh/MasSampul';

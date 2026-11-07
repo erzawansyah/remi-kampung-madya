@@ -8,3 +8,6 @@ Config.setCrf(16);
 Config.setPixelFormat('yuv420p');
 // Chromium bawaan lingkungan (kalau ada); kalau tidak, Remotion mengunduh Chrome Headless Shell sendiri.
 if (process.env.CHROME_PATH) Config.setBrowserExecutable(process.env.CHROME_PATH);
+
+// Efek @remotion/effects (WebGL2) dan HtmlInCanvas butuh WebGL saat render.
+Config.setChromiumOpenGlRenderer('swangle');
