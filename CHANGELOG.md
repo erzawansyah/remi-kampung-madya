@@ -6,6 +6,10 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.6.0] - 2026-11-08
+
+Nonton meja yang sedang main, dan pilihan waktu per giliran 45 detik. Aturan main tidak berubah.
+
 ### Untuk pemain
 
 #### Ditambahkan
