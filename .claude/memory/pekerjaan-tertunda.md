@@ -1,6 +1,6 @@
 # Pekerjaan tertunda
 
-Diperbarui: 7 Nov 2026. Hapus butir yang sudah selesai, tambahkan yang baru.
+Diperbarui: 8 Nov 2026. Hapus butir yang sudah selesai, tambahkan yang baru.
 
 ## Latar
 
@@ -18,7 +18,7 @@ Batch 14 Okt 2026 (level warga kedai Jago dan Suhu, 12 nama warga kedai baru, bu
 ## Belum selesai
 
 000. **Nonton (#60, keputusan pemilik 7 Nov 2026) sudah diterapkan di branch `claude/loving-goldberg-bhm3fp`, menunggu PR ke `main` dan merge pemilik.** Rincian dan tafsiran pengembang di `docs/keputusan-pemilik.md` #60; CHANGELOG masih di `[Belum dirilis]`. Versi naik ke **0.6.0** (minor, fitur baru) bersama PR-nya, sekalian memindah CHANGELOG ke `[0.6.0] - tanggal`. Tafsiran pengembang di #60 (permintaan tak dijawab 30 detik = ditolak, satu pemain sekaligus, Hentikan = jeda 3 menit, dll.) cukup dikabarkan ringkas bersama PR. Sesudah tayang: coba nonton dan minta lihat kartu dari dua HP sungguhan.
-001. **Menunggu keputusan pemilik: usulan Notion "Waktu giliran"** (45 detik, dari U.U, status "Perlu keputusan pemilik"). Rekomendasi agent: tambah pilihan 45 detik di waktu per giliran, bawaan tetap 60 detik. Waktu giliran menyentuh aturan meja, jadi jangan dikerjakan sebelum pemilik setuju.
+001. **Waktu per giliran 45 detik (#61, diputuskan pemilik 8 Nov 2026) sudah diterapkan di branch yang sama**, ikut PR 0.6.0 bersama #60. Sesudah tayang, ubah status usulan Notion "Waktu giliran" jadi Tayang.
 00. **Rilis 0.5.0 (pekerjaan 23–24 Okt 2026): PR #10 ke `main` dibuka 24 Okt 2026, menunggu pemilik merge.** Branch `ccr-681fc5be-tw8z13` (sudah memuat `origin/produksi`); versi sudah 0.5.0 dan CHANGELOG `[0.5.0] - 2026-10-24`. Isinya: kompetisi versi 2 (#51, termasuk keputusan 24 Okt: yang keluar tak dihitung dikalahkan tapi selalu dicatat 0, tanpa voting di meja kompetisi), nutup paling banyak 2 kartu (#52), pentungan bukan kembaran kartu pungutan (#53, kedua tafsirannya disetujui), jeda lanjut + Siap (#54), ledekan (#55), efek kepentung (#56), koneksi putus-putus (#57, mengubah #34, #35, #37), meja selamat dari restart (#58), usul fitur + peninjauan harian di Notion (#59).
    - Sesudah merge: pemilik memasang tag `v0.5.0` lewat GitHub Releases (push tag dari sesi Claude ditolak 403); judul dan deskripsinya sudah ada di deskripsi PR #10. Lalu fast-forward `produksi` ke `main`.
    - Database produksi masih v1, jadi deploy pertama menjalankan migrasi **v1 → v5** sekali (v2 kompetisi, v3 `usulan`, v4 `meja_aktif`, v5 `hasil_kompetisi_ditinggal`). Sesudah deploy minta pemilik (butuh akses server) mengecek log: `skema riwayat dimigrasi v1 → v5`, baris `usul fitur: …` (Notion belum diatur, atau diteruskan ke database `d31d1a9e…`), dan sesudah deploy berikutnya `meja KODE dipulihkan (…)` / `N dari M meja tersimpan dipulihkan`. Dari luar: `/healthz` = `"versi":"0.5.0"` (dengan `HEALTHZ_DETAIL` ada `mejaMain`), `/api/peringkat` masih array, dan respons handshake WebSocket di tab Network memuat `permessage-deflate` (Caddy meneruskan `Sec-WebSocket-Extensions`). Cadangan `VACUUM INTO` sebelum deploy dianjurkan; sesudah v4 database (dan cadangannya) memuat token pemain, jadi simpan di tempat privat.

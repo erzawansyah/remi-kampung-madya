@@ -782,7 +782,7 @@ Arti celetukan dari pemilik:
 - **Polling detail:** tiap 5 detik selama layar detail terbuka dan tab terlihat, langsung sekali lagi saat tab terlihat kembali, berhenti begitu layar ditinggalkan. Kalau datanya sama, layar tidak digambar ulang; kalau berubah, akordion Cara hitung yang terbuka dan fokus tombol dipertahankan.
 - **Waktu habis:** kompetisi yang disudahi lewat voting ditulis "Disudahi · menunggu N meja terakhir selesai" dengan lencana "disudahi" (yang masanya habis: "Waktu habis · …" dengan lencana "waktu habis"; dulu lencananya selalu "waktu habis"), dan catatan "Juaranya diumumkan sesudah meja terakhir selesai."
 - **Lobi kompetisi:** judulnya nama kompetisi; aturan meja hanya teks (tempo warga kedai dan "meja publik" tidak ditampilkan karena tidak berlaku di meja kompetisi); status "Menunggu N peserta lagi…", "Menunggu semua peserta tersambung…" kalau kursi penuh tapi ada yang terputus, atau hitung mundur detik "Kursi penuh. Permainan mulai sendiri dalam 2 detik…". Host tidak punya pilihan isi kursi (meja menolaknya). Keluar dari lobi kompetisi (tombol atau Back) dan lobi yang dibubarkan server langsung membuka detail kompetisinya, bukan beranda.
-- **Formulir pengajuan:** "Pemain per meja" 2–6 (bawaan 4); centang "Meja 4 pemain pakai 2 deck" disembunyikan dan dikirim mati kalau bukan 4; waktu per giliran 30/60/90/120 detik (bawaan 60), tanpa "Tanpa batas", dengan keterangan "Giliran yang kehabisan waktu dijalankan warga kedai, jadi tidak ada meja yang tertahan."
+- **Formulir pengajuan:** "Pemain per meja" 2–6 (bawaan 4); centang "Meja 4 pemain pakai 2 deck" disembunyikan dan dikirim mati kalau bukan 4; waktu per giliran 30/45/60/90/120 detik (bawaan 60; 45 ditambah #61), tanpa "Tanpa batas", dengan keterangan "Giliran yang kehabisan waktu dijalankan warga kedai, jadi tidak ada meja yang tertahan."
 
 **Yang dikerjakan (aplikasi):** `apps/client/src/ui/kompetisi.ts` (formulir, detail dengan daftar meja dan polling, piala), `konten/kompetisi.ts` (teks dan penyusun kalimat hasil), `ui/lobi.ts` (lobi kompetisi), `kontrolMeja.ts` (lencana bar atas, klasemen akhir dengan nilai dan Kembali ke kompetisi), `main.ts` (pesan `kompetisiHasil`, laken, Duduk/Buka meja baru, lobi dibubarkan), `game/warnaMeja.ts` + `gaya/token.css` (laken biru, palet kanvas dibaca ulang), `ui/riwayat.ts` (🏆 di leaderboard), Bantuan. Test: `apps/client/test/kompetisi.test.ts`, `aplikasiKompetisi.test.ts`, `kontrolMeja.test.ts` (meja kompetisi), `laken.test.ts`, `token.test.ts`, `riwayat.test.ts`, `antislop.test.ts`.
 
@@ -1013,6 +1013,18 @@ Pilihan yang waktu itu ditawarkan dan **tidak dipilih**:
 - Penonton memakai nama di HP-nya (kalau kosong: "Penonton"), tanpa wajib isi nama.
 
 **Test:** `packages/meja/test/penonton.test.ts`, `apps/server/test/nonton.test.ts`, `apps/client/test/nonton.test.ts`, `apps/client/test/aplikasiNonton.test.ts`.
+
+<a id="k61"></a>
+
+## 61. Pilihan waktu per giliran 45 detik
+
+**Asal:** usulan pemain "Waktu giliran" di Notion (5 Nov 2026): "Bikin 45 detik per giliran. 60 detik kelamaan. 30 detik kecepatan." Ditinjau agent 6 Nov 2026 sebagai "Perlu keputusan pemilik".
+
+**Keputusan pemilik (8 Nov 2026):** tambah pilihan 45 detik; bawaan tetap 60 detik ("jadi ada opsi 45. 60 gpp default").
+
+**Penerapan:** pilihan waktu per giliran di lobi meja online jadi 30, 45, 60, 90, 120 detik, atau tanpa batas (`apps/client/src/ui/lobi.ts`), dan di pengajuan kompetisi 30, 45, 60, 90, 120 detik (`PILIHAN_DETIK_GILIRAN_KOMPETISI` di `packages/meja/src/kompetisi.ts`, dipakai formulir dan validasi pengajuan). `PENGATURAN_BAWAAN.detikGiliran` dan `DETIK_GILIRAN_KOMPETISI_BAWAAN` tetap 60. Validasi pesan meja sudah menerima 0–600 detik, jadi server dan meja tidak berubah; sisa waktu minimal sambung ulang (20 detik) dan toleransi 2,5 detik (#57) tetap.
+
+**Test:** `packages/meja/test/kompetisi.test.ts`, `apps/client/test/kompetisi.test.ts`, `apps/client/test/lobi45.test.ts`.
 
 ---
 

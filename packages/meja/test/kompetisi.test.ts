@@ -421,7 +421,7 @@ describe('pengaturan dan pesan kompetisi', () => {
     expect(BATAS_PUTARAN_KOMPETISI_BAWAAN).toBe(5);
     expect(DETIK_GILIRAN_KOMPETISI_BAWAAN).toBe(60);
     expect([...PILIHAN_BATAS_PUTARAN_KOMPETISI]).toEqual([3, 5, 10, 15, 20]);
-    expect([...PILIHAN_DETIK_GILIRAN_KOMPETISI]).toEqual([30, 60, 90, 120]);
+    expect([...PILIHAN_DETIK_GILIRAN_KOMPETISI]).toEqual([30, 45, 60, 90, 120]);
   });
 
   it('pengaturan dari data tak dipercaya: kunci rusak jatuh ke bawaan, kunci lain dibuang', () => {
@@ -450,7 +450,7 @@ describe('pengaturan dan pesan kompetisi', () => {
     // Isian pengajuan (API publik): selain pilihan formulir jatuh ke bawaan, termasuk "tanpa batas"
     // yang disamarkan sebagai angka besar dan waktu 0 (tanpa batas waktu).
     for (const n of [1, 2, 4, 21, 100000, -5, 3.5]) expect(rapikanPengaturanKompetisi({ batasPutaran: n })).toMatchObject({ batasPutaran: 5 });
-    for (const d of [0, 1, 45, 600, -30]) expect(rapikanPengaturanKompetisi({ detikGiliran: d })).toMatchObject({ detikGiliran: 60 });
+    for (const d of [0, 1, 50, 600, -30]) expect(rapikanPengaturanKompetisi({ detikGiliran: d })).toMatchObject({ detikGiliran: 60 });
     for (const d of PILIHAN_DETIK_GILIRAN_KOMPETISI) expect(rapikanPengaturanKompetisi({ detikGiliran: d })).toMatchObject({ detikGiliran: d });
     // Yang tersimpan di database (termasuk data uji yang ditulis langsung): 1–20 putaran, 1–600 detik.
     expect(rapikanPengaturanKompetisi({ batasPutaran: 2, detikGiliran: 45 }, 'tersimpan')).toMatchObject({ batasPutaran: 2, detikGiliran: 45 });

@@ -65,7 +65,7 @@ export const BATAS_PUTARAN_KOMPETISI_BAWAAN = 5;
  * yang tersambung bisa menahan giliran, pengumuman joker, atau susun akhir selamanya, dan juara
  * kompetisinya ikut tertahan karena menunggu meja terakhir selesai (tafsiran pengembang).
  */
-export const PILIHAN_DETIK_GILIRAN_KOMPETISI = [30, 60, 90, 120] as const;
+export const PILIHAN_DETIK_GILIRAN_KOMPETISI = [30, 45, 60, 90, 120] as const;
 export const DETIK_GILIRAN_KOMPETISI_BAWAAN = 60;
 
 /**

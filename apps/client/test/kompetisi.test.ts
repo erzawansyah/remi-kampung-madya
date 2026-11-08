@@ -522,7 +522,7 @@ describe('layar Kompetisi: ajukan', () => {
     expect(q('#k-putaran').textContent).not.toContain('Tanpa batas');
   });
 
-  it('waktu per giliran wajib ada: 30/60/90/120 detik (bawaan 60), tanpa "Tanpa batas", dengan keterangannya', async () => {
+  it('waktu per giliran wajib ada: 30/45/60/90/120 detik (bawaan 60), tanpa "Tanpa batas", dengan keterangannya', async () => {
     await bukaFormulir();
     expect([...q<HTMLSelectElement>('#k-detik').options].map((o) => Number(o.value))).toEqual([...PILIHAN_DETIK_GILIRAN_KOMPETISI]);
     expect(q<HTMLSelectElement>('#k-detik').value).toBe('60');

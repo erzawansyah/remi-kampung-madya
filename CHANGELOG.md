@@ -16,6 +16,7 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
   - Penonton cuma bisa melihat kartu satu pemain sekaligus. Warga kedai dan pemain yang sedang terputus tidak bisa dimintai.
   - Tombol 👀 di meja menunjukkan jumlah penonton dan siapa yang sedang melihat kartumu; tekan **Hentikan** kalau sudah cukup (dihitung seperti ditolak). Izin juga berakhir kalau kamu keluar meja atau permainan kembali ke lobi.
 - Host bisa menutup mejanya dari penonton lewat **Boleh ditonton** di lobi (bawaannya boleh). Permainan yang kamu tonton tidak masuk Riwayat di HP-mu.
+- **Waktu per giliran 45 detik** (keputusan pemilik #61, dari usulan pemain): pilihan baru di lobi dan di pengajuan kompetisi, di antara 30 dan 60 detik. Bawaannya tetap 60 detik.
 
 ### Teknis
 

@@ -220,7 +220,7 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
       <label class="baris">Batas putaran ${pilihanBatas('putaran', p.batasPutaran, [3, 5, 10, 15, 20, 0], (n) => (n ? String(n) : 'Tanpa batas'))}</label>
       ${htmlKaldu}
       ${kaldu ? '' : htmlIsianBatas({ id: 'skor', nilai: p, bisaUbah: ubahAturan })}
-      <label class="baris">Waktu per giliran ${pilihanBatas('detik', p.detikGiliran, [30, 60, 90, 120, 0], (n) => (n ? `${n} detik` : 'Tanpa batas'))}</label>
+      <label class="baris">Waktu per giliran ${pilihanBatas('detik', p.detikGiliran, [30, 45, 60, 90, 120, 0], (n) => (n ? `${n} detik` : 'Tanpa batas'))}</label>
       <label class="baris">Tempo warga kedai
         <select id="tempo" ${dis}>${(['santai', 'normal', 'cepat'] as const)
           .map((t) => `<option value="${t}" ${t === (p.tempoBot ?? 'santai') ? 'selected' : ''}>${t[0]!.toUpperCase() + t.slice(1)}</option>`)
