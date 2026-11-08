@@ -30,7 +30,7 @@ import {
   type PenyimpanKompetisi,
 } from './kompetisi.js';
 import { buatPenyimpanUsulan, SKEMA_USULAN, type PenyimpanUsulan } from './usulan.js';
-import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, type PenyimpanMejaAktif } from './mejaAktif.js';
+import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, SKEMA_MEJA_AKTIF_TONTON, type PenyimpanMejaAktif } from './mejaAktif.js';
 
 export interface PermainanTersimpan {
   id: number;
@@ -176,6 +176,8 @@ export const MIGRASI: readonly string[] = [
   // permainan meja kompetisi yang ditinggal. Tabel sendiri: permainan/klasemen, Riwayat, dan
   // leaderboard umum tidak berubah.
   SKEMA_HASIL_DITINGGAL,
+  // v6 (Nov 2026, nonton #60): kode tonton meja di meja_aktif, supaya tontonan selamat dari restart.
+  SKEMA_MEJA_AKTIF_TONTON,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */

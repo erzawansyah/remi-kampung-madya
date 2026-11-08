@@ -100,6 +100,59 @@ html[data-efek='hemat'] .bar-atas button {
   background: var(--panel);
 }
 
+/* ---------- Nonton (#60) ----------
+   Tombol jumlah penonton di bar atas (pemain), kotak permintaan lihat kartu di bawah bar atas, dan
+   mode penonton: tombol aksi pemain di bar atas dan di jendela hasil/klasemen disembunyikan. */
+.bar-atas .tombol-penonton {
+  flex: none;
+  padding: 0 var(--ruang-2);
+  font-variant-numeric: tabular-nums;
+}
+.bar-atas .tombol-penonton.dilihat {
+  border-color: var(--emas);
+  color: var(--teks-emas);
+}
+/* #lapisan-minta: anak <body>, di luar #ui/#modal yang dibuat inert selama ada jendela, supaya permintaan
+   tetap bisa dijawab selagi hasil putaran, popup joker, atau panel mentung terbuka. */
+#lapisan-minta {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-minta);
+  pointer-events: none;
+}
+.permintaan-lihat {
+  position: absolute;
+  top: calc(var(--tinggi-bar-atas-ukur, 56px) + var(--ruang-1));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 2 * var(--ruang-3)));
+  padding: var(--ruang-2) var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  background: var(--panel);
+  border: 1px solid var(--emas);
+  box-shadow: var(--bayangan-2, var(--bayangan-1));
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.permintaan-lihat p {
+  margin: 0 0 var(--ruang-2);
+  font-size: var(--teks-sm);
+}
+.permintaan-lihat .deret {
+  justify-content: flex-end;
+}
+html[data-penonton] .bar-atas [data-a='emote'],
+html[data-penonton] #modal .wadah-ledek,
+html[data-penonton] #modal [data-lanjut-wadah],
+html[data-penonton] #modal [data-akhiri],
+html[data-penonton] #modal [data-kaldu],
+html[data-penonton] #modal .info-kaldu {
+  display: none;
+}
+.langkah-penonton {
+  font-weight: 600;
+}
+
 /* Lencana status koneksi (online): .menyambung | .terputus | .gagal; tersembunyi saat tersambung. */
 .status-koneksi {
   flex: none;

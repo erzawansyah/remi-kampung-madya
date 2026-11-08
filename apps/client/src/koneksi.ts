@@ -96,6 +96,8 @@ export interface Koneksi {
   sesiAktif(): SesiOnline | null;
   /** Lupakan sesi meja (meja sudah bubar): sambung ulang berikutnya tidak meminta kursi itu lagi. */
   lupakanSesi(): void;
+  /** Nonton (#60): lupakan tontonan (berhenti, ditolak, atau mejanya hilang); sambung ulang tidak menonton lagi. */
+  lupakanTontonan(): void;
   /** Nyalakan/matikan mode lanjut sesi (lihat OpsiKoneksiOnline.lanjutSesi). */
   aturLanjutSesi(aktif: boolean): void;
   /** Mode lanjut sesi sedang aktif. */
@@ -143,9 +145,9 @@ const PING_DIINGAT_MAKS = 32;
  * 'keluar' sengaja tidak diantrikan: pemanggilnya langsung menutup koneksi (antrian ikut
  * dibuang), jadi aplikasi mengecek siapKirim() dulu dan memberi tahu pemain kalau tidak sampai.
  */
-const BOLEH_ANTRI = new Set<PesanKeMeja['t']>(['buat', 'gabung', 'daftar']);
-/** Jenis yang cukup diwakili satu pesan terbaru di antrian. Buat dan gabung sama-sama "masuk meja". */
-const kelompokAntri = (t: PesanKeMeja['t']) => (t === 'buat' || t === 'gabung' ? 'masuk' : t);
+const BOLEH_ANTRI = new Set<PesanKeMeja['t']>(['buat', 'gabung', 'daftar', 'tonton']);
+/** Jenis yang cukup diwakili satu pesan terbaru di antrian. Buat, gabung, dan tonton sama-sama "masuk meja". */
+const kelompokAntri = (t: PesanKeMeja['t']) => (t === 'buat' || t === 'gabung' || t === 'tonton' ? 'masuk' : t);
 
 /** Pesan 'error' buatan koneksi sendiri: pesan yang dikirim saat putus tidak berangkat. */
 export const PESAN_TERTAHAN = 'Sinyalnya lagi putus, Bos. Tunggu nyambung dulu, baru coba lagi.';
@@ -230,6 +232,12 @@ export class KoneksiOnline implements Koneksi {
    * penyimpanan bisa gagal ditulis (mode privat, penuh) atau ditimpa tab lain yang masuk meja lain.
    */
   private sesiMemori: SesiOnline | null = null;
+  /**
+   * Nonton (#60): tontonan yang sedang berjalan di koneksi ini. Sesudah sambung ulang, pesan `tonton` yang
+   * sama dikirim lagi (didahulukan dari sesi kursi tersimpan). Dilupakan saat tontonan selesai, saat
+   * pemain buat/gabung meja, atau saat koneksi ditutup.
+   */
+  private tontonMemori: Extract<PesanKeMeja, { t: 'tonton' }> | null = null;
   /** Sudah memberi tahu pemain bahwa aksinya tertahan (sekali per putus). */
   private sudahDiberitahu = false;
   private timerPing: ReturnType<typeof setInterval> | null = null;
@@ -342,8 +350,9 @@ export class KoneksiOnline implements Koneksi {
       // barusan minta masuk meja lain: niat terbarunya yang menang. Sesi dari 'masuk' di koneksi ini
       // dipakai lebih dulu daripada localStorage (bisa gagal ditulis atau ditimpa tab lain).
       const sesi = this.sesiMemori ?? (this.pakaiSesiTersimpan ? simpan.sesi() : null);
-      const mauMasuk = antri.some((p) => p.t === 'buat' || p.t === 'gabung');
-      if (sesi && !mauMasuk) {
+      const mauMasuk = antri.some((p) => p.t === 'buat' || p.t === 'gabung' || p.t === 'tonton');
+      if (this.tontonMemori && !mauMasuk) ws.send(JSON.stringify(this.tontonMemori));
+      else if (sesi && !mauMasuk) {
         // Tiket kompetisi (#51 versi 2) ikut dikirim: kalau kursi lobi kompetisinya sudah dilepas karena
         // terlalu lama terputus, server mendudukkannya lagi lewat tiket selama masih ada kursi kosong.
         const tiket = simpan.tiketKompetisi().map(({ kode, token }) => ({ kode, token }));
@@ -374,6 +383,7 @@ export class KoneksiOnline implements Koneksi {
         this.sesiMemori = null;
         simpan.setSesi(null);
       }
+      if (p.t === 'tontonSelesai') this.tontonMemori = null;
       this.teruskan(p);
     };
     ws.onclose = (e) => this.lepas(ws, e.code);
@@ -543,6 +553,8 @@ export class KoneksiOnline implements Koneksi {
 
   kirim(p: PesanKeMeja) {
     if (this.ditutup) return;
+    if (p.t === 'tonton') this.tontonMemori = p;
+    else if (p.t === 'buat' || p.t === 'gabung' || (p.t === 'keluar' && this.tontonMemori)) this.tontonMemori = null;
     const ws = this.ws;
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(p));
@@ -573,6 +585,11 @@ export class KoneksiOnline implements Koneksi {
 
   lupakanSesi() {
     this.sesiMemori = null;
+  }
+
+  lupakanTontonan() {
+    this.tontonMemori = null;
+    this.antrian = this.antrian.filter((a) => a.pesan.t !== 'tonton');
   }
 
   aturLanjutSesi(aktif: boolean) {
@@ -606,6 +623,7 @@ export class KoneksiOnline implements Koneksi {
     this.tutupPensiun();
     this.antrian = [];
     this.sesiMemori = null;
+    this.tontonMemori = null;
     const ws = this.ws;
     this.ws = null;
     if (ws) {
@@ -768,6 +786,10 @@ export class KoneksiOffline implements Koneksi {
 
   lupakanSesi() {
     // Tidak ada sesi online.
+  }
+
+  lupakanTontonan() {
+    // Tidak ada tontonan offline.
   }
 
   aturLanjutSesi() {

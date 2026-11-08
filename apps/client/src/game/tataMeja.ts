@@ -44,6 +44,8 @@ export interface ModelTata {
   aksiTerakhir: Record<number, string>;
   disembunyikan: ReadonlySet<string>;
   bisaPungut: boolean;
+  /** Nonton (#60): meja ini dilihat penonton; deck tidak ditawarkan untuk diketuk. */
+  penonton?: boolean;
   kartukuDiAtas: boolean;
   berikutnya: string | null;
   fokus?: string | null;
@@ -1272,7 +1274,7 @@ function gambarTengah(
   const dx = x0 + kolomDeck / 2;
   const xDeck = dx - cwT / 2;
   const dy = y + chT / 2;
-  const bisaAmbil = v.status === 'putaranBerjalan' && p.giliran === v.saya && p.tahap === 'ambil' && !m.mulung;
+  const bisaAmbil = !m.penonton && v.status === 'putaranBerjalan' && p.giliran === v.saya && p.tahap === 'ambil' && !m.mulung;
   t.titik.deck = { x: dx, y: dy, w: cwT };
   t.area.deck = { x: xDeck, y, w: cwT, h: chT };
   if (p.jumlahDeck > 0) {

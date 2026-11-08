@@ -197,6 +197,8 @@ interface Sambungan {
    * jawabannya lewat sambungan baru.
    */
   digantikan?: { pemainId: string; kode: string };
+  /** Nonton (#60): sambungan ini sedang menonton meja `kode` dengan alamat kirim `alamat`. */
+  penonton?: { alamat: string; kode: string };
 }
 
 export { alamatKlien, alamatLokal, kunciIp, originDiizinkan } from './keamanan.js';
@@ -286,6 +288,8 @@ export interface ServerRemi {
   jumlahGalatMeja(): number;
   /** Jumlah sambungan WebSocket aktif. */
   jumlahSambungan(): number;
+  /** Nonton (#60): jumlah kode tonton yang masih tercatat (dibuang bersama mejanya). */
+  jumlahKodeTonton(): number;
   /** Tutup server: semua sambungan diputus (kode 1001), timer meja dihentikan. Aman dipanggil berulang. */
   tutup(): Promise<void>;
 }
@@ -302,6 +306,17 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
    */
   const ditinggalTertunda = new Map<string, { kompetisi: string; data: DataMeja; waktu: number }>();
   const sambunganPemain = new Map<string, Sambungan>();
+  /** Nonton (#60): alamat kirim penonton → sambungannya. Terpisah dari pemain (penonton tidak punya kursi). */
+  const sambunganPenonton = new Map<string, Sambungan>();
+  /**
+   * Nonton (#60): kode tonton per meja (kode meja → kode tonton) dan kebalikannya. Daftar "Lagi main" dan
+   * semua pesan ke penonton memakai kode tonton, jadi kode meja asli (dipakai gabung sesudah Main lagi,
+   * termasuk meja privat) tidak pernah bocor. Tetap selama meja hidup, dibuang di hapusMeja, dan ikut
+   * simpanan meja (kolom `kode_tonton`, MIGRASI v6), jadi meja yang dipulihkan sesudah restart memakai
+   * kode tonton yang sama dan penontonnya bisa menyambung ulang.
+   */
+  const kodeTontonMeja = new Map<string, string>();
+  const mejaDariKodeTonton = new Map<string, string>();
   const semuaSambungan = new Set<Sambungan>();
   /** Pemain yang sambungannya tertutup tapi belum dikabarkan terputus ke meja (jeda JEDA_PUTUS_MS). */
   const putusTertunda = new Map<string, { kode: string; timer: unknown; sejak: number }>();
@@ -404,7 +419,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     try {
       if (data.game?.status === 'selesai' || (!data.kursi.some((k) => k.jenis === 'manusia') && !ringkasanDitinggal(data, 0)))
         simpananMeja.hapus(kode);
-      else simpananMeja.simpan(kode, JSON.stringify(data), pembuatMeja.get(kode) ?? null, penjadwalDasar.sekarang());
+      else
+        simpananMeja.simpan(kode, JSON.stringify(data), pembuatMeja.get(kode) ?? null, penjadwalDasar.sekarang(), kodeTontonMeja.get(kode) ?? null);
     } catch (e) {
       log(`galat menyimpan meja ${kode}`, e);
     }
@@ -468,6 +484,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
    */
   const hapusMeja = (kode: string, buangSimpanan = true) => {
     try {
+      // Penonton diberi tahu, kecuali server sedang dimatikan: mereka menyambung ulang ke meja yang dipulihkan
+      // dengan kode tonton yang sama (ikut simpanan meja).
+      if (!menutup) daftarMeja.get(kode)?.bubarkanPenonton('Mejanya sudah bubar.');
       daftarMeja.get(kode)?.hentikan();
     } catch (e) {
       log(`galat menghentikan meja ${kode}`, e);
@@ -482,6 +501,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     }
     daftarMeja.delete(kode);
     kosongSejak.delete(kode);
+    const kodeTonton = kodeTontonMeja.get(kode);
+    if (kodeTonton !== undefined) mejaDariKodeTonton.delete(kodeTonton);
+    kodeTontonMeja.delete(kode);
     pembuatMeja.delete(kode);
     hasilKompetisiTerakhir.delete(kode);
     for (const [pemainId, c] of idAksi) if (c.kode === kode) idAksi.delete(pemainId);
@@ -891,6 +913,16 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   });
 
   const kirim = (pemainId: string, pesan: PesanServer) => {
+    const penonton = sambunganPenonton.get(pemainId);
+    if (penonton) {
+      if (penonton.ws.readyState === penonton.ws.OPEN) penonton.ws.send(JSON.stringify(pesan));
+      // Tontonan berakhir (meja kembali ke lobi, bubar, atau penontonnya keluar): lepas tautannya.
+      if (pesan.t === 'tontonSelesai') {
+        sambunganPenonton.delete(pemainId);
+        if (penonton.penonton?.alamat === pemainId) delete penonton.penonton;
+      }
+      return;
+    }
     const s = sambunganPemain.get(pemainId);
     if (!s) return;
     if (s.ws.readyState === s.ws.OPEN) s.ws.send(JSON.stringify(pesan));
@@ -905,12 +937,33 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     if (s.ws.readyState === s.ws.OPEN) s.ws.send(JSON.stringify(pesan));
   };
 
+  /** Kode acak yang belum dipakai meja, simpanan tertunda, maupun kode tonton mana pun. */
   const buatKode = () => {
     for (;;) {
       const b = randomBytes(5);
       const kode = [...b].map((x) => HURUF_KODE[x % HURUF_KODE.length]).join('');
-      if (!daftarMeja.has(kode) && !ditinggalTertunda.has(kode)) return kode;
+      if (!daftarMeja.has(kode) && !ditinggalTertunda.has(kode) && !mejaDariKodeTonton.has(kode)) return kode;
     }
+  };
+
+  /** Nonton (#60): kode tonton meja `kode`, dibuat sekali selama meja hidup. */
+  const kodeTontonUntuk = (kode: string) => {
+    let k = kodeTontonMeja.get(kode);
+    if (k === undefined) {
+      k = buatKode();
+      kodeTontonMeja.set(kode, k);
+      mejaDariKodeTonton.set(k, kode);
+      // Langsung dicatat di simpanan meja: meja yang tidak berubah lagi sebelum restart tetap membawanya.
+      // Meja yang barisnya belum ada (tulisan pertama masih tertunda) membawanya lewat tulisMeja.
+      if (simpananMeja && !menutup && daftarMeja.has(kode)) {
+        try {
+          simpananMeja.aturKodeTonton(kode, k);
+        } catch (e) {
+          log(`galat menyimpan kode tonton meja ${kode}`, e);
+        }
+      }
+    }
+    return k;
   };
 
   const opsiMeja = (kode: string) => ({
@@ -982,6 +1035,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       lama.kode = null;
       lama.ws.close(4000, 'Dibuka di tempat lain');
     }
+    // Duduk di meja (buat/gabung) mengakhiri tontonan sambungan ini (#60).
+    lepasPenonton(s);
     const idLama = s.pemainId;
     const kodeLama = s.kode;
     s.pemainId = pemainId;
@@ -994,6 +1049,19 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       } catch (e) {
         log(`galat saat pemain pindah dari meja ${kodeLama}`, e);
       }
+    }
+  };
+
+  /** Nonton (#60): sambungan ini berhenti menonton (keluar, ganti meja, atau tertutup). */
+  const lepasPenonton = (s: Sambungan) => {
+    const p = s.penonton;
+    if (!p) return;
+    delete s.penonton;
+    if (sambunganPenonton.get(p.alamat) === s) sambunganPenonton.delete(p.alamat);
+    try {
+      daftarMeja.get(p.kode)?.lepasPenonton(p.alamat);
+    } catch (e) {
+      log(`galat saat penonton meja ${p.kode} pergi`, e);
     }
   };
 
@@ -1011,15 +1079,59 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       case 'ping':
         // `w` = jam server, supaya client bisa mengoreksi jam HP yang meleset untuk bar waktu giliran.
         return kirimKe(s, { t: 'pong', w: penjadwalDasar.sekarang() });
-      case 'daftar':
-        return kirimKe(s, {
-          t: 'daftar',
-          meja: [...daftarMeja.values()]
-            // Meja kompetisi tidak pernah masuk daftar publik: duduknya lewat daftar meja di kompetisinya.
-            .filter((m) => m.publik && !m.kompetisi && m.status === 'lobi')
-            .map((m) => m.ringkasan())
-            .filter((r) => r.terisi < r.jumlahPemain),
-        });
+      case 'daftar': {
+        const lobi = [...daftarMeja.values()]
+          // Meja kompetisi tidak pernah masuk daftar publik: duduknya lewat daftar meja di kompetisinya.
+          .filter((m) => m.publik && !m.kompetisi && m.status === 'lobi')
+          .map((m) => m.ringkasan())
+          .filter((r) => r.terisi < r.jumlahPemain);
+        // Nonton (#60): meja yang sedang main ikut, hanya untuk aplikasi yang memintanya.
+        const tonton = pesan.tonton
+          ? [...daftarMeja.entries()]
+              .filter(([, m]) => m.bisaDitonton)
+              // Kode tonton, bukan kode meja asli.
+              .map(([k, m]) => ({ ...m.ringkasan(), kode: kodeTontonUntuk(k), tonton: true as const }))
+          : [];
+        return kirimKe(s, { t: 'daftar', meja: [...lobi, ...tonton] });
+      }
+      case 'tonton': {
+        const kodeMinta = pesan.kode.trim().toUpperCase();
+        // Kode tonton dari daftar "Lagi main"; kode meja asli tetap diterima (yang sudah tahu kodenya).
+        const kode = mejaDariKodeTonton.get(kodeMinta) ?? kodeMinta;
+        const meja = daftarMeja.get(kode);
+        // Pesan galat hanya menyebut kode yang dikirim penonton sendiri.
+        if (!meja) return kirimKe(s, { t: 'error', pesan: `Meja ${kodeMinta} nggak ketemu.` });
+        if (s.pemainId && s.kode === kode) return kirimKe(s, { t: 'error', pesan: 'Kamu duduk di meja ini, Bos. Nggak perlu nonton.' });
+        // Sambungan ini menonton meja yang sama lagi: tontonan lamanya dilepas dulu, supaya meja tidak
+        // menganggapnya HP yang sama dari sambungan lain (yang diambil alih dan diberi tontonSelesai).
+        if (s.penonton?.kode === kode) lepasPenonton(s);
+        const alamat = randomUUID();
+        sambunganPenonton.set(alamat, s);
+        try {
+          meja.tonton(alamat, pesan.nama, pesan.token, kodeTontonUntuk(kode));
+        } catch (e) {
+          sambunganPenonton.delete(alamat);
+          if (e instanceof GalatMeja) return kirimKe(s, { t: 'error', pesan: e.message });
+          throw e;
+        }
+        // Berhasil: tontonan lama sambungan ini dilepas, dan kursi yang dipegangnya dianggap terputus
+        // (sama seperti pindah ke meja lain lewat gabung).
+        lepasPenonton(s);
+        s.penonton = { alamat, kode };
+        if (s.pemainId) {
+          const idLama = s.pemainId;
+          const kodeLama = s.kode;
+          if (sambunganPemain.get(idLama) === s) sambunganPemain.delete(idLama);
+          s.pemainId = null;
+          s.kode = null;
+          try {
+            if (kodeLama) daftarMeja.get(kodeLama)?.terputus(idLama);
+          } catch (e) {
+            log(`galat saat pemain pindah dari meja ${kodeLama} untuk nonton`, e);
+          }
+        }
+        return;
+      }
       case 'buat': {
         if (daftarMeja.size >= (opsi.maksMeja ?? 500)) {
           return kirimKe(s, { t: 'error', pesan: 'Server lagi penuh, coba lagi nanti.' });
@@ -1104,6 +1216,19 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         return;
       }
       default: {
+        // Nonton (#60): pesan dari sambungan penonton ke mejanya (meja menolak yang bukan untuk penonton).
+        if (s.penonton && !s.pemainId) {
+          const { alamat, kode: kodeTonton } = s.penonton;
+          const mejaTonton = daftarMeja.get(kodeTonton);
+          if (!mejaTonton) {
+            lepasPenonton(s);
+            return kirimKe(s, { t: 'tontonSelesai', alasan: 'Mejanya sudah bubar.' });
+          }
+          if (pesan.t === 'aksi' && pesan.id !== undefined) kirimKe(s, { t: 'aksiDiterima', id: pesan.id });
+          mejaTonton.terimaPenonton(alamat, pesan);
+          if (pesan.t === 'keluar') lepasPenonton(s);
+          return;
+        }
         let pemainId = s.pemainId;
         let kode = s.kode;
         // Aksi yang terkirim lewat sambungan lama sebelum client pindah ke sambungan baru: tetap
@@ -1185,6 +1310,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       }
     });
     ws.on('close', () => {
+      lepasPenonton(s);
       if (semuaSambungan.delete(s)) {
         const sisa = (sambunganPerJaringan.get(s.jaringan) ?? 1) - 1;
         if (sisa > 0) sambunganPerJaringan.set(s.jaringan, sisa);
@@ -1311,6 +1437,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
    * simpanannya dibuang. Semua kursi manusia dianggap terputus (dataMejaDipulihkan), jadi meja dijeda
    * sampai ada yang kembali lewat `gabung` dengan tokennya; timer meja disusun ulang saat itu.
    */
+  /** Nonton (#60): kode tonton meja yang dipulihkan, dipasang sesudah semua meja dipulihkan. */
+  const kodeTontonPulih: [kode: string, kodeTonton: string][] = [];
+
   const pulihkanSatu = (b: BarisMejaAktif): string | null => {
     const kode = b.kode;
     if (!/^[A-Z0-9]{5}$/.test(kode)) return 'kode tidak sah';
@@ -1347,6 +1476,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     }
     daftarMeja.set(kode, meja);
     if (b.pembuatJaringan) pembuatMeja.set(kode, b.pembuatJaringan);
+    if (b.kodeTonton) kodeTontonPulih.push([kode, b.kodeTonton]);
     // Batas hapus meja kosong dihitung sejak server jalan lagi.
     kosongSejak.set(kode, penjadwalDasar.sekarang());
     const manusia = terbaca.kursi.filter((k) => k.jenis === 'manusia').length;
@@ -1394,6 +1524,17 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       }
     }
     if (baris.length) log(`${pulih} dari ${baris.length} meja tersimpan dipulihkan`);
+    // Kode tonton dipasang sesudah semua kode meja dikenal: kode yang tidak sah, atau bentrok dengan kode
+    // meja atau kode tonton lain, dibuang (meja itu dibuatkan kode tonton baru saat tampil di daftar).
+    for (const [kode, kt] of kodeTontonPulih) {
+      if (!/^[A-Z0-9]{5}$/.test(kt) || daftarMeja.has(kt) || ditinggalTertunda.has(kt) || mejaDariKodeTonton.has(kt)) {
+        log(`kode tonton meja ${kode} dibuang`);
+        continue;
+      }
+      kodeTontonMeja.set(kode, kt);
+      mejaDariKodeTonton.set(kt, kode);
+    }
+    kodeTontonPulih.length = 0;
   }
 
   await new Promise<void>((ok, gagal) => {
@@ -1425,6 +1566,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     jumlahMeja: () => daftarMeja.size,
     jumlahGalatMeja: () => galatMeja,
     jumlahSambungan: () => semuaSambungan.size,
+    jumlahKodeTonton: () => kodeTontonMeja.size,
     tutup: () =>
       (penutupan ??= (async () => {
         menutup = true;

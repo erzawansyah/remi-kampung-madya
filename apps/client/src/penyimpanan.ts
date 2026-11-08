@@ -26,6 +26,8 @@ const KUNCI = {
   tawaranPasang: 'remi.tawaranPasang',
   /** Tiket peserta kompetisi (keputusan #51), terbaru di depan. */
   tiketKompetisi: 'remi.tiketKompetisi',
+  /** Nonton (#60): penanda tetap penonton di HP ini (jeda sesudah ditolak tetap berlaku saat menyambung ulang). */
+  tokenPenonton: 'remi.tokenPenonton',
 } as const;
 
 /** Riwayat lokal yang disimpan (permainan terbaru di depan). */
@@ -251,6 +253,14 @@ export const simpan = {
   tambahTiketKompetisi: (t: TiketTersimpan) =>
     tulis(KUNCI.tiketKompetisi, [t, ...baca<TiketTersimpan[]>(KUNCI.tiketKompetisi, [], rapikanTiket).filter((x) => x.kode !== t.kode)].slice(0, MAKS_TIKET)),
 
+  /** Token penonton (#60); dibuat sekali lalu disimpan. Kalau tidak bisa disimpan, tetap dipakai selama halaman hidup. */
+  tokenPenonton: (buat: () => string): string => {
+    const ada = baca<string>(KUNCI.tokenPenonton, '', (x) => (typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x) ? x : undefined));
+    if (ada) return ada;
+    const baru = buat();
+    tulis(KUNCI.tokenPenonton, baru);
+    return baru;
+  },
   sesi: () => baca<SesiOnline | null>(KUNCI.sesi, null, rapikanSesi),
   setSesi: (s: SesiOnline | null) => tulis(KUNCI.sesi, s),
 

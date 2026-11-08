@@ -1,6 +1,6 @@
 // Pesan antara client dan meja (dipakai server online maupun meja lokal offline).
 
-import type { Aksi, LevelBot, ViewPemain } from '@remi/engine';
+import type { Aksi, Kartu, LevelBot, ViewPemain } from '@remi/engine';
 
 export interface PengaturanMeja {
   /** 2 s/d 6. */
@@ -26,6 +26,12 @@ export interface PengaturanMeja {
    * Sengaja tidak ada di PENGATURAN_BAWAAN: tidak ada = mati (simpanan lama dan golden tidak berubah).
    */
   modeKaldu?: boolean;
+  /**
+   * Nonton (#60): true = meja online ini tidak bisa ditonton. Bawaan (tidak ada) = bisa ditonton,
+   * seperti modeKaldu sengaja tidak ada di PENGATURAN_BAWAAN supaya simpanan lama dan golden tetap.
+   * Hanya bisa diubah di lobi. Meja kompetisi tidak pernah bisa ditonton, apa pun nilainya.
+   */
+  tanpaPenonton?: boolean;
 }
 
 export type TempoBot = 'santai' | 'normal' | 'cepat';
@@ -142,6 +148,52 @@ export type Ledekan = (typeof DAFTAR_LEDEKAN)[number];
 /** Ledekan paling banyak per kursi di satu hasil putaran (di luar batas 1,2 detik bersama emote). */
 export const MAKS_LEDEK_PER_PUTARAN = 12;
 
+// ---------------------------------------------------------------------------------------------
+// Nonton (keputusan pemilik #60, 7 Nov 2026): siapa saja boleh menonton meja online yang sedang
+// main dari daftar meja publik. Penonton hanya melihat nama pemain dan kartu buangan yang juga
+// terlihat pemain di meja. Penonton boleh minta lihat kartu ke satu pemain; pemain boleh menolak.
+
+/** Penonton paling banyak per meja. */
+export const MAKS_PENONTON = 30;
+/** Ditolak (atau dihentikan pemainnya): penonton baru boleh minta lagi ke pemain itu sesudah ini. */
+export const JEDA_TOLAK_LIHAT_MS = 3 * 60_000;
+/** Permintaan yang tidak dijawab selama ini dianggap ditolak (pemainnya mungkin sedang sibuk main). */
+export const BATAS_JAWAB_LIHAT_MS = 30_000;
+
+/**
+ * Keadaan tombol "minta lihat" satu kursi di layar penonton:
+ * - 'bisa': boleh minta sekarang,
+ * - 'menunggu': permintaan sudah terkirim, belum dijawab,
+ * - 'jeda': ditolak atau dihentikan, baru bisa minta lagi `jedaMs` lagi,
+ * - 'dilihat': penonton ini sedang melihat kartu kursi itu,
+ * - 'tidak': tidak bisa diminta (warga kedai, kursi kosong, pemain terputus, atau sedang melihat kursi lain).
+ */
+export type KeadaanMintaLihat = 'bisa' | 'menunggu' | 'jeda' | 'dilihat' | 'tidak';
+
+/** Yang dilihat penonton tanpa izin: nama pemain dan kartu buangan yang terlihat di meja. */
+export interface InfoTontonan {
+  /** Kode tonton meja ini (dari server), bukan kode meja asli; dipakai untuk menonton lagi. */
+  kode: string;
+  /** Nama host, untuk judul layar penonton. */
+  namaHost: string;
+  status: StatusMeja;
+  /** Satu per kursi, urut kursi. `jedaMs` hanya ada untuk 'jeda' (relatif terhadap saat dikirim). */
+  pemain: { nama: string; minta: KeadaanMintaLihat; jedaMs?: number }[];
+  /** Kartu buangan yang juga terlihat pemain di meja, paling atas di akhir. */
+  buangan: Kartu[];
+  /** Kursi yang kartunya sedang dilihat penonton ini; null = tidak ada. */
+  melihat: number | null;
+  /** Banyaknya penonton di meja ini, termasuk penerima. */
+  jumlahPenonton: number;
+}
+
+/** Penonton yang minta atau sedang melihat kartu seorang pemain (hanya di info milik pemain itu). */
+export interface PenontonKursi {
+  /** Nomor penonton di meja ini; dipakai untuk menjawab atau menghentikan. */
+  id: number;
+  nama: string;
+}
+
 export type JenisKursi = 'kosong' | 'manusia' | 'bot';
 
 export interface InfoKursi {
@@ -229,6 +281,12 @@ export interface InfoMeja {
    * mengabaikannya.
    */
   lanjutOtomatis?: { sisaMs: number };
+  /**
+   * Nonton (#60): hanya ada kalau ada penonton. `jumlah` terlihat semua pemain. `minta` dan `melihat`
+   * hanya ada di info milik pemain yang diminta/dilihat (penonton lain tidak tahu siapa melihat siapa).
+   * Aplikasi lama mengabaikannya.
+   */
+  penonton?: { jumlah: number; minta?: PenontonKursi[]; melihat?: PenontonKursi[] };
 }
 
 /** Klasemen akhir satu permainan (disimpan server ke database saat permainan selesai). */
@@ -294,6 +352,12 @@ export interface RingkasanMeja {
   jumlahPemain: number;
   terisi: number;
   status: StatusMeja;
+  /**
+   * Nonton (#60): meja yang sedang main dan boleh ditonton. Hanya ada di daftar untuk aplikasi yang
+   * memintanya (`daftar.tonton`), jadi aplikasi lama tidak pernah melihat meja yang sudah mulai.
+   * Entri tonton membawa kode tonton di `kode`, bukan kode meja asli (meja privat pun ikut daftar).
+   */
+  tonton?: true;
 }
 
 /** Aksi giliran dari client; indeks pemain diisi meja berdasarkan kursi pengirim. */
@@ -305,7 +369,21 @@ export type PesanKlien =
   | { t: 'buat'; nama: string; pengaturan?: Partial<PengaturanMeja>; kompetisi?: TiketKompetisi }
   /** `tiket`: semua tiket kompetisi di HP ini, untuk duduk di meja kompetisi (#51). */
   | { t: 'gabung'; kode: string; nama: string; token?: string; tiket?: TiketKompetisi[] }
-  | { t: 'daftar' }
+  /** `tonton`: sertakan meja yang sedang main dan boleh ditonton (#60). Aplikasi lama tidak mengirimnya. */
+  | { t: 'daftar'; tonton?: true }
+  /**
+   * Nonton meja `kode` (#60). `token`: penanda tetap penonton di HP ini (bukan kursi), supaya jeda
+   * sesudah ditolak tetap berlaku walau penontonnya menyambung ulang.
+   */
+  | { t: 'tonton'; kode: string; nama: string; token?: string }
+  /** Penonton minta lihat kartu kursi `kursi`. */
+  | { t: 'mintaLihat'; kursi: number }
+  /** Penonton berhenti melihat kartu (kembali ke tontonan buangan). */
+  | { t: 'berhentiLihat' }
+  /** Pemain menjawab permintaan penonton `penonton` (nomor dari InfoMeja.penonton). */
+  | { t: 'jawabLihat'; penonton: number; terima: boolean }
+  /** Pemain menghentikan penonton `penonton` melihat kartunya. */
+  | { t: 'hentikanLihat'; penonton: number }
   | { t: 'keluar' }
   | { t: 'aturKursi'; kursi: number; jenis: 'bot' | 'kosong'; level?: LevelBot }
   | { t: 'pengaturan'; pengaturan: Partial<PengaturanMeja> }
@@ -357,6 +435,16 @@ export type PesanServer =
    * tanpa diterapkan ulang.
    */
   | { t: 'aksiDiterima'; id: string }
+  /** Nonton (#60): keadaan tontonan untuk penonton (dikirim setiap meja atau permintaannya berubah). */
+  | { t: 'tontonan'; info: InfoTontonan }
+  /**
+   * Nonton (#60), hanya selama pemain kursi `info.kursiSaya` mengizinkan: persis info meja dan view
+   * yang dikirim ke pemain itu (tanpa daftar penonton lain).
+   */
+  | { t: 'tontonMeja'; info: InfoMeja }
+  | { t: 'tontonView'; view: ViewPemain }
+  /** Nonton (#60): tontonan berakhir (permainan selesai, meja bubar, atau meja ditutup untuk penonton). */
+  | { t: 'tontonSelesai'; alasan: string }
   /** `w` (opsional): jam server (ms epoch) saat menjawab; hanya dari server online, tidak dari meja offline. */
   | { t: 'pong'; w?: number }
   /**

@@ -66,6 +66,7 @@ import { TEKS_KOMPETISI, teksHasilKompetisi } from './konten/kompetisi';
 import { TEKS_LANJUT, TEKS_LEDEK } from './konten/ledek';
 import { apaEmoji, hapusLapisanLedek, htmlLedek, lapisanLedek, LedekBesar, sasaranLedekBawaan } from './ui/ledek';
 import { TEKS_KONEKSI, teksMentungTerlewat } from './konten/koneksi';
+import { TEKS_TONTONAN } from './konten/tontonan';
 import { simpan } from './penyimpanan';
 import { gerakDikurangi } from './preferensi';
 import { durasi } from './gerak';
@@ -93,6 +94,14 @@ export interface AppUntukMeja {
   selisihJam?(): number;
   /** Meja kompetisi (#51 versi 2): tinggalkan meja lalu buka detail kompetisi `kode`. */
   kembaliKeKompetisi?(kode: string): void;
+  /**
+   * Nonton (#60): meja ini ditampilkan untuk penonton yang diizinkan melihat kartu pemain
+   * `info.kursiSaya`. Semua aksi, emote, ledekan, voting, dan tombol host dimatikan; yang tampil sama
+   * dengan layar pemain itu.
+   */
+  readonly penonton?: boolean;
+  /** Penonton berhenti melihat kartu (kembali ke tontonan buangan). */
+  berhentiLihat?(): void;
 }
 
 /** Pesan server kompetisiHasil: nilai dan naik-turun peringkat kompetisi sesudah permainan selesai. */
@@ -523,6 +532,19 @@ export class KontrolMeja implements AksiAdegan {
   private readonly elLangkah: HTMLElement;
   private readonly elPetunjuk: HTMLElement;
   private readonly elTombol: HTMLElement;
+  /** Nonton (#60): tombol jumlah penonton di bar atas dan kotak permintaan lihat kartu. */
+  private readonly elPenonton: HTMLElement;
+  private readonly elMinta: HTMLElement;
+  /** Permintaan yang sudah kujawab (disembunyikan sebelum info baru dari server datang). */
+  private mintaDijawab = new Set<number>();
+  /**
+   * Nonton (#60): mode meja ini, ditetapkan saat dibuat. Tidak dibaca ulang dari aplikasi, karena tontonan
+   * bisa sudah berakhir (app.penonton false) saat meja ini dihancurkan.
+   */
+  private readonly modePenonton: boolean;
+  /** Lapisan kotak permintaan lihat kartu: anak <body>, di atas modal (lihat --z-minta). */
+  private readonly elLapisanMinta: HTMLElement;
+  private htmlMinta = '';
   private htmlLangkah = '';
   private htmlTombol = '';
   /**
@@ -621,6 +643,9 @@ export class KontrolMeja implements AksiAdegan {
     private readonly scene: MejaScene,
     private readonly akar: HTMLElement,
   ) {
+    this.modePenonton = app.penonton === true;
+    // Penonton melihat tangan orang lain: urutan tersimpan di HP ini (milik tangannya sendiri) tidak dipakai.
+    if (this.modePenonton) this.urutanManual = [];
     akar.innerHTML = `
       <div class="bar-atas">
         <button type="button" class="tombol-ikon" data-a="menu" aria-label="Menu" aria-haspopup="dialog"><span aria-hidden="true">☰</span></button>
@@ -628,6 +653,7 @@ export class KontrolMeja implements AksiAdegan {
         <span class="status-koneksi tersembunyi" role="img"></span>
         <button type="button" data-a="skor" aria-haspopup="dialog">Skor</button>
         <button type="button" data-a="log" aria-haspopup="dialog">Log</button>
+        <button type="button" class="tombol-penonton tersembunyi" data-a="penonton" aria-haspopup="dialog"></button>
         <button type="button" class="tombol-ikon" data-a="emote" aria-label="Kirim emote" aria-expanded="false"><span aria-hidden="true">😀</span></button>
         <div class="waktu tersembunyi" aria-hidden="true"><div></div></div>
       </div>
@@ -644,6 +670,23 @@ export class KontrolMeja implements AksiAdegan {
     this.elLangkah = this.elAksi.querySelector('.langkah')!;
     this.elPetunjuk = this.elAksi.querySelector('.petunjuk')!;
     this.elTombol = this.elAksi.querySelector('.tombol-aksi')!;
+    this.elPenonton = this.elAtas.querySelector('.tombol-penonton')!;
+    // Kotak permintaan di luar #ui: #ui dibuat inert selama ada modal (hasil putaran, popup joker, panel
+    // mentung, klasemen), padahal permintaan bisa datang kapan saja dan hangus 30 detik kemudian.
+    document.getElementById('lapisan-minta')?.remove();
+    this.elLapisanMinta = document.createElement('div');
+    this.elLapisanMinta.id = 'lapisan-minta';
+    this.elLapisanMinta.innerHTML = '<div class="permintaan-lihat tersembunyi" role="alertdialog" aria-live="assertive"></div>';
+    document.body.appendChild(this.elLapisanMinta);
+    this.elMinta = this.elLapisanMinta.querySelector('.permintaan-lihat')!;
+    // Nonton (#60): penanda di <html> supaya tombol di jendela (modal hasil, klasemen) ikut tersembunyi.
+    if (this.penonton) document.documentElement.dataset.penonton = '1';
+    this.elMinta.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-lihat]');
+      if (!b) return;
+      bunyi('klik');
+      this.jawabLihat(Number(b.dataset.id), b.dataset.lihat === 'izinkan');
+    });
 
     this.elAtas.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-a]');
@@ -653,6 +696,7 @@ export class KontrolMeja implements AksiAdegan {
       else if (b.dataset.a === 'skor') this.bukaSkor();
       else if (b.dataset.a === 'log') this.bukaLog();
       else if (b.dataset.a === 'emote') this.bukaPaletEmote(e.detail === 0);
+      else if (b.dataset.a === 'penonton') this.bukaPenonton();
     });
     this.elTombol.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-a]');
@@ -700,6 +744,8 @@ export class KontrolMeja implements AksiAdegan {
 
   hancurkan() {
     this.hancur = true;
+    if (this.modePenonton) delete document.documentElement.dataset.penonton;
+    this.elLapisanMinta.remove();
     this.antrian = [];
     // Timer pemutar (mis. pelepas goyang layar sesudah mentung) dibatalkan, dan peristiwa yang sedang
     // diputar tidak lagi menyentuh scene/DOM.
@@ -771,6 +817,11 @@ export class KontrolMeja implements AksiAdegan {
   saatError(dariServer = true) {
     if (this.hancur) return;
     if (dariServer) this.aksiTertunda = null;
+    // Jawaban minta lihat yang tidak berangkat (sinyal putus): kotaknya tampil lagi supaya bisa dijawab ulang.
+    if (!dariServer && this.mintaDijawab.size) {
+      this.mintaDijawab.clear();
+      this.renderPenonton();
+    }
     if (this.kunciKirim) this.lepasKunciTanpaJawaban();
     if (this.tertunda.size) {
       this.tertunda.clear();
@@ -953,7 +1004,8 @@ export class KontrolMeja implements AksiAdegan {
     if (!tambah.length) return;
     this.urutanManual = [...this.tanganUrut().map((k) => k.id), ...tambah];
     this.urutan = 'manual';
-    simpan.setUrutanTangan(this.urutanManual);
+    // Penonton: urutan hanya di memori, tidak menimpa urutan tangan pemilik HP ini.
+    if (!this.penonton) simpan.setUrutanTangan(this.urutanManual);
   }
 
   /**
@@ -1280,7 +1332,13 @@ export class KontrolMeja implements AksiAdegan {
 
   // ---------- AksiAdegan (dari Phaser dan keyboard) ----------
 
+  /** Nonton (#60): penonton tidak bisa menyentuh apa pun di meja. */
+  private get penonton(): boolean {
+    return this.modePenonton;
+  }
+
   ketukKartu(id: string) {
+    if (this.penonton) return;
     const k = this.semuaKartuMulung().find((x) => x.id === id);
     const pilih = !this.dipilih.has(id);
     if (pilih) this.dipilih.add(id);
@@ -1294,10 +1352,12 @@ export class KontrolMeja implements AksiAdegan {
   }
 
   ketukDeck() {
+    if (this.penonton) return;
     this.ambilDeck();
   }
 
   ketukBuangan(jumlah: number) {
+    if (this.penonton) return;
     if (this.mulung) return this.tolak('Lagi nyusun mulung. Batalkan dulu (✕) kalau mau ganti jumlah pungutan.', 'buangan');
     if (!this.pilihJumlah) {
       // Ketuk kartu di buangan saat giliran ambil = langsung mungut kartu itu dan semua di atasnya.
@@ -1319,6 +1379,7 @@ export class KontrolMeja implements AksiAdegan {
    * kartu yang diseret seperti biasa.
    */
   lepasKeBuangan(id: string): 'abaikan' | false | void {
+    if (this.penonton) return 'abaikan';
     // Aksi sebelumnya masih menunggu jawaban: kartu kembali ke tangan tanpa dianggap salah
     // ('abaikan' = scene mengembalikan kartunya tanpa goyang/kilat merah).
     if (this.kunciKirim) return 'abaikan';
@@ -1353,6 +1414,8 @@ export class KontrolMeja implements AksiAdegan {
   }
 
   geserKartu(id: string, indeksBaru: number) {
+    // Penonton tidak mengubah urutan tangan (urutan tersimpan di HP-nya milik tangannya sendiri).
+    if (this.penonton) return;
     const t = this.tanganUrut().map((k) => k.id);
     const lama = t.indexOf(id);
     if (lama < 0) return;
@@ -1365,7 +1428,7 @@ export class KontrolMeja implements AksiAdegan {
   }
 
   ketukKombinasi(indeks: number) {
-    if (!this.mulung) return;
+    if (this.penonton || !this.mulung) return;
     this.mulung.kombinasi.splice(indeks, 1);
     this.setPetunjuk('Kombinasi dibatalkan.');
     umumkan('Kombinasi dibatalkan.');
@@ -1821,6 +1884,8 @@ export class KontrolMeja implements AksiAdegan {
     const v = this.view;
     const p = v?.putaran;
     if (!v || !p) return '';
+    // Penonton (#60): petunjuk giliran ditulis untuk pemainnya, bukan untuk yang menonton.
+    if (this.penonton) return '';
     if (v.status === 'putaranSelesai') return 'Putaran selesai. Buka hasilnya buat lihat skor.';
     if (v.status === 'selesai') return 'Permainan selesai.';
     if (this.info?.menungguJoker.length) return 'Menunggu semua pemain menekan OK di pengumuman joker…';
@@ -1864,7 +1929,8 @@ export class KontrolMeja implements AksiAdegan {
       tangan: this.tanganUrut().filter((k) => !idMulung.has(k.id)),
       dipilih: this.dipilih,
       pilihJumlahMulung: this.pilihJumlah,
-      bisaPungut: !this.pilihJumlah && !this.mulung && st.mulung.aktif,
+      bisaPungut: !this.penonton && !this.pilihJumlah && !this.mulung && st.mulung.aktif,
+      ...(this.penonton ? { penonton: true } : {}),
       kartukuDiAtas: this.kartukuDiAtas(),
       berikutnya:
         this.giliranSaya() && v.putaran!.tahap === 'main'
@@ -1899,7 +1965,16 @@ export class KontrolMeja implements AksiAdegan {
     // Meja kompetisi (#51 versi 2): lencana nama kompetisinya, bukan kode meja.
     const kompetisi = this.app.jenis === 'online' ? (info.kompetisi ?? null) : null;
     const t = teksBarAtas(
-      this.app.jenis === 'offline' ? (this.app.tutorial ? 'Latihan' : 'Offline') : kompetisi ? `🏅 ${kompetisi.nama}` : `Meja ${info.kode}`,
+      this.app.jenis === 'offline'
+        ? this.app.tutorial
+          ? 'Latihan'
+          : 'Offline'
+        : kompetisi
+          ? `🏅 ${kompetisi.nama}`
+          : // Nonton (#60): penonton tidak diberi kode meja.
+            this.penonton
+            ? TEKS_TONTONAN.labelAtas
+            : `Meja ${info.kode}`,
       p ? p.nomor : null,
       v.konfigurasi.batasPutaran,
       p?.kaldu === true,
@@ -1910,6 +1985,84 @@ export class KontrolMeja implements AksiAdegan {
     if (elPutaran.textContent !== t.putaran) elPutaran.textContent = t.putaran;
     this.perbaruiWaktu();
     this.perbaruiKoneksi();
+    this.renderPenonton();
+  }
+
+  // ---------- nonton (#60) ----------
+
+  /** Tombol jumlah penonton di bar atas dan kotak permintaan lihat kartu (hanya di layar pemain). */
+  private renderPenonton() {
+    const p = this.info?.penonton;
+    const jumlah = !this.penonton && this.app.jenis === 'online' ? (p?.jumlah ?? 0) : 0;
+    this.elPenonton.classList.toggle('tersembunyi', jumlah === 0);
+    const dilihat = (p?.melihat?.length ?? 0) > 0;
+    this.elPenonton.classList.toggle('dilihat', dilihat);
+    const teks = `👀 ${jumlah}`;
+    if (this.elPenonton.textContent !== teks) this.elPenonton.textContent = teks;
+    const label = dilihat ? `${TEKS_TONTONAN.labelPenonton(jumlah)}. ${TEKS_TONTONAN.sedangDilihat(p!.melihat!.map((x) => x.nama))}` : TEKS_TONTONAN.labelPenonton(jumlah);
+    if (this.elPenonton.getAttribute('aria-label') !== label) this.elPenonton.setAttribute('aria-label', label);
+
+    // Permintaan: yang paling awal dulu, satu per satu. Yang sudah kujawab disembunyikan.
+    const minta = this.penonton ? [] : (p?.minta ?? []).filter((x) => !this.mintaDijawab.has(x.id));
+    // Yang tidak lagi ada di info boleh dilupakan.
+    const masihAda = new Set((p?.minta ?? []).map((x) => x.id));
+    for (const id of this.mintaDijawab) if (!masihAda.has(id)) this.mintaDijawab.delete(id);
+    const m = minta[0];
+    const html = m
+      ? `<p>${esc(TEKS_TONTONAN.permintaan(m.nama))}</p>
+         <div class="deret"><button type="button" class="kecil" data-lihat="tolak" data-id="${m.id}">${esc(TEKS_TONTONAN.tolak)}</button><button type="button" class="kecil utama" data-lihat="izinkan" data-id="${m.id}">${esc(TEKS_TONTONAN.izinkan)}</button></div>`
+      : '';
+    if (html === this.htmlMinta) return;
+    const baru = !!m && !this.htmlMinta.includes(`data-id="${m.id}"`);
+    this.htmlMinta = html;
+    this.elMinta.innerHTML = html;
+    this.elMinta.classList.toggle('tersembunyi', !m);
+    if (baru) {
+      bunyi('klik');
+      umumkan(TEKS_TONTONAN.permintaan(m.nama));
+    }
+  }
+
+  private jawabLihat(id: number, terima: boolean) {
+    if (this.penonton || this.hancur) return;
+    // Sambungan belum siap: jawabannya tidak akan sampai, jadi kotaknya tetap tampil.
+    const putus = this.alasanPutus();
+    if (putus) return toast(putus, true);
+    this.mintaDijawab.add(id);
+    this.app.kirim({ t: 'jawabLihat', penonton: id, terima });
+    this.renderPenonton();
+  }
+
+  /** Dialog penonton: berapa yang menonton, siapa yang melihat kartuku, dan tombol hentikan. */
+  private bukaPenonton() {
+    if (this.penonton) return;
+    const p = this.info?.penonton;
+    const melihat = p?.melihat ?? [];
+    bukaDialog(
+      `<div class="kepala-dialog"><h2>${esc(TEKS_TONTONAN.judulDialogPenonton)}</h2><button type="button" class="tombol-ikon hantu tutup-dialog" data-tutup aria-label="Tutup"><span aria-hidden="true">✕</span></button></div>
+       <p class="redup rapat">${esc(TEKS_TONTONAN.dialogPenontonJumlah(p?.jumlah ?? 0))}</p>
+       ${
+         melihat.length
+           ? `<ul class="daftar">${melihat
+               .map(
+                 (x) =>
+                   `<li class="kursi"><span class="nama"><b>${esc(x.nama)}</b></span><button type="button" class="kecil bahaya" data-hentikan="${x.id}">${esc(TEKS_TONTONAN.hentikan)}</button></li>`,
+               )
+               .join('')}</ul>`
+           : `<p class="rapat">${esc(TEKS_TONTONAN.dialogPenontonKosong)}</p>`
+       }`,
+      (dlg) =>
+        dlg.addEventListener('click', (e) => {
+          const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-hentikan]');
+          if (!b || b.disabled) return;
+          bunyi('klik');
+          const putus = this.alasanPutus();
+          if (putus) return toast(putus, true);
+          b.disabled = true;
+          this.app.kirim({ t: 'hentikanLihat', penonton: Number(b.dataset.hentikan) });
+          b.closest('li')?.remove();
+        }),
+    );
   }
 
   /** Detak timer: bar waktu, status koneksi, dan tutorial (jendela bisa dibuka/ditutup tanpa render). */
@@ -1980,6 +2133,7 @@ export class KontrolMeja implements AksiAdegan {
     const bawah = Math.ceil(this.elAksi.getBoundingClientRect().height);
     if (!atas || !bawah) return;
     this.akar.style.setProperty('--tinggi-bar-atas-ukur', `${atas}px`);
+    this.elLapisanMinta.style.setProperty('--tinggi-bar-atas-ukur', `${atas}px`);
     this.scene.aturRuang(atas, bawah);
     // Lebar berubah (putar layar, ukuran teks): petunjuk mungkin jadi (tidak) terpotong.
     this.tandaiPetunjukTerpotong(true);
@@ -2090,7 +2244,7 @@ export class KontrolMeja implements AksiAdegan {
 
   /** Tulis ulang bar aksi hanya bila isinya berubah; fokus tombol dikembalikan berdasarkan data-a. */
   private renderAksi(st: DaftarStatus) {
-    const { langkah, isi } = this.susunBar(st);
+    const { langkah, isi } = this.penonton ? this.susunBarPenonton() : this.susunBar(st);
     if (langkah !== this.htmlLangkah) {
       this.htmlLangkah = langkah;
       this.elLangkah.innerHTML = langkah;
@@ -2111,9 +2265,23 @@ export class KontrolMeja implements AksiAdegan {
     this.setPetunjuk(this.petunjuk, this.petunjukSalah);
   }
 
+  /** Nonton (#60): bar bawah penonton, siapa yang kartunya dilihat dan tombol berhenti. */
+  private susunBarPenonton(): { langkah: string; isi: string } {
+    const nama = this.view?.pemain[this.saya]?.nama ?? '';
+    return {
+      langkah: `<span class="langkah-penonton">${esc(TEKS_TONTONAN.melihat(nama))}</span>`,
+      isi: `<button type="button" data-a="berhentiLihat">${esc(TEKS_TONTONAN.berhentiLihat)}</button>`,
+    };
+  }
+
   /** Tombol bar aksi ditekan (klik, sentuh, atau pintasan keyboard). */
   private tekanTombol(a: string) {
     if (this.hancur || !this.view) return;
+    if (this.penonton) {
+      if (a !== 'berhentiLihat') return;
+      bunyi('klik');
+      return this.app.berhentiLihat?.();
+    }
     const b = this.elTombol.querySelector<HTMLElement>(`[data-a="${a}"]`);
     if (!b) return;
     // Aksi sebelumnya belum dijawab: tekan ulang (double-tap / tombol ditahan) diabaikan diam-diam.
@@ -2155,6 +2323,8 @@ export class KontrolMeja implements AksiAdegan {
 
   private tombolKeyboard(e: KeyboardEvent) {
     if (this.hancur || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || !this.view) return;
+    // Penonton (#60): pintasan meja semuanya aksi pemain; tombol HTML tetap bisa dipakai lewat Tab.
+    if (this.penonton) return;
     // Jendela terbuka: keyboard milik jendela itu (dom.ts mengurus Tab/Escape).
     if (adaJendelaTerbuka()) return;
     const t = e.target as HTMLElement | null;
@@ -2339,6 +2509,7 @@ export class KontrolMeja implements AksiAdegan {
   // ---------- emote ----------
 
   private bukaPaletEmote(dariKeyboard: boolean) {
+    if (this.penonton) return;
     if (this.akar.querySelector('.palet-emote')) return this.tutupPaletEmote(dariKeyboard);
     const el = document.createElement('div');
     el.className = 'palet-emote';
@@ -2819,6 +2990,8 @@ export class KontrolMeja implements AksiAdegan {
         dlg.addEventListener('click', (ev) => {
           const b = (ev.target as HTMLElement).closest<HTMLButtonElement>('button');
           if (!b || this.hancur) return;
+          // Penonton (#60): tombol lanjut, Siap, voting, dan ledekan disembunyikan dan tidak berbuat apa-apa.
+          if (this.penonton) return;
           if (b.hasAttribute('data-terkunci-lanjut')) {
             // Tombol host masih dikunci jeda lanjut: jelaskan, jangan diam saja.
             toast(TEKS_LANJUT.tunggu);
@@ -3028,7 +3201,7 @@ export class KontrolMeja implements AksiAdegan {
       batasSkor: 'Ada yang mencapai batas skor.',
       kaldu: 'Putaran kaldu ditutup mentung.',
     };
-    const host = info.kursiSaya === info.host;
+    const host = !this.penonton && info.kursiSaya === info.host;
     const offline = this.app.jenis === 'offline';
     // Meja kompetisi (#51 versi 2): cuma sekali main. Ganti Main lagi dengan Kembali ke kompetisi,
     // dan tampilkan nilai kompetisi tiap peserta (pesan kompetisiHasil, bisa datang belakangan).
@@ -3060,7 +3233,7 @@ export class KontrolMeja implements AksiAdegan {
                  : ''
          }
          <button type="button" data-a="skor">Rincian skor</button>
-         <button type="button" data-a="keluar">Ke beranda</button>
+         <button type="button" data-a="keluar">${this.penonton ? esc(TEKS_TONTONAN.berhentiLihat) : 'Ke beranda'}</button>
        </div>
        ${this.app.tutorial ? '' : this.htmlAjakanKedai()}`,
       (dlg) => {
@@ -3093,12 +3266,13 @@ export class KontrolMeja implements AksiAdegan {
         dlg.querySelector('[data-a=skor]')!.addEventListener('click', () => this.bukaSkor('riwayat'));
         dlg.querySelector('[data-a=keluar]')!.addEventListener('click', () => {
           tutupModal();
+          if (this.penonton) return this.app.berhentiLihat?.();
           this.app.keluarMeja();
         });
       },
       { bisaDitutup: false },
     );
-    if (pertama && v.saya !== null) {
+    if (pertama && v.saya !== null && !this.penonton) {
       bunyi(menang ? 'menang' : 'kalah');
       if (menang) getar('menang');
       const hasil = menang ? 'Selamat, kamu juara!' : `Permainan selesai. Kamu peringkat ${peringkat[v.saya]}.`;
@@ -3186,7 +3360,7 @@ export class KontrolMeja implements AksiAdegan {
   private bukaMenu() {
     const offline = this.app.jenis === 'offline';
     const info = this.info;
-    const bolehTempo = offline || info?.kursiSaya === info?.host;
+    const bolehTempo = !this.penonton && (offline || info?.kursiSaya === info?.host);
     const bisaLayarPenuh = !!document.fullscreenEnabled;
     // Daftar pintasan hanya berguna kalau ada keyboard/mouse (HP sentuh saja: disembunyikan).
     const adaKeyboard = window.matchMedia?.('(any-pointer: fine)').matches ?? true;
@@ -3197,7 +3371,10 @@ export class KontrolMeja implements AksiAdegan {
            ? 'Permainan offline tersimpan otomatis. Kamu bisa lanjut kapan saja dari beranda.'
            : info?.kompetisi
              ? `🏅 ${esc(TEKS_KOMPETISI.lencanaMeja)}: <b>${esc(info.kompetisi.nama)}</b>. ${esc(TEKS_KOMPETISI.aturanDikunci)}`
-             : `Kode meja: <b>${esc(info?.kode)}</b>. Ajak teman gabung pakai kode ini.`
+             : // Nonton (#60): penonton tidak diberi kode meja (yang dipegangnya kode tonton).
+               this.penonton
+               ? esc(TEKS_TONTONAN.menuPenonton)
+               : `Kode meja: <b>${esc(info?.kode)}</b>. Ajak teman gabung pakai kode ini.`
        }</p>
        <div class="menu-meja">
          <button type="button" class="utama" data-tutup>Lanjut main</button>
@@ -3206,7 +3383,7 @@ export class KontrolMeja implements AksiAdegan {
          ${adaKeyboard ? '<button type="button" data-m="pintasan"><span aria-hidden="true">⌨️</span> Pintasan keyboard</button>' : ''}
          ${bisaLayarPenuh ? `<button type="button" data-m="layar"><span aria-hidden="true">⛶</span> ${document.fullscreenElement ? 'Keluar layar penuh' : 'Layar penuh'}</button>` : ''}
          <button type="button" data-m="tentang"><span aria-hidden="true">ℹ️</span> Tentang</button>
-         <button type="button" data-m="keluar"${offline ? '' : ' class="bahaya"'}>${offline ? 'Simpan &amp; ke beranda' : 'Keluar meja'}</button>
+         <button type="button" data-m="keluar"${offline || this.penonton ? '' : ' class="bahaya"'}>${offline ? 'Simpan &amp; ke beranda' : this.penonton ? esc(TEKS_TONTONAN.berhentiLihat) : 'Keluar meja'}</button>
        </div>`,
       (dlg) =>
         dlg.addEventListener('click', (e) => {
@@ -3240,6 +3417,10 @@ export class KontrolMeja implements AksiAdegan {
               else void document.documentElement.requestFullscreen?.().catch(() => toast('Layar penuh tidak didukung di sini.'));
               return;
             case 'keluar':
+              if (this.penonton) {
+                tutupModal();
+                return this.app.berhentiLihat?.();
+              }
               if (offline) {
                 tutupModal();
                 return this.app.keluarMeja();

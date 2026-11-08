@@ -369,7 +369,7 @@ describe('endpoint peringkat v2', () => {
   });
 });
 
-describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), dan v5 (hasil kompetisi yang ditinggal)', () => {
+describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil kompetisi yang ditinggal), dan v6 (kode tonton)', () => {
   const kolom = (db: DatabaseSync, tabel: string) =>
     (db.prepare(`PRAGMA table_info(${tabel})`).all() as { name: string; notnull: number; pk: number }[]).map((k) => [k.name, k.notnull, k.pk]);
   const indeks = (db: DatabaseSync, tabel: string) =>
@@ -387,9 +387,9 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), dan v5 (hasi
     return db;
   }
 
-  it('v3 persis migrasi usul fitur (fitur/usul-fitur), v4 tabel meja_aktif, v5 tabel hasil_kompetisi_ditinggal', () => {
-    expect(MIGRASI).toHaveLength(5);
-    const db = sampaiVersi(5);
+  it('v3 persis migrasi usul fitur (fitur/usul-fitur), v4 tabel meja_aktif, v5 tabel hasil_kompetisi_ditinggal, v6 kolom kode_tonton', () => {
+    expect(MIGRASI).toHaveLength(6);
+    const db = sampaiVersi(6);
     expect(kolom(db, 'usulan')).toEqual([
       ['id', 0, 1],
       ['dibuat_pada', 1, 0],
@@ -409,6 +409,8 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), dan v5 (hasi
       ['data', 1, 0],
       ['pembuat_jaringan', 0, 0],
       ['diperbarui_pada', 1, 0],
+      // v6 (nonton #60): boleh NULL, server versi sebelumnya tetap bisa menulis.
+      ['kode_tonton', 0, 0],
     ]);
     // v5: kunci (meja, waktu mulai, peserta); semua kolom wajib diisi (tabel baru, ditulis server ini saja).
     expect(kolom(db, 'hasil_kompetisi_ditinggal')).toEqual([
@@ -427,8 +429,8 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), dan v5 (hasi
     db.close();
   });
 
-  it('database v1 (produksi), v2, v3, dan v4 (server dev) dimigrasi ke v5 tanpa menyentuh isi lama', () => {
-    for (const v of [1, 2, 3, 4]) {
+  it('database v1, v2, v3, v4 (server dev), dan v5 (produksi 0.5.0) dimigrasi ke v6 tanpa menyentuh isi lama', () => {
+    for (const v of [1, 2, 3, 4, 5]) {
       const db = sampaiVersi(v);
       tulisV0(db, 'LAMAA', '2026-10-20T10:00:00.000Z', [['Budi', 10], ['Siti', 0]]);
       tulisV0(db, 'LAMAB', '2026-10-21T10:00:00.000Z', [['Budi', -5], ['Siti', 20], ['Kipas Dua', 0, true]]);
@@ -442,8 +444,8 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), dan v5 (hasi
       const sebelum = isiLama();
       const log: string[] = [];
       const r = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
-      expect(versiSkema(db)).toBe(5);
-      expect(log).toEqual([`skema riwayat dimigrasi v${v} → v5`]);
+      expect(versiSkema(db)).toBe(6);
+      expect(log).toEqual([`skema riwayat dimigrasi v${v} → v6`]);
       const sesudah = isiLama();
       expect(sesudah).toEqual(sebelum);
       expect(r.daftar(10).map((g) => g.kodeMeja)).toEqual(['LAMAB', 'LAMAA']);
@@ -464,7 +466,7 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), dan v5 (hasi
     }
   });
 
-  it('database v2 pra-rilis (skema kompetisi versi 1) dimigrasi ke v5: perbaikan pra-rilis tetap jalan, tabel v5 ada dan kosong', () => {
+  it('database v2 pra-rilis (skema kompetisi versi 1) dimigrasi ke v6: perbaikan pra-rilis tetap jalan, tabel v5 ada dan kosong', () => {
     const db = sampaiVersi(1);
     // Seperti server dev yang sempat menjalankan kompetisi versi 1 (v2 waktu itu): skema kompetisi lama.
     db.exec(`CREATE TABLE kompetisi (kode TEXT PRIMARY KEY, nama TEXT NOT NULL, masa TEXT NOT NULL, pengaturan TEXT NOT NULL,
@@ -481,8 +483,8 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), dan v5 (hasi
     tulisV0(db, 'LAMAA', '2026-10-20T10:00:00.000Z', [['Budi', 10], ['Siti', 0]]);
     const log: string[] = [];
     const r = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
-    expect(versiSkema(db)).toBe(5);
-    expect(log).toContain('skema riwayat dimigrasi v2 → v5');
+    expect(versiSkema(db)).toBe(6);
+    expect(log).toContain('skema riwayat dimigrasi v2 → v6');
     expect(log.some((l) => l.includes('skema kompetisi pra-rilis'))).toBe(true);
     expect(db.prepare('SELECT COUNT(*) AS n FROM hasil_kompetisi_ditinggal').get()).toMatchObject({ n: 0 });
     expect(r.kompetisi.status('LAMAA', 2)).toBeNull();
@@ -517,12 +519,29 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), dan v5 (hasi
     r.mejaAktif.simpan('AAAAA', '{"a":1}', '1.2.3.4', 10);
     r.mejaAktif.simpan('BBBBB', '{"b":2}', '5.6.7.8', 5);
     expect(r.mejaAktif.semua()).toEqual([
-      { kode: 'BBBBB', data: '{"b":2}', pembuatJaringan: '5.6.7.8', diperbaruiPada: 5 },
-      { kode: 'AAAAA', data: '{"a":1}', pembuatJaringan: '1.2.3.4', diperbaruiPada: 10 },
+      { kode: 'BBBBB', data: '{"b":2}', pembuatJaringan: '5.6.7.8', diperbaruiPada: 5, kodeTonton: null },
+      { kode: 'AAAAA', data: '{"a":1}', pembuatJaringan: '1.2.3.4', diperbaruiPada: 10, kodeTonton: null },
     ]);
     r.mejaAktif.hapus('BBBBB');
     r.mejaAktif.hapus('ZZZZZ');
     expect(r.mejaAktif.semua().map((b) => b.kode)).toEqual(['AAAAA']);
+    r.tutup();
+  });
+
+  it('mejaAktif: kode tonton (nonton #60) dicatat langsung atau lewat simpan, dan simpan tanpa kode tidak menghapusnya', () => {
+    const r = bukaRiwayat(':memory:');
+    const tonton = () => Object.fromEntries(r.mejaAktif.semua().map((b) => [b.kode, b.kodeTonton]));
+    // Baris belum ada: tidak menulis apa pun.
+    r.mejaAktif.aturKodeTonton('AAAAA', 'TTTTT');
+    expect(r.mejaAktif.semua()).toEqual([]);
+    r.mejaAktif.simpan('AAAAA', '{"a":1}', null, 1);
+    r.mejaAktif.aturKodeTonton('AAAAA', 'TTTTT');
+    r.mejaAktif.simpan('BBBBB', '{"b":1}', null, 2, 'UUUUU');
+    expect(tonton()).toEqual({ AAAAA: 'TTTTT', BBBBB: 'UUUUU' });
+    // Tulisan berikutnya tanpa kode tonton (atau null) membiarkan yang tersimpan.
+    r.mejaAktif.simpan('AAAAA', '{"a":2}', null, 3);
+    r.mejaAktif.simpan('BBBBB', '{"b":2}', null, 4, null);
+    expect(tonton()).toEqual({ AAAAA: 'TTTTT', BBBBB: 'UUUUU' });
     r.tutup();
   });
 });

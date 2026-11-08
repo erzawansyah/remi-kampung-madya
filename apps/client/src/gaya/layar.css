@@ -784,6 +784,32 @@ html[data-efek='hemat'] .kipas canvas {
   font-weight: 400;
   box-shadow: none;
 }
+/* Nonton (#60): catatan kecil di daftar meja yang bisa ditonton, dan layar penonton. */
+.catatan-tonton {
+  margin-top: var(--ruang-2);
+  font-size: var(--teks-sm);
+}
+.layar-tontonan .pengantar {
+  margin: 0;
+}
+.buangan-tontonan .deret-kartu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ruang-2);
+}
+.baris-pemain-tontonan {
+  flex-wrap: wrap;
+  row-gap: var(--ruang-2);
+}
+.baris-pemain-tontonan .nama {
+  flex: 1 1 auto;
+}
+.baris-pemain-tontonan > button {
+  margin-left: auto;
+}
+.status-tontonan:empty {
+  display: none;
+}
 /* Tab Riwayat: padding samping dirapatkan supaya keempat label muat satu baris di HP 360 dengan
    teks besar (sisa ruang tetap dibagi rata oleh flex). Di layar yang lebih sempit deret tab tetap
    bisa digulir, lengkap dengan pudaran tepi (komponen.css, [data-luap]). */

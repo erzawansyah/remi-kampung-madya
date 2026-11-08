@@ -6,6 +6,29 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.6.0] - 2026-11-08
+
+Nonton meja yang sedang main, dan pilihan waktu per giliran 45 detik. Aturan main tidak berubah.
+
+### Untuk pemain
+
+#### Ditambahkan
+
+- **Nonton meja yang sedang main** (keputusan pemilik #60). Di Meja publik ada bagian **Lagi main** dengan tombol **Tonton**. Penonton cuma melihat nama pemain dan kartu buangan yang juga terlihat di meja; kartu jadi, skor, dan jumlah kartu di tangan tidak kelihatan. Semua meja online yang sedang main bisa ditonton, termasuk meja privat (kodenya tetap rahasia: yang tampil cuma nama host); meja kompetisi tidak bisa.
+- **Minta lihat kartu:** penonton bisa minta izin melihat kartu seorang pemain. Pemainnya dapat kotak "X pengin lihat kartumu." dengan tombol **Tolak** dan **Izinkan**. Kalau diizinkan, penonton melihat persis yang dilihat pemain itu (kartu tangan, kartu jadi, skor, Log), tapi tidak bisa menekan apa pun. Urutan kartu yang kamu atur di HP-mu sendiri tidak ikut terkirim.
+  - Satu permintaan ke tiap pemain sekaligus. Kalau ditolak, atau tidak dijawab 30 detik, penonton baru boleh minta lagi ke pemain itu 3 menit kemudian.
+  - Penonton cuma bisa melihat kartu satu pemain sekaligus. Warga kedai dan pemain yang sedang terputus tidak bisa dimintai.
+  - Tombol 👀 di meja menunjukkan jumlah penonton dan siapa yang sedang melihat kartumu; tekan **Hentikan** kalau sudah cukup (dihitung seperti ditolak). Izin juga berakhir kalau kamu keluar meja atau permainan kembali ke lobi.
+- Host bisa menutup mejanya dari penonton lewat **Boleh ditonton** di lobi (bawaannya boleh). Permainan yang kamu tonton tidak masuk Riwayat di HP-mu.
+- **Waktu per giliran 45 detik** (keputusan pemilik #61, dari usulan pemain): pilihan baru di lobi dan di pengajuan kompetisi, di antara 30 dan 60 detik. Bawaannya tetap 60 detik.
+
+### Teknis
+
+- **Nonton** (#60) di `@remi/meja`: `tonton()`, `terimaPenonton()`, `lepasPenonton()`, `bisaDitonton`, `bubarkanPenonton()`; konstanta `MAKS_PENONTON` (30), `JEDA_TOLAK_LIHAT_MS` (3 menit), `BATAS_JAWAB_LIHAT_MS` (30 detik). Penonton hanya di memori, jadi `DataMeja`, simpanan, dan golden tidak berubah. `InfoMeja.penonton` dan `PengaturanMeja.tanpaPenonton` opsional dan hanya ditulis kalau dipakai. Jeda tolak dicatat per nama penonton dan per penanda HP (`remi.tokenPenonton`).
+- Protokol aditif: pesan klien `daftar.tonton`, `tonton`, `mintaLihat`, `berhentiLihat`, `jawabLihat`, `hentikanLihat`; pesan server `tontonan`, `tontonMeja`, `tontonView`, `tontonSelesai`. Server memakai `sambunganPenonton` (alamat kirim sendiri, bukan kursi); meja yang sedang main hanya masuk daftar publik untuk aplikasi yang meminta `daftar.tonton`, jadi aplikasi lama tidak berubah. Entri tonton membawa kode tonton per meja (acak, dibuang bersama mejanya, dan ikut simpanan meja supaya penonton menyambung ulang ke meja yang dipulihkan sesudah restart: kolom `meja_aktif.kode_tonton`, skema riwayat v6), dan semua pesan ke penonton memakai kode itu, bukan kode meja asli; `InfoTontonan.namaHost` untuk judul layar penonton. Menonton melepas kursi sambungan itu di meja lain.
+- Client: `ui/tontonan.ts`, `konten/tontonan.ts`, `KontrolMeja` mode penonton (`AppUntukMeja.penonton`), layar `tontonan` di `main.ts` (pesan meja selain milik penonton dibuang selama menonton), `tontonMemori` di `koneksi.ts` untuk sambung ulang. Layar penonton = momen pembaruan "senyap", sama seperti daftar meja publik.
+- Test baru: `packages/meja/test/penonton.test.ts`, `apps/server/test/nonton.test.ts`, `apps/client/test/nonton.test.ts`, `apps/client/test/aplikasiNonton.test.ts`.
+
 ## [0.5.0] - 2026-10-24
 
 Kompetisi, meja online yang lebih tahan sinyal putus-putus dan pembaruan server, jeda dan ledekan di hasil putaran, kepentung yang terasa kayak ketonjok, dan Usul fitur. **Ada aturan main yang berubah** (keputusan pemilik 24 Okt 2026): nutup paling banyak pakai 2 kartu (#52), dan di permainan 2 deck pentungan tidak boleh kembaran kartu yang barusan dipungut (#53). Rinciannya di bagian Diubah.

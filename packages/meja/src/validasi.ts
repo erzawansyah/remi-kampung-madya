@@ -184,6 +184,10 @@ export function validasiPengaturan(x: unknown): Partial<PengaturanMeja> | null {
     if (typeof x.modeKaldu !== 'boolean') return null;
     hasil.modeKaldu = x.modeKaldu;
   }
+  if (x.tanpaPenonton !== undefined) {
+    if (typeof x.tanpaPenonton !== 'boolean') return null;
+    hasil.tanpaPenonton = x.tanpaPenonton;
+  }
   return hasil;
 }
 
@@ -234,6 +238,24 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       return tiket.every((t) => t !== null) ? { ...pesan, tiket: tiket as TiketKompetisi[] } : null;
     }
     case 'daftar':
+      // `tonton` (#60) opsional; nilai lain dari true dibuang (daftar lama).
+      return x.tonton === true ? { t: 'daftar', tonton: true } : { t: 'daftar' };
+    case 'tonton': {
+      if (!isStr(x.kode, 20) || !isStr(x.nama, 100)) return null;
+      if (x.token !== undefined && !(isStr(x.token, 64) && /^[A-Za-z0-9_-]{1,64}$/.test(x.token))) return null;
+      return { t: 'tonton', kode: x.kode, nama: x.nama, ...(x.token !== undefined ? { token: x.token as string } : {}) };
+    }
+    case 'mintaLihat':
+      // Kursi 0..5 (meja paling banyak 6 pemain); sah tidaknya diputuskan meja.
+      return isInt(x.kursi) && x.kursi >= 0 && x.kursi <= 5 ? { t: 'mintaLihat', kursi: x.kursi } : null;
+    case 'berhentiLihat':
+      return { t: 'berhentiLihat' };
+    case 'jawabLihat':
+      if (!isInt(x.penonton) || x.penonton < 1 || x.penonton > 1_000_000_000 || typeof x.terima !== 'boolean') return null;
+      return { t: 'jawabLihat', penonton: x.penonton, terima: x.terima };
+    case 'hentikanLihat':
+      if (!isInt(x.penonton) || x.penonton < 1 || x.penonton > 1_000_000_000) return null;
+      return { t: 'hentikanLihat', penonton: x.penonton };
     case 'keluar':
     case 'mainLagi':
     case 'siapLanjut':

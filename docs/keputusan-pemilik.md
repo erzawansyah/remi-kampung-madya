@@ -782,7 +782,7 @@ Arti celetukan dari pemilik:
 - **Polling detail:** tiap 5 detik selama layar detail terbuka dan tab terlihat, langsung sekali lagi saat tab terlihat kembali, berhenti begitu layar ditinggalkan. Kalau datanya sama, layar tidak digambar ulang; kalau berubah, akordion Cara hitung yang terbuka dan fokus tombol dipertahankan.
 - **Waktu habis:** kompetisi yang disudahi lewat voting ditulis "Disudahi · menunggu N meja terakhir selesai" dengan lencana "disudahi" (yang masanya habis: "Waktu habis · …" dengan lencana "waktu habis"; dulu lencananya selalu "waktu habis"), dan catatan "Juaranya diumumkan sesudah meja terakhir selesai."
 - **Lobi kompetisi:** judulnya nama kompetisi; aturan meja hanya teks (tempo warga kedai dan "meja publik" tidak ditampilkan karena tidak berlaku di meja kompetisi); status "Menunggu N peserta lagi…", "Menunggu semua peserta tersambung…" kalau kursi penuh tapi ada yang terputus, atau hitung mundur detik "Kursi penuh. Permainan mulai sendiri dalam 2 detik…". Host tidak punya pilihan isi kursi (meja menolaknya). Keluar dari lobi kompetisi (tombol atau Back) dan lobi yang dibubarkan server langsung membuka detail kompetisinya, bukan beranda.
-- **Formulir pengajuan:** "Pemain per meja" 2–6 (bawaan 4); centang "Meja 4 pemain pakai 2 deck" disembunyikan dan dikirim mati kalau bukan 4; waktu per giliran 30/60/90/120 detik (bawaan 60), tanpa "Tanpa batas", dengan keterangan "Giliran yang kehabisan waktu dijalankan warga kedai, jadi tidak ada meja yang tertahan."
+- **Formulir pengajuan:** "Pemain per meja" 2–6 (bawaan 4); centang "Meja 4 pemain pakai 2 deck" disembunyikan dan dikirim mati kalau bukan 4; waktu per giliran 30/45/60/90/120 detik (bawaan 60; 45 ditambah #61), tanpa "Tanpa batas", dengan keterangan "Giliran yang kehabisan waktu dijalankan warga kedai, jadi tidak ada meja yang tertahan."
 
 **Yang dikerjakan (aplikasi):** `apps/client/src/ui/kompetisi.ts` (formulir, detail dengan daftar meja dan polling, piala), `konten/kompetisi.ts` (teks dan penyusun kalimat hasil), `ui/lobi.ts` (lobi kompetisi), `kontrolMeja.ts` (lencana bar atas, klasemen akhir dengan nilai dan Kembali ke kompetisi), `main.ts` (pesan `kompetisiHasil`, laken, Duduk/Buka meja baru, lobi dibubarkan), `game/warnaMeja.ts` + `gaya/token.css` (laken biru, palet kanvas dibaca ulang), `ui/riwayat.ts` (🏆 di leaderboard), Bantuan. Test: `apps/client/test/kompetisi.test.ts`, `aplikasiKompetisi.test.ts`, `kontrolMeja.test.ts` (meja kompetisi), `laken.test.ts`, `token.test.ts`, `riwayat.test.ts`, `antislop.test.ts`.
 
@@ -982,6 +982,49 @@ Pilihan yang waktu itu ditawarkan dan **tidak dipilih**:
 **Tafsiran pengembang (dikabarkan ke pemilik bersama rilis 0.5.0):** jenis boleh dikosongkan; perapian teks sama dengan pesan di meja (tanda `<` dan `>` dibuang, teks kepanjangan ditolak dengan pesan, tidak dipotong diam-diam); batas 5 per jam hanya menghitung usulan yang diterima; `.env` diabaikan git.
 
 **Test:** `packages/meja/test/usulan.test.ts`, `apps/server/test/usulan.test.ts`, `apps/client/test/usulan.test.ts`, `antislop.test.ts`.
+
+<a id="k60"></a>
+
+## 60. Nonton meja yang sedang main
+
+**Asal:** usulan pemain "Live Streaming" di Notion (24 Okt 2026), ditinjau agent 1 Nov 2026 sebagai "Perlu keputusan pemilik".
+
+**Keputusan pemilik (7 Nov 2026):** "Masuk lewat publik. Lihat cuma kartu buangan. Tapi, bisa request ke pemain. Nanti pemain bisa nolak. Tapi requestnya dibatasi 1 kali per pemain. Jika ditolak, harus nunggu 3 menit. Kalau diterima, apa yang dia lihat, itu yang dilihat oleh si pemain." Pertanyaan susulan yang dijawab pemilik di hari yang sama:
+- "1 kali per pemain" = **satu permintaan aktif** ke tiap pemain. Kalau ditolak, penonton boleh minta lagi ke pemain yang sama sesudah 3 menit.
+- Yang dilihat penonton tanpa izin: **nama pemain dan kartu buangan** yang juga terlihat pemain di meja ((jumlah pemain − 1) kartu teratas). Kartu jadi, skor, dan jumlah kartu di tangan tidak.
+- **Meja kompetisi tidak bisa ditonton.**
+- **Semua meja online yang sedang main otomatis bisa ditonton**; host bisa mematikannya di lobi ("Boleh ditonton").
+
+**Penerapan:**
+- Meja (`packages/meja/src/meja.ts`, bagian "nonton"): `tonton()`, `terimaPenonton()`, `lepasPenonton()`, `bisaDitonton`, `bubarkanPenonton()`. Penonton hanya di memori (tidak di `DataMeja`, jadi golden dan simpanan tidak berubah). `InfoMeja.penonton` hanya ditulis kalau ada penonton: `jumlah` untuk semua pemain, `minta`/`melihat` hanya di info milik pemain yang diminta/dilihat. Pengaturan `tanpaPenonton` (tidak ada = boleh ditonton, seperti `modeKaldu`).
+- Konstanta di `protokol.ts`: `MAKS_PENONTON` (30 per meja), `JEDA_TOLAK_LIHAT_MS` (3 menit), `BATAS_JAWAB_LIHAT_MS` (30 detik). Pesan baru: `daftar.tonton`, `tonton`, `mintaLihat`, `berhentiLihat`, `jawabLihat`, `hentikanLihat` dari client; `tontonan`, `tontonMeja`, `tontonView`, `tontonSelesai` dari server.
+- Server (`apps/server/src/server.ts`): sambungan penonton punya alamat kirim sendiri (`sambunganPenonton`), bukan kursi. Daftar meja publik memuat meja yang bisa ditonton hanya untuk aplikasi yang memintanya (`daftar.tonton`), jadi aplikasi lama tidak melihat meja yang sudah mulai. Entri itu membawa kode tonton (`kodeTontonMeja`/`mejaDariKodeTonton`, dibuang di `hapusMeja`, ikut simpanan meja di kolom `meja_aktif.kode_tonton`, MIGRASI v6), dan `tonton` menerima kode tonton maupun kode meja asli; meja memakai kode tonton itu sebagai `kode` di `tontonan` dan `tontonMeja`. Menonton melepas kursi sambungan itu di meja lain (seperti pindah meja), dan menonton meja tempat ia duduk ditolak.
+- Aplikasi: bagian "Lagi main" di Meja publik (tombol Tonton), layar penonton `ui/tontonan.ts` (teks `konten/tontonan.ts`), dan meja pemain yang mengizinkan lewat `KontrolMeja` mode penonton (`AppUntukMeja.penonton`): semua aksi, ketuk, seret, pintasan keyboard, emote, ledekan, voting, dan tombol host dimatikan, bar bawah "Kamu lagi lihat kartu X" + Berhenti lihat. Pemain mendapat kotak "X pengin lihat kartumu" (Tolak/Izinkan) di bawah bar atas, dan tombol 👀 jumlah penonton yang membuka daftar yang sedang melihat kartunya dengan tombol Hentikan. `main.ts` membuang semua pesan meja selain milik penonton selama menonton, dan permainan yang ditonton tidak dicatat di Riwayat HP.
+
+**Tafsiran pengembang (dikabarkan ke pemilik bersama rilisnya):**
+- Meja publik maupun privat ikut daftar "Lagi main", tapi dengan **kode tonton** tersendiri, bukan kode meja asli (kode asli dipakai untuk gabung sesudah Main lagi, jadi tidak boleh bocor dari meja privat). Kode tonton dibuat server, tetap selama meja hidup, dan tidak pernah sama dengan kode meja mana pun; semua yang dikirim ke penonton memakai kode itu. Daftar dan layar penonton menampilkan nama host, bukan kode. Kode tonton ikut simpanan meja (#58), jadi sesudah restart/deploy meja yang dipulihkan memakai kode tonton yang sama dan penonton yang menyambung ulang kembali ke tontonannya. Meja yang tidak dipulihkan (atau `SIMPAN_MEJA=0`) sudah tidak ada, jadi penontonnya mendapat "nggak ketemu" dan kembali ke daftar.
+- Permintaan yang tidak dijawab 30 detik dianggap ditolak (jeda 3 menit), supaya pemain yang sedang sibuk tidak dikejar permintaan. Begitu juga permintaan yang masih menunggu saat penontonnya keluar atau sambungannya putus, supaya keluar-masuk tidak dipakai untuk mengulang permintaan.
+- Penonton hanya melihat kartu **satu pemain** sekaligus. Begitu satu pemain mengizinkan, permintaan lain yang masih menunggu dibatalkan tanpa jeda.
+- Izin berlaku sampai penonton berhenti sendiri, pemainnya menekan Hentikan (dihitung seperti ditolak: jeda 3 menit), pemainnya keluar meja, atau permainan kembali ke lobi (Main lagi; semua penonton diberi tahu tontonannya selesai). Antarputaran izinnya tetap.
+- Jeda tolak dicatat per nama penonton dan per penanda HP-nya (`remi.tokenPenonton`), jadi menyambung ulang atau ganti nama saja tidak melewati jeda. "Satu permintaan aktif" juga berlaku lintas sambungan dengan nama atau penanda yang sama, dan HP yang sama dari sambungan lain (sambung ulang, tab lain) mengambil alih tontonannya, termasuk izin dan permintaannya; sambungan lamanya diberi "Kamu nonton meja ini dari tempat lain." Kalau sambungan lama sudah tertutup lebih dulu, izinnya hilang dan penonton diberi tahu sambungannya sempat putus (bukan "berhenti membagi").
+- Warga kedai, kursi kosong, dan pemain yang sedang terputus tidak bisa dimintai.
+- "Yang dilihat pemain" = info meja dan view yang dikirim ke pemain itu: kartu tangan, kartu jadi, skor, Log, dan popup joker kalau pemainnya juga sedang melihat popup itu. Urutan tangan yang diatur pemain di HP-nya sendiri tidak ikut terkirim, jadi urutan kartu di layar penonton bisa beda.
+- Penonton hanya bisa masuk selagi permainan berjalan (bukan di lobi). "Boleh ditonton" hanya bisa diubah di lobi.
+- Penonton memakai nama di HP-nya (kalau kosong: "Penonton"), tanpa wajib isi nama.
+
+**Test:** `packages/meja/test/penonton.test.ts`, `apps/server/test/nonton.test.ts`, `apps/client/test/nonton.test.ts`, `apps/client/test/aplikasiNonton.test.ts`.
+
+<a id="k61"></a>
+
+## 61. Pilihan waktu per giliran 45 detik
+
+**Asal:** usulan pemain "Waktu giliran" di Notion (5 Nov 2026): "Bikin 45 detik per giliran. 60 detik kelamaan. 30 detik kecepatan." Ditinjau agent 6 Nov 2026 sebagai "Perlu keputusan pemilik".
+
+**Keputusan pemilik (8 Nov 2026):** tambah pilihan 45 detik; bawaan tetap 60 detik ("jadi ada opsi 45. 60 gpp default").
+
+**Penerapan:** pilihan waktu per giliran di lobi meja online jadi 30, 45, 60, 90, 120 detik, atau tanpa batas (`apps/client/src/ui/lobi.ts`), dan di pengajuan kompetisi 30, 45, 60, 90, 120 detik (`PILIHAN_DETIK_GILIRAN_KOMPETISI` di `packages/meja/src/kompetisi.ts`, dipakai formulir dan validasi pengajuan). `PENGATURAN_BAWAAN.detikGiliran` dan `DETIK_GILIRAN_KOMPETISI_BAWAAN` tetap 60. Validasi pesan meja sudah menerima 0–600 detik, jadi server dan meja tidak berubah; sisa waktu minimal sambung ulang (20 detik) dan toleransi 2,5 detik (#57) tetap.
+
+**Test:** `packages/meja/test/kompetisi.test.ts`, `apps/client/test/kompetisi.test.ts`, `apps/client/test/lobi45.test.ts`.
 
 ---
 
