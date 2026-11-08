@@ -6,6 +6,22 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+### Untuk pemain
+
+#### Diubah
+
+- **Minta lihat kartu saat nonton, satu per satu** (keputusan pemilik #62, mengubah #60), supaya penonton nggak bisa ngintip kartu pemain bergantian:
+  - Penonton cuma bisa punya satu permintaan sekaligus. Selama menunggu jawaban, semua tombol minta mati dengan hitung mundur **60 detik** (dulu 30 detik).
+  - Pemain yang menolak atau nggak menjawab nggak bisa dimintai lagi oleh penonton itu sampai permainannya selesai. Tombol pemain lain langsung hidup lagi (jeda 3 menit sudah nggak ada).
+  - Habis lihat kartu seseorang (berhenti sendiri, dihentikan pemainnya, atau pemainnya keluar), penonton baru bisa minta lagi ke siapa pun di meja itu **30 menit** kemudian. Hitung mundurnya kelihatan di layar penonton. Pemain yang menekan **Hentikan** juga nggak bisa dimintai lagi oleh penonton itu sampai permainannya selesai.
+  - Bagi pemain, kotak "X pengin lihat kartumu." sekarang bertahan sampai 60 detik.
+
+### Teknis
+
+- `@remi/meja` (#62): `BATAS_JAWAB_LIHAT_MS` 30 → 60 detik, `JEDA_SESUDAH_LIHAT_MS` baru (30 menit), `JEDA_TOLAK_LIHAT_MS` dihapus. `Penonton.minta` jadi satu permintaan; per meja `blokirLihat` (kursi yang menolak/tidak menjawab per kunci penonton, dikosongkan saat permainan baru dimulai) dan `jedaLihat` (jeda sesudah melihat per kunci penonton, hanya meja itu). Semuanya hanya di memori; golden tetap.
+- Protokol: `KeadaanMintaLihat` sekarang `bisa`, `menunggu`, `ditolak`, `tidakDijawab`, `dilihat`, `tidak` (`jeda` dan `jedaMs` per kursi dihapus); `InfoTontonan.tunggu` (`{ kursi, sisaMs }`), `InfoTontonan.jedaMs`, dan `InfoTontonan.tertahan` (yang menahan hanya cocok lewat nama atau sambungan lain: tanpa kursi, alasan, atau hitung mundur), masing-masing hanya kalau ada. Rincian hanya lewat kunci milik sendiri (token HP dan nomor tontonan); catatan blokir per meja dibatasi `MAKS_KUNCI_BLOKIR_LIHAT`. Server tidak berubah.
+- Client: `tombolMinta()` di `ui/tontonan.ts`, baris hitung mundur `.hitung-tontonan` (di luar aria-live), kabar ditolak/tidak dijawab/selesai melihat dibedakan di `main.ts`; tombol minta yang ditolak server dengan galat hidup lagi dari kabar terakhir (`pulihkanTombol()`).
+
 ## [0.6.0] - 2026-11-08
 
 Nonton meja yang sedang main, dan pilihan waktu per giliran 45 detik. Aturan main tidak berubah.

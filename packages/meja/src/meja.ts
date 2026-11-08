@@ -25,7 +25,7 @@ import {
 import {
   BATAS_JAWAB_LIHAT_MS,
   JEDA_BOT,
-  JEDA_TOLAK_LIHAT_MS,
+  JEDA_SESUDAH_LIHAT_MS,
   MAKS_LEDEK_PER_PUTARAN,
   MAKS_PENONTON,
   PENGATURAN_BAWAAN,
@@ -236,13 +236,32 @@ interface Penonton {
   /** Tujuan pesan (opsi.kirim). */
   alamat: string;
   nama: string;
-  /** Kunci jeda tolak: nama (dirapikan) dan token HP-nya kalau ada. */
+  /**
+   * Kunci jati diri penonton: nama (`n:`, dirapikan), token HP-nya kalau ada (`t:`), dan nomor
+   * tontonannya (`s:`). Dipakai untuk jeda sesudah melihat, kursi yang menolak/tidak menjawab, dan satu
+   * permintaan sekaligus (#62), supaya sambung ulang, ganti token, atau sambungan lain tidak
+   * melewatinya. Rinciannya (kursi mana, alasan, hitung mundur) hanya dikirim lewat kunci milik
+   * sendiri (`t:`/`s:`); yang cocok hanya lewat nama bisa saja orang lain (lihat `kunciSendiri`).
+   */
   kunci: string[];
   /** Kursi yang kartunya sedang dilihat; null = hanya tontonan buangan. */
   melihat: number | null;
-  /** Permintaan yang menunggu jawaban: kursi → batas jawab (jam meja). */
-  minta: Map<number, number>;
+  /** Satu-satunya permintaan yang menunggu jawaban (#62): kursi dan batas jawab (jam meja). */
+  minta: { kursi: number; batas: number } | null;
 }
+
+/** Kenapa seorang pemain tidak bisa diminta lagi oleh penonton sampai permainan selesai (#62). */
+type AlasanBlokirLihat = 'ditolak' | 'tidakDijawab';
+
+/**
+ * Batas banyaknya kunci penonton di catatan blokir satu meja (#62). Catatannya baru dikosongkan saat
+ * permainan baru dimulai, jadi tanpa batas skrip yang terus ganti nama/token bisa menumpuknya selama
+ * permainan. Yang dibuang lebih dulu: kunci tertua yang bukan milik penonton yang sedang hadir.
+ */
+export const MAKS_KUNCI_BLOKIR_LIHAT = 600;
+
+/** Galat umum saat yang menahan hanya cocok lewat nama (bisa orang lain): tanpa nama pemain atau alasan. */
+export const TEKS_MINTA_TERTAHAN = 'Belum bisa minta lihat dari sini, Bos. Namamu lagi dipakai minta atau lihat kartu di tempat lain, atau baru saja.';
 
 /** "2 menit 30 detik", "45 detik": sisa jeda sebelum boleh minta lagi. */
 export function teksSisaJeda(ms: number): string {
@@ -365,9 +384,14 @@ export class Meja {
   private nomorPenonton = 0;
   /** Nonton (#60): kode yang dikirim ke penonton sebagai `kode` (dari server, lihat `tonton()`). */
   private kodeTonton: string | null = null;
-  /** Jeda minta lihat sesudah ditolak: kunci penonton (token/nama) → kursi → sampai kapan (jam meja). */
-  private tolakLihat = new Map<string, Map<number, number>>();
-  /** Batas jawab permintaan lihat yang paling dekat (bukan bagian jadwalkan(): tidak diulang tiap perubahan). */
+  /**
+   * #62: kursi yang menolak (atau menghentikan) atau tidak menjawab, per kunci penonton (token/nama).
+   * Berlaku sampai permainan baru dimulai di meja ini (dikosongkan di `mulaiPermainan`).
+   */
+  private blokirLihat = new Map<string, Map<number, AlasanBlokirLihat>>();
+  /** #62: jeda sesudah melihat kartu, per kunci penonton → sampai kapan (jam meja). Hanya meja ini. */
+  private jedaLihat = new Map<string, number>();
+  /** Batas jawab atau akhir jeda yang paling dekat (bukan bagian jadwalkan(): tidak diulang tiap perubahan). */
   private timerPenonton: unknown = null;
 
   constructor(
@@ -658,10 +682,11 @@ export class Meja {
     }
     this.putusSejak.delete(i);
     this.dijalankanWarga.delete(i);
-    // Nonton (#60): izin dan permintaan untuk kursi ini berakhir bersama pemainnya.
+    // Nonton (#60): izin dan permintaan untuk kursi ini berakhir bersama pemainnya; yang sedang
+    // melihat mulai jeda 30 menit (#62).
     for (const p of this.penonton.values()) {
-      p.minta.delete(i);
-      if (p.melihat === i) p.melihat = null;
+      if (p.minta?.kursi === i) p.minta = null;
+      if (p.melihat === i) this.selesaiLihat(p);
     }
     this.lepasKursi(i);
   }
@@ -773,59 +798,64 @@ export class Meja {
 
   /**
    * Mulai menonton. `alamat`: tujuan pesan untuk penonton ini (lewat `opsi.kirim`, seperti pemainId).
-   * `token`: penanda tetap penonton di HP-nya, untuk jeda sesudah ditolak (bersama namanya, supaya
-   * menyambung ulang atau ganti token tidak melewati jeda). `kodeTonton`: kode khusus tonton dari server,
-   * dipakai sebagai `kode` di semua yang dikirim ke penonton, supaya kode meja asli (yang juga dipakai
-   * untuk gabung sesudah Main lagi) tidak bocor lewat daftar "Lagi main". Tanpa itu (offline, test)
-   * kode meja yang dipakai. Melempar GalatMeja kalau tidak bisa.
+   * `token`: penanda tetap penonton di HP-nya, untuk jeda sesudah melihat dan kursi yang menolak (#62),
+   * bersama namanya, supaya menyambung ulang atau ganti token tidak melewatinya. `kodeTonton`: kode
+   * khusus tonton dari server, dipakai sebagai `kode` di semua yang dikirim ke penonton, supaya kode meja
+   * asli (yang juga dipakai untuk gabung sesudah Main lagi) tidak bocor lewat daftar "Lagi main". Tanpa
+   * itu (offline, test) kode meja yang dipakai. Melempar GalatMeja kalau tidak bisa.
    */
   tonton(alamat: string, nama: string, token?: string, kodeTonton?: string): void {
     if (this.d.kompetisi) galat('Meja kompetisi nggak bisa ditonton, Bos.');
     if (this.d.pengaturan.tanpaPenonton === true) galat('Meja ini nggak bisa ditonton, Bos.');
     if (this.status !== 'main') galat('Permainan di meja ini belum mulai atau sudah selesai.');
     const namaRapi = rapikanNama(nama);
-    const kunci = [`n:${kunciNama(namaRapi)}`, ...(token ? [`t:${token}`] : [])];
     // HP yang sama (token sama) dari sambungan lain: sambungan sambung ulang, atau tab lain. Tontonan
-    // lama diambil alih (nomor, izin, dan permintaannya ikut), jadi satu HP tetap satu penonton dan
-    // satu permintaan aktif per pemain; sambungan lama diberi tahu.
+    // lama diambil alih (nomor, izin, dan permintaannya ikut), jadi satu HP tetap satu penonton;
+    // sambungan lama diberi tahu.
     const lama = token ? [...this.penonton.values()].find((p) => p.alamat !== alamat && p.kunci.includes(`t:${token}`)) : undefined;
     const sendiri = this.penonton.get(alamat);
-    // Alamat yang sama menonton lagi: permintaannya yang masih menunggu dihitung ditolak (lihat lepas).
-    if (sendiri && !lama) this.batalkanMinta(sendiri);
     if (!sendiri && !lama && this.penonton.size >= MAKS_PENONTON) galat('Penontonnya sudah penuh, Bos.');
+    // Alamat yang sama menonton lagi: permintaannya yang masih menunggu dihitung tidak dijawab, dan
+    // yang sedang melihat dihitung selesai melihat (lihat lepasPenonton).
+    if (sendiri && !lama) this.akhiriPenonton(sendiri);
     if (lama) {
       this.penonton.delete(lama.alamat);
       this.kirimKe(lama.alamat, { t: 'tontonSelesai', alasan: 'Kamu nonton meja ini dari tempat lain.' });
     }
+    const id = lama?.id ?? sendiri?.id ?? ++this.nomorPenonton;
+    const kunci = [`n:${kunciNama(namaRapi)}`, ...(token ? [`t:${token}`] : []), `s:${id}`];
     this.penonton.set(alamat, {
-      id: lama?.id ?? sendiri?.id ?? ++this.nomorPenonton,
+      id,
       alamat,
       nama: namaRapi,
       // Kunci nama lama tetap dibawa: ganti nama sambil mengambil alih tidak melewati jeda.
       kunci: lama ? [...new Set([...kunci, ...lama.kunci])] : kunci,
       melihat: lama?.melihat ?? null,
-      minta: lama?.minta ?? new Map(),
+      minta: lama?.minta ?? null,
     });
     if (kodeTonton) this.kodeTonton = kodeTonton;
     this.siarkan();
   }
 
   /**
-   * Penonton pergi (keluar atau sambungannya tertutup). Izinnya ikut hilang; permintaan yang masih menunggu
-   * dihitung ditolak (jeda), supaya keluar-masuk atau sambung ulang tidak dipakai untuk mengulang permintaan.
+   * Penonton pergi (keluar atau sambungannya tertutup). Permintaan yang masih menunggu dihitung tidak
+   * dijawab, dan yang sedang melihat dihitung selesai melihat (jeda 30 menit, #62), supaya keluar-masuk
+   * atau sambung ulang tidak dipakai untuk mengulang permintaan atau melewati jeda. Sambung ulang yang
+   * datang sebelum sambungan lamanya tertutup tetap mengambil alih tanpa kehilangan apa pun (`tonton`).
    */
   lepasPenonton(alamat: string): void {
     const p = this.penonton.get(alamat);
     if (!p) return;
-    this.batalkanMinta(p);
+    this.akhiriPenonton(p);
     this.penonton.delete(alamat);
     this.siarkan();
   }
 
-  /** Permintaan `p` yang masih menunggu dibatalkan dan dicatat seperti ditolak. */
-  private batalkanMinta(p: Penonton): void {
-    for (const i of p.minta.keys()) this.catatTolak(p, i);
-    p.minta.clear();
+  /** Penonton `p` berhenti dipakai: permintaannya dicatat tidak dijawab, melihatnya dicatat selesai. */
+  private akhiriPenonton(p: Penonton): void {
+    if (p.minta) this.catatBlokir(p, p.minta.kursi, 'tidakDijawab');
+    p.minta = null;
+    if (p.melihat !== null) this.selesaiLihat(p);
   }
 
   /** Pesan dari penonton. Kesalahan dikirim balik sebagai pesan error. */
@@ -838,7 +868,7 @@ export class Meja {
           return this.mintaLihat(p, pesan.kursi);
         case 'berhentiLihat':
           if (p.melihat === null) return;
-          p.melihat = null;
+          this.selesaiLihat(p);
           return this.siarkan();
         case 'keluar':
           this.kirimKe(alamat, { t: 'tontonSelesai', alasan: 'Kamu berhenti nonton.' });
@@ -854,47 +884,145 @@ export class Meja {
     }
   }
 
-  /** Sampai kapan penonton `p` belum boleh minta lagi ke kursi `i` (0 = boleh). */
-  private jedaTolak(p: Penonton, i: number): number {
-    const sekarang = this.penjadwal.sekarang();
-    let sampai = 0;
-    for (const k of p.kunci) {
-      const t = this.tolakLihat.get(k)?.get(i) ?? 0;
-      if (t > sekarang) sampai = Math.max(sampai, t);
-    }
-    return sampai;
+  /** Semua penonton yang berbagi kunci dengan `p` (orang yang sama dari sambungan lain), termasuk `p`. */
+  private sejatiDiri(p: Penonton): Penonton[] {
+    return [...this.penonton.values()].filter((q) => q === p || q.kunci.some((k) => p.kunci.includes(k)));
   }
 
-  /** Catat jeda tolak untuk penonton `p` di kursi `i` (ditolak, tidak dijawab, atau dihentikan). */
-  private catatTolak(p: Penonton, i: number): void {
+  /**
+   * Kunci yang pasti milik `p` sendiri: token HP-nya dan nomor tontonannya. Kunci nama tidak, karena
+   * orang lain bisa memakai nama yang sama; yang tertahan hanya lewat nama tetap ditahan, tapi tanpa
+   * rincian (kursi, alasan, hitung mundur), supaya penonton lain tidak tahu siapa minta atau melihat
+   * kartu siapa (#60).
+   */
+  private kunciSendiri(p: Penonton): string[] {
+    return p.kunci.filter((k) => !k.startsWith('n:'));
+  }
+
+  private milikSendiri(p: Penonton, q: Penonton): boolean {
+    if (q === p) return true;
+    const sendiri = this.kunciSendiri(p);
+    return q.kunci.some((k) => sendiri.includes(k));
+  }
+
+  /**
+   * Yang menahan `p` minta lihat (#62): permintaan miliknya sendiri yang menunggu, jeda miliknya sendiri
+   * (0 = tidak ada), dan `tertahan` = ada permintaan, tontonan kartu, atau jeda yang hanya cocok lewat
+   * nama atau dari sambungan lain (tanpa rincian).
+   */
+  private tahananMinta(p: Penonton): { minta: { kursi: number; batas: number } | null; jeda: number; tertahan: boolean } {
+    let minta: { kursi: number; batas: number } | null = null;
+    let tertahan = false;
+    for (const q of this.sejatiDiri(p)) {
+      if (q.minta) {
+        if (this.milikSendiri(p, q)) minta ??= q.minta;
+        else tertahan = true;
+      }
+      if (q !== p && q.melihat !== null) tertahan = true;
+    }
     const sekarang = this.penjadwal.sekarang();
-    const sampai = sekarang + JEDA_TOLAK_LIHAT_MS;
-    // Jeda yang sudah lewat dibuang, supaya catatannya tidak menumpuk selama meja hidup.
-    for (const [k, m] of this.tolakLihat) {
-      for (const [j, t] of m) if (t <= sekarang) m.delete(j);
-      if (!m.size) this.tolakLihat.delete(k);
-    }
+    const sendiri = this.kunciSendiri(p);
+    let jeda = 0;
     for (const k of p.kunci) {
-      const m = this.tolakLihat.get(k) ?? new Map<number, number>();
-      m.set(i, sampai);
-      this.tolakLihat.set(k, m);
+      const t = this.jedaLihat.get(k) ?? 0;
+      if (t <= sekarang) continue;
+      if (sendiri.includes(k)) jeda = Math.max(jeda, t);
+      else tertahan = true;
     }
+    return { minta, jeda, tertahan };
+  }
+
+  /**
+   * Kursi `i` menolak atau tidak menjawab penonton `p`: tidak bisa diminta lagi sampai permainan selesai.
+   * 'lain' = hanya tercatat lewat kunci nama (bisa orang lain), jadi alasannya tidak dikirim.
+   */
+  private blokirDiri(p: Penonton, i: number): AlasanBlokirLihat | 'lain' | null {
+    const sendiri = this.kunciSendiri(p);
+    let alasan: AlasanBlokirLihat | 'lain' | null = null;
+    for (const k of p.kunci) {
+      const a = this.blokirLihat.get(k)?.get(i);
+      if (!a) continue;
+      if (!sendiri.includes(k)) {
+        alasan ??= 'lain';
+        continue;
+      }
+      // 'ditolak' lebih jelas daripada 'tidakDijawab' kalau keduanya tercatat (dari kunci berbeda).
+      if (a === 'ditolak') return a;
+      alasan = a;
+    }
+    return alasan;
+  }
+
+  private catatBlokir(p: Penonton, i: number, alasan: AlasanBlokirLihat): void {
+    for (const k of p.kunci) {
+      const m = this.blokirLihat.get(k) ?? new Map<number, AlasanBlokirLihat>();
+      if (m.get(i) !== 'ditolak') m.set(i, alasan);
+      // Hapus lalu pasang lagi: kunci yang baru dipakai pindah ke belakang (paling akhir dibuang).
+      this.blokirLihat.delete(k);
+      this.blokirLihat.set(k, m);
+    }
+    this.pangkasBlokir();
+  }
+
+  /** Jaga catatan blokir tetap di bawah MAKS_KUNCI_BLOKIR_LIHAT; kunci penonton yang hadir tidak dibuang. */
+  private pangkasBlokir(): void {
+    if (this.blokirLihat.size <= MAKS_KUNCI_BLOKIR_LIHAT) return;
+    const hadir = new Set<string>();
+    for (const p of this.penonton.values()) for (const k of p.kunci) hadir.add(k);
+    for (const k of this.blokirLihat.keys()) {
+      if (this.blokirLihat.size <= MAKS_KUNCI_BLOKIR_LIHAT) break;
+      if (!hadir.has(k)) this.blokirLihat.delete(k);
+    }
+  }
+
+  /** Banyaknya kunci penonton di catatan blokir (untuk test). */
+  get jumlahKunciBlokirLihat(): number {
+    return this.blokirLihat.size;
+  }
+
+  /**
+   * Penonton `p` selesai melihat kartu (sebab apa pun: berhenti sendiri, dihentikan pemainnya, pemainnya
+   * keluar, sambungannya tertutup, permainan selesai): tidak bisa minta ke siapa pun di meja ini selama
+   * JEDA_SESUDAH_LIHAT_MS (#62). Jeda yang sudah lewat dibuang supaya catatannya tidak menumpuk.
+   */
+  private selesaiLihat(p: Penonton): void {
+    p.melihat = null;
+    const sekarang = this.penjadwal.sekarang();
+    this.buangJedaLewat(sekarang);
+    for (const k of p.kunci) this.jedaLihat.set(k, sekarang + JEDA_SESUDAH_LIHAT_MS);
+    // Hanya timernya: dipanggil juga dari dalam siarkan()/bubarkanPenonton(), jadi tidak boleh menyiarkan.
+    this.aturTimerPenonton();
+  }
+
+  /** Buang jeda yang sudah lewat; true kalau ada yang dibuang. */
+  private buangJedaLewat(sekarang: number): boolean {
+    let ada = false;
+    for (const [k, t] of this.jedaLihat) {
+      if (t <= sekarang) {
+        this.jedaLihat.delete(k);
+        ada = true;
+      }
+    }
+    return ada;
   }
 
   private mintaLihat(p: Penonton, i: number): void {
     const k = this.d.kursi[i];
     if (!k || k.jenis === 'kosong') galat('Kursinya kosong, Bos.');
     if (k.jenis !== 'manusia') galat('Warga kedai nggak bisa dimintai, Bos.');
-    if (!k.terhubung) galat('Pemainnya lagi nggak nyambung, Bos.');
     if (p.melihat !== null) galat('Berhenti lihat dulu, baru minta ke pemain lain.');
-    if (p.minta.has(i)) galat('Masih nunggu jawabannya, Bos.');
-    // Satu permintaan aktif per pemain juga untuk orang yang sama dari sambungan lain (nama atau token sama).
-    for (const q of this.penonton.values()) {
-      if (q !== p && q.minta.has(i) && q.kunci.some((k) => p.kunci.includes(k))) galat('Masih nunggu jawabannya, Bos.');
-    }
-    const sampai = this.jedaTolak(p, i);
-    if (sampai) galat(`Sabar, Bos. Bisa minta lagi ${teksSisaJeda(sampai - this.penjadwal.sekarang())} lagi.`);
-    p.minta.set(i, this.penjadwal.sekarang() + BATAS_JAWAB_LIHAT_MS);
+    // Satu permintaan sekaligus, ke siapa pun, juga dari sambungan lain orang yang sama (#62). Yang
+    // menahan hanya lewat nama (bisa orang lain) ditolak dengan pesan umum, tanpa nama pemain.
+    const { minta: menunggu, jeda: sampai, tertahan } = this.tahananMinta(p);
+    if (menunggu) galat(`Masih nunggu jawaban ${this.d.kursi[menunggu.kursi]?.nama ?? 'pemainnya'}, Bos.`);
+    if (sampai) galat(`Sabar, Bos. Bisa minta lihat lagi ${teksSisaJeda(sampai - this.penjadwal.sekarang())} lagi.`);
+    if (tertahan) galat(TEKS_MINTA_TERTAHAN);
+    const blokir = this.blokirDiri(p, i);
+    if (blokir === 'ditolak') galat(`${k.nama} nggak mau kartunya dilihat di permainan ini. Coba pemain lain, Bos.`);
+    if (blokir === 'tidakDijawab') galat(`${k.nama} tadi nggak jawab, jadi nggak bisa diminta lagi di permainan ini. Coba pemain lain, Bos.`);
+    if (blokir) galat(TEKS_MINTA_TERTAHAN);
+    if (!k.terhubung) galat('Pemainnya lagi nggak nyambung, Bos.');
+    p.minta = { kursi: i, batas: this.penjadwal.sekarang() + BATAS_JAWAB_LIHAT_MS };
     this.jadwalkanPenonton();
     this.siarkan();
   }
@@ -907,13 +1035,10 @@ export class Meja {
   private jawabLihat(kursi: number, id: number, terima: boolean): void {
     const p = this.penontonDenganId(id);
     // Permintaan yang sudah tidak ada (penontonnya pergi, sudah kedaluwarsa): diam saja.
-    if (!p || !p.minta.has(kursi)) return;
-    p.minta.delete(kursi);
-    if (terima) {
-      p.melihat = kursi;
-      // Satu kursi saja yang dilihat: permintaan lain yang masih menunggu dibatalkan (tanpa jeda).
-      p.minta.clear();
-    } else this.catatTolak(p, kursi);
+    if (!p || p.minta?.kursi !== kursi) return;
+    p.minta = null;
+    if (terima) p.melihat = kursi;
+    else this.catatBlokir(p, kursi, 'ditolak');
     this.jadwalkanPenonton();
     this.siarkan();
   }
@@ -921,33 +1046,45 @@ export class Meja {
   private hentikanLihat(kursi: number, id: number): void {
     const p = this.penontonDenganId(id);
     if (!p || p.melihat !== kursi) return;
-    p.melihat = null;
-    // Dihentikan pemainnya sama dengan ditolak: baru boleh minta lagi sesudah jeda.
-    this.catatTolak(p, kursi);
+    // Dihentikan pemainnya: jeda 30 menit seperti selesai melihat, dan pemain itu dihitung menolak
+    // (tidak bisa diminta lagi oleh penonton ini sampai permainan selesai).
+    this.catatBlokir(p, kursi, 'ditolak');
+    this.selesaiLihat(p);
     this.siarkan();
   }
 
-  /** Permintaan yang lewat batas jawab dianggap ditolak; timer dipasang untuk batas terdekat berikutnya. */
+  /**
+   * Permintaan yang lewat batas jawab dicatat tidak dijawab; jeda sesudah melihat yang sudah lewat
+   * dibuang (dan penonton diberi kabar terbaru). Timer dipasang untuk batas terdekat berikutnya.
+   */
   private jadwalkanPenonton(): void {
+    if (this.berhenti) return;
+    const sekarang = this.penjadwal.sekarang();
+    let berubah = this.buangJedaLewat(sekarang) && this.penonton.size > 0;
+    for (const p of this.penonton.values()) {
+      if (p.minta && p.minta.batas <= sekarang) {
+        this.catatBlokir(p, p.minta.kursi, 'tidakDijawab');
+        p.minta = null;
+        berubah = true;
+      }
+    }
+    this.aturTimerPenonton();
+    if (berubah) this.siarkan();
+  }
+
+  /** Pasang (ulang) timer penonton untuk batas jawab atau akhir jeda terdekat; tidak menyiarkan apa pun. */
+  private aturTimerPenonton(): void {
     if (this.timerPenonton !== null) this.penjadwal.batal(this.timerPenonton);
     this.timerPenonton = null;
     if (this.berhenti) return;
     const sekarang = this.penjadwal.sekarang();
-    let berubah = false;
     let terdekat = Infinity;
-    for (const p of this.penonton.values()) {
-      for (const [i, batas] of p.minta) {
-        if (batas <= sekarang) {
-          p.minta.delete(i);
-          this.catatTolak(p, i);
-          berubah = true;
-        } else terdekat = Math.min(terdekat, batas);
-      }
-    }
+    for (const p of this.penonton.values()) if (p.minta) terdekat = Math.min(terdekat, p.minta.batas);
+    for (const t of this.jedaLihat.values()) terdekat = Math.min(terdekat, t);
     if (terdekat < Infinity) {
       this.timerPenonton = this.pasangTimer(
-        terdekat - sekarang,
-        'batas jawab minta lihat',
+        Math.max(0, terdekat - sekarang),
+        'batas jawab minta lihat atau akhir jeda lihat',
         () => {
           this.timerPenonton = null;
           this.jadwalkanPenonton();
@@ -955,34 +1092,38 @@ export class Meja {
         false,
       );
     }
-    if (berubah) this.siarkan();
   }
 
-  /** Keadaan tombol minta lihat kursi `i` untuk penonton `p`. */
-  private keadaanMinta(p: Penonton, i: number): { minta: KeadaanMintaLihat; jedaMs?: number } {
+  /** Keadaan tombol minta lihat kursi `i` untuk penonton `p` (tanpa kunci bersama; lihat KeadaanMintaLihat). */
+  private keadaanMinta(p: Penonton, i: number, menunggu: { kursi: number } | null): KeadaanMintaLihat {
     const k = this.d.kursi[i];
-    if (k.jenis !== 'manusia') return { minta: 'tidak' };
-    if (p.melihat === i) return { minta: 'dilihat' };
-    if (p.minta.has(i)) return { minta: 'menunggu' };
-    const sampai = this.jedaTolak(p, i);
-    if (sampai) return { minta: 'jeda', jedaMs: sampai - this.penjadwal.sekarang() };
-    if (!k.terhubung || p.melihat !== null) return { minta: 'tidak' };
-    return { minta: 'bisa' };
+    if (k.jenis !== 'manusia') return 'tidak';
+    if (p.melihat === i) return 'dilihat';
+    if (menunggu?.kursi === i) return 'menunggu';
+    const blokir = this.blokirDiri(p, i);
+    if (blokir) return blokir === 'lain' ? 'tidak' : blokir;
+    if (!k.terhubung) return 'tidak';
+    return 'bisa';
   }
 
   private infoTontonan(p: Penonton): InfoTontonan {
     const g = this.d.game;
     const n = this.d.kursi.length;
+    const sekarang = this.penjadwal.sekarang();
     // Sama dengan buangan di view pemain: (jumlah pemain − 1) kartu teratas, minimal 1.
     const buangan = g?.putaran ? g.putaran.buangan.slice(-Math.max(1, n - 1)).map((e) => ({ ...e.kartu })) : [];
+    const { minta: menunggu, jeda, tertahan } = this.tahananMinta(p);
     return {
       kode: this.kodeTonton ?? this.d.kode,
       namaHost: this.d.kursi[this.d.host]?.nama ?? '',
       status: this.status,
-      pemain: this.d.kursi.map((k, i) => ({ nama: k.nama, ...this.keadaanMinta(p, i) })),
+      pemain: this.d.kursi.map((k, i) => ({ nama: k.nama, minta: this.keadaanMinta(p, i, menunggu) })),
       buangan,
       melihat: p.melihat,
       jumlahPenonton: this.penonton.size,
+      ...(menunggu ? { tunggu: { kursi: menunggu.kursi, sisaMs: Math.max(0, menunggu.batas - sekarang) } } : {}),
+      ...(jeda ? { jedaMs: jeda - sekarang } : {}),
+      ...(tertahan ? { tertahan: true as const } : {}),
     };
   }
 
@@ -993,7 +1134,7 @@ export class Meja {
     const melihat: PenontonKursi[] = [];
     if (i !== null) {
       for (const p of this.penonton.values()) {
-        if (p.minta.has(i)) minta.push({ id: p.id, nama: p.nama });
+        if (p.minta?.kursi === i) minta.push({ id: p.id, nama: p.nama });
         if (p.melihat === i) melihat.push({ id: p.id, nama: p.nama });
       }
     }
@@ -1003,8 +1144,8 @@ export class Meja {
   /** Kirim tontonan ke semua penonton; yang diizinkan juga dapat info meja dan view pemain yang dilihatnya. */
   private siarkanPenonton(batasLog: number): void {
     for (const p of this.penonton.values()) {
-      // Pemainnya sudah keluar (kursinya diteruskan warga kedai): izinnya berakhir.
-      if (p.melihat !== null && this.d.kursi[p.melihat]?.jenis !== 'manusia') p.melihat = null;
+      // Pemainnya sudah keluar (kursinya diteruskan warga kedai): izinnya berakhir, jeda mulai (#62).
+      if (p.melihat !== null && this.d.kursi[p.melihat]?.jenis !== 'manusia') this.selesaiLihat(p);
       this.kirimKe(p.alamat, { t: 'tontonan', info: this.infoTontonan(p) });
       if (p.melihat === null) continue;
       const i = p.melihat;
@@ -1089,6 +1230,8 @@ export class Meja {
     if (this.d.kompetisi && this.d.kursi.some((k) => k.jenis !== 'manusia')) galat('Masih ada kursi kosong. Tunggu peserta lain masuk.');
     if (this.d.kursi.some((k) => k.jenis === 'kosong')) galat('Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.');
     hapusTandaKeluar(this.d.kursi);
+    // Nonton (#62): pemain yang menolak atau tidak menjawab boleh diminta lagi di permainan baru.
+    this.blokirLihat.clear();
     const p = this.d.pengaturan;
     const kaldu = p.modeKaldu === true;
     const game = buatPermainan({
@@ -1939,7 +2082,11 @@ export class Meja {
 
   /** Semua penonton diberi tahu tontonannya berakhir (meja dibuang server), lalu dilupakan. */
   bubarkanPenonton(alasan: string): void {
-    for (const p of this.penonton.values()) this.kirimKe(p.alamat, { t: 'tontonSelesai', alasan });
+    for (const p of this.penonton.values()) {
+      // Melihat berakhir karena permainannya selesai juga dihitung (#62: sebab apa pun).
+      if (p.melihat !== null) this.selesaiLihat(p);
+      this.kirimKe(p.alamat, { t: 'tontonSelesai', alasan });
+    }
     this.penonton.clear();
   }
 

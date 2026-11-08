@@ -10,7 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buatPermainan, terapkanAksi, viewUntuk, type GameState } from '@remi/engine';
-import { PENGATURAN_BAWAAN, type InfoMeja, type InfoTontonan } from '@remi/meja';
+import { JEDA_SESUDAH_LIHAT_MS, PENGATURAN_BAWAAN, type InfoMeja, type InfoTontonan } from '@remi/meja';
 import type { AppUntukMeja } from '../src/kontrolMeja';
 import { WsPalsu } from './bantu';
 
@@ -199,6 +199,22 @@ describe('Aplikasi: nonton', () => {
     expect(terakhir(ws)).toEqual({ t: 'berhentiLihat' });
     expect(dipanggil('hancurkan').length).toBeGreaterThan(0);
     expect(document.querySelector('.layar-tontonan')).not.toBeNull();
+    // Berhenti sendiri juga memulai jeda 30 menit (#62): kabar dan hitung mundur langsung tampil.
+    expect(toastTeks()).toContain('Oke, berhenti lihat. Kamu bisa minta lihat lagi 30 menit lagi.');
+    expect(document.querySelector('.hitung-tontonan')!.textContent).toBe('Habis lihat kartu, kamu bisa minta lagi dalam 30:00.');
+  });
+
+  it('minta lihat ditolak server dengan galat: tombolnya hidup lagi', async () => {
+    const ws = await nonton();
+    const tombol = () => document.querySelector<HTMLButtonElement>('[data-minta="0"]')!;
+    tombol().click();
+    expect(terakhir(ws)).toEqual({ t: 'mintaLihat', kursi: 0 });
+    expect(tombol().disabled).toBe(true);
+    ws.kirimDariServer({ t: 'error', pesan: 'Pemainnya lagi nggak nyambung, Bos.' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(toastTeks()).toContain('Pemainnya lagi nggak nyambung, Bos.');
+    expect(document.querySelector('.layar-tontonan')).not.toBeNull();
+    expect(tombol().disabled).toBe(false);
   });
 
   it('pemain menghentikan: kabar singkat, kembali ke layar penonton', async () => {
@@ -207,18 +223,32 @@ describe('Aplikasi: nonton', () => {
     ws.kirimDariServer({ t: 'tontonan', info: tontonan({ melihat: 0 }) });
     ws.kirimDariServer({ t: 'tontonMeja', info: infoMeja(g, 0) });
     await vi.advanceTimersByTimeAsync(0);
-    ws.kirimDariServer({ t: 'tontonan', info: tontonan({ pemain: [{ nama: 'Ani', minta: 'jeda', jedaMs: 180_000 }, { nama: 'Budi', minta: 'bisa' }, { nama: 'Warga', minta: 'tidak' }] }) });
+    ws.kirimDariServer({ t: 'tontonan', info: tontonan({ pemain: [{ nama: 'Ani', minta: 'ditolak' }, { nama: 'Budi', minta: 'bisa' }, { nama: 'Warga', minta: 'tidak' }], jedaMs: JEDA_SESUDAH_LIHAT_MS }) });
     await vi.advanceTimersByTimeAsync(0);
-    expect(toastTeks()).toContain('Ani berhenti membagi kartunya.');
+    expect(toastTeks()).toContain('Ani berhenti membagi kartunya. Kamu bisa minta lihat lagi 30 menit lagi.');
+    // Bukan kabar "menolak": yang menolak hanya dari permintaan yang menunggu.
+    expect(toastTeks()).not.toContain('belum mau');
+    // Jeda 30 menit tampil di layar penonton, semua tombol mati.
+    expect(document.querySelector('.hitung-tontonan')!.textContent).toContain('30:00');
+    expect([...document.querySelectorAll<HTMLButtonElement>('[data-minta]')].every((b) => b.disabled)).toBe(true);
     expect(document.querySelector('.layar-tontonan')).not.toBeNull();
   });
 
   it('ditolak: kabar singkat; tontonan selesai dari server kembali ke daftar meja', async () => {
     const ws = await nonton();
-    ws.kirimDariServer({ t: 'tontonan', info: tontonan({ pemain: [{ nama: 'Ani', minta: 'menunggu' }, { nama: 'Budi', minta: 'bisa' }, { nama: 'Warga', minta: 'tidak' }] }) });
-    ws.kirimDariServer({ t: 'tontonan', info: tontonan({ pemain: [{ nama: 'Ani', minta: 'jeda', jedaMs: 180_000 }, { nama: 'Budi', minta: 'bisa' }, { nama: 'Warga', minta: 'tidak' }] }) });
+    ws.kirimDariServer({ t: 'tontonan', info: tontonan({ pemain: [{ nama: 'Ani', minta: 'menunggu' }, { nama: 'Budi', minta: 'bisa' }, { nama: 'Warga', minta: 'tidak' }], tunggu: { kursi: 0, sisaMs: 60_000 } }) });
+    ws.kirimDariServer({ t: 'tontonan', info: tontonan({ pemain: [{ nama: 'Ani', minta: 'ditolak' }, { nama: 'Budi', minta: 'bisa' }, { nama: 'Warga', minta: 'tidak' }] }) });
     await vi.advanceTimersByTimeAsync(0);
-    expect(toastTeks()).toContain('Ani belum mau kartunya dilihat.');
+    expect(toastTeks()).toContain('Ani belum mau kartunya dilihat. Coba minta ke pemain lain.');
+    // Tombol Budi langsung hidup lagi (#62), Ani mati dengan label yang jelas.
+    const tombol = () => [...document.querySelectorAll<HTMLButtonElement>('[data-minta]')];
+    expect(tombol().map((b) => b.disabled)).toEqual([true, false, true]);
+    expect(tombol()[0].textContent).toBe('Nggak mau dilihat');
+    // Tidak dijawab: kabarnya beda.
+    ws.kirimDariServer({ t: 'tontonan', info: tontonan({ pemain: [{ nama: 'Ani', minta: 'ditolak' }, { nama: 'Budi', minta: 'menunggu' }, { nama: 'Warga', minta: 'tidak' }], tunggu: { kursi: 1, sisaMs: 60_000 } }) });
+    ws.kirimDariServer({ t: 'tontonan', info: tontonan({ pemain: [{ nama: 'Ani', minta: 'ditolak' }, { nama: 'Budi', minta: 'tidakDijawab' }, { nama: 'Warga', minta: 'tidak' }] }) });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(toastTeks()).toContain('Budi nggak jawab. Coba minta ke pemain lain.');
     const nDaftar = ws.terkirim.filter((p) => p.t === 'daftar').length;
     ws.kirimDariServer({ t: 'tontonSelesai', alasan: 'Permainannya sudah selesai. Makasih sudah nonton.' });
     await vi.advanceTimersByTimeAsync(0);
@@ -242,7 +272,7 @@ describe('Aplikasi: nonton', () => {
     baru.kirimDariServer({ t: 'tontonan', info: tontonan() });
     await vi.advanceTimersByTimeAsync(0);
     expect(toastTeks()).not.toContain('Ani berhenti membagi kartunya.');
-    expect(toastTeks()).toContain('Sambunganmu sempat putus, jadi izin lihat kartunya lepas. Minta lagi ya.');
+    expect(toastTeks()).toContain('Sambunganmu sempat putus, jadi izin lihat kartunya lepas. Kamu bisa minta lihat lagi 30 menit lagi.');
     expect(document.querySelector('.layar-tontonan')).not.toBeNull();
   });
 

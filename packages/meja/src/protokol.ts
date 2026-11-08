@@ -152,23 +152,28 @@ export const MAKS_LEDEK_PER_PUTARAN = 12;
 // Nonton (keputusan pemilik #60, 7 Nov 2026): siapa saja boleh menonton meja online yang sedang
 // main dari daftar meja publik. Penonton hanya melihat nama pemain dan kartu buangan yang juga
 // terlihat pemain di meja. Penonton boleh minta lihat kartu ke satu pemain; pemain boleh menolak.
+// Aturan minta lihat diubah keputusan pemilik #62 (8 Nov 2026): satu permintaan sekaligus (ke
+// siapa pun), yang tidak menjawab atau menolak tidak bisa diminta lagi sampai permainan selesai,
+// dan sesudah melihat kartu siapa pun penonton menunggu 30 menit sebelum boleh minta lagi.
 
 /** Penonton paling banyak per meja. */
 export const MAKS_PENONTON = 30;
-/** Ditolak (atau dihentikan pemainnya): penonton baru boleh minta lagi ke pemain itu sesudah ini. */
-export const JEDA_TOLAK_LIHAT_MS = 3 * 60_000;
-/** Permintaan yang tidak dijawab selama ini dianggap ditolak (pemainnya mungkin sedang sibuk main). */
-export const BATAS_JAWAB_LIHAT_MS = 30_000;
+/** Permintaan yang tidak dijawab selama ini dianggap tidak dijawab (#62: 60 detik, dulu 30). */
+export const BATAS_JAWAB_LIHAT_MS = 60_000;
+/** Sesudah selesai melihat kartu (sebab apa pun), penonton baru boleh minta lagi ke siapa pun di meja ini sesudah ini (#62). */
+export const JEDA_SESUDAH_LIHAT_MS = 30 * 60_000;
 
 /**
- * Keadaan tombol "minta lihat" satu kursi di layar penonton:
- * - 'bisa': boleh minta sekarang,
- * - 'menunggu': permintaan sudah terkirim, belum dijawab,
- * - 'jeda': ditolak atau dihentikan, baru bisa minta lagi `jedaMs` lagi,
+ * Keadaan tombol "minta lihat" satu kursi di layar penonton (#62). Ini keadaan kursinya sendiri;
+ * selama `InfoTontonan.tunggu` atau `jedaMs` ada, semua tombol tetap mati.
+ * - 'bisa': boleh diminta (kalau tidak ada permintaan yang menunggu dan tidak sedang jeda),
+ * - 'menunggu': permintaan ke kursi ini sudah terkirim, belum dijawab,
+ * - 'ditolak': pemainnya menolak (atau menghentikan) penonton ini; tidak bisa diminta lagi sampai permainan selesai,
+ * - 'tidakDijawab': permintaannya tidak dijawab; tidak bisa diminta lagi sampai permainan selesai,
  * - 'dilihat': penonton ini sedang melihat kartu kursi itu,
- * - 'tidak': tidak bisa diminta (warga kedai, kursi kosong, pemain terputus, atau sedang melihat kursi lain).
+ * - 'tidak': tidak bisa diminta (warga kedai, kursi kosong, atau pemain terputus).
  */
-export type KeadaanMintaLihat = 'bisa' | 'menunggu' | 'jeda' | 'dilihat' | 'tidak';
+export type KeadaanMintaLihat = 'bisa' | 'menunggu' | 'ditolak' | 'tidakDijawab' | 'dilihat' | 'tidak';
 
 /** Yang dilihat penonton tanpa izin: nama pemain dan kartu buangan yang terlihat di meja. */
 export interface InfoTontonan {
@@ -177,14 +182,30 @@ export interface InfoTontonan {
   /** Nama host, untuk judul layar penonton. */
   namaHost: string;
   status: StatusMeja;
-  /** Satu per kursi, urut kursi. `jedaMs` hanya ada untuk 'jeda' (relatif terhadap saat dikirim). */
-  pemain: { nama: string; minta: KeadaanMintaLihat; jedaMs?: number }[];
+  /** Satu per kursi, urut kursi. */
+  pemain: { nama: string; minta: KeadaanMintaLihat }[];
   /** Kartu buangan yang juga terlihat pemain di meja, paling atas di akhir. */
   buangan: Kartu[];
   /** Kursi yang kartunya sedang dilihat penonton ini; null = tidak ada. */
   melihat: number | null;
   /** Banyaknya penonton di meja ini, termasuk penerima. */
   jumlahPenonton: number;
+  /**
+   * #62: permintaan penonton ini yang masih menunggu jawaban (paling banyak satu); `sisaMs` relatif
+   * terhadap saat dikirim. Selama ada, semua tombol minta mati. Hanya ada kalau ada permintaan.
+   */
+  tunggu?: { kursi: number; sisaMs: number };
+  /**
+   * #62: sisa jeda sesudah melihat kartu (relatif terhadap saat dikirim). Selama jeda semua tombol
+   * minta mati. Hanya ada selama jeda.
+   */
+  jedaMs?: number;
+  /**
+   * #62: semua tombol minta mati tanpa rincian, karena ada permintaan, tontonan kartu, atau jeda atas
+   * nama penonton ini dari sambungan lain (HP lain dengan nama yang sama, yang bisa saja orang lain).
+   * Kursi mana dan sampai kapan sengaja tidak dikirim. Hanya ditulis kalau true.
+   */
+  tertahan?: true;
 }
 
 /** Penonton yang minta atau sedang melihat kartu seorang pemain (hanya di info milik pemain itu). */
@@ -373,7 +394,7 @@ export type PesanKlien =
   | { t: 'daftar'; tonton?: true }
   /**
    * Nonton meja `kode` (#60). `token`: penanda tetap penonton di HP ini (bukan kursi), supaya jeda
-   * sesudah ditolak tetap berlaku walau penontonnya menyambung ulang.
+   * sesudah melihat dan kursi yang menolak (#62) tetap berlaku walau penontonnya menyambung ulang.
    */
   | { t: 'tonton'; kode: string; nama: string; token?: string }
   /** Penonton minta lihat kartu kursi `kursi`. */

@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 // Nonton (keputusan pemilik #60) di aplikasi:
-// - layar penonton: nama pemain, kartu buangan, tombol minta lihat per keadaan (bisa, menunggu, jeda
-//   dengan hitung mundur, dilihat, tidak bisa), tanpa kartu tangan siapa pun;
+// - layar penonton: nama pemain, kartu buangan, tombol minta lihat per keadaan (bisa, menunggu dengan
+//   hitung mundur 60 detik yang mematikan semua tombol, ditolak, tidak dijawab, jeda 30 menit sesudah
+//   melihat dengan hitung mundur, dilihat, tidak bisa; keputusan #62), tanpa kartu tangan siapa pun;
 // - daftar meja publik: bagian "Lagi main" dengan tombol Tonton;
 // - KontrolMeja mode penonton: tampilan meja pemain, tanpa aksi apa pun (ketuk, seret, tombol, keyboard),
 //   bar bawah "Kamu lagi lihat kartu X" + Berhenti lihat;
@@ -14,7 +15,7 @@ vi.hoisted(() => {
 });
 
 import { buatPermainan, terapkanAksi, viewUntuk, type GameState, type Kartu } from '@remi/engine';
-import { JEDA_TOLAK_LIHAT_MS, PENGATURAN_BAWAAN, type InfoMeja, type InfoTontonan, type RingkasanMeja } from '@remi/meja';
+import { BATAS_JAWAB_LIHAT_MS, JEDA_SESUDAH_LIHAT_MS, PENGATURAN_BAWAAN, type InfoMeja, type InfoTontonan, type RingkasanMeja } from '@remi/meja';
 
 vi.mock('../src/efek/suara', () => ({ bunyi: vi.fn(), getar: vi.fn() }));
 vi.mock('../src/efek/sorak', () => ({ sorak: vi.fn(async () => {}), bersihkanSorak: vi.fn() }));
@@ -25,7 +26,7 @@ vi.mock('../src/ui/dom', async (asli) => ({ ...(await asli<typeof import('../src
 
 import { KontrolMeja, type AppUntukMeja } from '../src/kontrolMeja';
 import { TEKS_TONTONAN } from '../src/konten/tontonan';
-import { renderTontonan } from '../src/ui/tontonan';
+import { renderTontonan, tombolMinta } from '../src/ui/tontonan';
 import { renderDaftarPublik } from '../src/ui/beranda';
 import { renderLobi } from '../src/ui/lobi';
 import { bukaModal, tutupSemuaJendela } from '../src/ui/dom';
@@ -114,7 +115,7 @@ describe('layar penonton', () => {
     status: 'main',
     pemain: [
       { nama: 'Ani', minta: 'bisa' },
-      { nama: 'Budi', minta: 'jeda', jedaMs: JEDA_TOLAK_LIHAT_MS },
+      { nama: 'Budi', minta: 'ditolak' },
       { nama: 'Warga', minta: 'tidak' },
     ],
     buangan: [kartu('love-7-0', 7, 'love'), kartu('waru-13-0', 13, 'waru')],
@@ -133,34 +134,136 @@ describe('layar penonton', () => {
     expect(akar.textContent).toContain('2 penonton');
     expect(akar.querySelectorAll('.buangan-tontonan canvas')).toHaveLength(2);
     const tombol = [...akar.querySelectorAll<HTMLButtonElement>('[data-minta]')];
-    expect(tombol.map((b) => b.textContent)).toEqual([TEKS_TONTONAN.minta, 'Bisa minta lagi 3 menit lagi', TEKS_TONTONAN.tidakBisa]);
+    expect(tombol.map((b) => b.textContent)).toEqual([TEKS_TONTONAN.minta, 'Nggak mau dilihat', TEKS_TONTONAN.tidakBisa]);
     expect(tombol.map((b) => b.disabled)).toEqual([false, true, true]);
+    expect(akar.querySelector<HTMLElement>('.ket-blokir')!.hidden).toBe(false);
     tombol[0].click();
     expect(minta).toHaveBeenCalledWith(0);
     // Ketuk ganda sebelum jawaban datang tidak mengirim dua kali.
     tombol[0].click();
     expect(minta).toHaveBeenCalledTimes(1);
-    t.perbarui(info({ pemain: [{ nama: 'Ani', minta: 'menunggu' }, { nama: 'Budi', minta: 'bisa' }, { nama: 'Warga', minta: 'tidak' }], buangan: [] }));
-    expect(akar.querySelector('[data-minta="0"]')!.textContent).toBe(TEKS_TONTONAN.menunggu);
+    t.perbarui(info({ pemain: [{ nama: 'Ani', minta: 'menunggu' }, { nama: 'Budi', minta: 'bisa' }, { nama: 'Warga', minta: 'tidak' }], buangan: [], tunggu: { kursi: 0, sisaMs: 60_000 } }));
+    expect(akar.querySelector('[data-minta="0"]')!.textContent).toBe('Nunggu jawaban… 1:00');
     expect(akar.textContent).toContain(TEKS_TONTONAN.buanganKosong);
     akar.querySelector<HTMLButtonElement>('#berhenti-nonton')!.click();
     expect(berhenti).toHaveBeenCalled();
     t.lepas();
   });
 
-  it('tombol hidup lagi sendiri begitu jeda habis', () => {
+  it('#62: selama permintaan menunggu semua tombol mati dengan hitung mundur 60 detik', () => {
     vi.useFakeTimers();
     try {
-      const t = renderTontonan(akar, info({ pemain: [{ nama: 'Ani', minta: 'jeda', jedaMs: 2000 }] }), { minta: vi.fn(), berhenti: vi.fn() });
-      const b = () => akar.querySelector<HTMLButtonElement>('[data-minta="0"]')!;
-      expect(b().disabled).toBe(true);
-      vi.advanceTimersByTime(4000);
-      expect(b().disabled).toBe(false);
-      expect(b().textContent).toBe(TEKS_TONTONAN.minta);
+      const minta = vi.fn();
+      const pemain: InfoTontonan['pemain'] = [
+        { nama: 'Ani', minta: 'menunggu' },
+        { nama: 'Budi', minta: 'bisa' },
+        { nama: 'Cici', minta: 'bisa' },
+        { nama: 'Dodi', minta: 'bisa' },
+      ];
+      const t = renderTontonan(akar, info({ pemain, tunggu: { kursi: 0, sisaMs: BATAS_JAWAB_LIHAT_MS } }), { minta, berhenti: vi.fn() });
+      const tombol = () => [...akar.querySelectorAll<HTMLButtonElement>('[data-minta]')];
+      const hitung = () => akar.querySelector<HTMLElement>('.hitung-tontonan')!;
+      expect(tombol().every((b) => b.disabled)).toBe(true);
+      expect(tombol().map((b) => b.textContent)).toEqual(['Nunggu jawaban… 1:00', 'Tunggu jawaban dulu', 'Tunggu jawaban dulu', 'Tunggu jawaban dulu']);
+      expect(hitung().hidden).toBe(false);
+      expect(hitung().textContent).toBe('Nunggu jawaban Ani. Sisa waktunya 1:00.');
+      // Hitung mundur di luar aria-live (tidak dibacakan tiap detik).
+      expect(hitung().closest('[aria-live]')).toBeNull();
+      vi.advanceTimersByTime(15_000);
+      expect(tombol()[0].textContent).toBe('Nunggu jawaban… 0:45');
+      expect(hitung().textContent).toBe('Nunggu jawaban Ani. Sisa waktunya 0:45.');
+      tombol()[1].click();
+      expect(minta).not.toHaveBeenCalled();
+      // Tidak dijawab: kursi lain langsung hidup, Ani mati dengan labelnya sendiri.
+      t.perbarui(info({ pemain: [{ nama: 'Ani', minta: 'tidakDijawab' }, ...pemain.slice(1)] }));
+      expect(tombol().map((b) => [b.textContent, b.disabled])).toEqual([
+        ['Nggak dijawab', true],
+        [TEKS_TONTONAN.minta, false],
+        [TEKS_TONTONAN.minta, false],
+        [TEKS_TONTONAN.minta, false],
+      ]);
+      expect(hitung().hidden).toBe(true);
+      // Ketuk satu: semua tombol langsung mati sampai kabar server datang.
+      tombol()[2].click();
+      expect(minta).toHaveBeenCalledWith(2);
+      expect(tombol().every((b) => b.disabled)).toBe(true);
       t.lepas();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('#62: sesudah melihat semua tombol mati 30 menit dengan hitung mundur, lalu hidup lagi sendiri', () => {
+    vi.useFakeTimers();
+    try {
+      const pemain: InfoTontonan['pemain'] = [
+        { nama: 'Ani', minta: 'tidakDijawab' },
+        { nama: 'Budi', minta: 'ditolak' },
+        { nama: 'Cici', minta: 'bisa' },
+        { nama: 'Dodi', minta: 'bisa' },
+      ];
+      const t = renderTontonan(akar, info({ pemain, jedaMs: JEDA_SESUDAH_LIHAT_MS }), { minta: vi.fn(), berhenti: vi.fn() });
+      const tombol = () => [...akar.querySelectorAll<HTMLButtonElement>('[data-minta]')];
+      const hitung = () => akar.querySelector<HTMLElement>('.hitung-tontonan')!.textContent;
+      expect(tombol().map((b) => [b.textContent, b.disabled])).toEqual([
+        ['Nggak dijawab', true],
+        ['Nggak mau dilihat', true],
+        ['Tunggu 30:00', true],
+        ['Tunggu 30:00', true],
+      ]);
+      expect(hitung()).toBe('Habis lihat kartu, kamu bisa minta lagi dalam 30:00.');
+      vi.advanceTimersByTime(61_000);
+      expect(tombol()[2].textContent).toBe('Tunggu 28:59');
+      expect(hitung()).toBe('Habis lihat kartu, kamu bisa minta lagi dalam 28:59.');
+      vi.advanceTimersByTime(JEDA_SESUDAH_LIHAT_MS);
+      expect(tombol().map((b) => b.disabled)).toEqual([true, true, false, false]);
+      expect(tombol()[3].textContent).toBe(TEKS_TONTONAN.minta);
+      expect(akar.querySelector<HTMLElement>('.hitung-tontonan')!.hidden).toBe(true);
+      t.lepas();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('tombolMinta: keadaan kursi dan kunci bersama', () => {
+    expect(tombolMinta('bisa', null, 0)).toEqual({ teks: TEKS_TONTONAN.minta, bisa: true });
+    expect(tombolMinta('bisa', 5_000, 0)).toEqual({ teks: TEKS_TONTONAN.tungguJawaban, bisa: false });
+    expect(tombolMinta('bisa', null, 90_000)).toEqual({ teks: 'Tunggu 1:30', bisa: false });
+    expect(tombolMinta('menunggu', 0, 0)).toEqual({ teks: 'Nunggu jawaban…', bisa: false });
+    expect(tombolMinta('dilihat', null, 0).bisa).toBe(false);
+    expect(tombolMinta('tidak', null, 0)).toEqual({ teks: TEKS_TONTONAN.tidakBisa, bisa: false });
+    expect(tombolMinta('bisa', null, 0, true)).toEqual({ teks: TEKS_TONTONAN.tertahanTombol, bisa: false });
+    // Hitung mundur milik sendiri didahulukan.
+    expect(tombolMinta('bisa', null, 90_000, true)).toEqual({ teks: 'Tunggu 1:30', bisa: false });
+  });
+
+  it('tertahan (namamu dipakai di tempat lain): semua tombol mati tanpa rincian', () => {
+    const pemain: InfoTontonan['pemain'] = [
+      { nama: 'Ani', minta: 'bisa' },
+      { nama: 'Budi', minta: 'bisa' },
+    ];
+    const t = renderTontonan(akar, info({ pemain, tertahan: true }), { minta: vi.fn(), berhenti: vi.fn() });
+    const tombol = [...akar.querySelectorAll<HTMLButtonElement>('[data-minta]')];
+    expect(tombol.map((b) => [b.textContent, b.disabled])).toEqual([
+      [TEKS_TONTONAN.tertahanTombol, true],
+      [TEKS_TONTONAN.tertahanTombol, true],
+    ]);
+    expect(akar.querySelector<HTMLElement>('.hitung-tontonan')!.textContent).toBe(TEKS_TONTONAN.tertahan);
+    t.perbarui(info({ pemain }));
+    expect([...akar.querySelectorAll<HTMLButtonElement>('[data-minta]')].every((b) => !b.disabled)).toBe(true);
+    t.lepas();
+  });
+
+  it('pulihkanTombol: tombol yang dimatikan saat diketuk hidup lagi dari kabar terakhir', () => {
+    const minta = vi.fn();
+    const t = renderTontonan(akar, info(), { minta, berhenti: vi.fn() });
+    const tombol0 = () => akar.querySelector<HTMLButtonElement>('[data-minta="0"]')!;
+    tombol0().click();
+    expect(tombol0().disabled).toBe(true);
+    t.pulihkanTombol();
+    expect(tombol0().disabled).toBe(false);
+    expect(tombol0().textContent).toBe(TEKS_TONTONAN.minta);
+    t.lepas();
   });
 
   it('daftar meja publik punya bagian "Lagi main" dengan tombol Tonton', () => {

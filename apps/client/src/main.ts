@@ -4,7 +4,7 @@
 import './gaya.css';
 import { registerSW } from 'virtual:pwa-register';
 import type { ViewPemain } from '@remi/engine';
-import { TEKS_LOBI_KOMPETISI_BUBAR, type InfoMeja, type InfoTontonan, type PengaturanMeja } from '@remi/meja';
+import { JEDA_SESUDAH_LIHAT_MS, TEKS_LOBI_KOMPETISI_BUBAR, type InfoMeja, type InfoTontonan, type PengaturanMeja } from '@remi/meja';
 import { pasangPreferensi } from './preferensi';
 import {
   idAcak,
@@ -709,6 +709,9 @@ class Aplikasi implements AppUntukMeja {
         }
         // Meja: aksi atau tombol yang menunggu jawaban sudah dijawab (ditolak), kuncinya lepas sekarang.
         this.kontrol?.saatError(p.pesan !== PESAN_TERTAHAN);
+        // Penonton: minta lihat ditolak server; tombol yang dimatikan saat diketuk digambar ulang dari
+        // kabar terakhir (tanpa ini tombolnya mati sampai kabar berikutnya, yang bisa tidak datang).
+        if (this.layar === 'tontonan' && p.pesan !== PESAN_TERTAHAN) this.tontonan?.layar?.pulihkanTombol();
         if (this.layar === 'beranda') this.beranda?.aturStatusOnline('tersambung');
         toast(p.pesan, true);
         break;
@@ -1084,12 +1087,13 @@ class Aplikasi implements AppUntukMeja {
     }
     // Permintaan yang hangus karena sambungan putus juga bukan penolakan dari pemainnya.
     if (sempatPutus) return;
+    // #62: ditolak dan tidak dijawab dikabarkan berbeda; tombol pemain lain langsung hidup lagi.
     info.pemain.forEach((p, i) => {
-      if (sebelum.pemain[i]?.minta === 'menunggu' && p.minta === 'jeda') {
-        const t = TEKS_TONTONAN.ditolak(p.nama);
-        toast(t);
-        umumkan(t);
-      }
+      if (sebelum.pemain[i]?.minta !== 'menunggu') return;
+      const t = p.minta === 'ditolak' ? TEKS_TONTONAN.kabarDitolak(p.nama) : p.minta === 'tidakDijawab' ? TEKS_TONTONAN.kabarTidakDijawab(p.nama) : '';
+      if (!t) return;
+      toast(t);
+      umumkan(t);
     });
   }
 
@@ -1119,7 +1123,16 @@ class Aplikasi implements AppUntukMeja {
     if (!t) return;
     t.berhentiSendiri = true;
     this.kirim({ t: 'berhentiLihat' });
-    if (t.info) t.info = { ...t.info, melihat: null, pemain: t.info.pemain.map((p) => (p.minta === 'dilihat' ? { ...p, minta: 'bisa' as const } : p)) };
+    // Jeda 30 menit (#62) langsung tampil; kabar server yang datang sesudahnya menimpanya.
+    if (t.info)
+      t.info = {
+        ...t.info,
+        melihat: null,
+        jedaMs: JEDA_SESUDAH_LIHAT_MS,
+        pemain: t.info.pemain.map((p) => (p.minta === 'dilihat' ? { ...p, minta: 'bisa' as const } : p)),
+      };
+    toast(TEKS_TONTONAN.berhentiSendiri);
+    umumkan(TEKS_TONTONAN.berhentiSendiri);
     this.tampilkanTontonan();
   }
 

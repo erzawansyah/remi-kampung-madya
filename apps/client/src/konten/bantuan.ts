@@ -11,7 +11,7 @@ import type { Bunga, Rank } from '@remi/engine';
 import {
   BATAS_JAWAB_LIHAT_MS,
   JEDA_LANJUT_MS,
-  JEDA_TOLAK_LIHAT_MS,
+  JEDA_SESUDAH_LIHAT_MS,
   MAKS_LEDEK_PER_PUTARAN,
   MAKS_PESAN,
   MIN_MAIN_KOMPETISI,
@@ -32,9 +32,9 @@ const DETIK_TENGGANG = Math.round(TENGGANG_SAMBUNG_MS / 1000);
 const DETIK_SISA_MIN = Math.round(SISA_MIN_SAMBUNG_MS / 1000);
 /** Jeda sebelum host bisa memulai putaran berikutnya di meja online (keputusan #54). */
 const DETIK_JEDA_LANJUT = Math.round(JEDA_LANJUT_MS / 1000);
-/** Jeda sesudah permintaan lihat kartu ditolak, dalam menit (keputusan #60). */
-const MENIT_JEDA_TOLAK = Math.round(JEDA_TOLAK_LIHAT_MS / 60_000);
-/** Batas pemain menjawab permintaan lihat kartu, dalam detik (keputusan #60). */
+/** Jeda sesudah selesai lihat kartu, dalam menit (keputusan #62). */
+const MENIT_JEDA_LIHAT = Math.round(JEDA_SESUDAH_LIHAT_MS / 60_000);
+/** Batas pemain menjawab permintaan lihat kartu, dalam detik (keputusan #62). */
 const DETIK_JAWAB_LIHAT = Math.round(BATAS_JAWAB_LIHAT_MS / 1000);
 
 export type KartuContoh = {
@@ -854,8 +854,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'daftar',
         butir: [
-          `Pemain boleh menolak. Ke tiap pemain cuma bisa ada satu permintaan yang menunggu. Kalau ditolak, tunggu ${MENIT_JEDA_TOLAK} menit sebelum minta lagi ke orang yang sama. Permintaan yang nggak dijawab ${DETIK_JAWAB_LIHAT} detik dihitung ditolak.`,
+          `Permintaannya satu per satu: selama nunggu jawaban (paling lama ${DETIK_JAWAB_LIHAT} detik), kamu belum bisa minta ke pemain lain.`,
+          'Pemain yang menolak atau nggak menjawab nggak bisa kamu mintai lagi sampai permainannya selesai. Ke pemain lain langsung bisa.',
           'Kalau diizinkan, kamu lihat persis yang dilihat pemain itu, sampai kamu berhenti atau dia menghentikannya.',
+          `Habis lihat kartu (berhenti sendiri, dihentikan, atau pemainnya keluar), kamu baru bisa minta lagi ke siapa pun di meja itu ${MENIT_JEDA_LIHAT} menit kemudian. Hitung mundurnya kelihatan di layar.`,
           'Pemain melihat jumlah penonton di tombol 👀, dan bisa menghentikan siapa pun yang sedang lihat kartunya kapan saja.',
           'Meja privat juga bisa ditonton, tapi kodenya tetap rahasia: penonton cuma lihat nama host. Host bisa mematikan Boleh ditonton di lobi. Meja kompetisi nggak bisa ditonton.',
         ],
@@ -951,7 +953,7 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   },
   {
     tanya: 'Ada yang nonton mejaku. Dia bisa lihat kartuku?',
-    jawab: `Nggak, kecuali kamu izinkan. Penonton cuma lihat nama pemain dan kartu buangan. Kalau ada yang minta lihat kartumu, kamu bisa Tolak atau Izinkan; nggak dijawab ${DETIK_JAWAB_LIHAT} detik dihitung ditolak. Yang sudah kamu izinkan bisa kamu hentikan kapan saja lewat tombol 👀. Nggak mau ditonton sama sekali? Host bisa mematikan Boleh ditonton di lobi.`,
+    jawab: `Nggak, kecuali kamu izinkan. Penonton cuma lihat nama pemain dan kartu buangan. Kalau ada yang minta lihat kartumu, kamu bisa Tolak atau Izinkan; kalau ${DETIK_JAWAB_LIHAT} detik nggak dijawab, permintaannya hangus. Yang sudah kamu tolak atau nggak kamu jawab nggak bisa minta lagi ke kamu sampai permainannya selesai. Yang sudah kamu izinkan bisa kamu hentikan kapan saja lewat tombol 👀. Nggak mau ditonton sama sekali? Host bisa mematikan Boleh ditonton di lobi.`,
   },
   {
     tanya: 'Kok namaku nggak bisa diganti?',

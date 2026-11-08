@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import type { PesanKlien, PesanServer } from '@remi/meja';
+import { JEDA_SESUDAH_LIHAT_MS, type PesanKlien, type PesanServer } from '@remi/meja';
 import { bukaRiwayat } from '../src/riwayat.js';
 import { jalankanServer, type ServerRemi } from '../src/server.js';
 
@@ -157,10 +157,15 @@ describe('nonton (#60)', () => {
     expect(vc.view.putaran!.tangan[0]).toBeNull();
     expect((await c.tunggu('tontonMeja')).info.kursiSaya).toBe(1);
 
-    // Pemain menghentikan: penonton kembali ke buangan, kursi itu dijeda.
+    // Pemain menghentikan: penonton kembali ke buangan, kursi itu dihitung menolak, dan semua
+    // permintaan dijeda 30 menit (#62).
     await b.kirim({ t: 'hentikanLihat', penonton: id });
-    const sesudah = await c.tunggu('tontonan', (p) => p.info.pemain[1].minta === 'jeda');
+    const sesudah = await c.tunggu('tontonan', (p) => p.info.pemain[1].minta === 'ditolak');
     expect(sesudah.info.melihat).toBeNull();
+    expect(sesudah.info.jedaMs).toBeGreaterThan(JEDA_SESUDAH_LIHAT_MS - 5_000);
+    c.pesan = [];
+    await c.kirim({ t: 'mintaLihat', kursi: 0 });
+    expect((await c.tunggu('error')).pesan).toMatch(/^Sabar, Bos\. Bisa minta lihat lagi (30|29) menit/);
 
     c.tutup();
     await a.tunggu('meja', (p) => !p.info.penonton);

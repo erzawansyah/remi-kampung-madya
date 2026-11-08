@@ -672,7 +672,7 @@ export class KontrolMeja implements AksiAdegan {
     this.elTombol = this.elAksi.querySelector('.tombol-aksi')!;
     this.elPenonton = this.elAtas.querySelector('.tombol-penonton')!;
     // Kotak permintaan di luar #ui: #ui dibuat inert selama ada modal (hasil putaran, popup joker, panel
-    // mentung, klasemen), padahal permintaan bisa datang kapan saja dan hangus 30 detik kemudian.
+    // mentung, klasemen), padahal permintaan bisa datang kapan saja dan hangus 60 detik kemudian (#62).
     document.getElementById('lapisan-minta')?.remove();
     this.elLapisanMinta = document.createElement('div');
     this.elLapisanMinta.id = 'lapisan-minta';
