@@ -34,7 +34,7 @@ vi.mock('../src/game/game', () => ({
 }));
 
 /** Panggilan ke KontrolMeja tiruan (nama metode + argumen) dan aplikasi yang diberikan kepadanya. */
-const kontrol = vi.hoisted(() => ({ panggilan: [] as { nama: string; arg: unknown[] }[], app: null as unknown }));
+const kontrol = vi.hoisted(() => ({ panggilan: [] as { nama: string; arg: unknown[] }[], app: null as unknown, tahanKeluar: false }));
 vi.mock('../src/kontrolMeja', async (asli) => {
   const m = await asli<typeof import('../src/kontrolMeja')>();
   const catat =
@@ -60,6 +60,7 @@ vi.mock('../src/kontrolMeja', async (asli) => {
     };
     hancurkan = catat('hancurkan');
     keadaanTampil = () => ({ status: null, sibuk: false, klasemen: false });
+    menahanKeluar = () => kontrol.tahanKeluar;
   }
   return { ...m, KontrolMeja: KontrolPalsu };
 });
@@ -149,6 +150,7 @@ beforeEach(() => {
   sessionStorage.clear();
   kontrol.panggilan.length = 0;
   kontrol.app = null;
+  kontrol.tahanKeluar = false;
   vi.mocked(umumkan).mockClear();
   WsPalsu.semua = [];
   vi.stubGlobal('WebSocket', WsPalsu);
@@ -220,6 +222,28 @@ describe('Aplikasi: pesan server sampai ke meja', () => {
   it('masuk tanpa dijalankanWarga: tidak ada kabar warga', async () => {
     await diMeja();
     expect(toastTeks().some((t) => t.startsWith('Sinyalmu sempat putus'))).toBe(false);
+  });
+});
+
+describe('Aplikasi: tombol Back di meja', () => {
+  const dialogKeluar = () => [...document.querySelectorAll('#lapisan-dialog .dialog')].filter((d) => /keluar/i.test(d.textContent ?? ''));
+
+  it('jendela pilih susunan joker (#63) terbuka: Back tidak menutupnya dan tidak menawarkan keluar meja', async () => {
+    await diMeja();
+    // Jendela wajib (tanpa Batal) seperti pilih susunan joker: ketuk latar tidak menutupnya.
+    const { bukaDialog } = await import('../src/ui/dom');
+    const { dialog } = bukaDialog('<h2>Joker-nya jadi apa?</h2><button type="button" data-opsi="0">A</button>', undefined, { bisaDitutup: false });
+    kontrol.tahanKeluar = true;
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dialog.isConnected).toBe(true);
+    expect(dialogKeluar()).toHaveLength(0);
+
+    // Pembanding: tanpa jendela itu, Back menawarkan keluar seperti biasa.
+    kontrol.tahanKeluar = false;
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dialogKeluar().length).toBeGreaterThan(0);
   });
 });
 
