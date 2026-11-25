@@ -24,7 +24,7 @@ import { TEKS_KONEKSI, teksDijalankanWarga } from './konten/koneksi';
 import { KOMPETISI_DIBUKA, TEKS_KOMPETISI } from './konten/kompetisi';
 import { catatanDariView, kunciPermainan, simpan } from './penyimpanan';
 import { bangunkanGame, buatGame, tidurkanGame, type PenampungGame } from './game/game';
-import { KontrolMeja, masihGiliranku, type AppUntukMeja, type PesanHasilKompetisi } from './kontrolMeja';
+import { KontrolMeja, masihGiliranku, type AppUntukMeja, type PesanHasilKompetisi, type PesanHasilSprint } from './kontrolMeja';
 import { aturLaken } from './game/warnaMeja';
 import {
   konfirmasiTimpaSimpanan,
@@ -52,6 +52,8 @@ import {
 import { mejaMasukPeringkat, opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
 import { renderRiwayat } from './ui/riwayat';
 import { renderKompetisi } from './ui/kompetisi';
+import { renderSprint, type SprintTerpasang } from './ui/sprint';
+import { TEKS_SPRINT } from './konten/sprint';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang, siapkanJendelaMalas } from './ui/jendelaMalas';
 import { bukaUsulan } from './ui/usulan';
@@ -120,7 +122,10 @@ interface PromptPasang extends Event {
   readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform?: string }>;
 }
 
-type Layar = 'beranda' | 'publik' | 'riwayat' | 'kompetisi' | 'lobi' | 'meja' | 'tontonan';
+type Layar = 'beranda' | 'publik' | 'riwayat' | 'kompetisi' | 'sprint' | 'lobi' | 'meja' | 'tontonan';
+
+/** Layar penuh dari beranda yang belum duduk di meja (Escape/Back = kembali ke beranda). */
+const LAYAR_DEPAN = new Set<Layar>(['publik', 'riwayat', 'kompetisi', 'sprint']);
 
 /** Nonton (#60): pesan yang boleh dikirim selama menonton. Pesan meja lain (aksi, OK joker, emote…) dibuang. */
 const PESAN_PENONTON = new Set<PesanKeMeja['t']>(['tonton', 'mintaLihat', 'berhentiLihat', 'keluar', 'ping', 'daftar']);
@@ -165,6 +170,10 @@ class Aplikasi implements AppUntukMeja {
    * datang sebelum KontrolMeja siap (Phaser masih dimuat); dilupakan saat meninggalkan meja.
    */
   private hasilKompetisi: PesanHasilKompetisi | null = null;
+  /** Hasil sprint meja ini (pesan sprintHasil); sama seperti hasilKompetisi, bisa datang sebelum KontrolMeja siap. */
+  private hasilSprint: PesanHasilSprint | null = null;
+  /** Layar Sprint yang sedang terpasang (tombol Main sprint menunggu jawaban server). */
+  private layarSprint: SprintTerpasang | null = null;
   /** Sudah ada entri riwayat "penjaga" untuk menangkap tombol Back. */
   private adaJaga = false;
   // Pembaruan PWA (lihat pembaruan.ts: kapan versi baru dipasang sendiri)
@@ -278,11 +287,11 @@ class Aplikasi implements AppUntukMeja {
     // dom.ts menangkap Escape lebih dulu (fase capture) untuk menutup dialog yang terbuka.
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape' || e.defaultPrevented || e.repeat || adaJendelaTerbuka()) return;
-      if (this.layar !== 'riwayat' && this.layar !== 'publik' && this.layar !== 'kompetisi') return;
+      if (!LAYAR_DEPAN.has(this.layar)) return;
       e.preventDefault();
       const dari = this.layar;
       this.tampilkanBeranda();
-      if (dari === 'riwayat' || dari === 'kompetisi') this.beranda?.fokusNav(dari);
+      if (dari === 'riwayat' || dari === 'kompetisi' || dari === 'sprint') this.beranda?.fokusNav(dari);
     });
     window.addEventListener('online', () => {
       // Sinyal kembali: sesi meja online yang tertunda disambung lagi. Label "siap" hanya kalau tidak ada
@@ -475,6 +484,7 @@ class Aplikasi implements AppUntukMeja {
       case 'publik':
       case 'riwayat':
       case 'kompetisi':
+      case 'sprint':
         this.pastikanJaga();
         return this.tampilkanBeranda();
       case 'tontonan':
@@ -502,6 +512,7 @@ class Aplikasi implements AppUntukMeja {
         selesai: asal === 'meja' && this.view?.status === 'selesai',
         masukPeringkat: asal === 'meja' && !offline && mejaMasukPeringkat(this.info),
         kompetisi: !offline && !!this.info?.kompetisi,
+        sprint: !offline && this.info?.sprint === true,
       }),
     );
     // Layar sudah berganti selagi dialog terbuka (mis. host memulai permainan dari lobi):
@@ -522,6 +533,7 @@ class Aplikasi implements AppUntukMeja {
     this.info = null;
     this.view = null;
     this.hasilKompetisi = null;
+    this.hasilSprint = null;
     this.statusKini = 'menyambung';
     k.saatPesan((p) => {
       if (this.koneksi === k) this.terimaPesan(p);
@@ -551,7 +563,7 @@ class Aplikasi implements AppUntukMeja {
 
   /** `kabar` dari KabarKoneksi koneksi ini: null = tidak ada yang perlu dikabarkan. */
   private saatStatusBerubah(s: StatusKoneksi, kabar: Kabar | null) {
-    if (this.layar === 'beranda' || this.layar === 'publik' || this.layar === 'kompetisi') {
+    if (this.layar === 'beranda' || LAYAR_DEPAN.has(this.layar)) {
       if (s !== 'gagal') {
         // Mode lanjut sesi tidak pernah 'gagal': selama belum tersambung, beranda bilang apa yang dicoba.
         const lanjut = this.koneksi?.melanjutkanSesi === true && s !== 'tersambung';
@@ -563,6 +575,7 @@ class Aplikasi implements AppUntukMeja {
       // sini, jadi 'gagal' hanya ditangani sekali per koneksi.
       this.koneksi?.tutup();
       this.koneksi = null;
+      this.layarSprint?.aturSibuk(false);
       const cobaLagi = this.niatOnline ? () => this.cobaLagiOnline() : null;
       if (this.layar === 'beranda' && this.beranda) {
         this.beranda.aturStatusOnline('gagal', cobaLagi);
@@ -583,8 +596,9 @@ class Aplikasi implements AppUntukMeja {
   private cobaLagiOnline() {
     const niat = this.niatOnline;
     // Tombol "Coba lagi" yang basi (pemain sudah pindah ke meja/lobi) tidak boleh mengganti koneksi.
-    if (!niat || (this.layar !== 'beranda' && this.layar !== 'publik' && this.layar !== 'kompetisi')) return;
+    if (!niat || (this.layar !== 'beranda' && !LAYAR_DEPAN.has(this.layar))) return;
     if (this.layar === 'beranda') this.beranda?.aturStatusOnline('menyambung');
+    if (this.layar === 'sprint') this.layarSprint?.aturSibuk(true);
     niat();
   }
 
@@ -723,6 +737,8 @@ class Aplikasi implements AppUntukMeja {
         // Meja: aksi atau tombol yang menunggu jawaban sudah dijawab (ditolak), kuncinya lepas sekarang.
         this.kontrol?.saatError(p.pesan !== PESAN_TERTAHAN);
         if (this.layar === 'beranda') this.beranda?.aturStatusOnline('tersambung');
+        // Main sprint ditolak server (penuh, server tanpa papan, …): tombolnya bisa ditekan lagi.
+        if (this.layar === 'sprint') this.layarSprint?.aturSibuk(false);
         toast(pesan, true);
         break;
       }
@@ -786,6 +802,12 @@ class Aplikasi implements AppUntukMeja {
         if (!this.tontonan) return;
         toast(p.alasan);
         return this.keluarTontonan();
+      case 'sprintHasil':
+        // Hasil percobaan sprint yang sudah tercatat, tampil di klasemen akhir meja sprint.
+        if (this.tontonan) break;
+        this.hasilSprint = p;
+        this.kontrol?.terimaHasilSprint(p);
+        break;
       case 'kompetisiHasil':
         // Nilai dan naik-turun peringkat kompetisi (#51 versi 2), tampil di klasemen akhir meja.
         this.hasilKompetisi = p;
@@ -906,6 +928,7 @@ class Aplikasi implements AppUntukMeja {
           this.pastikanJaga();
         },
         lihatKompetisi: () => this.tampilkanKompetisi(),
+        lihatSprint: () => this.tampilkanSprint(),
         mainOffline: (nama, pengaturan, pengocokSaya) => this.mainOffline(nama, pengaturan, pengocokSaya),
         lanjutOffline: () => this.lanjutOffline(),
         latihan: (nama) => this.mulaiLatihan(nama),
@@ -1032,6 +1055,49 @@ class Aplikasi implements AppUntukMeja {
     this.pastikanJaga();
   }
 
+  /**
+   * Layar Sprint (25 Nov 2026): pembuka, Main sprint, dan papan sprint. Sprint hanya online; meja
+   * sprintnya dibuat server lewat pesan {t:'sprint'} di jalur online yang sama dengan Buat meja.
+   * `langsungMain`: "Sprint lagi" dari klasemen akhir, percobaan baru langsung dikirim.
+   */
+  private tampilkanSprint(langsungMain = false) {
+    this.layar = 'sprint';
+    this.niatOnline = null;
+    this.sembunyikanGame();
+    aturLaken('biasa');
+    tutupModal();
+    suasanaMusik('beranda');
+    this.layarSprint = renderSprint(this.ui, {
+      kembali: () => {
+        this.tampilkanBeranda();
+        this.beranda?.fokusNav('sprint');
+      },
+      main: () => this.mulaiSprint(),
+    });
+    this.pastikanJaga();
+    if (langsungMain) {
+      if (navigator.onLine === false) return toast(TEKS_SPRINT.butuhInternet, true);
+      this.layarSprint.aturSibuk(true);
+      this.mulaiSprint();
+    }
+  }
+
+  /** Satu percobaan sprint baru: server membuat mejanya dan langsung memulai permainan. */
+  private mulaiSprint() {
+    this.sesiDitendang = false;
+    this.kirimOnline({ t: 'sprint', nama: simpan.nama() || 'Pemain' });
+  }
+
+  /**
+   * Klasemen akhir meja sprint: tinggalkan meja (hasilnya sudah tercatat; kursinya dilepas supaya meja
+   * yang sudah selesai langsung dibuang server), lalu "Sprint lagi" atau ke beranda. Kalau sinyal sedang
+   * putus, pesan keluar tidak dikirim: mejanya tetap dibuang server sesudah lama kosong.
+   */
+  tinggalkanSprint(lagi: boolean) {
+    if (this.koneksi?.jenis === 'online' && this.koneksi.siapKirim()) this.koneksi.kirim({ t: 'keluar' });
+    this.keluarMeja(true, undefined, lagi);
+  }
+
   /** Klasemen akhir meja kompetisi: keluar dari meja, lalu buka detail kompetisinya. */
   kembaliKeKompetisi(kode: string) {
     this.kirim({ t: 'keluar' });
@@ -1069,8 +1135,11 @@ class Aplikasi implements AppUntukMeja {
     this.mainOffline(simpan.nama() || 'Pemain', simpan.pengaturanOffline(), false);
   }
 
-  /** Tinggalkan meja: ke beranda, atau ke detail kompetisi `kompetisi` (meja kompetisi, #51 versi 2). */
-  keluarMeja(hapusSesi = true, kompetisi?: string) {
+  /**
+   * Tinggalkan meja: ke beranda, ke detail kompetisi `kompetisi` (meja kompetisi, #51 versi 2), atau
+   * (`sprintLagi`) ke layar Sprint sambil langsung memulai percobaan baru.
+   */
+  keluarMeja(hapusSesi = true, kompetisi?: string, sprintLagi = false) {
     // Penonton (#60): "keluar" dari meja yang ditonton = kembali ke tontonan buangan.
     if (this.tontonan) return this.berhentiLihat();
     const takSampai = this.keluarTakSampai;
@@ -1082,10 +1151,12 @@ class Aplikasi implements AppUntukMeja {
     this.info = null;
     this.view = null;
     this.hasilKompetisi = null;
+    this.hasilSprint = null;
     this.kodeAwal = '';
     this.niatOnline = null;
     history.replaceState(history.state, '', location.pathname);
     if (kompetisi) this.tampilkanKompetisi(kompetisi);
+    else if (sprintLagi) this.tampilkanSprint(true);
     else this.tampilkanBeranda();
     if (takSampai) toast(PESAN_KELUAR_TAK_SAMPAI[takSampai], true, 9000);
   }
@@ -1277,6 +1348,7 @@ class Aplikasi implements AppUntukMeja {
         this.kontrol = new KontrolMeja(this, scene, akar);
         this.kontrol.perbarui(this.info, this.view);
         if (this.hasilKompetisi) this.kontrol.terimaHasilKompetisi(this.hasilKompetisi);
+        if (this.hasilSprint) this.kontrol.terimaHasilSprint(this.hasilSprint);
       },
       async (e: unknown) => {
         console.error('meja gagal dimuat', e);

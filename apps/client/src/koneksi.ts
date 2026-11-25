@@ -145,9 +145,11 @@ const PING_DIINGAT_MAKS = 32;
  * 'keluar' sengaja tidak diantrikan: pemanggilnya langsung menutup koneksi (antrian ikut
  * dibuang), jadi aplikasi mengecek siapKirim() dulu dan memberi tahu pemain kalau tidak sampai.
  */
-const BOLEH_ANTRI = new Set<PesanKeMeja['t']>(['buat', 'gabung', 'daftar', 'tonton']);
-/** Jenis yang cukup diwakili satu pesan terbaru di antrian. Buat, gabung, dan tonton sama-sama "masuk meja". */
-const kelompokAntri = (t: PesanKeMeja['t']) => (t === 'buat' || t === 'gabung' || t === 'tonton' ? 'masuk' : t);
+const BOLEH_ANTRI = new Set<PesanKeMeja['t']>(['buat', 'gabung', 'daftar', 'tonton', 'sprint']);
+/** Pesan yang membawa pemain ke meja (baru): buat, gabung, tonton, dan sprint (meja sprint baru). */
+const MASUK_MEJA = new Set<PesanKeMeja['t']>(['buat', 'gabung', 'tonton', 'sprint']);
+/** Jenis yang cukup diwakili satu pesan terbaru di antrian. Semua pesan MASUK_MEJA sama-sama "masuk meja". */
+const kelompokAntri = (t: PesanKeMeja['t']) => (MASUK_MEJA.has(t) ? 'masuk' : t);
 
 /** Pesan 'error' buatan koneksi sendiri: pesan yang dikirim saat putus tidak berangkat. */
 export const PESAN_TERTAHAN = 'Sinyalnya lagi putus, Bos. Tunggu nyambung dulu, baru coba lagi.';
@@ -350,7 +352,7 @@ export class KoneksiOnline implements Koneksi {
       // barusan minta masuk meja lain: niat terbarunya yang menang. Sesi dari 'masuk' di koneksi ini
       // dipakai lebih dulu daripada localStorage (bisa gagal ditulis atau ditimpa tab lain).
       const sesi = this.sesiMemori ?? (this.pakaiSesiTersimpan ? simpan.sesi() : null);
-      const mauMasuk = antri.some((p) => p.t === 'buat' || p.t === 'gabung' || p.t === 'tonton');
+      const mauMasuk = antri.some((p) => MASUK_MEJA.has(p.t));
       if (this.tontonMemori && !mauMasuk) ws.send(JSON.stringify(this.tontonMemori));
       else if (sesi && !mauMasuk) {
         // Tiket kompetisi (#51 versi 2) ikut dikirim: kalau kursi lobi kompetisinya sudah dilepas karena
@@ -554,7 +556,7 @@ export class KoneksiOnline implements Koneksi {
   kirim(p: PesanKeMeja) {
     if (this.ditutup) return;
     if (p.t === 'tonton') this.tontonMemori = p;
-    else if (p.t === 'buat' || p.t === 'gabung' || (p.t === 'keluar' && this.tontonMemori)) this.tontonMemori = null;
+    else if (p.t === 'buat' || p.t === 'gabung' || p.t === 'sprint' || (p.t === 'keluar' && this.tontonMemori)) this.tontonMemori = null;
     const ws = this.ws;
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(p));

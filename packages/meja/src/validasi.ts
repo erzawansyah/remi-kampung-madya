@@ -234,6 +234,9 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       const kompetisi = validasiTiket(x.kompetisi);
       return kompetisi ? { t: 'buat', nama: x.nama, pengaturan, kompetisi } : null;
     }
+    case 'sprint':
+      // Nama dicek sama seperti `buat`; dirapikan (rapikanNama) saat meja dibuat.
+      return isStr(x.nama, 100) ? { t: 'sprint', nama: x.nama } : null;
     case 'gabung': {
       if (!isStr(x.kode, 20) || !isStr(x.nama, 100)) return null;
       if (x.token !== undefined && !isStr(x.token, 100)) return null;

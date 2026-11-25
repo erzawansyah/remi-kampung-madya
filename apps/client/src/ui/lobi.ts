@@ -11,6 +11,7 @@ import type { LevelBot } from '@remi/engine';
 import type { InfoKursi, InfoMeja, PengaturanMeja, PesanKlien } from '@remi/meja';
 import { TEKS_KALDU } from '../konten/kaldu';
 import { TEKS_KOMPETISI, teksMenungguPeserta } from '../konten/kompetisi';
+import { TEKS_SPRINT } from '../konten/sprint';
 import { DAFTAR_LEVEL_WARGA, infoLevel, labelLevelKecil } from '../konten/levelWarga';
 import { htmlIsianBatas, lepasIsianBatas, pasangIsianBatas } from './batasSkor';
 import { esc, konfirmasi, toast, type OpsiKonfirmasi } from './dom';
@@ -79,6 +80,11 @@ export interface KeadaanKeluar {
    * Okt 2026); di lobi, duduk lagi lewat layar Kompetisi.
    */
   kompetisi?: boolean;
+  /**
+   * Meja sprint (25 Nov 2026): keluar di tengah permainan = percobaannya berhenti, tetap dicatat dengan
+   * putaran yang sudah selesai (tidak dihitung menang); sebelum putaran pertama selesai tidak dicatat.
+   */
+  sprint?: boolean;
 }
 
 /** Ada minimal 2 kursi manusia (yang keluar sudah jadi warga kedai): permainannya masuk peringkat online. */
@@ -112,6 +118,11 @@ export function opsiKonfirmasiKeluar(k: KeadaanKeluar): OpsiKonfirmasi {
       tidak: 'Tetap di sini',
       bahaya: true,
     };
+  }
+  if (k.sprint) {
+    return k.selesai
+      ? { judul: 'Keluar dari meja?', pesan: TEKS_SPRINT.keluarSelesai, ya: 'Keluar', tidak: 'Tetap di sini' }
+      : { judul: 'Keluar dari sprint?', pesan: TEKS_SPRINT.keluarMain, ya: 'Keluar', tidak: 'Lanjut main', bahaya: true };
   }
   if (k.selesai) {
     return {

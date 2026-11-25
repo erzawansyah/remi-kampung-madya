@@ -10,6 +10,7 @@
 import type { Bunga, Rank } from '@remi/engine';
 import {
   BATAS_JAWAB_LIHAT_MS,
+  JUMLAH_PUTARAN_SPRINT,
   JEDA_LANJUT_MS,
   JEDA_TOLAK_LIHAT_MS,
   MAKS_LEDEK_PER_PUTARAN,
@@ -20,6 +21,7 @@ import { TEKS_KALDU } from './kaldu';
 import { TEKS_LANJUT, TEKS_LEDEK } from './ledek';
 import { DAFTAR_LEVEL_WARGA } from './levelWarga';
 import { TEKS_USULAN } from './usulan';
+import { TEKS_SPRINT } from './sprint';
 
 /** Masa tenggang sambung ulang dalam detik (sama dengan yang dipakai meja). */
 const DETIK_TENGGANG = Math.round(TENGGANG_SAMBUNG_MS / 1000);
@@ -149,7 +151,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: '**Urutan duduk** diacak waktu permainan dimulai. Host bisa mematikan **Acak urutan duduk** di lobi atau Atur meja; meja kompetisi selalu diacak.',
+        teks: '**Urutan duduk** diacak waktu permainan dimulai. Host bisa mematikan **Acak urutan duduk** di lobi atau Atur meja; meja sprint selalu diacak.',
       },
       {
         t: 'paragraf',
@@ -683,7 +685,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'daftar',
         butir: [
-          'Sepakat berhenti: di antara putaran, semua pemain manusia yang terhubung setuju mengakhiri permainan. Di meja kompetisi tidak ada sepakat berhenti.',
+          'Sepakat berhenti: di antara putaran, semua pemain manusia yang terhubung setuju mengakhiri permainan. Di meja sprint tidak ada sepakat berhenti.',
           'Batas putaran: permainan selesai setelah jumlah putaran tertentu.',
           'Batas skor atas: ada pemain yang skor totalnya mencapai batas itu atau lebih.',
           'Batas skor bawah: ada pemain yang skor totalnya turun sampai batas itu atau lebih rendah.',
@@ -711,7 +713,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Putaran kaldu mulai di putaran ke-N kalau batas putaran diisi N, atau di putaran sesudah semua pemain setuju "putaran berikutnya terakhir" (di antara putaran).',
           'Putaran kaldu yang ditutup mentung mengakhiri permainan.',
           'Deck habis dan belum ada yang mentung? Kaldu lagi: putaran berikutnya juga putaran kaldu, sampai ada yang mentung. Pengocoknya tetap yang skornya paling rendah.',
-          'Di mode kaldu batas skor tidak dipakai, dan batas putaran cuma menandai mulainya kaldu. "Akhiri permainan" tetap bisa di antara putaran, kecuali di meja kompetisi.',
+          'Di mode kaldu batas skor tidak dipakai, dan batas putaran cuma menandai mulainya kaldu. "Akhiri permainan" tetap bisa di antara putaran.',
         ],
       },
       {
@@ -830,7 +832,37 @@ export const BAB_BANTUAN: BabBantuan[] = [
     ],
   },
   // Bab "Kompetisi" dicabut selama kompetisi ditutup sementara (0.7.0, KOMPETISI_DIBUKA di
-  // konten/kompetisi.ts). Isinya ada di riwayat git kalau kompetisi dibuka lagi.
+  // konten/kompetisi.ts). Isinya ada di riwayat git kalau kompetisi dibuka lagi. Sejak 0.8.0 ubin
+  // berandanya diganti Sprint (bab di bawah). Aturan sprint: packages/meja/src/sprint.ts.
+  {
+    id: 'sprint',
+    judul: 'Sprint',
+    ikon: '⏱️',
+    ringkas: `${JUMLAH_PUTARAN_SPRINT} putaran lawan 3 warga kedai level Suhu, dan papan sprint.`,
+    isi: [
+      {
+        t: 'paragraf',
+        teks: `**${TEKS_SPRINT.judul}:** main sendiri lawan 3 warga kedai level Suhu (Kipas Dua, Cak Kopag, Mbak Teras) selama ${JUMLAH_PUTARAN_SPRINT} putaran, lalu hasilnya masuk papan sprint. Tombolnya ada di panel Main online di beranda. Sprint butuh internet, karena permainannya jalan di server supaya rekornya nggak bisa diakali.`,
+      },
+      {
+        t: 'daftar',
+        butir: [
+          'Aturan mejanya dikunci: 4 pemain, 1 deck, tanpa batas skor, tanpa batas waktu giliran, dan urutan duduk diacak. Kartunya dikocok baru setiap main. Yang bisa diganti cuma tempo warga kedai (menu ☰, Pengaturan).',
+          `Nggak ada voting akhiri dan nggak ada Main lagi. Di klasemen akhir, tekan ${TEKS_SPRINT.sprintLagi} buat percobaan baru. Boleh coba sesering apa pun.`,
+          `Menang kalau sesudah ${JUMLAH_PUTARAN_SPRINT} putaran skor totalmu nggak kalah dari ketiga warga kedai. Skor sama dihitung menang.`,
+          'Keluar di tengah jalan: putaran yang sudah selesai tetap dicatat, tapi nggak dihitung menang. Keluar sebelum putaran pertama selesai nggak dicatat sama sekali.',
+        ],
+      },
+      {
+        t: 'paragraf',
+        teks: `**Papan sprint** punya dua tab: ${TEKS_SPRINT.tabMinggu} (mulai Senin pukul 00.00 WIB) dan ${TEKS_SPRINT.tabSemua}. Kolom Menang, Mentung, Kepentung, dan Skor dijumlah dari semua percobaan. Urutan bawaannya: menang terbanyak, lalu skor tertinggi, mentung terbanyak, dan kepentung paling sedikit. Ketuk judul kolom buat mengurutkan pakai kolom itu.`,
+      },
+      {
+        t: 'paragraf',
+        teks: 'Yang paling atas di papan sebuah minggu jadi **juara mingguan** dan dapat 🏆 di samping namanya (🏆2 kalau sudah dua kali, dan seterusnya). Nama digabung tanpa beda huruf besar kecil, jadi pakai nama yang sama setiap main.',
+      },
+    ],
+  },
   {
     id: 'nonton',
     judul: 'Nonton',
@@ -846,7 +878,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
         butir: [
           `Pemain boleh menolak. Kalau ditolak (atau nggak dijawab ${DETIK_JAWAB_LIHAT} detik), tunggu ${MENIT_JEDA_TOLAK} menit sebelum minta lagi ke orang yang sama.`,
           'Kalau diizinkan, kamu lihat persis yang dilihat pemain itu, sampai kamu berhenti atau dia menghentikannya lewat tombol 👀.',
-          'Meja privat juga bisa ditonton, tapi kodenya tetap rahasia. Host bisa mematikan Boleh ditonton di lobi, dan meja kompetisi nggak bisa ditonton.',
+          'Meja privat juga bisa ditonton, tapi kodenya tetap rahasia. Host bisa mematikan Boleh ditonton di lobi.',
         ],
       },
     ],

@@ -10,6 +10,7 @@ import { TEKS_KALDU } from '../src/konten/kaldu';
 import { TEKS_NAMA } from '../src/konten/nama';
 import * as KOMPETISI from '../src/konten/kompetisi';
 import { TEKS_USULAN } from '../src/konten/usulan';
+import * as SPRINT from '../src/konten/sprint';
 import { TEKS_LANJUT, TEKS_LEDEK } from '../src/konten/ledek';
 import { TEKS_KONEKSI, teksDijalankanWarga, teksMentungTerlewat } from '../src/konten/koneksi';
 import { TEKS_TURUNKAN } from '../src/konten/turunkan';
@@ -68,6 +69,8 @@ const sumber: [string, string[]][] = [
       KOMPETISI.ariaPiala(2),
     ],
   ],
+  // Sprint (25 Nov 2026): layar Sprint, papan, dan hasil di klasemen akhir meja sprint.
+  ['Sprint', [...semuaTeks(SPRINT.TEKS_SPRINT), SPRINT.teksPeringkatMinggu(2), SPRINT.ariaPiala(2)]],
   // Usul fitur (24 Okt 2026): dialog dan pesan penolakan (yang terakhir juga dikirim server).
   ['Usul fitur', [...semuaTeks(TEKS_USULAN), ...semuaTeks(PESAN_USULAN)]],
   // Hasil putaran online (24 Okt 2026): jeda lanjut, tombol Siap, dan ledekan.

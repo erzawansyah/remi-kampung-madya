@@ -173,7 +173,7 @@ describe('konten: Bantuan dipangkas (tinjauan pemilik 25 Nov 2026)', () => {
     const kartu = JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'kartu'));
     expect(kartu).toContain('Acak urutan duduk');
     expect(kartu).toContain('yang dapat kursi pertama');
-    expect(kartu).toContain('meja kompetisi selalu diacak');
+    expect(kartu).toContain('meja sprint selalu diacak');
   });
 });
 

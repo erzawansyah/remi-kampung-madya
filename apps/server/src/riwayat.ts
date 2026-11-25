@@ -31,6 +31,7 @@ import {
 } from './kompetisi.js';
 import { buatPenyimpanUsulan, SKEMA_USULAN, type PenyimpanUsulan } from './usulan.js';
 import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, SKEMA_MEJA_AKTIF_TONTON, type PenyimpanMejaAktif } from './mejaAktif.js';
+import { buatPenyimpanSprint, SKEMA_SPRINT, type PenyimpanSprint } from './sprint.js';
 
 export interface PermainanTersimpan {
   id: number;
@@ -114,6 +115,8 @@ export interface PenyimpanRiwayat {
   usulan: PenyimpanUsulan;
   /** Meja online yang masih ada (selamat dari restart/deploy), di database yang sama. Diatur server.ts. */
   mejaAktif: PenyimpanMejaAktif;
+  /** Sprint (25 Nov 2026): satu baris per percobaan, di database yang sama. Diatur server.ts. */
+  sprint: PenyimpanSprint;
   tutup(): void;
 }
 
@@ -178,6 +181,9 @@ export const MIGRASI: readonly string[] = [
   SKEMA_HASIL_DITINGGAL,
   // v6 (Nov 2026, nonton #60): kode tonton meja di meja_aktif, supaya tontonan selamat dari restart.
   SKEMA_MEJA_AKTIF_TONTON,
+  // v7 (25 Nov 2026, keputusan pemilik): sprint, satu baris per percobaan. Tabel sendiri: permainan,
+  // klasemen, Riwayat, dan leaderboard umum tidak berubah.
+  SKEMA_SPRINT,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */
@@ -266,6 +272,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
   const kompetisi = buatPenyimpanKompetisi(db);
   const usulan = buatPenyimpanUsulan(db);
   const mejaAktif = buatPenyimpanMejaAktif(db);
+  const sprint = buatPenyimpanSprint(db);
 
   const tambahPermainan = db.prepare(
     `INSERT INTO permainan (kode_meja, selesai_pada, alasan, jumlah_putaran, jumlah_pemain, jumlah_deck, jumlah_manusia, mode_kaldu)
@@ -453,6 +460,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
     kompetisi,
     usulan,
     mejaAktif,
+    sprint,
     tutup() {
       if (milikSendiri) db.close();
     },
