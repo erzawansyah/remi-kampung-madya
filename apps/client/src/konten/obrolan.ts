@@ -18,9 +18,28 @@ export const TEKS_OBROLAN = {
   tombol: 'Obrolan',
   /** Kirim lagi sebelum 1,2 detik (meja membuang pesan yang terlalu cepat). */
   pelan: 'Pelan-pelan, Bos. Satu-satu.',
-  /** Penanda pesan sendiri di daftar. */
-  kamu: 'kamu',
+  /** Penanda pesan sendiri di daftar (hanya untuk pembaca layar; gelembungnya di kanan). */
+  kamu: 'Kamu',
+  /** Label di samping nama pesan warga kedai. */
+  warga: 'warga kedai',
+  /** Tombol kembali di kepala lembar obrolan meja. */
+  kembali: 'Meja',
+  /** aria-label tombol kembali. */
+  labelKembali: 'Kembali ke meja',
+  /** Spanduk kuning selama giliranku dan lembar obrolan terbuka. */
+  giliran: 'Giliranmu! Ketuk untuk kembali ke meja',
+  /** Tombol 😊 pembuka baki celetukan dan emoji. */
+  labelBaki: 'Celetukan dan emoji',
+  /** Judul bagian di baki. */
+  celetukan: 'Celetukan',
+  emoji: 'Emoji',
 } as const;
+
+/** Sisa waktu giliran di spanduk lembar obrolan: "32 dtk". */
+export const teksSisaGiliran = (detik: number): string => `${Math.max(0, Math.ceil(detik))} dtk`;
+
+/** Subjudul lembar obrolan: siapa saja di meja ("Kamu, Kipas Dua, Cak Kopag"). */
+export const teksPeserta = (nama: readonly string[]): string => nama.join(', ');
 
 /** aria-label tombol 💬 saat ada pesan yang belum dibaca: "Obrolan, 3 pesan baru". */
 export const teksBelumDibaca = (n: number): string => (n > 0 ? `${TEKS_OBROLAN.tombol}, ${n} pesan baru` : TEKS_OBROLAN.tombol);

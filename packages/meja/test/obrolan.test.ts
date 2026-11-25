@@ -142,6 +142,31 @@ describe('obrolan meja', () => {
     const baris = m.riwayatObrolan[0];
     expect(baris).toBeDefined();
     expect(['Warga A', 'Warga B']).toContain(baris!.nama);
+    // Celetukan warga kedai ditandai meja saat dikirim (label "warga kedai" di aplikasi).
+    expect(baris!.warga).toBe(true);
+    // Pesan emote-nya tetap bentuk lama (golden meja); aplikasi menilainya dari kursi saat tiba.
+    expect(surat.terakhir('A', 'emote')).toEqual({ t: 'emote', kursi: m.data.kursi.findIndex((k) => k.nama === baris!.nama), isi: baris!.isi });
+  });
+
+  it('pesan pemain yang lalu Keluar tidak pernah ditandai warga kedai, walau kursinya diteruskan warga dengan nama yang sama', () => {
+    const { opsi, surat, jam } = siapkan({ namaLawan: ['Warga A'] });
+    const m = Meja.buat(opsi, 'A', 'Ani', { jumlahPemain: 3, detikGiliran: 0 });
+    m.masuk('B', 'Budi');
+    m.terima('A', { t: 'aturKursi', kursi: 2, jenis: 'bot' });
+    m.terima('A', { t: 'mulai', pengocok: 0 });
+    siapSemua(m);
+    jam.maju(1500);
+    m.terima('B', { t: 'emote', isi: 'aku pamit dulu' });
+    m.terima('B', { t: 'keluar' });
+    const kursiBudi = m.data.kursi.findIndex((k) => k.nama === 'Budi');
+    expect(m.data.kursi[kursiBudi]!.jenis).toBe('bot');
+    const budi = m.riwayatObrolan.filter((e) => e.nama === 'Budi');
+    expect(budi.map((e) => e.isi)).toEqual(['aku pamit dulu']);
+    expect(budi[0]).not.toHaveProperty('warga');
+    surat.bersihkan();
+    m.terputus('A');
+    m.masuk('A', 'Ani');
+    expect(surat.terakhir('A', 'obrolan')!.pesan.find((e) => e.nama === 'Budi')).not.toHaveProperty('warga');
   });
 
   it('validasiObrolan merapikan data dari jaringan', () => {
@@ -152,10 +177,17 @@ describe('obrolan meja', () => {
       { nama: 3, isi: 'x' },
       { nama: 'Cici', isi: '<b>tebal</b>', w: 'kemarin' },
       null,
+      { nama: 'Kipas Dua', isi: 'GG', w: 6, warga: true },
+      { nama: 'Dodi', isi: 'iya', w: 7, warga: 'ya' },
+      { nama: 'Eka', isi: 'oke', w: 8, warga: false },
     ]);
     expect(hasil).toEqual([
       { nama: 'Ani', isi: 'halo', w: 5 },
       { nama: 'Cici', isi: 'btebal/b', w: 0 },
+      // Tanda warga kedai hanya kalau persis true; selain itu tidak ditulis.
+      { nama: 'Kipas Dua', isi: 'GG', w: 6, warga: true },
+      { nama: 'Dodi', isi: 'iya', w: 7 },
+      { nama: 'Eka', isi: 'oke', w: 8 },
     ]);
     const banyak = Array.from({ length: MAKS_OBROLAN + 5 }, (_, i) => ({ nama: 'A', isi: `p${i}`, w: i }));
     expect(validasiObrolan(banyak)).toHaveLength(MAKS_OBROLAN);

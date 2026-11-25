@@ -34,7 +34,7 @@ vi.mock('../src/game/game', () => ({
 }));
 
 /** Panggilan ke KontrolMeja tiruan (nama metode + argumen) dan aplikasi yang diberikan kepadanya. */
-const kontrol = vi.hoisted(() => ({ panggilan: [] as { nama: string; arg: unknown[] }[], app: null as unknown, tahanKeluar: false }));
+const kontrol = vi.hoisted(() => ({ panggilan: [] as { nama: string; arg: unknown[] }[], app: null as unknown, tahanKeluar: false, obrolanTerbuka: false }));
 vi.mock('../src/kontrolMeja', async (asli) => {
   const m = await asli<typeof import('../src/kontrolMeja')>();
   const catat =
@@ -61,6 +61,12 @@ vi.mock('../src/kontrolMeja', async (asli) => {
     hancurkan = catat('hancurkan');
     keadaanTampil = () => ({ status: null, sibuk: false, klasemen: false });
     menahanKeluar = () => kontrol.tahanKeluar;
+    tutupObrolanTerbuka = () => {
+      const ada = kontrol.obrolanTerbuka;
+      kontrol.obrolanTerbuka = false;
+      if (ada) kontrol.panggilan.push({ nama: 'tutupObrolan', arg: [] });
+      return ada;
+    };
   }
   return { ...m, KontrolMeja: KontrolPalsu };
 });
@@ -151,6 +157,7 @@ beforeEach(() => {
   kontrol.panggilan.length = 0;
   kontrol.app = null;
   kontrol.tahanKeluar = false;
+  kontrol.obrolanTerbuka = false;
   vi.mocked(umumkan).mockClear();
   WsPalsu.semua = [];
   vi.stubGlobal('WebSocket', WsPalsu);
@@ -247,6 +254,21 @@ describe('Aplikasi: tombol Back di meja', () => {
   });
 });
 
+describe('Aplikasi: Back dengan lembar obrolan terbuka (0.8.0)', () => {
+  it('Back menutup lembar obrolan dulu, tidak menawarkan keluar meja; Back berikutnya baru menawarkan keluar', async () => {
+    await diMeja();
+    const dialogKeluar = () => [...document.querySelectorAll('#lapisan-dialog .dialog')].filter((d) => /keluar/i.test(d.textContent ?? ''));
+    kontrol.obrolanTerbuka = true;
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(kontrol.panggilan.filter((p) => p.nama === 'tutupObrolan')).toHaveLength(1);
+    expect(dialogKeluar()).toHaveLength(0);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dialogKeluar().length).toBeGreaterThan(0);
+  });
+});
+
 describe('Aplikasi: obrolan (0.7.0)', () => {
   it('emote dan riwayat obrolan masuk ke simpanan obrolan dengan nama; meja lain mulai kosong; keluar = dibuang', async () => {
     const { ws, app } = await diMeja();
@@ -278,6 +300,24 @@ describe('Aplikasi: obrolan (0.7.0)', () => {
     expect(o.daftar).toHaveLength(1);
     app.keluarMeja();
     expect(o.daftar).toHaveLength(0);
+  });
+
+  it('tanda warga kedai: riwayat dari tanda meja, emote dari kursi saat tiba; pemain yang lalu Keluar tidak ikut ditandai', async () => {
+    const { ws, app, g } = await diMeja();
+    const o = app.obrolan!;
+    ws.kirimDariServer({ t: 'obrolan', pesan: [{ nama: 'Budi', isi: 'tadi', w: 1 }, { nama: 'Kipas Dua', isi: 'GG', w: 2, warga: true }] });
+    expect(o.daftar.map((b) => b.warga)).toEqual([undefined, true]);
+    // Kursi 1 (manusia) menulis, lalu Keluar: kursinya diteruskan warga kedai dengan nama yang sama.
+    ws.kirimDariServer({ t: 'emote', kursi: 1, isi: 'aku pamit' });
+    const info = infoMeja(g);
+    ws.kirimDariServer({ t: 'meja', info: { ...info, kursi: info.kursi.map((k, i) => (i === 1 ? { ...k, jenis: 'bot' as const, terhubung: false } : k)) } });
+    // Celetukan warga kedai di kursi itu sekarang.
+    ws.kirimDariServer({ t: 'emote', kursi: 1, isi: 'Waduh!' });
+    expect(o.daftar.slice(2).map((b) => [b.nama, b.isi, b.warga])).toEqual([
+      [g.pemain[1]!.nama, 'aku pamit', undefined],
+      [g.pemain[1]!.nama, 'Waduh!', true],
+    ]);
+    expect(o.daftar[2]).not.toHaveProperty('warga');
   });
 });
 

@@ -148,6 +148,13 @@ export interface EntriObrolan {
   nama: string;
   isi: string;
   w: number;
+  /**
+   * Celetukan warga kedai (Meja.celetukBot); hanya ditulis kalau true. Dicatat saat dikirim, karena
+   * kursi pemain yang keluar dipegang warga kedai dengan nama yang sama: dari kursi sekarang aplikasi
+   * tidak bisa membedakannya. Aplikasi lama mengabaikannya. Pesan `emote` sendiri tidak membawanya
+   * (golden meja tetap): aplikasi menilai emote langsung dari kursi pengirim saat pesan itu tiba.
+   */
+  warga?: true;
 }
 
 /**

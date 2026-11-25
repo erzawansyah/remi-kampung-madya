@@ -1104,17 +1104,19 @@ details.akordion[open] > summary::after {
   border-top: 0;
 }
 
-/* ---------- Obrolan (0.7.0) ----------
-   Dipakai panel "Obrolan" di lobi dan lembar obrolan di meja (.lembar-obrolan, meja.css). */
+/* ---------- Obrolan (0.7.0; gelembung ala aplikasi chat sejak 0.8.0) ----------
+   Dipakai panel "Obrolan" di lobi dan lembar obrolan layar penuh di meja (.lembar-obrolan, meja.css).
+   Pesan orang di kiri (nama berwarna + jam), pesanku di kanan berwarna kuning MADYA, emoji saja tampil
+   besar tanpa gelembung. */
 .obrolan-daftar {
   list-style: none;
   margin: 0;
-  padding: var(--ruang-1) var(--ruang-2);
+  padding: var(--ruang-2);
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-height: 4.5rem;
-  max-height: 11rem;
+  gap: 6px;
+  min-height: 6rem;
+  max-height: 18rem;
   overflow-y: auto;
   overscroll-behavior: contain;
   background: var(--isian);
@@ -1124,28 +1126,98 @@ details.akordion[open] > summary::after {
   line-height: var(--baris-normal);
 }
 .baris-obrolan {
+  display: flex;
+  justify-content: flex-start;
+}
+.baris-obrolan.milikku {
+  justify-content: flex-end;
+}
+.gelembung-obrolan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-width: min(82%, 26rem);
+  padding: 5px 10px 4px;
+  background: var(--panel-terang);
+  color: var(--teks);
+  border-radius: 14px 14px 14px 4px;
+  box-shadow: var(--bayangan-1);
   /* Pesan panjang tanpa spasi dilipat, tidak melebarkan panel. */
   overflow-wrap: anywhere;
 }
+.baris-obrolan.milikku .gelembung-obrolan {
+  background: var(--emas);
+  color: var(--teks-di-emas);
+  border-radius: 14px 14px 4px 14px;
+}
+.kepala-baris {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  font-size: var(--teks-xs);
+  line-height: var(--baris-rapat);
+  margin-bottom: 2px;
+}
 .baris-obrolan .nama {
+  font-weight: 700;
   color: var(--teks-emas);
-  margin-right: 0.4em;
 }
-.baris-obrolan .nama::after {
-  content: ':';
+/* Warna nama tetap per nama (ui/obrolan.ts warnaNama), semuanya ≥ 4.5:1 di --panel-terang. */
+.baris-obrolan .nama[data-warna='0'] {
+  color: #ffd277;
 }
-.baris-obrolan.milikku .nama {
+.baris-obrolan .nama[data-warna='1'] {
+  color: #9fdcff;
+}
+.baris-obrolan .nama[data-warna='2'] {
+  color: #ffb3a8;
+}
+.baris-obrolan .nama[data-warna='3'] {
+  color: #b8f0b0;
+}
+.baris-obrolan .nama[data-warna='4'] {
+  color: #e2c2ff;
+}
+.baris-obrolan .nama[data-warna='5'] {
+  color: #8ff0e0;
+}
+.label-warga {
   color: var(--teks-redup);
+  font-style: italic;
+}
+.gelembung-obrolan .jam {
+  align-self: flex-end;
+  margin-top: 1px;
+  font-size: 0.6875rem;
+  line-height: 1;
+  color: var(--teks-redup);
+  font-variant-numeric: tabular-nums;
+}
+.baris-obrolan.milikku .jam {
+  color: var(--emas-pekat);
+}
+/* Emoji saja: besar, tanpa gelembung. */
+.baris-obrolan.emoji .gelembung-obrolan {
+  background: transparent;
+  box-shadow: none;
+  padding-inline: 2px;
 }
 .baris-obrolan.emoji .isi {
-  font-size: 1.25em;
+  font-size: 2.25rem;
+  line-height: 1.15;
+}
+.baris-obrolan.emoji.milikku .jam {
+  color: var(--teks-redup);
 }
 .obrolan-kosong {
   margin: auto 0;
   text-align: center;
 }
+/* Bar tulis: 😊, isian, kirim. */
 .obrolan-tulis {
   display: flex;
+  align-items: center;
   gap: 6px;
   margin-top: var(--ruang-2);
 }
@@ -1153,28 +1225,71 @@ details.akordion[open] > summary::after {
   flex: 1;
   min-width: 0;
   min-height: var(--sentuh);
+  border-radius: var(--radius-pil);
+  padding-inline: var(--ruang-3);
 }
-.obrolan-cepat button {
+.obrolan-tulis .tombol-baki,
+.obrolan-tulis .tombol-kirim {
+  flex: none;
+  min-width: 0;
+  width: var(--sentuh);
+  height: var(--sentuh);
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.obrolan-tulis .tombol-baki.aktif {
+  background: var(--permukaan-3);
+  box-shadow: inset 0 0 0 2px var(--garis-emas);
+}
+/* Baki celetukan + emoji (tertutup bawaan). */
+.baki-obrolan {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: var(--ruang-2);
+  max-height: 14rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.baki-obrolan[hidden] {
+  display: none;
+}
+.judul-baki {
+  margin: 0;
+  font-size: var(--teks-xs);
+  font-weight: 700;
+  color: var(--teks-redup);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.baki-obrolan button {
   min-width: 0;
   min-height: var(--sentuh);
   padding: var(--ruang-1) var(--ruang-2);
   font-size: var(--teks-sm);
 }
-/* Lobi: pesan cepat satu deret yang bisa digeser. */
-.obrolan-cepat.deret-geser {
+.baki-obrolan .palet-celetukan {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-top: var(--ruang-2);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
-  padding-bottom: 2px;
 }
-.obrolan-cepat.deret-geser button {
-  flex: none;
-  white-space: nowrap;
+.baki-obrolan .palet-celetukan button {
+  flex: 0 1 auto;
+  border-radius: var(--radius-pil);
+  padding-inline: var(--ruang-3);
+  /* Celetukan panjang dilipat di spasi; kata yang tetap tidak muat baru dipotong. */
+  overflow-wrap: anywhere;
 }
-.obrolan-cepat.deret-geser button.emoji {
-  font-size: 1.25rem;
-  padding-inline: var(--ruang-1);
+.baki-obrolan .palet-emoji {
+  display: grid;
+  /* minmax(0, 1fr): kolom tidak melebar mengikuti isi (meluber ke kanan di HP sempit). */
+  grid-template-columns: repeat(auto-fill, minmax(2.75rem, 1fr));
+  gap: 4px;
+}
+.baki-obrolan .palet-emoji button {
+  font-size: 1.5rem;
+  padding: var(--ruang-1) 0;
 }

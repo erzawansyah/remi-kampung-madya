@@ -1412,11 +1412,13 @@ export class Meja {
   }
 
   /** Kirim emote/pesan ke semua pemain manusia. Maksimal satu per 1,2 detik per kursi. */
-  private kirimEmote(kursi: number, isi: string): void {
+  private kirimEmote(kursi: number, isi: string, warga = false): void {
     const sekarang = this.penjadwal.sekarang();
     if (sekarang - (this.emoteTerakhir.get(kursi) ?? -Infinity) < 1200) return;
     this.emoteTerakhir.set(kursi, sekarang);
-    this.obrolan.push({ nama: this.d.kursi[kursi]?.nama ?? 'Pemain', isi, w: sekarang });
+    // `warga` hanya untuk celetukan warga kedai, hanya ditulis kalau true, dan hanya di riwayat obrolan.
+    const tanda = warga ? { warga: true as const } : {};
+    this.obrolan.push({ nama: this.d.kursi[kursi]?.nama ?? 'Pemain', isi, w: sekarang, ...tanda });
     if (this.obrolan.length > MAKS_OBROLAN) this.obrolan.splice(0, this.obrolan.length - MAKS_OBROLAN);
     this.kirimKeManusia({ t: 'emote', kursi, isi });
   }
@@ -1523,7 +1525,7 @@ export class Meja {
         700 + i * 800 + Math.floor(acak() * 400),
         'celetukan warga kedai',
         () => {
-          if (!this.berhenti) this.kirimEmote(kursi, isi);
+          if (!this.berhenti) this.kirimEmote(kursi, isi, true);
         },
         false,
       ),
