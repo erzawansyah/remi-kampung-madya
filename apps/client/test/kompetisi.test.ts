@@ -22,7 +22,6 @@ import {
   type PesanServer,
 } from '@remi/meja';
 import { BAB_BANTUAN } from '../src/konten/bantuan';
-import { TEKS_KALDU } from '../src/konten/kaldu';
 import { simpan } from '../src/penyimpanan';
 import { tutupSemuaJendela } from '../src/ui/dom';
 import { htmlKlasemen, htmlPiala, keteranganWaktu, POLLING_DETAIL_MS, renderKompetisi, ringkasAturan, type AksiKompetisi } from '../src/ui/kompetisi';
@@ -211,12 +210,8 @@ describe('teks kompetisi', () => {
     expect(TEKS_KOMPETISI.caraHitung).toContain('cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0');
     expect(permainanKompetisiDihitung([{ keluar: true }, {}, { keluar: true }, { keluar: true }])).toBe(false);
     expect(kursiDicatatKompetisi([{ keluar: true }, {}, { keluar: true }, { keluar: true }])).toEqual([true, false, true, true]);
-    const online = JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'online'));
-    expect(online).toContain(`Meja 4 orang dengan 1 yang keluar: juara ${contoh[0]}; kedua ${contoh[1]}; ketiga ${contoh[3]}.`);
-    expect(online).toContain('Kalau cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0.');
-    expect(online).toContain(`Di meja kompetisi tidak ada Akhiri permainan maupun ${TEKS_KALDU.tombol}`);
-    // Kalimat lama (voting akhiri butuh semua peserta) tidak ada lagi.
-    expect(online).not.toContain('termasuk yang sedang terputus');
+    // Bab Bantuan "Kompetisi" dicabut selama kompetisi ditutup (0.7.0).
+    expect(BAB_BANTUAN.find((b) => b.id === 'kompetisi')).toBeUndefined();
     expect(JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'akhir-permainan'))).toContain('Di meja kompetisi tidak ada sepakat berhenti.');
   });
 

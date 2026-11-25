@@ -17,7 +17,7 @@ import { gambarKartuKeKanvas, type KartuGambar } from '../game/kartuGrafisGambar
 import { htmlTautanKedai, KEDAI } from '../konten/kedai';
 import { TEKS_TAWARAN } from '../konten/pasang';
 import { TEKS_KALDU } from '../konten/kaldu';
-import { TEKS_KOMPETISI } from '../konten/kompetisi';
+import { KOMPETISI_DIBUKA, TEKS_KOMPETISI } from '../konten/kompetisi';
 import { TEKS_KONEKSI } from '../konten/koneksi';
 import { TEKS_NAMA } from '../konten/nama';
 import { TEKS_USULAN } from '../konten/usulan';
@@ -27,6 +27,8 @@ import { labelTanggalGanti, namaTerkunciSampai, simpanNamaBaru, type KeadaanNama
 import { simpan } from '../penyimpanan';
 import { labelVersi } from '../versi';
 import { bacaIsianBatas, htmlIsianBatas, pasangIsianBatas } from './batasSkor';
+import { htmlInfo, htmlLabelInfo } from './info';
+import { TEKS_ACAK_DUDUK } from '../konten/acakDuduk';
 import { esc, konfirmasi, toast } from './dom';
 
 /** Keadaan main online yang ditampilkan di beranda. */
@@ -146,7 +148,9 @@ export function infoSimpanan(): { teks: string; latihan: boolean } | null {
   try {
     const n = d.pengaturan?.jumlahPemain ?? d.kursi?.length;
     const putaran = d.game?.putaran?.nomor ?? (d.game ? d.game.riwayat.length + 1 : 1);
-    const skor = d.game?.skor?.[0];
+    // Kursi pemain bisa di mana saja sesudah urutan duduk diacak (#62): satu-satunya manusia di meja offline.
+    const saya = d.kursi?.findIndex((k) => k.jenis === 'manusia') ?? 0;
+    const skor = d.game?.skor?.[Math.max(0, saya)];
     const bagian = [latihan ? 'dengan panduan' : `${n} pemain`, `putaran ${putaran}`, typeof skor === 'number' ? `skormu ${skor}` : ''];
     return { teks: bagian.filter(Boolean).join(' · '), latihan };
   } catch {
@@ -243,12 +247,15 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
               <label class="baris">Jumlah pemain
                 <select id="o-jumlah">${pilihan(p.jumlahPemain, [2, 3, 4, 5, 6].map((n) => [n, String(n)]))}</select></label>
               <label class="baris" id="o-dua-baris">Pakai 2 deck (12 kartu)<input type="checkbox" id="o-dua" ${p.duaDeckUntukEmpat ? 'checked' : ''} /></label>
-              <label class="baris">Level warga kedai
+              <label class="baris" for="o-level"><span class="label-info">Level warga kedai<span id="info-level"${LEVEL_WARGA[p.levelBot].ket ? '' : ' hidden'}>${htmlInfo(
+                LEVEL_WARGA[p.levelBot].ket ?? '',
+                'level warga kedai',
+                'ket-level',
+              )}</span></span>
                 <select id="o-level" aria-describedby="ket-level">${pilihan(
                   p.levelBot,
                   DAFTAR_LEVEL_WARGA.map((l) => [l.level, l.pilihan]),
                 )}</select></label>
-              <p class="bantuan rapat" id="ket-level"${LEVEL_WARGA[p.levelBot].ket ? '' : ' hidden'}>${esc(LEVEL_WARGA[p.levelBot].ket ?? '')}</p>
               <label class="baris">Tempo warga kedai
                 <select id="o-tempo">${pilihan(p.tempoBot, [
                   ['santai', 'Santai'],
@@ -257,10 +264,10 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
                 ])}</select></label>
               <label class="baris">Batas putaran
                 <select id="o-putaran">${pilihan(p.batasPutaran ?? 0, [3, 5, 10, 15, 20, 0].map((n) => [n, n ? String(n) : 'Tanpa batas']))}</select></label>
-              <label class="baris">${esc(TEKS_KALDU.label)}<input type="checkbox" id="o-kaldu" aria-describedby="ket-kaldu" ${p.modeKaldu === true ? 'checked' : ''} /></label>
-              <p class="bantuan rapat" id="ket-kaldu">${esc(TEKS_KALDU.ket)}</p>
+              <label class="baris" for="o-kaldu">${htmlLabelInfo(TEKS_KALDU.label, TEKS_KALDU.ket, 'ket-kaldu')}<input type="checkbox" id="o-kaldu" aria-describedby="ket-kaldu" ${p.modeKaldu === true ? 'checked' : ''} /></label>
               ${htmlIsianBatas({ id: 'o-skor', nilai: p, bisaUbah: true })}
-              <label class="baris">Pengocok pertama
+              <label class="baris" for="o-acak">${htmlLabelInfo(TEKS_ACAK_DUDUK.label, TEKS_ACAK_DUDUK.ket, 'ket-o-acak')}<input type="checkbox" id="o-acak" aria-describedby="ket-o-acak" ${p.urutanTetap === true ? '' : 'checked'} /></label>
+              <label class="baris${p.urutanTetap === true ? '' : ' tersembunyi'}" id="o-kocok-baris">Pengocok pertama
                 <select id="o-kocok"><option value="acak">Acak</option><option value="saya">Saya</option></select></label>
             </div>
           </details>
@@ -276,14 +283,18 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
             <span>Server-nya belum bisa dihubungi, Bos.</span>
             <button type="button" class="kecil" id="coba-lagi">Coba lagi</button>
           </div>
-          <p class="redup rapat">Main bareng teman pakai kode meja atau link undangan.</p>
           <button type="button" class="penuh" id="buat">Buat meja baru</button>
           <div class="gabung-deret">
             <input type="text" id="kode" class="input-kode" maxlength="5" placeholder="KODE" aria-label="Kode meja (5 karakter)" value="${esc(opsi.kodeAwal ?? '')}" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" />
             <button type="button" id="gabung">Gabung</button>
           </div>
           <button type="button" class="hantu penuh" id="publik">Cari meja publik</button>
-          <button type="button" class="hantu penuh" id="kompetisi"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.tombolBeranda)}</button>
+          ${
+            KOMPETISI_DIBUKA
+              ? `<button type="button" class="hantu penuh" id="kompetisi"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.tombolBeranda)}</button>`
+              : // Ditutup sementara: tetap terlihat (redup, "Segera hadir"); diketuk = toast.
+                `<button type="button" class="hantu penuh mati tombol-segera" id="kompetisi" aria-disabled="true"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.tombolBeranda)} <small class="label-segera">${esc(TEKS_KOMPETISI.segeraHadir)}</small></button>`
+          }
         </section>
       </div>
 
@@ -325,11 +336,36 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   const isianNama = el<HTMLInputElement>('nama')!;
   const ketNama = el('ket-nama')!;
   const keadaanNama = (): KeadaanNama => ({ nama: simpan.nama().trim(), diganti: simpan.namaDiganti() });
+  /** Ada tekanan pointer di beranda yang belum selesai (klik/batal). */
+  let ditekan = false;
   const aturTampilNama = () => {
     const sampai = namaTerkunciSampai(keadaanNama(), Date.now());
     isianNama.readOnly = sampai !== null;
     ketNama.textContent = sampai !== null ? `${TEKS_NAMA.bisaGantiLagi} ${labelTanggalGanti(sampai)}.` : TEKS_NAMA.ketBaru;
+    // "Cuma bisa diganti seminggu sekali" hanya selama isian nama sedang diisi; tanggal buka kunci
+    // tetap terlihat selama namanya terkunci. Selama tekanan yang meninggalkan isian belum selesai,
+    // keterangannya tetap (lihat `ditekan` di bawah; `change` yang menyimpan nama juga jalan di sela itu).
+    ketNama.hidden = sampai === null && document.activeElement !== isianNama && !ditekan;
   };
+  isianNama.addEventListener('focus', aturTampilNama);
+  // Isian ditinggalkan karena layar beranda ditekan (mis. tombol Main tepat di bawahnya): blur jalan
+  // di antara tekan dan lepas, dan menyembunyikan keterangan saat itu juga menggeser tombol di bawah
+  // jari, sehingga kliknya jatuh di luar tombol. Jadi tunggu sampai tekanan itu selesai (klik, atau
+  // dibatalkan), baru keterangannya disembunyikan. Blur lewat papan ketik (Tab) langsung.
+  layarEl.addEventListener('pointerdown', () => (ditekan = true), true);
+  isianNama.addEventListener('blur', () => {
+    if (!ditekan) return aturTampilNama();
+    const win = layarEl.ownerDocument.defaultView ?? window;
+    const jenis = ['click', 'auxclick', 'contextmenu', 'pointercancel'] as const;
+    const selesai = () => {
+      jenis.forEach((j) => win.removeEventListener(j, selesai, true));
+      ditekan = false;
+      setTimeout(aturTampilNama, 0);
+    };
+    jenis.forEach((j) => win.addEventListener(j, selesai, true));
+  });
+  layarEl.addEventListener('click', () => (ditekan = false));
+  layarEl.addEventListener('pointercancel', () => (ditekan = false));
   /** Cek nama di isian, konfirmasi kalau diganti, lalu simpan. Null = belum bisa main. */
   const cekNama = async (): Promise<string | null> => {
     const k = keadaanNama();
@@ -418,6 +454,8 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
       tempoBot: el<HTMLSelectElement>('o-tempo')!.value as PengaturanMeja['tempoBot'],
       batasPutaran: Number(el<HTMLSelectElement>('o-putaran')!.value) || null,
       modeKaldu: kaldu.checked,
+      // Acak urutan duduk (#62): bawaan menyala; mati = urutan tetap dan pengocok pertama dipilih.
+      urutanTetap: !el<HTMLInputElement>('o-acak')!.checked,
       // Mode kaldu tidak memakai batas skor (#43), tapi angkanya tetap disimpan (isiannya cuma
       // disembunyikan), sama seperti lobi; Meja.mulai() yang mengirim batas skor kosong ke engine.
       ...bacaIsianBatas(akar, 'o-skor'),
@@ -427,6 +465,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   const aturTampilAtur = () => {
     el('o-dua-baris')!.classList.toggle('tersembunyi', jumlah.value !== '4');
     isianBatas.classList.toggle('tersembunyi', kaldu.checked);
+    el('o-kocok-baris')!.classList.toggle('tersembunyi', el<HTMLInputElement>('o-acak')!.checked);
   };
   const perbaruiAtur = () => {
     aturTampilAtur();
@@ -434,8 +473,9 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
     simpan.setPengaturanOffline(baru);
     el('ringkas-meja')!.textContent = ringkasMeja({ ...p, ...baru });
     const ket = LEVEL_WARGA[rapikanLevel(baru.levelBot)].ket ?? '';
+    // Jago dan Suhu tanpa keterangan (keputusan pemilik 14 Okt 2026): "?"-nya ikut disembunyikan.
     el('ket-level')!.textContent = ket;
-    el('ket-level')!.hidden = !ket;
+    el('info-level')!.hidden = !ket;
   };
   akar.querySelector('.isi-atur')!.addEventListener('change', perbaruiAtur);
   // Batas skor dirapikan (kelipatan 10) saat isian ditinggalkan atau Enter, lalu disimpan.
@@ -453,7 +493,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
     if (!(await bolehTimpa('Main baru pakai slot simpanan yang sama.'))) return;
     const pengaturan = bacaPengaturan();
     simpan.setPengaturanOffline(pengaturan);
-    aksi.mainOffline(n, pengaturan, el<HTMLSelectElement>('o-kocok')!.value === 'saya');
+    aksi.mainOffline(n, pengaturan, !el<HTMLInputElement>('o-acak')!.checked && el<HTMLSelectElement>('o-kocok')!.value === 'saya');
   });
   akar.querySelectorAll('[data-latihan]').forEach((b) =>
     b.addEventListener('click', async () => {
@@ -506,6 +546,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   });
   // Ikut serta dan meja kompetisi memakai nama ini, jadi nama dipastikan dulu (#49).
   el('kompetisi')!.addEventListener('click', async () => {
+    if (!KOMPETISI_DIBUKA) return toast(TEKS_KOMPETISI.dirombak);
     if (!(await pastikanNama())) return;
     aksi.lihatKompetisi();
   });

@@ -19,6 +19,7 @@ import {
   permainanKompetisiDihitung,
   rapikanPengaturanKompetisi,
   ringkasanDitinggal,
+  TEKS_KOMPETISI_DIROMBAK,
   TEKS_KURSI_KOMPETISI_LEPAS,
   TEKS_LOBI_KOMPETISI_BUBAR,
   validasiPesan,
@@ -163,11 +164,22 @@ export interface OpsiServer {
    * (2 detik); untuk test.
    */
   jedaMulaiKompetisiMs?: number;
+  /**
+   * Sumber acak urutan duduk (#62). Bawaan Math.random; false = kursi tidak pernah diacak (test yang
+   * bergantung pada nomor kursi).
+   */
+  acakDuduk?: (() => number) | false;
   /** Pengajuan kompetisi yang masih menunggu peserta: maksimal per jaringan (bawaan 3) dan total (bawaan 50). */
   maksPengajuanPerIp?: number;
   maksPengajuan?: number;
   /** Permintaan tulis ke /api/kompetisi per menit per jaringan (bawaan 30). */
   batasTulisKompetisiPerMenit?: number;
+  /**
+   * Terima pengajuan kompetisi baru (POST /api/kompetisi). Bawaan false: kompetisi sedang dirombak
+   * (rilis 0.7.0), jadi pengajuan baru ditolak dengan TEKS_KOMPETISI_DIROMBAK. Ikut serta, voting
+   * tutup, detail, daftar, dan meja kompetisi yang sudah ada tetap jalan.
+   */
+  terimaPengajuanKompetisi?: boolean;
   /**
    * Usul fitur diteruskan ke database Notion pemilik (env NOTION_TOKEN dan NOTION_USULAN_DB, lihat
    * main.ts). Kosong = usulan hanya disimpan di database, lalu terkirim begitu Notion diatur dan server
@@ -790,6 +802,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       if (kali > (opsi.batasTulisKompetisiPerMenit ?? 30)) return json(429, { error: 'Pelan-pelan, Bos. Coba lagi semenit lagi.' });
       const isi = await bacaJson(req);
       if (!kode) {
+        if (opsi.terimaPengajuanKompetisi !== true) return json(503, { error: TEKS_KOMPETISI_DIROMBAK });
         // Pengajuan yang tercatat di sini tapi sudah jalan/batal tidak dihitung lagi.
         for (const [k] of pengajuKompetisi) if (penyimpan.status(k, sekarang) !== 'pengajuan') pengajuKompetisi.delete(k);
         const dariSini = [...pengajuKompetisi.values()].filter((j) => j === jaringan).length;
@@ -976,6 +989,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     // Meja kompetisi: mulai sendiri dan menerima peserta baru hanya selama kompetisinya berjalan.
     kompetisiBerjalan: (k: string) => opsi.riwayat?.kompetisi.status(k, jam()) === 'berjalan',
     buatSeed: () => randomBytes(4).readInt32LE(0),
+    ...(opsi.acakDuduk === false ? {} : { acakDuduk: opsi.acakDuduk ?? Math.random }),
     // Nama warga kedai: urutan acak per meja, supaya lawan pertama tidak selalu "Kipas Dua".
     namaLawan: namaLawanAcak(),
     // Disimpan ke database (tertunda sebentar) supaya meja selamat dari restart/deploy.

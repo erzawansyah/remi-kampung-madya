@@ -79,11 +79,11 @@ export function htmlKartuJadiAsal(daftar: KartuJadi[], nama: (i: number) => stri
     .join('')}</div>`;
 }
 
-const LABEL_STATUS = { mentung: 'MENTUNG', kepentung: 'kepentung', aman: 'aman' } as const;
-
+/** Lencana hanya untuk yang mentung atau kepentung; yang aman tanpa lencana (audit teks pemilik, butir 11). */
 function lencanaStatus(r: RincianSkor): string {
-  const k = r.status === 'mentung' ? 'emas' : r.status === 'kepentung' ? 'merah' : '';
-  return `<span class="lencana ${k}">${LABEL_STATUS[r.status]}</span>`;
+  if (r.status === 'mentung') return '<span class="lencana emas">MENTUNG</span>';
+  if (r.status === 'kepentung') return '<span class="lencana merah">kepentung</span>';
+  return '';
 }
 
 /** Komponen skor satu pemain di satu putaran. */

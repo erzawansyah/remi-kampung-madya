@@ -14,6 +14,23 @@ import { TEKS_KOMPETISI, teksMenungguPeserta } from '../konten/kompetisi';
 import { DAFTAR_LEVEL_WARGA, infoLevel, labelLevelKecil } from '../konten/levelWarga';
 import { htmlIsianBatas, lepasIsianBatas, pasangIsianBatas } from './batasSkor';
 import { esc, konfirmasi, toast, type OpsiKonfirmasi } from './dom';
+import { htmlInfo, htmlLabelInfo } from './info';
+import { TEKS_ACAK_DUDUK } from '../konten/acakDuduk';
+import { TEKS_OBROLAN } from '../konten/obrolan';
+import { htmlPanelObrolan, pasangPanelObrolan, type Obrolan } from './obrolan';
+
+/** Id isian pesan obrolan di lobi (fokus dan kursornya dipulihkan saat lobi digambar ulang). */
+const ID_ISIAN_OBROLAN = 'isian-obrolan-lobi';
+
+/** Panel obrolan di lobi (0.7.0). Isi, draf, dan posisi gulirnya disimpan di `Obrolan` milik aplikasi. */
+export interface ObrolanLobi {
+  obrolan: Obrolan;
+  /** Alasan pesan belum bisa dikirim (sambungan belum siap); '' = boleh. */
+  alasanTolak?: () => string;
+}
+
+const htmlObrolanLobi = () =>
+  `<section class="kartu-panel panel-obrolan" aria-labelledby="judul-obrolan"><h2 id="judul-obrolan">${esc(TEKS_OBROLAN.judul)}</h2>${htmlPanelObrolan({ susunan: 'lobi', idIsian: ID_ISIAN_OBROLAN })}</section>`;
 
 /** Nilai <select> kursi untuk warga kedai level tertentu, mis. "bot-jago". */
 const nilaiBot = (level: string) => `bot-${level}`;
@@ -115,7 +132,13 @@ export function opsiKonfirmasiKeluar(k: KeadaanKeluar): OpsiKonfirmasi {
   };
 }
 
-export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKlien) => void, keluar: () => void): void {
+export function renderLobi(
+  akar: HTMLElement,
+  info: InfoMeja,
+  kirim: (p: PesanKlien) => void,
+  keluar: () => void,
+  obrolan?: ObrolanLobi,
+): void {
   const host = info.kursiSaya === info.host;
   // Lobi digambar ulang setiap info meja berubah (ada yang masuk, kursi diatur). Angka batas skor
   // yang sedang diketik host jangan sampai hilang: dicatat di sini, dipulihkan sesudah digambar.
@@ -132,6 +155,11 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
         : aktif.dataset.kursi !== undefined
           ? `[data-kursi="${Number(aktif.dataset.kursi)}"]`
           : null
+      : null;
+  // Kursor di isian obrolan (yang sedang mengetik) ikut dipulihkan, bukan lompat ke akhir.
+  const kursorObrolan =
+    aktif instanceof HTMLInputElement && aktif.id === ID_ISIAN_OBROLAN && akar.contains(aktif)
+      ? { awal: aktif.selectionStart, akhir: aktif.selectionEnd }
       : null;
   lepasIsianBatas(akar);
   const p = info.pengaturan;
@@ -151,10 +179,15 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
         k.jenis === 'bot' ? `<span class="lencana">${esc(['warga kedai', labelLevelKecil(k.level)].filter(Boolean).join(' · '))}</span>` : '',
         k.jenis === 'manusia' && !k.terhubung ? '<span class="lencana merah">terputus</span>' : '',
       ].join('');
-      const nama =
-        k.jenis === 'kosong' ? `<span class="redup">${kompetisi ? 'menunggu peserta…' : 'menunggu orang masuk…'}</span>` : `<b>${esc(k.nama)}</b>`;
       // Meja kompetisi: peserta memilih mejanya sendiri, host tidak mengatur kursi (meja menolaknya).
       const pilih = host && !kompetisi && i !== info.kursiSaya ? pilihanKursi(k, i, false) : '';
+      // Kursi kosong yang punya pilihan "Tunggu orang" (host) tidak perlu tulisan lagi.
+      const nama =
+        k.jenis !== 'kosong'
+          ? `<b>${esc(k.nama)}</b>`
+          : pilih
+            ? ''
+            : `<span class="redup">${kompetisi ? 'menunggu peserta…' : 'kosong'}</span>`;
       return `<div class="kursi"><span class="redup" aria-label="Kursi ${i + 1}">${i + 1}</span><span class="nama">${nama}</span>${lencana}${pilih}</div>`;
     })
     .join('');
@@ -162,9 +195,24 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   const q = <T extends HTMLElement>(sel: string) => akar.querySelector(sel) as T | null;
   /** Sesudah digambar ulang: gulir dan fokus dikembalikan, tombol keluar dan pilihan kursi dipasang. */
   const pasangUmum = () => {
+    const wadahObrolan = q('.panel-obrolan');
+    if (wadahObrolan && obrolan) {
+      pasangPanelObrolan(wadahObrolan, {
+        obrolan: obrolan.obrolan,
+        kirim: (isi) => kirim({ t: 'emote', isi }),
+        namaSaya: () => (info.kursiSaya != null ? (info.kursi[info.kursiSaya]?.nama ?? null) : null),
+        alasanTolak: obrolan.alasanTolak,
+        susunan: 'lobi',
+        idIsian: ID_ISIAN_OBROLAN,
+      });
+    }
     const layarBaru = q('.layar-lobi');
     if (layarBaru && gulirLama !== null) layarBaru.scrollTop = gulirLama;
     if (fokusLama && !sedangDiisi) q(fokusLama)?.focus({ preventScroll: true });
+    const isianObrolan = q<HTMLInputElement>(`#${ID_ISIAN_OBROLAN}`);
+    if (kursorObrolan && isianObrolan && kursorObrolan.awal !== null && kursorObrolan.akhir !== null) {
+      isianObrolan.setSelectionRange(kursorObrolan.awal, kursorObrolan.akhir);
+    }
     q('#keluar')!.addEventListener('click', async () => {
       const ya = await konfirmasi(opsiKonfirmasiKeluar({ asal: 'lobi', offline: false, masukPeringkat: false, kompetisi: !!kompetisi }));
       // Selagi dialog terbuka permainan bisa saja mulai (layar sudah jadi meja): teks
@@ -184,7 +232,7 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   };
 
   if (kompetisi) {
-    akar.innerHTML = htmlLobiKompetisi(info, barisKursi, kosong);
+    akar.innerHTML = htmlLobiKompetisi(info, barisKursi, kosong, obrolan ? htmlObrolanLobi() : '');
     pasangUmum();
     jalankanHitungMundur(akar, info);
     return;
@@ -193,13 +241,17 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   const pilihanBatas = (id: string, nilai: number | null, opsi: number[], label: (n: number) => string) =>
     `<select id="${id}" ${disAturan}>${opsi.map((n) => `<option value="${n}" ${n === (nilai ?? 0) ? 'selected' : ''}>${label(n)}</option>`).join('')}</select>`;
   const kaldu = p.modeKaldu === true;
-  // Host: kotak centang + satu baris keterangan. Bukan host: keadaannya sebagai teks (keterangan
-  // hanya kalau nyala).
+  // Host: kotak centang. Bukan host: keadaannya sebagai teks. Penjelasannya lewat "?".
+  const labelKaldu = htmlLabelInfo(TEKS_KALDU.label, TEKS_KALDU.ket, 'ket-kaldu');
   const htmlKaldu = ubahAturan
-    ? `<label class="baris">${esc(TEKS_KALDU.label)}<input type="checkbox" id="kaldu" aria-describedby="ket-kaldu" ${kaldu ? 'checked' : ''} /></label>
-       <p class="bantuan rapat" id="ket-kaldu">${esc(TEKS_KALDU.ket)}</p>`
-    : `<div class="baris baris-teks"><span>${esc(TEKS_KALDU.label)}</span><b id="kaldu">${esc(kaldu ? TEKS_KALDU.nyala : TEKS_KALDU.mati)}</b></div>
-       ${kaldu ? `<p class="bantuan rapat" id="ket-kaldu">${esc(TEKS_KALDU.ket)}</p>` : ''}`;
+    ? `<label class="baris" for="kaldu">${labelKaldu}<input type="checkbox" id="kaldu" aria-describedby="ket-kaldu" ${kaldu ? 'checked' : ''} /></label>`
+    : `<div class="baris baris-teks">${labelKaldu}<b id="kaldu">${esc(kaldu ? TEKS_KALDU.nyala : TEKS_KALDU.mati)}</b></div>`;
+  // Acak urutan duduk (#62): bawaan menyala. Kalau mati, host memilih pengocok pertama.
+  const acakDuduk = p.urutanTetap !== true;
+  const labelAcak = htmlLabelInfo(TEKS_ACAK_DUDUK.label, TEKS_ACAK_DUDUK.ket, 'ket-acak');
+  const htmlAcak = host
+    ? `<label class="baris" for="acak-duduk">${labelAcak}<input type="checkbox" id="acak-duduk" aria-describedby="ket-acak" ${acakDuduk ? 'checked' : ''} /></label>`
+    : `<div class="baris baris-teks">${labelAcak}<b id="acak-duduk">${esc(acakDuduk ? TEKS_ACAK_DUDUK.nyala : TEKS_ACAK_DUDUK.mati)}</b></div>`;
 
   akar.innerHTML = `
   <div class="layar layar-lobi"><div class="kolom">
@@ -211,6 +263,8 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
       ${barisKursi}
       ${host && kosong ? '<button type="button" id="isi-bot" class="kecil">Ajak warga kedai isi kursi kosong</button>' : ''}
     </div>
+
+    ${obrolan ? htmlObrolanLobi() : ''}
 
     <div class="kartu-panel">
       <h2>Pengaturan ${host ? '' : '<span class="redup">(diatur host)</span>'}</h2>
@@ -226,19 +280,23 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
           .map((t) => `<option value="${t}" ${t === (p.tempoBot ?? 'santai') ? 'selected' : ''}>${t[0]!.toUpperCase() + t.slice(1)}</option>`)
           .join('')}</select></label>
       <label class="baris">Meja publik (muncul di daftar)<input type="checkbox" id="publik" ${p.publik ? 'checked' : ''} ${dis} /></label>
-      <label class="baris">Boleh ditonton<input type="checkbox" id="ditonton" aria-describedby="ket-ditonton" ${p.tanpaPenonton === true ? '' : 'checked'} ${dis} /></label>
-      <p class="bantuan rapat" id="ket-ditonton">Penonton cuma lihat kartu buangan. Kartumu baru kelihatan kalau kamu izinkan.</p>
+      <label class="baris" for="ditonton">${htmlLabelInfo('Boleh ditonton', 'Penonton cuma lihat kartu buangan. Kartumu baru kelihatan kalau kamu izinkan.', 'ket-ditonton')}<input type="checkbox" id="ditonton" aria-describedby="ket-ditonton" ${p.tanpaPenonton === true ? '' : 'checked'} ${dis} /></label>
+      ${htmlAcak}
     </div>
 
     ${
       host
         ? `<div class="kartu-panel">
-            <label class="baris">Pengocok pertama
+            ${
+              acakDuduk
+                ? ''
+                : `<label class="baris">Pengocok pertama
               <select id="kocok"><option value="acak">Acak</option>${info.kursi
                 .map((k, i) => (k.jenis === 'kosong' ? '' : `<option value="${i}">${esc(k.nama)}</option>`))
-                .join('')}</select></label>
+                .join('')}</select></label>`
+            }
             <button type="button" class="utama besar${kosong ? ' mati' : ''}" id="mulai" ${kosong ? 'aria-disabled="true" aria-describedby="ket-mulai"' : ''}>Mulai main</button>
-            ${kosong ? '<p class="redup rapat" id="ket-mulai">Masih ada kursi kosong: tunggu teman masuk atau ajak warga kedai.</p>' : ''}
+            ${kosong ? '<p class="redup rapat" id="ket-mulai">Kursi masih kosong.</p>' : ''}
           </div>`
         : '<div class="kartu-panel"><p class="redup rapat" role="status">Menunggu host memulai permainan…</p></div>'
     }
@@ -272,9 +330,11 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   q('#ditonton')?.addEventListener('change', () => ubah({ tanpaPenonton: !q<HTMLInputElement>('#ditonton')!.checked }));
   q('#mulai')!.addEventListener('click', () => {
     if (kosong) return toast('Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.', true);
-    const v = q<HTMLSelectElement>('#kocok')!.value;
+    // Urutan duduk diacak: yang dapat kursi pertama ngocok (meja yang menentukan), tanpa pilihan.
+    const v = q<HTMLSelectElement>('#kocok')?.value ?? 'acak';
     kirim({ t: 'mulai', pengocok: v === 'acak' ? undefined : Number(v) });
   });
+  q('#acak-duduk')?.addEventListener('change', () => ubah({ urutanTetap: !q<HTMLInputElement>('#acak-duduk')!.checked }));
   if (!ubahAturan) return;
   q('#dua')?.addEventListener('change', () => ubah({ duaDeckUntukEmpat: q<HTMLInputElement>('#dua')!.checked }));
   q('#putaran')!.addEventListener('change', () => ubah({ batasPutaran: angka('#putaran') }));
@@ -303,7 +363,7 @@ export function teksStatusLobiKompetisi(info: Pick<InfoMeja, 'kursi'>, sisaMs: n
 }
 
 /** Lobi meja kompetisi: nama kompetisi (tanpa kode/undangan), kursi, status mulai sendiri, aturan sebagai teks. */
-function htmlLobiKompetisi(info: InfoMeja, barisKursi: string, kosong: number): string {
+function htmlLobiKompetisi(info: InfoMeja, barisKursi: string, kosong: number, htmlObrolan: string): string {
   const p = info.pengaturan;
   const k = info.kompetisi!;
   const baris = (label: string, nilai: string, id: string) =>
@@ -315,23 +375,23 @@ function htmlLobiKompetisi(info: InfoMeja, barisKursi: string, kosong: number): 
     <div class="judul"><p>🏅 ${esc(TEKS_KOMPETISI.lencanaMeja)}</p><h1 class="nama-kompetisi">${esc(k.nama)}</h1></div>
 
     <div class="kartu-panel">
-      <h2>Kursi (${info.kursi.length - kosong}/${info.kursi.length})</h2>
+      <h2 class="label-info">Kursi (${info.kursi.length - kosong}/${info.kursi.length})${htmlInfo(TEKS_KOMPETISI.ketLobi, 'kursi meja kompetisi', 'ket-lobi-kompetisi')}</h2>
       ${barisKursi}
     </div>
 
+    ${htmlObrolan}
+
     <div class="kartu-panel">
       <p class="rapat status-lobi-kompetisi${sisa !== null ? ' penuh' : ''}" id="status-lobi" role="status">${esc(teksStatusLobiKompetisi(info, sisa))}</p>
-      <p class="bantuan rapat">${esc(TEKS_KOMPETISI.ketLobi)}</p>
     </div>
 
     <div class="kartu-panel">
-      <h2>${esc(TEKS_KOMPETISI.judulAturan)}</h2>
-      <p class="bantuan rapat">${esc(TEKS_KOMPETISI.aturanDikunci)}</p>
+      <h2 class="label-info">${esc(TEKS_KOMPETISI.judulAturan)}${htmlInfo(TEKS_KOMPETISI.aturanDikunci, TEKS_KOMPETISI.judulAturan, 'ket-aturan-kompetisi')}</h2>
       ${baris('Jumlah pemain', `${p.jumlahPemain} orang`, 'jumlah')}
       ${p.jumlahPemain === 4 ? baris('Pakai 2 deck (12 kartu)', p.duaDeckUntukEmpat ? 'Ya' : 'Tidak', 'dua') : ''}
       ${baris('Batas putaran', p.batasPutaran ? String(p.batasPutaran) : 'Tanpa batas', 'putaran')}
-      ${baris(TEKS_KALDU.label, kaldu ? TEKS_KALDU.nyala : TEKS_KALDU.mati, 'kaldu')}
-      ${kaldu ? `<p class="bantuan rapat" id="ket-kaldu">${esc(TEKS_KALDU.ket)}</p>` : htmlIsianBatas({ id: 'skor', nilai: p, bisaUbah: false })}
+      <div class="baris baris-teks">${htmlLabelInfo(TEKS_KALDU.label, TEKS_KALDU.ket, 'ket-kaldu')}<b id="kaldu">${esc(kaldu ? TEKS_KALDU.nyala : TEKS_KALDU.mati)}</b></div>
+      ${kaldu ? '' : htmlIsianBatas({ id: 'skor', nilai: p, bisaUbah: false })}
       ${baris('Waktu per giliran', p.detikGiliran ? `${p.detikGiliran} detik` : 'Tanpa batas', 'detik')}
     </div>
     <button type="button" id="keluar" class="bahaya">Keluar meja</button>

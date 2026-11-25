@@ -28,6 +28,11 @@ const KUNCI = {
   tiketKompetisi: 'remi.tiketKompetisi',
   /** Nonton (#60): penanda tetap penonton di HP ini (jeda sesudah ditolak tetap berlaku saat menyambung ulang). */
   tokenPenonton: 'remi.tokenPenonton',
+  /**
+   * Pengingat sebelum Selesai di susun akhir (#64): "Jangan tanya lagi sampai permainan ini selesai" dicentang
+   * di meja `kode`; `riwayat` = jumlah putaran selesai terbanyak yang sudah terlihat di permainan itu.
+   */
+  tanpaPengingatSusun: 'remi.tanpaPengingatSusun',
 } as const;
 
 /** Riwayat lokal yang disimpan (permainan terbaru di depan). */
@@ -167,6 +172,8 @@ const rapikanPengaturanOffline: Rapikan<Partial<PengaturanMeja>> = (x) => {
   if ('levelBot' in p) p.levelBot = rapikanLevel(p.levelBot);
   // Mode kaldu (#42): hanya boolean yang dipakai; bentuk lain dibuang (jatuh ke bawaan: mati).
   if ('modeKaldu' in p && typeof p.modeKaldu !== 'boolean') delete p.modeKaldu;
+  // Acak urutan duduk (#62): bentuk lain dibuang (jatuh ke bawaan: diacak).
+  if ('urutanTetap' in p && typeof p.urutanTetap !== 'boolean') delete p.urutanTetap;
   for (const [k, arah] of [
     ['batasSkorAtas', 'atas'],
     ['batasSkorBawah', 'bawah'],
@@ -241,6 +248,20 @@ export function kunciPermainan(kode: string, v: Pick<ViewPemain, 'skor' | 'riway
 
 // ---------------------------------------------------------------------------------------------
 
+/** Pengingat susun akhir dimatikan untuk satu permainan (#64). */
+export interface TanpaPengingatSusun {
+  kode: string;
+  riwayat: number;
+}
+
+function rapikanTanpaPengingat(x: unknown): TanpaPengingatSusun | null | undefined {
+  if (x === null) return null;
+  if (!x || typeof x !== 'object') return undefined;
+  const { kode, riwayat } = x as Record<string, unknown>;
+  if (typeof kode !== 'string' || !kode || typeof riwayat !== 'number' || !Number.isInteger(riwayat) || riwayat < 0) return undefined;
+  return { kode, riwayat };
+}
+
 export const simpan = {
   nama: () => baca<string>(KUNCI.nama, '', rapikanString),
   setNama: (n: string) => tulis(KUNCI.nama, n),
@@ -299,6 +320,10 @@ export const simpan = {
     const rapi = rapikanTawaranPasang(t) ?? {};
     tulis(KUNCI.tawaranPasang, Object.keys(rapi).length ? rapi : null);
   },
+
+  tanpaPengingatSusun: () => baca<TanpaPengingatSusun | null>(KUNCI.tanpaPengingatSusun, null, rapikanTanpaPengingat),
+  /** null menghapus kuncinya (permainan baru, atau permainannya sudah selesai). */
+  setTanpaPengingatSusun: (t: TanpaPengingatSusun | null) => tulis(KUNCI.tanpaPengingatSusun, t),
 
   urutanTangan: () => baca<string[]>(KUNCI.urutanTangan, [], rapikanDaftarString),
   setUrutanTangan: (u: string[]) => tulis(KUNCI.urutanTangan, u),

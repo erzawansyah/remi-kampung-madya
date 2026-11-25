@@ -114,6 +114,16 @@ describe('htmlRincianPutaran', () => {
       expect(d.querySelector('.lencana')!.textContent).toBe('kepentung');
       expect(d.querySelector('.komponen')!.textContent).toContain(`Kena pentung ${namaBiasa(h.pementung!)}`);
     }
+    // Yang aman tanpa lencana.
+    for (const r of h.rincian.filter((x) => x.status === 'aman')) {
+      expect(el.querySelector(`details[data-pemain="${r.pemain}"] .lencana`)).toBeNull();
+    }
+  });
+
+  it('putaran deck habis: tidak ada lencana sama sekali', () => {
+    const h = riwayat.find((x) => x.cara === 'deckHabis')!;
+    const el = parse(htmlRincianPutaran(h, namaBiasa, null));
+    expect(el.querySelectorAll('.lencana')).toHaveLength(0);
   });
 
   it('#41 pentung beberapa joker: semua kartu pentungan disebut, nilai total untuk yang mentung dan kepentung', () => {

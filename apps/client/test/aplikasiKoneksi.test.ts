@@ -34,7 +34,7 @@ vi.mock('../src/game/game', () => ({
 }));
 
 /** Panggilan ke KontrolMeja tiruan (nama metode + argumen) dan aplikasi yang diberikan kepadanya. */
-const kontrol = vi.hoisted(() => ({ panggilan: [] as { nama: string; arg: unknown[] }[], app: null as unknown }));
+const kontrol = vi.hoisted(() => ({ panggilan: [] as { nama: string; arg: unknown[] }[], app: null as unknown, tahanKeluar: false }));
 vi.mock('../src/kontrolMeja', async (asli) => {
   const m = await asli<typeof import('../src/kontrolMeja')>();
   const catat =
@@ -49,10 +49,18 @@ vi.mock('../src/kontrolMeja', async (asli) => {
     perbarui = catat('perbarui');
     aksiDiterima = catat('aksiDiterima');
     saatError = catat('saatError');
+    teksPenolakan = (pesan: string) => pesan;
     koneksiBerubah = catat('koneksiBerubah');
-    terimaEmote = catat('terimaEmote');
+    // Seperti KontrolMeja tanpa animasi: baris obrolan langsung masuk simpanan obrolan aplikasi.
+    terimaEmote = (kursi: number, isi: string, baris?: unknown) => {
+      kontrol.panggilan.push({ nama: 'terimaEmote', arg: [kursi, isi] });
+      if (!baris) return;
+      kontrol.panggilan.push({ nama: 'barisEmote', arg: [baris] });
+      (kontrol.app as { obrolan: { tambah(b: unknown): void } }).obrolan.tambah(baris);
+    };
     hancurkan = catat('hancurkan');
     keadaanTampil = () => ({ status: null, sibuk: false, klasemen: false });
+    menahanKeluar = () => kontrol.tahanKeluar;
   }
   return { ...m, KontrolMeja: KontrolPalsu };
 });
@@ -142,6 +150,7 @@ beforeEach(() => {
   sessionStorage.clear();
   kontrol.panggilan.length = 0;
   kontrol.app = null;
+  kontrol.tahanKeluar = false;
   vi.mocked(umumkan).mockClear();
   WsPalsu.semua = [];
   vi.stubGlobal('WebSocket', WsPalsu);
@@ -213,6 +222,62 @@ describe('Aplikasi: pesan server sampai ke meja', () => {
   it('masuk tanpa dijalankanWarga: tidak ada kabar warga', async () => {
     await diMeja();
     expect(toastTeks().some((t) => t.startsWith('Sinyalmu sempat putus'))).toBe(false);
+  });
+});
+
+describe('Aplikasi: tombol Back di meja', () => {
+  const dialogKeluar = () => [...document.querySelectorAll('#lapisan-dialog .dialog')].filter((d) => /keluar/i.test(d.textContent ?? ''));
+
+  it('jendela pilih susunan joker (#63) terbuka: Back tidak menutupnya dan tidak menawarkan keluar meja', async () => {
+    await diMeja();
+    // Jendela wajib (tanpa Batal) seperti pilih susunan joker: ketuk latar tidak menutupnya.
+    const { bukaDialog } = await import('../src/ui/dom');
+    const { dialog } = bukaDialog('<h2>Joker-nya jadi apa?</h2><button type="button" data-opsi="0">A</button>', undefined, { bisaDitutup: false });
+    kontrol.tahanKeluar = true;
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dialog.isConnected).toBe(true);
+    expect(dialogKeluar()).toHaveLength(0);
+
+    // Pembanding: tanpa jendela itu, Back menawarkan keluar seperti biasa.
+    kontrol.tahanKeluar = false;
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dialogKeluar().length).toBeGreaterThan(0);
+  });
+});
+
+describe('Aplikasi: obrolan (0.7.0)', () => {
+  it('emote dan riwayat obrolan masuk ke simpanan obrolan dengan nama; meja lain mulai kosong; keluar = dibuang', async () => {
+    const { ws, app } = await diMeja();
+    const o = app.obrolan!;
+    ws.kirimDariServer({ t: 'obrolan', pesan: [{ nama: 'Budi', isi: 'tadi', w: 1 }, { nama: 7, isi: 'rusak' } as never] });
+    expect(o.daftar.map((b) => [b.nama, b.isi])).toEqual([['Budi', 'tadi']]);
+    ws.kirimDariServer({ t: 'emote', kursi: 1, isi: 'GG' });
+    ws.kirimDariServer({ t: 'emote', kursi: 0, isi: '😂' });
+    expect(o.daftar.map((b) => [b.nama, b.isi, b.milikku])).toEqual([
+      ['Budi', 'tadi', undefined],
+      ['Budi', 'GG', false],
+      ['Aku', '😂', true],
+    ]);
+    // Di meja barisnya diserahkan ke KontrolMeja (ditunda bersama gelembung selama animasi), tidak
+    // ditambahkan aplikasi sendiri.
+    expect(dipanggil('barisEmote')).toHaveLength(2);
+    // Gelembung di kursi tetap jalan.
+    expect(dipanggil('terimaEmote')).toEqual([
+      [1, 'GG'],
+      [0, '😂'],
+    ]);
+    // Tersambung lagi ke meja yang sama: obrolannya tetap (riwayat baru menggantikan kalau dikirim).
+    ws.kirimDariServer({ t: 'masuk', kode: 'MADYA', token: 'tok', kursi: 0 });
+    expect(o.daftar).toHaveLength(3);
+    // Meja lain: mulai kosong.
+    ws.kirimDariServer({ t: 'masuk', kode: 'LAINN', token: 'tok', kursi: 0 });
+    expect(o.daftar).toHaveLength(0);
+    ws.kirimDariServer({ t: 'emote', kursi: 1, isi: 'halo' });
+    expect(o.daftar).toHaveLength(1);
+    app.keluarMeja();
+    expect(o.daftar).toHaveLength(0);
   });
 });
 

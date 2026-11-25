@@ -665,13 +665,15 @@ export class KoneksiOffline implements Koneksi {
     document.addEventListener('visibilitychange', this.saatTersembunyi);
   }
 
-  private opsi(namaLawan?: readonly string[]) {
+  private opsi(namaLawan?: readonly string[], acakDuduk = true) {
     return {
       kode: 'OFFLINE',
       kirim: (_: string, p: PesanServer) => this.kirimKeUI(p),
       batasLog: 200,
       saatBerubah: () => this.jadwalSimpan(),
       namaLawan,
+      // Acak urutan duduk (#62) ikut pengaturan meja; latihan dengan panduan tidak pernah diacak.
+      ...(acakDuduk ? { acakDuduk: Math.random } : {}),
     };
   }
 
@@ -688,7 +690,7 @@ export class KoneksiOffline implements Koneksi {
   ): KoneksiOffline {
     const k = new KoneksiOffline();
     const namaLawan = pilihan.urutanNamaTetap ? NAMA_LAWAN_BAWAAN : namaLawanAcak();
-    const meja = Meja.buat(k.opsi(namaLawan), ID_SAYA, nama, { ...pengaturan, detikGiliran: 0, publik: false });
+    const meja = Meja.buat(k.opsi(namaLawan, !pilihan.urutanNamaTetap), ID_SAYA, nama, { ...pengaturan, detikGiliran: 0, publik: false });
     k.meja = meja;
     for (let i = 1; i < (pengaturan.jumlahPemain ?? 4); i++) {
       meja.terima(ID_SAYA, { t: 'aturKursi', kursi: i, jenis: 'bot', level: pengaturan.levelBot });

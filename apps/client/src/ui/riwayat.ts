@@ -42,6 +42,7 @@ import {
 } from '../konten/peringkat';
 import { simpan, type CatatanPermainan } from '../penyimpanan';
 import { esc } from './dom';
+import { KOMPETISI_DIBUKA } from '../konten/kompetisi';
 import { htmlPiala } from './kompetisi';
 import { angkaSkor } from './rincianSkor';
 
@@ -291,11 +292,12 @@ function htmlPeringkatLama(daftar: BarisPeringkatLama[], namaSaya: string): stri
 
 function htmlBarisPapan(b: BarisPapan, label: string, urut: UrutanPeringkat, kunciSaya: string): string {
   const angka = angkaUrutan(b, urut);
-  // Piala juara kompetisi (#51 versi 2) di samping nama, kalau server mengirimnya.
+  // Piala juara kompetisi (#51 versi 2) di samping nama, kalau server mengirimnya. Disembunyikan selama
+  // kompetisi ditutup sementara (0.7.0).
   const piala = typeof b.piala === 'number' && Number.isFinite(b.piala) ? Math.floor(b.piala) : 0;
   return `<div class="baris-peringkat${kunciNama(b.nama) === kunciSaya ? ' saya' : ''}">
       <span class="medali">${label}</span>
-      <span class="nama-skor"><b>${esc(b.nama)}${htmlPiala(piala)}</b><small class="redup">${esc(rincianBaris(b, urut))}</small></span>
+      <span class="nama-skor"><b>${esc(b.nama)}${KOMPETISI_DIBUKA ? htmlPiala(piala) : ''}</b><small class="redup">${esc(rincianBaris(b, urut))}</small></span>
       <span class="kanan-peringkat"><b class="total ${angka.kelas}">${esc(angka.teks)}</b><small class="redup">${esc(KETERANGAN_ANGKA[urut])}</small></span>
     </div>`;
 }

@@ -427,12 +427,14 @@ describe('API dan meja kompetisi', () => {
   let alamat: string;
   beforeAll(async () => {
     riwayat = bukaRiwayat(':memory:');
-    server = await jalankanServer({
+    server = await jalankanServer({ acakDuduk: false,
       port: 0,
       host: '127.0.0.1',
       riwayat,
       log: () => undefined,
       maksPengajuanPerIp: 2,
+      // Uji endpoint pengajuan: dinyalakan khusus (bawaannya ditolak selama kompetisi dirombak).
+      terimaPengajuanKompetisi: true,
       jedaMulaiKompetisiMs: 30,
       jedaLanjutMs: 0,
       jedaBotMs: 5,
@@ -883,7 +885,7 @@ describe('meja kompetisi yang ditinggal (WebSocket)', () => {
     const db = new DatabaseSync(':memory:');
     const riwayat = bukaRiwayat(db);
     const log: string[] = [];
-    const server = await jalankanServer({
+    const server = await jalankanServer({ acakDuduk: false,
       port: 0,
       host: '127.0.0.1',
       riwayat,

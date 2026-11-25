@@ -321,9 +321,9 @@ Ini perilaku aplikasi, bukan aturan main. Semuanya bisa diubah kalau perlu.
   - Kartu di kartu jadi lawan yang berasal dari buanganmu diberi tanda **kamu**.
   - Saat giliranmu membuang, tumpukan menampilkan "berikutnya: X".
   - Bar waktu giliran berubah warna di 10 detik terakhir (dan diumumkan ke pembaca layar).
-- **Emote:**
-  - Tombol 😀 di bar atas membuka emoji, celetukan (misalnya "Awas!", "Gedein!", "CEKI!", "Give me!", "Kartu itu bundar, kak."), dan isian untuk menulis pesan sendiri (maksimal 60 huruf, keputusan #48).
-  - Emote dan pesan muncul sebagai gelembung di dekat pemainnya, dibatasi 1 per 1,2 detik.
+- **Obrolan dan emote:**
+  - Tombol 💬 di bar atas membuka Obrolan: riwayat pesan meja (50 terakhir), emoji, celetukan (misalnya "Awas!", "Gedein!", "CEKI!", "Give me!", "Kartu itu bundar, kak."), dan isian untuk menulis pesan sendiri (maksimal 60 huruf, keputusan #48). Angka di tombol = pesan yang belum dibaca. Di lobi ada panel Obrolan yang sama selama menunggu pemain. Penonton tidak ikut obrolan.
+  - Emote dan pesan juga muncul sebagai gelembung di dekat pemainnya, dibatasi 1 per 1,2 detik.
   - Warga kedai sesekali nyeletuk menanggapi kejadian yang terlihat semua orang, misalnya "Suwun, Bos!" saat mungut kartu orang, "Nutup, rek!" saat mentung, atau "Kartu itu bundar, kak." saat kepentung.
 
 ## Ringkasan aturan
@@ -338,7 +338,7 @@ Ini perilaku aplikasi, bukan aturan main. Semuanya bisa diubah kalau perlu.
 Kartu bergambar joker tidak dipakai.
 
 **Persiapan putaran**
-- Pengocok putaran pertama bebas dipilih atau diacak.
+- Urutan duduk diacak waktu permainan dimulai (keputusan #62; host bisa mematikannya di lobi). Kalau diacak, yang dapat kursi pertama ngocok putaran pertama; kalau tidak, pengocok putaran pertama bebas dipilih atau diacak.
 - Putaran berikutnya, pengocoknya pemain dengan skor akumulasi terendah. Kalau ada yang sama, bebas di antara mereka.
 - Pengocok membuka 1 kartu dari sisa deck. Angkanya menjadi angka joker, lalu kartunya diselipkan ke posisi acak di deck.
 - Angka joker tidak boleh sama dengan joker **putaran tepat sebelumnya** (keputusan pemilik #40). Kalau kartu yang dibuka angkanya sama, kartu itu dianulir: disisihkan, lalu kartu berikutnya dibuka, sampai angkanya beda. Kartu yang dianulir ikut diselipkan acak ke deck sesudah kartu joker, jadi jumlah kartu deck tetap. Hanya dibandingkan dengan putaran tepat sebelumnya: putaran 3 boleh sama dengan putaran 1. Putaran pertama (juga permainan baru sesudah "Main lagi") bebas. Popup joker hanya menampilkan kartu joker yang berlaku, tanpa penjelasan anulir.
@@ -474,6 +474,9 @@ Kartu bergambar joker tidak dipakai.
 | 59 | Usul fitur dari pemain | Tombol Usul fitur di game; server meneruskan ke database Notion pemilik (kalau `NOTION_TOKEN` dan `NOTION_USULAN_DB` diisi). Agent dijadwalkan meninjau sekali sehari (20.38 WIB; routine-nya masih menunggu konektor Notion) dan berhenti di PR; pemilik yang merge, dan aturan main menunggu keputusan pemilik ([rinci](docs/keputusan-pemilik.md#k59)) | Diputuskan pemilik (24 Okt 2026) |
 | 60 | Bisa nonton meja yang sedang main? | Bisa, dari Meja publik (bagian "Lagi main"). Penonton hanya melihat nama pemain dan kartu buangan yang terlihat di meja. Penonton boleh minta lihat kartu ke seorang pemain; pemain boleh menolak. Satu permintaan aktif per pemain, ditolak = tunggu 3 menit, tidak dijawab 30 detik = ditolak. Kalau diizinkan, penonton melihat persis layar pemain itu sampai salah satunya berhenti. Meja kompetisi tidak bisa ditonton; host bisa mematikan "Boleh ditonton" di lobi. Semua meja online yang sedang main (publik maupun privat) otomatis bisa ditonton; daftarnya memakai kode tonton tersendiri, jadi kode meja asli tidak bocor ([rinci](docs/keputusan-pemilik.md#k60)) | Diputuskan pemilik (7 Nov 2026); tafsiran kecil pengembang dikabarkan bersama rilis |
 | 61 | Waktu per giliran 45 detik? | Ditambah sebagai pilihan (lobi dan pengajuan kompetisi): 30, 45, 60, 90, 120 detik, atau tanpa batas di meja biasa. Bawaan tetap 60 detik. Dari usulan pemain di Notion ("60 detik kelamaan, 30 detik kecepatan") ([rinci](docs/keputusan-pemilik.md#k61)) | Diputuskan pemilik (8 Nov 2026) |
+| 62 | Urutan duduk harus sesuai urutan masuk lobi? | Tidak: bawaannya diacak waktu permainan dimulai, yang dapat kursi pertama ngocok putaran pertama. Host bisa mematikan "Acak urutan duduk" di lobi (offline: Atur meja); kalau mati, urutan = urutan masuk dan pengocok pertama dipilih. Meja kompetisi selalu diacak, latihan tidak pernah ([rinci](docs/keputusan-pemilik.md#k62)) | Diputuskan pemilik (25 Nov 2026) |
+| 63 | Boleh menebak joker lewat tombol Turunkan? | Tidak gratis: Turunkan selalu bisa ditekan; sah = langsung turun, tidak sah = satu pesan yang sama untuk semua alasan. Jendela pilih susunan joker tanpa Batal ([rinci](docs/keputusan-pemilik.md#k63)) | Diputuskan pemilik (25 Nov 2026) |
+| 64 | Pemain lupa menurunkan kartu di susun akhir | Pengingat "Sudah selesai menyusun?" setiap menekan Selesai dengan kartu di tangan (tanpa melihat isinya), bisa dimatikan sampai permainan selesai. Tanpa turunkan otomatis ([rinci](docs/keputusan-pemilik.md#k64)) | Diputuskan pemilik (25 Nov 2026) |
 
 ## Test
 

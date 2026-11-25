@@ -541,6 +541,17 @@ label.baris > input[type='checkbox'] {
 .dialog.konfirmasi .deret {
   margin-top: var(--ruang-2);
 }
+/* Kotak centang di konfirmasi (mis. "Jangan tanya lagi …"): seluruh baris bisa diketuk. */
+.centang-konfirmasi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.centang-konfirmasi > input {
+  flex: none;
+}
 .kepala-dialog {
   display: flex;
   align-items: center;
@@ -1009,4 +1020,160 @@ details.akordion > summary::after {
 }
 details.akordion[open] > summary::after {
   transform: rotate(180deg);
+}
+
+/* Ikon "?" + gelembung penjelasan (ui/info.ts). Tombolnya kecil secara tampilan, tapi area sentuhnya
+   tetap cukup lewat padding transparan. Gelembungnya dipasang di <body> (posisi tetap). */
+.label-info {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ruang-1);
+  min-width: 0;
+}
+.tombol-info {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.5em;
+  height: 1.5em;
+  min-height: 0;
+  padding: 0;
+  margin: -0.4em -0.2em;
+  border: 1.5px solid var(--teks-redup);
+  border-radius: 50%;
+  background: transparent;
+  background-clip: content-box;
+  color: var(--teks-redup);
+  font-size: 0.8em;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: none;
+  cursor: help;
+  /* Area sentuh lebih luas dari lingkarannya. */
+  outline-offset: 2px;
+  position: relative;
+}
+.tombol-info::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+}
+.tombol-info[aria-expanded='true'] {
+  border-color: var(--emas);
+  color: var(--teks-di-emas);
+  background: var(--emas);
+}
+@media (hover: hover) {
+  .tombol-info:hover {
+    border-color: var(--emas);
+    color: var(--teks-emas);
+  }
+}
+.gelembung-info {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  padding: var(--ruang-2) var(--ruang-3);
+  border-radius: var(--radius-kecil);
+  border: 1px solid var(--krem-garis);
+  background: var(--krem);
+  color: var(--tinta);
+  font-size: var(--teks-sm);
+  line-height: 1.45;
+  box-shadow: var(--bayangan-2);
+  pointer-events: auto;
+}
+.gelembung-info::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--panah-x, 50%) - 6px);
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  border: inherit;
+  transform: rotate(45deg);
+}
+.gelembung-info[data-sisi='bawah']::before {
+  top: -7px;
+  border-right: 0;
+  border-bottom: 0;
+}
+.gelembung-info[data-sisi='atas']::before {
+  bottom: -7px;
+  border-left: 0;
+  border-top: 0;
+}
+
+/* ---------- Obrolan (0.7.0) ----------
+   Dipakai panel "Obrolan" di lobi dan lembar obrolan di meja (.lembar-obrolan, meja.css). */
+.obrolan-daftar {
+  list-style: none;
+  margin: 0;
+  padding: var(--ruang-1) var(--ruang-2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 4.5rem;
+  max-height: 11rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--isian);
+  border: 1px solid var(--garis);
+  border-radius: var(--radius-sedang);
+  font-size: var(--teks-sm);
+  line-height: var(--baris-normal);
+}
+.baris-obrolan {
+  /* Pesan panjang tanpa spasi dilipat, tidak melebarkan panel. */
+  overflow-wrap: anywhere;
+}
+.baris-obrolan .nama {
+  color: var(--teks-emas);
+  margin-right: 0.4em;
+}
+.baris-obrolan .nama::after {
+  content: ':';
+}
+.baris-obrolan.milikku .nama {
+  color: var(--teks-redup);
+}
+.baris-obrolan.emoji .isi {
+  font-size: 1.25em;
+}
+.obrolan-kosong {
+  margin: auto 0;
+  text-align: center;
+}
+.obrolan-tulis {
+  display: flex;
+  gap: 6px;
+  margin-top: var(--ruang-2);
+}
+.obrolan-tulis input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--sentuh);
+}
+.obrolan-cepat button {
+  min-width: 0;
+  min-height: var(--sentuh);
+  padding: var(--ruang-1) var(--ruang-2);
+  font-size: var(--teks-sm);
+}
+/* Lobi: pesan cepat satu deret yang bisa digeser. */
+.obrolan-cepat.deret-geser {
+  display: flex;
+  gap: 6px;
+  margin-top: var(--ruang-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.obrolan-cepat.deret-geser button {
+  flex: none;
+  white-space: nowrap;
+}
+.obrolan-cepat.deret-geser button.emoji {
+  font-size: 1.25rem;
+  padding-inline: var(--ruang-1);
 }

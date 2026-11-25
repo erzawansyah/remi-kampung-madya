@@ -9,6 +9,7 @@ import { gambarKartuKeKanvas } from '../game/kartuGrafisGambar';
 import { bunyi, getar, getarDidukung } from '../efek/suara';
 import { aturPreferensi, gerakDikurangi, preferensi, PREFERENSI_BAWAAN, saatPreferensiBerubah, type Preferensi } from '../preferensi';
 import { bukaDialog, esc, konfirmasi, toast } from './dom';
+import { htmlInfo } from './info';
 
 export interface OpsiPengaturan {
   /** Dibuka dari dalam meja (menu ☰). */
@@ -91,25 +92,42 @@ const PRATINJAU: { bunga: Bunga; rank: Rank }[] = [
 ];
 
 function htmlSegmen(id: string, opsi: [string, string][], data: string): string {
-  return `<div class="segmen penuh" role="radiogroup" aria-labelledby="${id}" ${data}>
+  return `<div class="segmen penuh" role="radiogroup" aria-labelledby="${id}" aria-describedby="ket-${id.replace(/^lbl-/, '')}" ${data}>
     ${opsi.map(([nilai, teks]) => `<button type="button" role="radio" aria-checked="false" tabindex="-1" data-nilai="${esc(nilai)}">${esc(teks)}</button>`).join('')}
   </div>`;
+}
+
+/**
+ * Nama pilihan + "?" (ui/info.ts). Namanya di elemen ber-id `lbl-<k>` sendiri, jadi nama
+ * aksesibel kontrolnya tidak ikut memuat tombol "?"; penjelasannya di `ket-<k>` (aria-describedby).
+ */
+function htmlJudulPilihan(k: string, label: string, ket: string, tag: 'span' | 'label' = 'span'): string {
+  const nama = tag === 'label' ? `<label for="p-${k}" id="lbl-${k}">${esc(label)}</label>` : `<span class="atur-label" id="lbl-${k}">${esc(label)}</span>`;
+  return `<span class="label-info">${nama}${htmlInfo(ket, label, `ket-${k}`)}</span>`;
 }
 
 function htmlBarisPilihan(k: KunciPilihan): string {
   const p = PILIHAN[k];
   return `<div class="atur-blok">
-    <span class="atur-label" id="lbl-${k}">${esc(p.label)}</span>
+    ${htmlJudulPilihan(k, p.label, p.bantuan)}
     ${htmlSegmen(`lbl-${k}`, p.opsi, `data-pilihan="${k}"`)}
-    <small class="bantuan" ${k === 'gerak' ? 'data-ket-gerak' : ''}>${esc(p.bantuan)}</small>
+    ${k === 'gerak' ? '<small class="bantuan" data-ket-gerak hidden></small>' : ''}
     ${k === 'warnaKartu' ? '<div class="pratinjau-warna" aria-hidden="true"></div>' : ''}
   </div>`;
 }
 
 function htmlSaklar(k: KunciSaklar, label: string, ket: string): string {
   return `<div class="atur-baris">
-    <label for="p-${k}" id="lbl-${k}"><span>${esc(label)}</span><small class="bantuan">${esc(ket)}</small></label>
-    <button type="button" id="p-${k}" class="saklar" role="switch" aria-checked="false" aria-labelledby="lbl-${k}" data-saklar="${k}"></button>
+    ${htmlJudulPilihan(k, label, ket, 'label')}
+    <button type="button" id="p-${k}" class="saklar" role="switch" aria-checked="false" aria-labelledby="lbl-${k}" aria-describedby="ket-${k}" data-saklar="${k}"></button>
+  </div>`;
+}
+
+/** Baris "Lainnya": nama + "?" di kiri, tombol di kanan. */
+function htmlBarisTombol(k: string, label: string, ket: string, tombol: string): string {
+  return `<div class="atur-baris">
+    ${htmlJudulPilihan(k, label, ket)}
+    ${tombol.replace('<button ', `<button aria-describedby="ket-${k}" `)}
   </div>`;
 }
 
@@ -162,9 +180,8 @@ export function bukaPengaturan(opsi: OpsiPengaturan = {}): void {
          ? `<p class="kelompok-judul" id="kel-meja">Meja ini</p>
             <div class="panel-terang" role="group" aria-labelledby="kel-meja">
               <div class="atur-blok">
-                <span class="atur-label" id="lbl-tempo">Tempo warga kedai</span>
+                ${htmlJudulPilihan('tempo', 'Tempo warga kedai', 'Seberapa lama warga kedai "mikir" sebelum jalan.')}
                 ${htmlSegmen('lbl-tempo', TEMPO, 'data-tempo')}
-                <small class="bantuan">Seberapa lama warga kedai "mikir" sebelum jalan.</small>
               </div>
             </div>`
          : ''
@@ -172,14 +189,8 @@ export function bukaPengaturan(opsi: OpsiPengaturan = {}): void {
 
      <p class="kelompok-judul" id="kel-lain">Lainnya</p>
      <div class="panel-terang" role="group" aria-labelledby="kel-lain">
-       <div class="atur-baris">
-         <span><span>Tutorial</span><small class="bantuan">Latihan satu putaran sambil dipandu.</small></span>
-         <button type="button" class="kecil" data-ulang-tutorial>Ulangi tutorial</button>
-       </div>
-       <div class="atur-baris">
-         <span><span>Pengaturan bawaan</span><small class="bantuan">Kembalikan semua pilihan di atas.</small></span>
-         <button type="button" class="kecil" data-bawaan>Kembalikan</button>
-       </div>
+       ${htmlBarisTombol('tutorial', 'Tutorial', 'Latihan satu putaran sambil dipandu.', '<button type="button" class="kecil" data-ulang-tutorial>Ulangi tutorial</button>')}
+       ${htmlBarisTombol('bawaan', 'Pengaturan bawaan', 'Kembalikan semua pilihan di atas.', '<button type="button" class="kecil" data-bawaan>Kembalikan</button>')}
      </div>
 
      <div class="kaki-dialog"><button type="button" class="utama" data-tutup>Selesai</button></div>`,
@@ -200,10 +211,13 @@ export function bukaPengaturan(opsi: OpsiPengaturan = {}): void {
           d.querySelector(`[data-wadah-volume="${k}"]`)!.classList.toggle('mati', !nyala);
         });
         d.querySelectorAll<HTMLElement>('[data-pilihan]').forEach((g) => pilihSegmen(g, String(p[g.dataset.pilihan as KunciPilihan])));
+        // Penjelasan Gerak lewat "?"; keadaan setelan HP (status) tetap terlihat selama "Ikut sistem".
         const ketGerak = d.querySelector<HTMLElement>('[data-ket-gerak]');
-        if (ketGerak && p.gerak === 'ikutSistem') {
-          ketGerak.textContent = `${PILIHAN.gerak.bantuan} Setelan HP-mu sekarang: ${gerakDikurangi(p) ? 'gerak dikurangi' : 'gerak penuh'}.`;
-        } else if (ketGerak) ketGerak.textContent = PILIHAN.gerak.bantuan;
+        if (ketGerak) {
+          const ikut = p.gerak === 'ikutSistem';
+          ketGerak.hidden = !ikut;
+          ketGerak.textContent = ikut ? `Setelan HP-mu sekarang: ${gerakDikurangi(p) ? 'gerak dikurangi' : 'gerak penuh'}.` : '';
+        }
         gambarPratinjau();
       };
 

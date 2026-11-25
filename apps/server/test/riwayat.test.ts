@@ -48,7 +48,7 @@ describe('endpoint riwayat', () => {
   beforeAll(async () => {
     riwayat = bukaRiwayat(':memory:');
     riwayat.simpan(ringkasan('AAAAA', 1, [['Budi', 120], ['Siti', -40]]));
-    server = await jalankanServer({ port: 0, host: '127.0.0.1', riwayat, log: () => undefined });
+    server = await jalankanServer({ acakDuduk: false, port: 0, host: '127.0.0.1', riwayat, log: () => undefined });
   });
   afterAll(async () => {
     await server.tutup();
@@ -334,7 +334,7 @@ describe('endpoint peringkat v2', () => {
   beforeAll(async () => {
     riwayat = bukaRiwayat(':memory:');
     for (let i = 0; i < 3; i++) riwayat.simpan(ringkasanKeluar(`G${i}AAA`, Date.UTC(2026, 9, 1 + i), [['Budi', 100 * i], ['Siti', 50], ['Kipas Dua', 0, 'b']]));
-    server = await jalankanServer({ port: 0, host: '127.0.0.1', riwayat, log: () => undefined });
+    server = await jalankanServer({ acakDuduk: false, port: 0, host: '127.0.0.1', riwayat, log: () => undefined });
   });
   afterAll(async () => {
     await server.tutup();

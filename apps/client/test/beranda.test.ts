@@ -109,6 +109,62 @@ describe('nama wajib dan ganti seminggu sekali (#49)', () => {
     expect(document.querySelector('#toast')!.textContent).toContain('Isi namamu dulu');
   });
 
+  it('"seminggu sekali" hanya terlihat selama isian nama difokus; tanggal kunci selalu terlihat', async () => {
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    const elKet = document.querySelector<HTMLElement>('#ket-nama')!;
+    expect(elKet.hidden).toBe(true);
+    expect(isian().getAttribute('aria-describedby')).toBe('ket-nama');
+    isian().focus();
+    expect(elKet.hidden).toBe(false);
+    expect(ket()).toBe('Nama cuma bisa diganti seminggu sekali.');
+    isian().blur();
+    expect(elKet.hidden).toBe(true);
+
+    // Isian ditinggalkan lewat ketukan (tombol di bawahnya): keterangan baru disembunyikan sesudah
+    // klik selesai, supaya tombol tidak bergeser di bawah jari dan ketukannya tidak hilang.
+    const mulai = document.querySelector<HTMLElement>('details.atur-meja > summary')!;
+    isian().focus();
+    expect(elKet.hidden).toBe(false);
+    mulai.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    isian().blur();
+    expect(elKet.hidden).toBe(false);
+    mulai.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    expect(elKet.hidden).toBe(false);
+    mulai.click();
+    expect(elKet.hidden).toBe(false);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(elKet.hidden).toBe(true);
+
+    // Nama pertama diketik lalu langsung ketuk Atur meja: `change` (menyimpan nama) jalan di sela
+    // tekan dan lepas; keterangannya tetap sampai kliknya selesai.
+    localStorage.removeItem('remi.nama');
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    const ket2 = document.querySelector<HTMLElement>('#ket-nama')!;
+    const atur = document.querySelector<HTMLDetailsElement>('details.atur-meja')!;
+    isian().focus();
+    isian().value = 'Penguji';
+    atur.querySelector('summary')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    // Di Chrome `change` datang sesudah fokus pindah (activeElement bukan isian lagi).
+    isian().blur();
+    isian().dispatchEvent(new Event('change'));
+    await tunggu();
+    expect(ket2.hidden).toBe(false);
+    atur.querySelector('summary')!.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ket2.hidden).toBe(true);
+    expect(JSON.parse(localStorage.getItem('remi.nama')!)).toBe('Penguji');
+
+    localStorage.setItem('remi.namaDiganti', JSON.stringify(Date.now() - HARI));
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    expect(document.querySelector<HTMLElement>('#ket-nama')!.hidden).toBe(false);
+    expect(ket()).toContain('Bisa ganti lagi');
+  });
+
+  it('beranda tanpa kalimat "Main bareng teman pakai kode meja…" di Main online', () => {
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    expect(document.querySelector('.panel-online')!.textContent).not.toContain('Main bareng teman');
+  });
+
   it('isi nama pertama kali: tersimpan tanpa konfirmasi dan tanpa jeda', async () => {
     localStorage.removeItem('remi.nama');
     const aksi = aksiPalsu();
@@ -335,6 +391,39 @@ describe('renderBeranda', () => {
     expect(document.querySelector('.layar-lobi')).not.toBeNull();
     expect(melayang()).toHaveLength(0);
     expect(document.querySelector('[data-nav=pasang], [data-pasang-nanti]')).toBeNull();
+  });
+
+  it('label pilihan yang memuat "?" tetap menamai kontrolnya (beranda dan lobi host)', () => {
+    // Tombol "?" di dalam <label> tanpa for= akan jadi kontrol label itu: kotak centang/isian
+    // kehilangan namanya dan ketuk teksnya membuka gelembung, bukan mengubah pilihan.
+    const periksa = () => {
+      const label = [...document.querySelectorAll<HTMLLabelElement>('#ui label')].filter((l) => l.querySelector('button.tombol-info'));
+      expect(label.length).toBeGreaterThan(0);
+      for (const l of label) {
+        const kontrol = l.querySelector<HTMLElement>('input, select');
+        expect(kontrol, l.outerHTML).not.toBeNull();
+        expect(l.htmlFor).toBe(kontrol!.id);
+        expect(l.control).toBe(kontrol);
+      }
+      return label.length;
+    };
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    expect(periksa()).toBe(4); // level, kaldu, batas atas, acak duduk
+    const kaldu = document.querySelector<HTMLInputElement>('#o-kaldu')!;
+    const awal = kaldu.checked;
+    kaldu.closest('label')!.querySelector<HTMLElement>('.label-info')!.click();
+    expect(kaldu.checked).toBe(!awal);
+
+    let info: InfoMeja | null = null;
+    const meja = Meja.buat(
+      { kode: 'ABCDE', penjadwal: { setel: () => 0, batal: () => undefined, sekarang: () => 0 }, kirim: (_: string, p: PesanServer) => p.t === 'meja' && (info = p.info) },
+      'host',
+      'Budi',
+      { jumlahPemain: 3 },
+    );
+    meja.hentikan();
+    renderLobi(document.getElementById('ui')!, info!, vi.fn(), vi.fn());
+    expect(periksa()).toBe(4); // kaldu, batas atas, boleh ditonton, acak duduk
   });
 
   it("status 'gagal': pesan + Coba lagi di panel online; status lain menyembunyikannya", () => {

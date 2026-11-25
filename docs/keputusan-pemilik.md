@@ -1,8 +1,8 @@
-# Keputusan pemilik: rincian butir #25–#59
+# Keputusan pemilik: rincian butir #25–#64
 
-Dokumen ini merinci baris **#25–#59** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #40–#47 semuanya sudah diterapkan (#42–#43 di engine, meja, server, warga kedai, dan aplikasi; #47 di engine dan meja, tanpa tampilan apa pun di aplikasi). Butir #48–#50 datang dari permintaan pemilik 18 Okt 2026 dan diterapkan di rilis 0.4.0. Butir #51 (kompetisi) diputuskan pemilik 23 Okt 2026. Butir #52–#53 (aturan mentung) diputuskan pemilik lewat wawancara 24 Okt 2026, begitu juga #54–#59 (jeda dan ledekan di hasil putaran, efek kepentung, koneksi putus-putus, meja selamat dari restart, dan usul fitur); #57 mengubah #34, #35, dan #37.
+Dokumen ini merinci baris **#25–#64** di tabel [Aturan Terbuka dan keputusan](../README.md#aturan-terbuka-dan-keputusan) README. Butir #25–#38 ditemukan saat audit rilis 0.2.0 dan sengaja tidak diubah sampai pemilik memutuskan: sebagian menyangkut aturan main atau info rahasia (wewenang pemilik), sebagian lagi perilaku room di `packages/meja`. Butir #39 adalah pengaturan deploy. Butir #40–#47 datang dari permintaan pemilik 16 Okt 2026 sesudah main bareng di Kedai Madya: #40–#47 semuanya sudah diterapkan (#42–#43 di engine, meja, server, warga kedai, dan aplikasi; #47 di engine dan meja, tanpa tampilan apa pun di aplikasi). Butir #48–#50 datang dari permintaan pemilik 18 Okt 2026 dan diterapkan di rilis 0.4.0. Butir #51 (kompetisi) diputuskan pemilik 23 Okt 2026. Butir #52–#53 (aturan mentung) diputuskan pemilik lewat wawancara 24 Okt 2026, begitu juga #54–#59 (jeda dan ledekan di hasil putaran, efek kepentung, koneksi putus-putus, meja selamat dari restart, dan usul fitur); #57 mengubah #34, #35, dan #37.
 
-**Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026, #40–#47 pada 16 Okt 2026, #48–#50 pada 18 Okt 2026, #51 pada 23 Okt 2026 (versi 2 dan keputusan lanjutannya 24 Okt 2026), #52–#59 pada 24 Okt 2026. Baris #20–#23 README (susun akhir) juga sudah diputuskan 16 Okt 2026: sesuai bawaan yang sudah berjalan. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. **Yang masih perlu dikonfirmasi pemilik hanya dua tafsiran: #43 (mode kaldu tanpa batas skor) dan kelompok "berubah-ubah" di #47.** Kedua tafsiran #53 (kembaran pungutan tidak boleh tersisa sendirian; kedua kartu kembar yang dipungut sekaligus sama-sama tidak boleh jadi pentungan) dan tafsiran kompetisi yang dibahas di wawancara (waktu per giliran wajib, putaran berikutnya mulai sendiri, sekali main per meja, kursi lobi dilepas) sudah disetujui 24 Okt 2026. Tafsiran pengembang yang lebih kecil di #51 dan #54–#59 (detail tampilan dan penerapan, bukan aturan main) dikabarkan bersama PR rilis 0.5.0 dan berlaku sampai pemilik meminta lain. Selain itu ada dua hal kompetisi yang masih menunggu jawaban pemilik, di #51 "Sisa celah": meja kompetisi minimal 3 orang atau dibiarkan (kemenangan lawan yang hilang di meja 2 orang), dan apakah meja yang tinggal satu peserta bertahan boleh ditutup sesudah waktu tertentu walau pemainnya masih sesekali tersambung. Catatan kecil dari 14 Okt 2026 (bunyi dramatis, gaya Jago/Suhu) sudah ditanggapi, lihat [Catatan lain](#catatan-lain-belum-masuk-tabel).
+**Semua butir bernomor sudah diputuskan pemilik:** #25–#37 dan #39 pada 13 Okt 2026, #38 pada 14 Okt 2026, #40–#47 pada 16 Okt 2026, #48–#50 pada 18 Okt 2026, #51 pada 23 Okt 2026 (versi 2 dan keputusan lanjutannya 24 Okt 2026), #52–#59 pada 24 Okt 2026, #60 pada 7 Nov 2026, #61 pada 8 Nov 2026, #62–#64 pada 25 Nov 2026. Baris #20–#23 README (susun akhir) juga sudah diputuskan 16 Okt 2026: sesuai bawaan yang sudah berjalan. Jangan ubah perilaku yang sudah diputuskan tanpa izin pemilik. **Yang masih perlu dikonfirmasi pemilik hanya dua tafsiran: #43 (mode kaldu tanpa batas skor) dan kelompok "berubah-ubah" di #47.** Kedua tafsiran #53 (kembaran pungutan tidak boleh tersisa sendirian; kedua kartu kembar yang dipungut sekaligus sama-sama tidak boleh jadi pentungan) dan tafsiran kompetisi yang dibahas di wawancara (waktu per giliran wajib, putaran berikutnya mulai sendiri, sekali main per meja, kursi lobi dilepas) sudah disetujui 24 Okt 2026. Tafsiran pengembang yang lebih kecil di #51 dan #54–#59 (detail tampilan dan penerapan, bukan aturan main) dikabarkan bersama PR rilis 0.5.0 dan berlaku sampai pemilik meminta lain. Selain itu ada dua hal kompetisi yang masih menunggu jawaban pemilik, di #51 "Sisa celah": meja kompetisi minimal 3 orang atau dibiarkan (kemenangan lawan yang hilang di meja 2 orang), dan apakah meja yang tinggal satu peserta bertahan boleh ditutup sesudah waktu tertentu walau pemainnya masih sesekali tersambung. Catatan kecil dari 14 Okt 2026 (bunyi dramatis, gaya Jago/Suhu) sudah ditanggapi, lihat [Catatan lain](#catatan-lain-belum-masuk-tabel).
 
 Untuk tiap butir ada: keputusan pemilik (kalau sudah), apa yang terjadi sebelum keputusan, bukti di kode (`file:baris`, per kode saat rilis 0.2.0, jadi nomor baris bisa sudah bergeser), pilihan yang waktu itu ditawarkan, dan dampaknya. Pilihan **bukan aturan baru**, hanya daftar kemungkinan yang ditawarkan ke pemilik.
 
@@ -52,6 +52,11 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 | [57](#k57) | Koneksi putus-putus | client + `packages/meja` + `apps/server` | Diputuskan: rencana perbaikan disetujui semua, mengubah #34, #35, #37 (diterapkan) |
 | [58](#k58) | Meja bubar setiap server restart atau deploy | `apps/server` + `packages/meja` | Diputuskan: meja disimpan di database dan dipulihkan (diterapkan) |
 | [59](#k59) | Usul fitur dari pemain | client + `apps/server` + Notion | Diputuskan: usulan ke Notion, ditinjau agent sekali sehari, berhenti di PR (aplikasi dan server diterapkan; routine peninjauan menunggu konektor Notion) |
+| [60](#k60) | Nonton meja yang sedang main | client + `packages/meja` + `apps/server` | Diputuskan: penonton lihat buangan, minta izin lihat kartu (diterapkan 0.6.0) |
+| [61](#k61) | Waktu per giliran 45 detik | client + `packages/meja` | Diputuskan: pilihan baru, bawaan tetap 60 (diterapkan 0.6.0) |
+| [62](#k62) | Urutan duduk mengikuti urutan masuk lobi | `packages/meja` + client + `apps/server` | Diputuskan: diacak waktu mulai, saklar di lobi, bawaan menyala |
+| [63](#k63) | Joker bisa ditebak lewat tombol Turunkan | client | Diputuskan: Turunkan selalu bisa ditekan, satu pesan tolak, pilih susunan tanpa Batal |
+| [64](#k64) | Pemain lupa menurunkan kartu di susun akhir | client | Diputuskan: pengingat sebelum Selesai, bisa dimatikan sampai permainan selesai |
 
 ---
 
@@ -1025,6 +1030,46 @@ Pilihan yang waktu itu ditawarkan dan **tidak dipilih**:
 **Penerapan:** pilihan waktu per giliran di lobi meja online jadi 30, 45, 60, 90, 120 detik, atau tanpa batas (`apps/client/src/ui/lobi.ts`), dan di pengajuan kompetisi 30, 45, 60, 90, 120 detik (`PILIHAN_DETIK_GILIRAN_KOMPETISI` di `packages/meja/src/kompetisi.ts`, dipakai formulir dan validasi pengajuan). `PENGATURAN_BAWAAN.detikGiliran` dan `DETIK_GILIRAN_KOMPETISI_BAWAAN` tetap 60. Validasi pesan meja sudah menerima 0–600 detik, jadi server dan meja tidak berubah; sisa waktu minimal sambung ulang (20 detik) dan toleransi 2,5 detik (#57) tetap.
 
 **Test:** `packages/meja/test/kompetisi.test.ts`, `apps/client/test/kompetisi.test.ts`, `apps/client/test/lobi45.test.ts`.
+
+<a id="k62"></a>
+
+## 62. Acak urutan duduk
+
+**Asal:** permintaan pemilik (25 Nov 2026): "Ada opsi acak urutan meja. Jadi penentuan meja tidak harus sesuai dengan urutan pemain masuk. Buatkan saklar, tapi set acak sebagai default." Susulan hari yang sama: meja kompetisi ikut diacak, main offline ikut saklar yang sama, dan pengocok pertama tidak diundi lagi ("pengacakannya sudah melalui acak kursi").
+
+**Keputusan:**
+- Saklar **Acak urutan duduk** di lobi (host) dan Atur meja (offline), bawaannya menyala. Kursi diacak waktu permainan dimulai dari lobi (termasuk sesudah Main lagi), bukan tiap putaran.
+- Kalau diacak, yang dapat kursi pertama ngocok putaran pertama (pilihan pengocok pertama disembunyikan). Kalau dimatikan, urutan = urutan masuk dan host memilih pengocok pertama seperti dulu.
+- Meja kompetisi selalu diacak. Latihan dengan panduan tidak pernah diacak.
+
+**Penerapan:** `PengaturanMeja.urutanTetap` (tidak ada = diacak, seperti `tanpaPenonton`; divalidasi `validasiPengaturan`), `OpsiMeja.acakDuduk` (sumber acak; server dan meja offline memberi `Math.random`, test/golden/latihan tidak, jadi kursi tidak diacak di sana), `Meja.acakUrutanDuduk()` dipanggil di `mulaiPermainan` dan memindahkan semua catatan per kursi (host, waktu emote, putus, jeda tolak penonton, dll.). Server: `OpsiServer.acakDuduk` (`false` di test yang bergantung nomor kursi). Aplikasi: `konten/acakDuduk.ts`, saklar `#acak-duduk` (lobi) dan `#o-acak` (Atur meja).
+
+**Test:** `packages/meja/test/acak-duduk.test.ts`, `apps/server/test/server.test.ts` (bagian acak urutan duduk).
+
+<a id="k63"></a>
+
+## 63. Joker tidak bisa ditebak gratis lewat tombol Turunkan
+
+**Asal:** pemilik (25 Nov 2026): pemain yang lupa angka joker bisa mengujinya dengan memilih dua kartu seri lalu menaik-turunkan kartu lain satu per satu; kalau tombol Turunkan menyala, kartu itu joker. Ini membuat mode ingatan tidak berarti.
+
+**Keputusan:**
+- Tombol Turunkan selalu bisa ditekan. Kalau kartu yang dipilih sah, langsung turun (tidak bisa ditarik). Kalau tidak sah, ditolak dengan **satu pesan yang sama** untuk semua alasan ("Belum jadi kartu jadi, Bos."), supaya alasan penolakan tidak membocorkan joker.
+- Jendela "Joker-nya jadi apa?" tidak punya tombol Batal (dan tidak bisa ditutup dengan Escape/latar): pemain wajib memilih salah satu susunan, lalu kartunya turun.
+- Tempat lain yang bereaksi terhadap kartu yang dipilih (rancangan mulung, mentung, seret, label tombol) diaudit dulu; hasilnya dibawa ke pemilik sebelum diubah.
+
+**Akibat yang disetujui:** pemain baru tidak lagi diberi tahu alasan Turunkan ditolak; penjelasan aturannya tetap di Bantuan.
+
+**Hasil audit (25 Nov 2026) dan sisa celah yang sengaja dibiarkan pemilik** ("dibiarkan dulu", kasusnya dianggap jarang; tidak mengubah aturan, hanya kapan hasilnya terlihat):
+- **Rancangan mulung:** sesudah menekan Mulung, tombol Jadikan langsung memeriksa kombinasi (diterima dengan label "→angka" kalau ada joker, ditolak kalau tidak), lalu rancangan dan mulungnya bisa dibatalkan tanpa ada yang berubah di meja. Cara menutupnya: Jadikan hanya mengelompokkan kartu (tanpa pemeriksaan dan label), pemeriksaan baru saat Konfirmasi (sah = mulung langsung terjadi; tidak sah = satu pesan umum, kecuali pesan yang tidak bergantung joker seperti kartu paling bawah dan jumlah modal).
+- **Dua kartu terakhir sesudah mulung:** memilih keduanya mengubah label tombol jadi "Mentung pakai 2 kartu!" hanya kalau keduanya joker hidup (juga lewat seret dan tombol B). Cara menutupnya: label selalu "Buang 2 kartu", selalu bisa ditekan; joker = langsung mentung, bukan = satu pesan umum.
+
+<a id="k64"></a>
+
+## 64. Pengingat sebelum Selesai di susun akhir
+
+**Asal:** pemilik (25 Nov 2026): kebanyakan pemain lupa menurunkan kartu jadi di akhir putaran. Turunkan otomatis ditimbang lalu ditolak (sulit dijelaskan ke pemain baru, dan kalau memakai joker berarti sistem "mengingatkan" joker); dipilih pengingat.
+
+**Keputusan:** saat pemain menekan Selesai di susun akhir dan masih memegang kartu, muncul "Sudah selesai menyusun?" / "Kartu yang masih di tanganmu dihitung minus. Turunkan dulu kartu jadi kalau masih ada." dengan kotak centang "Jangan tanya lagi sampai permainan ini selesai" dan tombol Kembali menyusun / Selesai. Pengingat muncul tanpa melihat isi tangan (tidak membocorkan ada tidaknya kombinasi), berlaku untuk semua pemain, online maupun offline. Tidak ada aturan main yang berubah; batas waktu susun akhir (#23) tetap: kalau waktunya habis, warga kedai menurunkan yang bisa dijadikan lalu selesai.
 
 ---
 

@@ -472,7 +472,7 @@ describe('POST /api/usulan', () => {
   const log: string[] = [];
   beforeAll(async () => {
     riwayat = bukaRiwayat(':memory:');
-    server = await jalankanServer({ port: 0, host: '127.0.0.1', riwayat, log: (...x) => log.push(x.map(String).join(' ')), maksUsulanPerHari: 20 });
+    server = await jalankanServer({ acakDuduk: false, port: 0, host: '127.0.0.1', riwayat, log: (...x) => log.push(x.map(String).join(' ')), maksUsulanPerHari: 20 });
     alamat = `http://127.0.0.1:${server.port}`;
   });
   afterAll(async () => {
@@ -555,7 +555,7 @@ describe('POST /api/usulan', () => {
   });
 
   it('server tanpa database: 503', async () => {
-    const s = await jalankanServer({ port: 0, host: '127.0.0.1', log: () => undefined });
+    const s = await jalankanServer({ acakDuduk: false, port: 0, host: '127.0.0.1', log: () => undefined });
     const r = await fetch(`http://127.0.0.1:${s.port}/api/usulan`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     expect(r.status).toBe(503);
     await s.tutup();
@@ -572,7 +572,7 @@ describe('server dengan Notion', () => {
       return new Response(JSON.stringify({ object: 'page', id: `halaman-${kiriman.length}` }), { status: 200 });
     }) as unknown as typeof fetch;
     const log: string[] = [];
-    const s = await jalankanServer({
+    const s = await jalankanServer({ acakDuduk: false,
       port: 0,
       host: '127.0.0.1',
       riwayat,

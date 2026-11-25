@@ -381,29 +381,49 @@ export interface OpsiKonfirmasi {
   tidak?: string;
   /** Aksi merusak (hapus/keluar): tombol setuju bergaya bahaya, fokus awal di tombol batal. */
   bahaya?: boolean;
+  /** Label kotak centang di bawah pesan (mis. "Jangan tanya lagi …"). Tanpa ini tidak ada kotak centang. */
+  centang?: string;
+  /** Dipanggil sekali begitu dialog terbuka, dengan penutupnya (untuk menutup dari luar, dihitung batal). */
+  saatBuka?: (tutup: () => void) => void;
 }
 
-/** Minta konfirmasi. Resolve true bila setuju; false bila batal, Escape, atau ketuk latar. */
-export function konfirmasi(o: OpsiKonfirmasi): Promise<boolean> {
+export interface JawabanKonfirmasi {
+  /** true = tombol setuju ditekan; false = batal, Escape, ketuk latar, atau ditutup dari luar. */
+  ya: boolean;
+  /** Kotak centang (bila ada) tercentang saat dialog ditutup. */
+  centang: boolean;
+}
+
+/** Konfirmasi dengan jawaban lengkap (termasuk kotak centang). */
+export function konfirmasiRinci(o: OpsiKonfirmasi): Promise<JawabanKonfirmasi> {
   return new Promise((selesai) => {
     let jawaban = false;
-    bukaDialog(
+    let kotak: HTMLInputElement | null = null;
+    const { tutup } = bukaDialog(
       `<h2>${esc(o.judul)}</h2>
        <p>${esc(o.pesan)}</p>
+       ${o.centang ? `<label class="centang-konfirmasi"><input type="checkbox" data-centang> <span>${esc(o.centang)}</span></label>` : ''}
        <div class="deret">
          <button type="button" data-tidak ${o.bahaya ? 'autofocus' : ''}>${esc(o.tidak ?? 'Nggak jadi')}</button>
          <button type="button" data-ya class="${o.bahaya ? 'bahaya' : 'utama'}" ${o.bahaya ? '' : 'autofocus'}>${esc(o.ya ?? 'Iya')}</button>
        </div>`,
       (d, tutup) => {
+        kotak = d.querySelector<HTMLInputElement>('[data-centang]');
         d.querySelector('[data-ya]')!.addEventListener('click', () => {
           jawaban = true;
           tutup();
         });
         d.querySelector('[data-tidak]')!.addEventListener('click', () => tutup());
       },
-      { kelas: 'konfirmasi', saatTutup: () => selesai(jawaban) },
+      { kelas: 'konfirmasi', saatTutup: () => selesai({ ya: jawaban, centang: !!kotak?.checked }) },
     );
+    o.saatBuka?.(tutup);
   });
+}
+
+/** Minta konfirmasi. Resolve true bila setuju; false bila batal, Escape, atau ketuk latar. */
+export function konfirmasi(o: OpsiKonfirmasi): Promise<boolean> {
+  return konfirmasiRinci(o).then((j) => j.ya);
 }
 
 /**

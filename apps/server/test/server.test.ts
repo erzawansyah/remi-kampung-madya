@@ -39,7 +39,7 @@ class Klien {
 
 let server: ServerRemi;
 beforeAll(async () => {
-  server = await jalankanServer({ port: 0, host: '127.0.0.1', jedaBotMs: 5, log: () => undefined });
+  server = await jalankanServer({ acakDuduk: false, port: 0, host: '127.0.0.1', jedaBotMs: 5, log: () => undefined });
 });
 afterAll(async () => {
   await server.tutup();
@@ -162,6 +162,21 @@ describe('server WebSocket', () => {
     b.tutup();
   });
 
+  it('obrolan di lobi: yang baru gabung menerima riwayatnya (0.7.0)', async () => {
+    const a = new Klien(server.port);
+    await a.kirim({ t: 'buat', nama: 'Budi', pengaturan: { jumlahPemain: 3 } });
+    const { kode } = await a.tunggu('masuk');
+    await a.kirim({ t: 'emote', isi: 'ada yang mau main?' });
+    await a.tunggu('emote');
+    const b = new Klien(server.port);
+    await b.kirim({ t: 'gabung', kode, nama: 'Siti' });
+    const o = await b.tunggu('obrolan');
+    expect(o.pesan.map((e) => [e.nama, e.isi])).toEqual([['Budi', 'ada yang mau main?']]);
+    expect(typeof o.pesan[0]!.w).toBe('number');
+    a.tutup();
+    b.tutup();
+  });
+
   it('HP yang masih memakai aplikasi 0.1.0: emote lama diteruskan sebagai padanan baru, bukan ditolak', async () => {
     // Pesan persis seperti yang dikirim client 0.1.0 (JSON mentah, tanpa field baru).
     const lama = new Klien(server.port);
@@ -188,7 +203,7 @@ describe('hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 O
   // lanjut tetap bawaan server (10 detik). Pola yang sama dipakai kompetisi.test.ts.
   let srv: ServerRemi;
   beforeAll(async () => {
-    srv = await jalankanServer({
+    srv = await jalankanServer({ acakDuduk: false,
       port: 0,
       host: '127.0.0.1',
       jedaBotMs: 5,
@@ -271,4 +286,36 @@ describe('hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 O
     ani.tutup();
     budi.tutup();
   }, 20_000);
+});
+
+describe('acak urutan duduk (#62) di server', () => {
+  it('bawaan meja online diacak waktu Mulai; urutanTetap dari lobi mematikannya', async () => {
+    const s = await jalankanServer({ acakDuduk: () => 0, port: 0, host: '127.0.0.1', jedaBotMs: 5, log: () => undefined });
+    try {
+      const a = new Klien(s.port);
+      await a.kirim({ t: 'buat', nama: 'Budi', pengaturan: { jumlahPemain: 2, detikGiliran: 0 } });
+      await a.tunggu('masuk');
+      await a.kirim({ t: 'aturKursi', kursi: 1, jenis: 'bot' });
+      await a.kirim({ t: 'mulai', pengocok: 0 });
+      // Acak 0 menukar kursi 1 dengan kursi 0: Budi pindah ke kursi 1, warga kedai ngocok duluan.
+      const info = (await a.tunggu('meja', (p) => p.info.status === 'main')).info;
+      expect(info.kursiSaya).toBe(1);
+      expect(info.host).toBe(1);
+      expect(info.kursi[1].nama).toBe('Budi');
+      a.tutup();
+
+      const b = new Klien(s.port);
+      await b.kirim({ t: 'buat', nama: 'Siti', pengaturan: { jumlahPemain: 2, detikGiliran: 0 } });
+      await b.tunggu('masuk');
+      await b.kirim({ t: 'pengaturan', pengaturan: { urutanTetap: true } });
+      await b.kirim({ t: 'aturKursi', kursi: 1, jenis: 'bot' });
+      await b.tunggu('meja', (p) => p.info.pengaturan.urutanTetap === true && p.info.kursi[1].jenis === 'bot');
+      await b.kirim({ t: 'mulai', pengocok: 0 });
+      const infoB = (await b.tunggu('meja', (p) => p.info.status === 'main')).info;
+      expect(infoB.kursiSaya).toBe(0);
+      b.tutup();
+    } finally {
+      await s.tutup();
+    }
+  });
 });

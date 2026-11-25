@@ -389,7 +389,7 @@ function hitungTata(m: ModelTata | null, u: UkuranLayar, pilihanMulung: PilihanM
 
   // ---- kelompok tengah (deck · info · buangan berkapasitas penuh) tanpa perapatan buangan ----
   const kapasitas = Math.max(1, n - 1);
-  const kolomDeckMin = kiraLebarTeks('ketuk = ambil', 11 * s * d, true) + 2 * d - 14 * d;
+  const kolomDeckMin = kiraLebarTeks(LABEL_DECK_PATOKAN, 11 * s * d, true) + 2 * d - 14 * d;
   const lebarInfoDasar = lebarInfoTengah(u);
   const lebarTengahDengan = (cwT: number, lebarInfo: number) => Math.max(cwT, kolomDeckMin) + cwT * (1.5 + 0.62 * (kapasitas - 1)) + 28 * d + lebarInfo;
   /** Kartu deck/buangan terkecil yang dipakai sebagai patokan lebar kelompok tengah. */
@@ -469,17 +469,9 @@ function hitungTata(m: ModelTata | null, u: UkuranLayar, pilihanMulung: PilihanM
   if (jumlahAtas && !lanskap && kolomDasar < jumlahAtas && lebarPanelUntuk(kolomDasar + 1) >= Math.max(LEBAR_PANEL_RINGKAS_CSS * d, Math.max(kepala2.nama, kepala2.info) + 16 * d))
     calon.push({ kolom: kolomDasar + 1, barisKepala: kepalaRingkas(kolomDasar + 1), ringkas: true });
 
-  // ---- kolom info tengah: dilebarkan supaya 'Giliran <nama>' utuh kalau ada ruang ----
-  // Ruangnya diambil dari sisa kolom tengah (maks 22 %), dan tidak sampai menggeser kartu jadiku dari samping deck.
-  const jadiSampingDasar = bisaJadiSamping(lebarKolom, lebarInfoDasar);
-  const lebarInfo = Math.max(
-    lebarInfoDasar,
-    Math.min(
-      lebarInfoGiliran(m, u),
-      lebarKolom * 0.22,
-      jadiSampingDasar ? lebarKolom - 14 * d - LEBAR_JADI_SAMPING_CSS * d - lebarTengahDengan(cwTPatokan, 0) : Infinity,
-    ),
-  );
+  // ---- kolom info tengah (arah; saat susun akhir juga sebabnya) ----
+  // Giliran tidak ditulis di sini (cukup bingkai panel yang jalan), jadi lebarnya tetap.
+  const lebarInfo = lebarInfoDasar;
   const lebarTengahUntuk = (cwT: number) => lebarTengahDengan(cwT, lebarInfo);
   const jadiSamping = bisaJadiSamping(lebarKolom, lebarInfo);
   const lebarTengahMaks = jadiSamping ? lebarKolom - 14 * d - LEBAR_JADI_SAMPING_CSS * d : lebarKolom;
@@ -892,18 +884,13 @@ export function kiraLebarLabel(isi: string, ukuranPx: number, tebal = false): nu
   return Math.ceil(em * ukuranPx * (tebal ? FAKTOR_TEBAL_LABEL : 1) - 1e-9);
 }
 
-/** Lebar dasar kolom info di tengah (arah, giliran, putaran), piksel perangkat. */
+/** Lebar dasar kolom info di tengah (arah; saat susun akhir: sebab dan 'Susun akhir'), piksel perangkat. */
 function lebarInfoTengah(u: UkuranLayar): number {
   return 104 * u.d * Math.min(u.skalaTeks, 1.25);
 }
 
-/** Lebar kolom info yang membuat 'Giliran <nama>' utuh untuk semua lawan di meja (giliranku: 'Giliranmu'). */
-function lebarInfoGiliran(m: ModelTata, u: UkuranLayar): number {
-  const px = 12 * u.skalaTeks * u.d;
-  const saya = m.view.saya ?? 0;
-  const isi = m.view.pemain.map((p, i) => (i === saya ? 'Giliranmu' : `Giliran ${p.nama}`));
-  return Math.max(0, ...isi.map((x) => kiraLebarTeks(x, px, true))) + 2 * u.d;
-}
+/** Label deck terlebar yang mungkin (sisa deck paling banyak tiga angka), patokan lebar kolom deck. */
+const LABEL_DECK_PATOKAN = 'deck 000';
 
 /**
  * Lebar nama lawan terpanjang di meja dan info patokan panel ringkas (INFO_PATOKAN, dengan ikon kartu), piksel
@@ -1259,10 +1246,10 @@ function gambarTengah(
   let langkah = cwT * (ringkas ? 0.34 : 0.62);
   const geserLebih = cwT * (ringkas ? 0.42 : 0.5);
   const lebarBuangan = (k: number) => cwT + langkah * (k - 1) + geserLebih;
-  // Kolom deck selebar kartu, atau selebar label terpanjangnya ('ketuk = ambil') kalau kartunya kecil,
+  // Kolom deck selebar kartu, atau selebar labelnya ('deck N') kalau kartunya kecil,
   // supaya label tidak terpotong tepi layar dan tidak menimpa kolom info.
   // Label boleh menjorok separuh celah ke kiri (margin kolom) dan ke kanan (celah ke kolom info).
-  const kolomDeck = Math.max(cwT, kiraLebarTeks(ringkas ? `deck ${p.jumlahDeck}` : 'ketuk = ambil', 11 * s * d, true) + 2 * d - celah);
+  const kolomDeck = Math.max(cwT, kiraLebarTeks(ringkas ? `deck ${p.jumlahDeck}` : LABEL_DECK_PATOKAN, 11 * s * d, true) + 2 * d - celah);
   const sisa = lebarKolom - (kolomDeck + celah + lebarInfo + celah);
   if (!ringkas && lebarBuangan(kapasitas) > sisa) langkah = Math.max(cwT * LANGKAH_BUANGAN_MIN, (sisa - cwT * 1.5) / Math.max(1, kapasitas - 1));
   const lebarKelompok = kolomDeck + celah + (ringkas ? 0 : lebarInfo + celah) + lebarBuangan(kapasitas);
@@ -1307,16 +1294,17 @@ function gambarTengah(
     kunci: 'deck-label',
     x: dx,
     y: yLabelBawah,
-    isi: bisaAmbil ? 'ketuk = ambil' : `deck ${p.jumlahDeck}`,
+    isi: `deck ${p.jumlahDeck}`,
     ukuran: 11,
     warna: bisaAmbil ? 'emas' : 'redup',
     tebal: bisaAmbil,
     ox: 0.5,
   });
 
-  // ---- info: arah, giliran, putaran (tanpa angka joker: hanya diumumkan sekali lewat popup) ----
+  // ---- info: arah (tanpa angka joker: hanya diumumkan sekali lewat popup) ----
+  // Giliran dan nomor putaran tidak ditulis di sini: giliran sudah ditandai bingkai panel yang jalan
+  // (dan label 'giliranmu' di tanganku), nomor putaran ada di bar atas.
   const tx = x0 + kolomDeck + celah;
-  const nama = v.pemain[p.giliran]?.nama ?? '';
   // Ringkas (menyusun mulung di HP lanskap): kolom info disembunyikan sementara; giliran sudah pasti
   // giliranku, dan label diriku tetap menulis 'giliranmu'.
   if (!ringkas) t.teks.push({ kunci: 'arah', x: tx, y: y + 2 * d, isi: p.arah === 1 ? '↻ searah' : '↺ berbalik', ukuran: 12, warna: 'redup', maks: lebarInfo });
@@ -1325,14 +1313,6 @@ function gambarTengah(
   } else if (v.status === 'susunAkhir') {
     t.teks.push({ kunci: 'giliran', x: tx, y: y + 2 * d + hTeks, isi: p.mentung ? 'Mentung!' : 'Deck habis', ukuran: 12, warna: 'emas', tebal: true, maks: lebarInfo });
     t.teks.push({ kunci: 'putaran', x: tx, y: y + 2 * d + hTeks * 2, isi: 'Susun akhir', ukuran: 11, warna: 'emas', maks: lebarInfo });
-  } else {
-    if (v.status === 'putaranBerjalan') {
-      // Kolom sempit: nama saja (panel pemain yang jalan sudah disorot), supaya namanya tidak terpotong.
-      // Lebar sebenarnya diukur scene: 'Giliran <nama>' dipakai selama muat.
-      const saya = p.giliran === v.saya;
-      t.teks.push({ kunci: 'giliran', x: tx, y: y + 2 * d + hTeks, isi: saya ? 'Giliranmu' : `Giliran ${nama}`, cadangan: saya ? undefined : nama, ukuran: 12, warna: saya ? 'emas' : 'teks', tebal: true, maks: lebarInfo });
-    }
-    t.teks.push({ kunci: 'putaran', x: tx, y: y + 2 * d + hTeks * 2, isi: `Putaran ${p.nomor}`, ukuran: 11, warna: 'samar', maks: lebarInfo });
   }
 
   // ---- buangan: (n − 1) kartu teratas, bertumpuk alami tapi tetap terbaca ----

@@ -189,7 +189,8 @@ describe('meja offline: level warga kedai', () => {
     vi.useFakeTimers();
     const k = KoneksiOffline.baru('Budi', { jumlahPemain: 4, levelBot: level });
     const info = await infoPertama(k);
-    expect(info.kursi.slice(1).map((x) => [x.jenis, x.level])).toEqual([
+    // Urutan duduk diacak (#62): warga kedai bisa di kursi mana pun, jadi yang dicek semua kursi selain Budi.
+    expect(info.kursi.filter((x) => x.nama !== 'Budi').map((x) => [x.jenis, x.level])).toEqual([
       ['bot', level],
       ['bot', level],
       ['bot', level],
