@@ -121,25 +121,58 @@ describe('konten: status keputusan pemilik dan isi menu', () => {
     expect(catatan.teks).not.toContain(CATATAN_MENUNGGU);
   });
 
-  it('sambung ulang: masa tenggang sama dengan meja, popup joker muncul lagi, meja menunggu kalau semua terputus', () => {
+  it('sambung ulang: masa tenggang sama dengan meja, cukup satu butir (B3)', () => {
     const teks = JSON.stringify([BAB_BANTUAN, FAQ]);
     expect(teks).toContain(`ditunggu ${TENGGANG_SAMBUNG_MS / 1000} detik`);
     // Tenggang dihitung sejak terputus, bukan sejak giliran tiba (meja.ts: putusSejak + tenggang).
     const faq = FAQ.find((f) => f.tanya.startsWith('Internetku putus'))!;
     expect(faq.jawab).toContain(`ditunggu ${TENGGANG_SAMBUNG_MS / 1000} detik, dihitung sejak kamu terputus`);
     expect(faq.jawab).not.toContain('giliranmu tiba saat kamu terputus');
-    expect(teks).toContain('popup joker muncul lagi');
-    expect(teks).toContain('Waktu giliran diberi penuh lagi');
-    // Keputusan #5: joker di kartu jadi diberi label dan tercatat di log; teks lama "tidak ditampilkan lagi" dibuang.
+    const online = JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'online'));
+    expect(online.match(/Sinyal putus\?/g)).toHaveLength(1);
+    // Keputusan #5: joker di kartu jadi diberi label; teks lama "tidak ditampilkan lagi" dibuang.
     expect(teks).not.toContain('sesudah itu tidak ditampilkan lagi');
     expect(teks).toContain('label angka yang diwakilinya');
   });
 
-  it("isi menu ☰ sesuai menu meja (bukan 'aturan singkat')", () => {
+  it("tidak ada 'aturan singkat' (nama menu lama)", () => {
     expect(semuaTeks()).not.toContain('aturan singkat');
-    const butir = BAB_BANTUAN.flatMap((b) => b.isi).flatMap((x) => (x.t === 'daftar' ? x.butir : []));
-    const menu = butir.find((t) => t.includes('Menu ☰'))!;
-    for (const isi of ['Pengaturan', 'Bantuan & aturan', 'pintasan keyboard', 'Layar penuh', 'Tentang', 'keluar']) expect(menu).toContain(isi);
+  });
+});
+
+describe('konten: Bantuan dipangkas (tinjauan pemilik 25 Nov 2026)', () => {
+  const semua = () => JSON.stringify([BAB_BANTUAN, FAQ, GLOSARIUM]);
+
+  it('bab online dipecah: Main online, Kompetisi, Nonton (B1)', () => {
+    const id = BAB_BANTUAN.map((b) => b.id);
+    for (const x of ['online', 'kompetisi', 'nonton']) expect(id).toContain(x);
+    expect(BAB_BANTUAN.find((b) => b.id === 'online')!.judul).toBe('Main online');
+  });
+
+  it('rincian yang cuma penting buat server dibuang (B2)', () => {
+    const t = semua();
+    for (const x of ['45 menit', '0/O', 'Server sempat mati', 'menunggu semua pemain menekan OK', 'diberi penuh lagi', 'Masih mengirim', 'Lagi nyambung lagi'])
+      expect(t, x).not.toContain(x);
+  });
+
+  it('cara main di aplikasi tanpa butir sepele, dengan obrolan (B5)', () => {
+    const t = JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'antarmuka'));
+    for (const x of ['kanan bawah', 'ujung kanan', 'Menu ☰', 'pintasan keyboard']) expect(t, x).not.toContain(x);
+    expect(t).toContain('Obrolan');
+  });
+
+  it('tanya jawab paling banyak 13, istilah bunga digabung (B6, B8)', () => {
+    expect(FAQ.length).toBeLessThanOrEqual(13);
+    const istilah = GLOSARIUM.map((g) => g.istilah);
+    for (const x of ['Love', 'Wajik', 'Kriting', 'Waru']) expect(istilah).not.toContain(x);
+    expect(GLOSARIUM.find((g) => g.istilah === 'Bunga')!.arti).toMatch(/Love.*Wajik.*Kriting.*Waru/);
+  });
+
+  it('urutan duduk diacak dan pengocok pertama mengikutinya (#62)', () => {
+    const kartu = JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'kartu'));
+    expect(kartu).toContain('Acak urutan duduk');
+    expect(kartu).toContain('yang dapat kursi pertama');
+    expect(kartu).toContain('meja kompetisi selalu diacak');
   });
 });
 

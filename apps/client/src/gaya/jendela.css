@@ -401,9 +401,14 @@ mark {
   margin-top: var(--ruang-4);
   border-top: 1px solid var(--garis);
 }
+.tentang-changelog .changelog-rinci,
 .tentang-changelog .changelog-teknis {
   margin-top: var(--ruang-3);
 }
+.tentang-changelog .changelog-rinci + .changelog-teknis {
+  margin-top: var(--ruang-2);
+}
+.tentang-changelog .changelog-rinci > summary,
 .tentang-changelog .changelog-teknis > summary {
   font-size: var(--teks-sm);
 }

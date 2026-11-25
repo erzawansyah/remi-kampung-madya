@@ -215,7 +215,6 @@ describe('klaim kunci di Bantuan sama dengan engine', () => {
     expect(teksBab('joker')).toContain('tidak boleh sama dengan putaran tepat sebelumnya');
     expect(teksBab('joker')).toContain('joker putaran 3 boleh sama dengan putaran 1');
     expect(teksBab('mulai')).toContain('Kalau angkanya sama dengan joker putaran sebelumnya, kartu itu dianulir');
-    expect(FAQ.some((f) => f.jawab.includes('dianulir') && f.jawab.includes('putaran 3 sama dengan putaran 1'))).toBe(true);
     const kartu = pembuatKartu();
     // Dari bawah ke atas; joker putaran lalu 7, dua kartu teratas 7.
     const deck = [kartu({ bunga: 'waru', rank: 3 }), kartu({ bunga: 'love', rank: 9 }), kartu({ bunga: 'kriting', rank: 7 }), kartu({ bunga: 'love', rank: 7 })];

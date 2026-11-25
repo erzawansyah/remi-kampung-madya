@@ -8,7 +8,7 @@ vi.hoisted(() => {
   Object.assign(globalThis, { __VERSI_APP__: '0.0.0', __BUILD_SHA__: 'dev', __BUILD_WAKTU__: '2026-10-12T00:00:00.000Z' });
 });
 
-import { bagiChangelog, htmlChangelog, mdSebaris, renderMarkdown, tautanAman } from '../src/ui/tentang';
+import { bagiChangelog, htmlChangelog, judulPerubahan, mdSebaris, pilihRingkasan, renderMarkdown, tautanAman } from '../src/ui/tentang';
 import changelog from '../../../CHANGELOG.md?raw';
 
 const jadiDom = (html: string) => {
@@ -192,12 +192,59 @@ describe('htmlChangelog (Tentang untuk pemain)', () => {
     expect(teknis.textContent).toContain('GET /healthz');
     // Di luar lipatan teknis, tidak ada jargon pengembang.
     const versi = el.querySelector('.changelog-versi')!.cloneNode(true) as HTMLElement;
-    versi.querySelector('details')!.remove();
+    versi.querySelector('details.changelog-teknis')!.remove();
     expect(versi.textContent).not.toMatch(/healthz|smoke\.mjs|Teknis/);
-    expect(versi.querySelector('h4')!.textContent).toBe('Ditambahkan');
     expect(versi.querySelector('strong')!.textContent).toBe('Aturan main tidak berubah');
-    // Versi tanpa bagian teknis: tanpa lipatan.
-    expect(el.querySelectorAll('.changelog-versi')[1]!.querySelector('details')).toBeNull();
+    // Ringkasan judul tampil terbuka; rincian "Untuk pemain" dilipat di "Selengkapnya" (C1).
+    expect([...versi.querySelectorAll('ul.changelog-ringkas > li')].map((li) => li.textContent)).toEqual(['Kartu baru']);
+    const rinci = versi.querySelector<HTMLDetailsElement>('details.changelog-rinci')!;
+    expect(rinci.open).toBe(false);
+    expect(rinci.querySelector('summary')!.textContent).toBe('Selengkapnya');
+    expect(rinci.querySelector('h4')!.textContent).toBe('Ditambahkan');
+    // Versi tanpa bagian teknis: hanya lipatan Selengkapnya.
+    const kedua = el.querySelectorAll('.changelog-versi')[1]!;
+    expect(kedua.querySelector('details.changelog-teknis')).toBeNull();
+    expect(kedua.querySelectorAll('details')).toHaveLength(1);
+  });
+
+  it('judulPerubahan: teks tebal di awal butir, atau kalimat pertama yang dipotong rapi', () => {
+    const md = [
+      '#### Ditambahkan',
+      '',
+      '- **Nonton meja yang sedang main** (keputusan pemilik #60). Di Meja publik ada bagian **Lagi main**.',
+      '- **Aturan: nutup paling banyak pakai 2 kartu** (keputusan pemilik #52).',
+      '  - Butir menjorok tidak ikut.',
+      '- **Sinyal putus-putus** (keputusan pemilik):',
+      '- Host bisa menutup mejanya dari penonton lewat **Boleh ditonton** di lobi. Kalimat kedua.',
+      '- Sinyal yang mati diam-diam sekarang ketahuan dalam hitungan detik sesudah kamu menekan sesuatu (dulu bisa sampai semenit), dan aplikasi langsung menyambung lagi.',
+      '- Lihat [Bantuan](https://contoh.invalid) dan `<b>kode</b>`: sisanya.',
+    ].join('\n');
+    const j = judulPerubahan(md);
+    expect(j.slice(0, 4)).toEqual([
+      'Nonton meja yang sedang main',
+      'Aturan: nutup paling banyak pakai 2 kartu',
+      'Sinyal putus-putus',
+      'Host bisa menutup mejanya dari penonton lewat Boleh ditonton di lobi',
+    ]);
+    expect(j[4]!.endsWith('…')).toBe(true);
+    expect(j[4]!.length).toBeLessThanOrEqual(91);
+    expect(j[5]).toBe('Lihat Bantuan dan <b>kode</b>');
+    // Paling banyak 8 judul terbuka; perubahan aturan selalu ikut, lalu yang berawalan tebal.
+    const banyak = [
+      ...Array.from({ length: 10 }, (_, i) => `- Perbaikan kecil nomor ${i + 1}.`),
+      '- **Fitur besar**: rinciannya.',
+      '- **Aturan: contoh aturan baru** (keputusan pemilik).',
+    ].join('\n');
+    const r = pilihRingkasan(banyak);
+    expect(r.tampil).toHaveLength(8);
+    expect(r.sisa).toBe(4);
+    expect(r.tampil.slice(-2)).toEqual(['Fitur besar', 'Aturan: contoh aturan baru']);
+    const html = jadiDom(htmlChangelog(`## [9.9.8] - 2026-01-01\n\n### Untuk pemain\n\n${banyak}\n`));
+    expect(html.querySelector('ul.changelog-ringkas li:last-child')!.textContent).toBe('dan 4 perubahan lain');
+    // Teks polos di-escape saat dirender: tag tampil sebagai teks.
+    const el = jadiDom(htmlChangelog(`## [9.9.9] - 2026-01-01\n\n### Untuk pemain\n\n${md}\n`));
+    expect(el.querySelector('ul.changelog-ringkas b')).toBeNull();
+    expect(el.querySelector('ul.changelog-ringkas')!.textContent).toContain('<b>kode</b>');
   });
 
   it('CHANGELOG.md asli: tiap versi tampil dengan bagian pemain, teknis selalu terlipat', () => {

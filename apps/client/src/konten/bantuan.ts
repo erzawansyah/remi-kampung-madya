@@ -16,20 +16,15 @@ import {
   MAKS_PESAN,
   MIN_MAIN_KOMPETISI,
   MIN_PESERTA,
-  SISA_MIN_SAMBUNG_MS,
   TENGGANG_SAMBUNG_MS,
 } from '@remi/meja';
 import { TEKS_KALDU } from './kaldu';
-import { TEKS_KOMPETISI } from './kompetisi';
-import { TEKS_KONEKSI } from './koneksi';
 import { TEKS_LANJUT, TEKS_LEDEK } from './ledek';
 import { DAFTAR_LEVEL_WARGA } from './levelWarga';
 import { TEKS_USULAN } from './usulan';
 
 /** Masa tenggang sambung ulang dalam detik (sama dengan yang dipakai meja). */
 const DETIK_TENGGANG = Math.round(TENGGANG_SAMBUNG_MS / 1000);
-/** Sisa waktu paling sedikit untuk yang kembali di gilirannya sendiri (keputusan #57). */
-const DETIK_SISA_MIN = Math.round(SISA_MIN_SAMBUNG_MS / 1000);
 /** Jeda sebelum host bisa memulai putaran berikutnya di meja online (keputusan #54). */
 const DETIK_JEDA_LANJUT = Math.round(JEDA_LANJUT_MS / 1000);
 /** Jeda sesudah permintaan lihat kartu ditolak, dalam menit (keputusan #60). */
@@ -93,9 +88,9 @@ export const BAB_BANTUAN: BabBantuan[] = [
         t: 'langkah',
         butir: [
           'Pengocok membagikan kartu ke semua pemain.',
-          'Pengocok membuka satu kartu dari sisa deck. Angkanya jadi angka joker putaran itu, lalu kartunya diselipkan lagi ke deck. Kalau angkanya sama dengan joker putaran sebelumnya, kartu itu dianulir dan pengocok membuka kartu berikutnya.',
+          'Pengocok membuka satu kartu dari sisa deck: angkanya jadi angka joker putaran itu. Kalau angkanya sama dengan joker putaran sebelumnya, kartu itu dianulir dan dibuka kartu berikutnya (rinciannya di bab Joker).',
           'Angka joker diumumkan sekali lewat popup di awal putaran. Ingat baik-baik, karena angkanya tidak dipajang di meja.',
-          'Joker yang sudah dipasang di kartu jadi diberi label angka yang diwakilinya (misalnya →7) dan tercatat di log. Sama seperti di meja asli, semua orang bisa melihatnya, jadi itu bisa jadi petunjuk.',
+          'Joker yang sudah dipasang di kartu jadi diberi label angka yang diwakilinya (misalnya →7), jadi bisa jadi petunjuk.',
           'Pengocok jalan pertama. Tiap giliran: ambil 1 kartu dari deck atau mulung dari buangan, turunkan kartu jadi kalau mau, lalu buang 1 kartu.',
           'Putaran berakhir kalau ada yang mentung atau deck habis.',
           'Semua pemain dapat kesempatan terakhir menurunkan kartu jadi (susun akhir), lalu skor putaran dihitung.',
@@ -156,7 +151,11 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: '**Pengocok** putaran pertama boleh dipilih atau diacak. Putaran berikutnya yang ngocok adalah pemain dengan skor total paling rendah. Kalau ada yang sama, bebas dipilih di antara mereka.',
+        teks: '**Urutan duduk** diacak waktu permainan dimulai. Host bisa mematikan **Acak urutan duduk** di lobi atau Atur meja; meja kompetisi selalu diacak.',
+      },
+      {
+        t: 'paragraf',
+        teks: '**Pengocok** putaran pertama: yang dapat kursi pertama kalau urutan duduk diacak, atau dipilih host (bisa juga diacak) kalau tidak. Putaran berikutnya yang ngocok adalah pemain dengan skor total paling rendah. Kalau ada yang sama, bebas dipilih di antara mereka.',
       },
       {
         t: 'paragraf',
@@ -737,7 +736,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
     id: 'antarmuka',
     judul: 'Cara main di aplikasi',
     ikon: '👆',
-    ringkas: 'Ketuk, seret, tombol, urutkan kartu, emote, dan pengaturan.',
+    ringkas: 'Ketuk, seret, urutkan kartu, dan obrolan.',
     isi: [
       {
         t: 'paragraf',
@@ -761,14 +760,9 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'daftar',
         butir: [
-          'Tombol utama ada di kanan bawah, dan labelnya menjelaskan aksinya, misalnya "Ambil deck" atau "Buang 7♥".',
-          'Tombol yang belum bisa dipakai tetap menjelaskan alasannya kalau diketuk.',
           'Kalau kartu pilihanmu bisa disusun lebih dari satu cara, kamu akan diminta memilih susunannya.',
-          'Kartu yang baru masuk tangan ditaruh di ujung kanan. Urutan kartu lain tidak berubah.',
-          `Emote: tekan tombol 😀 di bar atas untuk mengirim emoji, celetukan khas warga Madya (Gedein!, CEKI!, Give me!, dan lainnya), atau pesan yang kamu tulis sendiri (paling panjang ${MAKS_PESAN} huruf).`,
-          'Skor dan log permainan bisa dibuka dari bar atas. Menu ☰ berisi Pengaturan, Bantuan & aturan, pintasan keyboard (kalau pakai keyboard/mouse), Layar penuh, Tentang, dan tombol keluar (Simpan & ke beranda di permainan offline).',
-          'Pengaturan seperti suara, musik, getar, kurangi gerak, kecepatan animasi, kartu empat warna, dan ukuran teks hanya berlaku di HP-mu sendiri.',
-          'Kalau ada pintasan keyboard, daftarnya bisa dilihat di menu.',
+          `Obrolan: tekan 💬 di bar atas (atau panel Obrolan di lobi) untuk ngobrol. Ada riwayat pesan, emoji, celetukan khas warga Madya (Gedein!, CEKI!, Give me!, dan lainnya), atau pesan yang kamu tulis sendiri (paling panjang ${MAKS_PESAN} huruf). Gelembungnya juga muncul di samping nama.`,
+          'Skor dan log permainan bisa dibuka dari bar atas.',
         ],
       },
       {
@@ -779,13 +773,13 @@ export const BAB_BANTUAN: BabBantuan[] = [
   },
   {
     id: 'online',
-    judul: 'Main online & offline',
+    judul: 'Main online',
     ikon: '📶',
-    ringkas: 'Buat atau gabung meja, kode meja, sambung ulang, dan main bareng warga kedai.',
+    ringkas: 'Buat atau gabung meja, sinyal putus, hasil putaran, dan Riwayat.',
     isi: [
       {
         t: 'paragraf',
-        teks: '**Offline bareng warga kedai** jalan sepenuhnya di HP tanpa internet, dan tersimpan otomatis tiap aksi. Kamu bisa lanjut kapan saja dari beranda. **Online** butuh internet dan bisa dimainkan bareng teman.',
+        teks: '**Offline bareng warga kedai** jalan di HP tanpa internet dan tersimpan otomatis, jadi bisa dilanjut kapan saja dari beranda. **Online** butuh internet dan bisa dimainkan bareng teman.',
       },
       {
         t: 'paragraf',
@@ -795,31 +789,24 @@ export const BAB_BANTUAN: BabBantuan[] = [
         t: 'langkah',
         butir: [
           'Isi nama, lalu tekan Buat meja baru. Kamu jadi host.',
-          'Bagikan kode meja (5 karakter, huruf dan angka), atau salin dan bagikan link undangannya.',
-          'Atur kursi: tunggu teman masuk, atau ajak warga kedai (pemain komputer) lalu pilih levelnya. Host juga mengatur jumlah pemain, batas putaran, mode kaldu, batas skor, waktu per giliran, tempo warga kedai, apakah meja muncul di daftar meja publik, dan apakah meja boleh ditonton.',
+          'Bagikan kode meja atau link undangannya.',
+          'Isi kursi kosong: tunggu teman masuk, atau ajak warga kedai lalu pilih levelnya. Host juga mengatur aturan meja di lobi.',
           'Kalau semua kursi sudah terisi, host menekan Mulai main.',
         ],
       },
       {
         t: 'paragraf',
-        teks: '**Gabung meja:** masukkan kode meja lalu tekan Gabung, buka link undangan dari teman, atau pilih dari Cari meja publik. Kode meja tidak memakai huruf dan angka yang mirip (0/O, 1/I/L), jadi gampang dibacakan.',
+        teks: '**Gabung meja:** masukkan kode meja lalu tekan Gabung, buka link undangan dari teman, atau pilih dari Cari meja publik. Orang baru hanya bisa masuk selama meja masih di lobi.',
       },
       {
         t: 'daftar',
         butir: [
-          'Orang baru hanya bisa masuk selama meja masih di lobi.',
-          `Sambungan putus atau halaman ke-refresh? Aplikasi menyambung ulang sendiri. Giliranmu ditunggu ${DETIK_TENGGANG} detik sejak kamu terputus (atau sampai waktu giliran habis, mana yang duluan). Lewat dari itu, warga kedai menjalankan giliranmu sampai kamu kembali. Kalau kamu kembali waktu masih giliranmu, sisa waktumu paling sedikit ${DETIK_SISA_MIN} detik (sekali per giliran).`,
-          `Sinyal putus-putus? Selama aplikasi menyambung lagi, langkah belum bisa dikirim (muncul "${TEKS_KONEKSI.nyambung}"), tapi kartu yang kamu pilih tetap ada. Kalau muncul "${TEKS_KONEKSI.masihMengirim}", tunggu sebentar: langkahmu dikirim ulang sendiri, atau dikembalikan supaya bisa kamu ulangi. Sesudah tersambung lagi, kejadian yang terlewat tidak diputar ulang, dan kalau warga kedai sempat menjalankan langkahmu, ada kabar singkat. Rinciannya di Log.`,
-          'Keluar meja di tengah permainan: kursimu diteruskan warga kedai sampai permainan selesai, dan nggak bisa diambil lagi. Kalau mejanya minimal 2 orang, di peringkat online kamu dihitung juru kunci. Sinyal putus atau aplikasi ketutup nggak dihitung keluar.',
+          `Sinyal putus? Aplikasi nyambung lagi sendiri. Giliranmu ditunggu ${DETIK_TENGGANG} detik; lewat itu warga kedai yang jalan sampai kamu kembali.`,
           'Waktu giliran habis: warga kedai menyelesaikan giliranmu.',
-          'Kalau semua pemain manusia terputus, meja menunggu sampai ada yang kembali. Waktu giliran diberi penuh lagi begitu ia tersambung, dan yang masih terputus dapat waktu tunggu penuh lagi.',
-          'Host pergi: tugas host pindah ke pemain manusia lain yang masih terhubung.',
-          'Putaran berikutnya dimulai oleh host. Kalau skor terendah sama, host memilih pengocok atau Acak.',
-          `Di hasil putaran, tombol host baru aktif ${DETIK_JEDA_LANJUT} detik kemudian, supaya semua sempat melihat kartu. Kalau sudah selesai melihat, tekan ${TEKS_LANJUT.siap}. Begitu yang lain siap semua, host bisa langsung lanjut.`,
-          `Mau ngeledek? Waktu hasil putaran tampil, buka bagian ${TEKS_LEDEK.judul} di bawah rincian skor, pilih orangnya, lalu ketuk ledekannya atau emoji. Ledekanmu muncul besar di layar dia, dan yang kepentung boleh membalas. Tiap pemain paling banyak ${MAKS_LEDEK_PER_PUTARAN} ledekan per putaran. Warga kedai nggak ikut ngeledek.`,
-          'Pengumuman joker menunggu semua pemain menekan OK. Pemain yang terputus tidak ditunggu. Kalau ia kembali sebelum sempat menekan OK, popup joker muncul lagi untuknya saja; meja nggak ikut berhenti, kecuali sedang gilirannya.',
-          'Meja tanpa pemain yang terhubung dihapus otomatis: 10 menit kalau masih di lobi, 45 menit kalau permainannya sedang jalan.',
-          'Server sempat mati atau diperbarui? Meja yang permainannya belum selesai tersimpan. Aplikasi menyambung ulang sendiri dan kamu kembali ke kursimu dengan kartu yang sama. Permainan berhenti sebentar sampai ada yang kembali.',
+          'Keluar meja di tengah permainan: kursimu diteruskan warga kedai sampai permainan selesai, dan nggak bisa diambil lagi. Kalau mejanya minimal 2 orang, di peringkat online kamu dihitung juru kunci. Sinyal putus atau aplikasi ketutup nggak dihitung keluar.',
+          'Host pergi: tugas host pindah ke pemain lain yang masih terhubung.',
+          `Di hasil putaran, tombol host baru aktif ${DETIK_JEDA_LANJUT} detik kemudian supaya semua sempat lihat kartu. Sudah selesai lihat? Tekan ${TEKS_LANJUT.siap}.`,
+          `Mau ngeledek? Di hasil putaran, buka bagian ${TEKS_LEDEK.judul}, pilih orangnya, lalu ketuk ledekannya. Paling banyak ${MAKS_LEDEK_PER_PUTARAN} per putaran.`,
         ],
       },
       {
@@ -828,25 +815,49 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: 'Hasil akhir permainan online masuk **Riwayat** (ubin Riwayat & statistik di beranda). Yang dihitung di peringkat cuma meja yang dimainkan minimal 2 orang. Urutan bawaannya rata-rata skor akhir per permainan, dan bisa diganti (skor terbaik, persen juara, jumlah juara, dan lainnya). Rata-rata, persen juara, dan poin posisi baru muncul sesudah 3 kali main. Peringkat menggabungkan pemain berdasarkan nama tanpa beda huruf besar/kecil, jadi pakai nama yang sama setiap main.',
+        teks: 'Hasil akhir permainan online masuk **Riwayat** (ubin Riwayat & statistik di beranda). Peringkat cuma menghitung meja yang dimainkan minimal 2 orang, dan rata-rata baru muncul sesudah 3 kali main. Pemain digabung berdasarkan nama, jadi pakai nama yang sama setiap main.',
       },
       {
         t: 'paragraf',
-        teks: `**Kompetisi** (tombol Kompetisi di beranda): siapa saja boleh mengajukan kompetisi, lengkap dengan lama kompetisi (1 malam, 1 minggu, atau 1 bulan), jumlah pemain per meja, batas putaran, dan aturan mejanya. Kompetisi jalan begitu ${MIN_PESERTA} orang ikut (yang mengajukan langsung terhitung ikut); kalau 24 jam belum cukup, pengajuannya batal. Yang telat boleh ikut selama kompetisi masih jalan. Selama kompetisi jalan, layar kompetisinya menampilkan meja yang menunggu peserta: pilih Duduk, atau buka meja baru. Meja mulai sendiri begitu semua kursinya terisi peserta. Meja kompetisi khusus peserta (tanpa warga kedai), aturannya ikut kompetisi, dan cuma sekali main.`,
+        teks: '**Nama** wajib diisi sebelum main, dan cuma bisa diganti seminggu sekali.',
+      },
+      {
+        t: 'paragraf',
+        teks: '**Pasang ke layar utama:** ketuk "Pasang ke layar utama" di beranda supaya game ini bisa dibuka seperti aplikasi. Main offline tetap jalan tanpa internet, dan pembaruan masuk sendiri waktu kamu nggak sedang main.',
+      },
+      {
+        t: 'paragraf',
+        teks: `**${TEKS_USULAN.ubin}:** punya ide atau nemu yang aneh? Ketuk 💡 ${TEKS_USULAN.ubin} di beranda, tulis usulanmu, lalu kirim. Usulanmu dibaca dan ditinjau tiap hari.`,
+      },
+    ],
+  },
+  {
+    id: 'kompetisi',
+    judul: 'Kompetisi',
+    ikon: '🏅',
+    ringkas: 'Ikut kompetisi, nilai tiap permainan, dan juara.',
+    isi: [
+      {
+        t: 'paragraf',
+        teks: `Tekan **Kompetisi** di beranda untuk mengajukan kompetisi atau ikut serta. Kompetisi jalan begitu ${MIN_PESERTA} orang ikut; kalau 24 jam belum cukup, pengajuannya batal. Yang telat boleh ikut selama kompetisi masih jalan.`,
       },
       {
         t: 'daftar',
         butir: [
+          `Duduk dari daftar meja di layar kompetisi, atau buka meja baru. Meja mulai sendiri begitu semua kursi terisi peserta, tanpa warga kedai, aturannya ikut kompetisi, dan cuma sekali main. Di meja kompetisi tidak ada Akhiri permainan maupun ${TEKS_KALDU.tombol}: permainan selesai sendiri sesuai aturan kompetisinya.`,
           'Nilai tiap permainan 0 sampai 10, dari banyaknya peserta di meja itu yang kalah skor darimu. Meja 4 orang: juara 10; kedua 6,7; ketiga 3,3; juru kunci 0. Skor sama tidak saling mengalahkan.',
-          'Keluar di tengah permainan = 0, dan yang keluar tidak dihitung sebagai lawan: nilai yang lain dihitung dari peserta yang bertahan sampai akhir saja. Meja 4 orang dengan 1 yang keluar: juara 10; kedua 5; ketiga 0. Kalau cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0.',
-          `Klasemen diurutkan dari rata-rata nilai per permainan, dan kamu masuk klasemen sesudah ${MIN_MAIN_KOMPETISI} kali main. Rata-rata sama: yang lebih sering main di atas, lalu rata-rata skor akhir.`,
-          'Permainan yang sudah mulai sebelum kompetisi berakhir tetap dihitung. Juaranya diumumkan sesudah meja terakhir selesai, lalu dapat 🏆 di samping namanya, juga di tab Peringkat layar Riwayat.',
-          `Meja kompetisi lakennya biru dan bar atasnya menulis nama kompetisi. Sesudah permainan selesai, klasemen akhir menampilkan nilai tiap peserta dan naik-turun peringkatnya. Tombol ${TEKS_KOMPETISI.kembaliKompetisi} membawamu ke daftar meja lagi.`,
-          `Meja kompetisi selalu punya batas waktu per giliran. Di hasil putaran, kalau host belum memulai putaran berikutnya, putarannya mulai sendiri sebentar kemudian. Di meja kompetisi tidak ada Akhiri permainan maupun ${TEKS_KALDU.tombol}: permainan selesai sendiri di batas putaran (atau batas skor kalau diisi), dan kalau mode kaldu dipakai, putaran kaldu mulai sendiri di batas putaran.`,
-          'Kompetisi bisa disudahi lebih awal kalau lebih dari separuh peserta setuju.',
-          'Tiket peserta tersimpan di HP yang dipakai waktu ikut serta, jadi main kompetisi dari HP itu.',
+          'Keluar di tengah permainan = 0, dan yang keluar tidak dihitung sebagai lawan. Meja 4 orang dengan 1 yang keluar: juara 10; kedua 5; ketiga 0. Kalau cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0.',
+          `Klasemen diurutkan dari rata-rata nilai, mulai sesudah ${MIN_MAIN_KOMPETISI} kali main. Juaranya diumumkan sesudah meja terakhir selesai dan dapat 🏆 di samping namanya. Main dari HP yang dipakai waktu ikut serta, karena tiketmu tersimpan di situ.`,
         ],
       },
+    ],
+  },
+  {
+    id: 'nonton',
+    judul: 'Nonton',
+    ikon: '👀',
+    ringkas: 'Nonton meja yang lagi main dan minta lihat kartu.',
+    isi: [
       {
         t: 'paragraf',
         teks: '**Nonton:** buka Cari meja publik, lalu pilih Tonton di bagian Lagi main. Penonton cuma lihat nama pemain dan kartu buangan. Mau lihat kartu seorang pemain? Minta izin dulu ke orangnya.',
@@ -854,23 +865,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'daftar',
         butir: [
-          `Pemain boleh menolak. Ke tiap pemain cuma bisa ada satu permintaan yang menunggu. Kalau ditolak, tunggu ${MENIT_JEDA_TOLAK} menit sebelum minta lagi ke orang yang sama. Permintaan yang nggak dijawab ${DETIK_JAWAB_LIHAT} detik dihitung ditolak.`,
-          'Kalau diizinkan, kamu lihat persis yang dilihat pemain itu, sampai kamu berhenti atau dia menghentikannya.',
-          'Pemain melihat jumlah penonton di tombol 👀, dan bisa menghentikan siapa pun yang sedang lihat kartunya kapan saja.',
-          'Meja privat juga bisa ditonton, tapi kodenya tetap rahasia: penonton cuma lihat nama host. Host bisa mematikan Boleh ditonton di lobi. Meja kompetisi nggak bisa ditonton.',
+          `Pemain boleh menolak. Kalau ditolak (atau nggak dijawab ${DETIK_JAWAB_LIHAT} detik), tunggu ${MENIT_JEDA_TOLAK} menit sebelum minta lagi ke orang yang sama.`,
+          'Kalau diizinkan, kamu lihat persis yang dilihat pemain itu, sampai kamu berhenti atau dia menghentikannya lewat tombol 👀.',
+          'Meja privat juga bisa ditonton, tapi kodenya tetap rahasia. Host bisa mematikan Boleh ditonton di lobi, dan meja kompetisi nggak bisa ditonton.',
         ],
-      },
-      {
-        t: 'paragraf',
-        teks: '**Nama** wajib diisi sebelum main. Sesudah diganti, nama baru bisa diganti lagi seminggu kemudian. Tanggalnya tertulis di bawah isian nama di beranda.',
-      },
-      {
-        t: 'paragraf',
-        teks: '**Pasang ke layar utama:** game ini bisa dipasang di HP seperti aplikasi. Ketuk "Pasang ke layar utama" di beranda lalu ikuti petunjuknya. Sesudah terpasang, main offline tetap jalan tanpa internet, dan pembaruan masuk sendiri waktu kamu nggak sedang main.',
-      },
-      {
-        t: 'paragraf',
-        teks: `**${TEKS_USULAN.ubin}:** punya ide atau nemu yang aneh? Ketuk 💡 ${TEKS_USULAN.ubin} di beranda (atau di Tentang yang dibuka dari beranda), pilih jenisnya, tulis judul dan ceritanya, lalu kirim atas namamu. Usulanmu dibaca dan ditinjau tiap hari. Kalau sinyal lagi putus, tulisanmu tetap ada selama aplikasinya belum ditutup, dan bisa dikirim lagi.`,
       },
     ],
   },
@@ -880,14 +878,6 @@ export const FAQ: { tanya: string; jawab: string }[] = [
   {
     tanya: 'Kenapa angka joker nggak muncul lagi setelah popup?',
     jawab: 'Itu disengaja (mode ingatan). Seperti di meja asli, angka joker cuma diumumkan sekali di awal putaran. Setelah itu kamu harus ingat sendiri, dan joker di tangan tidak diberi tanda.',
-  },
-  {
-    tanya: 'Angka joker bisa sama dengan putaran kemarin?',
-    jawab: 'Dengan putaran tepat sebelumnya nggak bisa. Kartu yang angkanya sama dianulir, diselipkan lagi ke deck, lalu pengocok membuka kartu berikutnya. Dengan putaran yang lebih lama boleh sama, misalnya putaran 3 sama dengan putaran 1.',
-  },
-  {
-    tanya: 'Bisa nggak aplikasi menandai joker atau kartu yang bahaya dibuang?',
-    jawab: 'Tidak. Mengingat joker dan menimbang kartu yang aman dibuang termasuk skill main di Kedai Madya, jadi aplikasi sengaja tidak membantu di situ.',
   },
   {
     tanya: 'Kenapa As-ku nggak bisa dibuang?',
@@ -930,45 +920,13 @@ export const FAQ: { tanya: string; jawab: string }[] = [
     jawab: 'Setelah mentung, kalau pemain tepat sebelum yang mentung ikut kepentung, arah putaran berikutnya dibalik. Kalau tidak, namanya lompat dan arah tetap.',
   },
   {
-    tanya: 'Siapa yang ngocok putaran berikutnya?',
-    jawab: 'Pemain dengan skor total paling rendah. Kalau ada yang sama, bebas dipilih di antara mereka.',
-  },
-  {
-    tanya: 'Deck habis, terus gimana?',
-    jawab: 'Yang mengambil kartu terakhir menyelesaikan gilirannya, lalu semua pemain dapat susun akhir. Setelah itu semua dihitung skor dasar dan arah tetap.',
-  },
-  {
     tanya: 'Internetku putus waktu main online. Kartuku hilang?',
-    jawab: `Tidak. Kartumu tetap di kursimu. Giliranmu ditunggu ${DETIK_TENGGANG} detik, dihitung sejak kamu terputus. Lewat dari itu, warga kedai yang menjalankan giliranmu sampai kamu kembali. Kalau kamu kembali waktu masih giliranmu, sisa waktumu paling sedikit ${DETIK_SISA_MIN} detik. Buka lagi aplikasinya, dan kamu kembali ke kursimu.`,
-  },
-  {
-    tanya: 'Kok host nggak bisa langsung lanjut ke putaran berikutnya?',
-    jawab: `Di meja online, sesudah putaran selesai semua diberi waktu ${DETIK_JEDA_LANJUT} detik buat lihat kartu dan skor. Kalau sudah, tekan ${TEKS_LANJUT.siap}. Begitu yang lain siap semua, host bisa langsung lanjut.`,
-  },
-  {
-    tanya: 'Gimana cara ngeledek?',
-    jawab: `Waktu hasil putaran tampil di meja online, buka bagian ${TEKS_LEDEK.judul} di bawah rincian skor, pilih orangnya, lalu ketuk ledekannya atau emoji. Ledekanmu muncul besar di layar dia. Tiap pemain paling banyak ${MAKS_LEDEK_PER_PUTARAN} ledekan per putaran. Di meja offline dan latihan tidak ada ledekan.`,
-  },
-  {
-    tanya: 'Ada yang nonton mejaku. Dia bisa lihat kartuku?',
-    jawab: `Nggak, kecuali kamu izinkan. Penonton cuma lihat nama pemain dan kartu buangan. Kalau ada yang minta lihat kartumu, kamu bisa Tolak atau Izinkan; nggak dijawab ${DETIK_JAWAB_LIHAT} detik dihitung ditolak. Yang sudah kamu izinkan bisa kamu hentikan kapan saja lewat tombol 👀. Nggak mau ditonton sama sekali? Host bisa mematikan Boleh ditonton di lobi.`,
-  },
-  {
-    tanya: 'Kok namaku nggak bisa diganti?',
-    jawab: 'Nama cuma bisa diganti seminggu sekali, supaya peringkat nggak kacau. Tanggal bisa ganti lagi tertulis di bawah isian nama di beranda.',
-  },
-  {
-    tanya: 'Ada taruhan atau koin di game ini?',
-    jawab: 'Tidak ada. Skornya cuma poin buat seru-seruan.',
+    jawab: `Tidak. Kartumu tetap di kursimu, dan aplikasi nyambung lagi sendiri. Giliranmu ditunggu ${DETIK_TENGGANG} detik, dihitung sejak kamu terputus; lewat itu warga kedai yang jalan sampai kamu kembali.`,
   },
 ];
 
 export const GLOSARIUM: { istilah: string; arti: string }[] = [
-  { istilah: 'Bunga', arti: 'Jenis kartu: Love (♥), Wajik (♦), Kriting (♣), dan Waru (♠).' },
-  { istilah: 'Love', arti: 'Bunga hati (♥), warna merah.' },
-  { istilah: 'Wajik', arti: 'Bunga wajik (♦), warna merah.' },
-  { istilah: 'Kriting', arti: 'Bunga keriting (♣), warna hitam.' },
-  { istilah: 'Waru', arti: 'Bunga sekop (♠), warna hitam.' },
+  { istilah: 'Bunga', arti: 'Jenis kartu: Love (♥) dan Wajik (♦) yang merah, Kriting (♣) dan Waru (♠) yang hitam.' },
   { istilah: 'Londo', arti: 'Kartu bergambar: J, Q, dan K.' },
   { istilah: 'Joker', arti: 'Semua kartu yang angkanya sama dengan kartu yang dibuka di awal putaran. Angkanya diumumkan sekali saja.' },
   { istilah: 'Joker mati', arti: 'Joker yang pernah dibuang di putaran itu. Sudah jadi kartu biasa sampai putaran selesai.' },
