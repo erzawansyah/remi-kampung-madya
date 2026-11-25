@@ -473,7 +473,7 @@ export function validasiObrolan(x: unknown): EntriObrolan[] | null {
     const isi = (DAFTAR_EMOTE as readonly string[]).includes(b.isi) ? b.isi : rapikanPesan(b.isi);
     if (!isi) continue;
     const w = typeof b.w === 'number' && Number.isFinite(b.w) ? b.w : 0;
-    hasil.push({ nama: rapikanNama(b.nama), isi, w });
+    hasil.push({ nama: rapikanNama(b.nama), isi, w, ...(b.warga === true ? { warga: true as const } : {}) });
   }
   return hasil;
 }

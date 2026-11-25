@@ -165,11 +165,12 @@ describe('obrolan di lobi', () => {
     obrolan.ganti([
       { nama: 'Ani', isi: 'halo', w },
       { nama: 'Budi', isi: 'iya', w },
-      { nama: 'Kipas Dua', isi: 'Gedein!', w },
+      { nama: 'Kipas Dua', isi: 'Gedein!', w, warga: true },
       { nama: 'Ani', isi: '🔥', w },
     ]);
     const info = infoLobi();
-    info.kursi[2] = { jenis: 'bot', nama: 'Kipas Dua', terhubung: true, level: 'normal' };
+    // Kursi Ani sekarang dipegang warga kedai (keluar): pesannya sendiri tetap tanpa label.
+    info.kursi[0] = { jenis: 'bot', nama: 'Ani', terhubung: true, level: 'normal' };
     const { akar } = lobi(obrolan, info);
     const baris = [...akar.querySelectorAll<HTMLElement>('.baris-obrolan')];
     expect(baris.map((b) => b.classList.contains('milikku'))).toEqual([false, true, false, false]);

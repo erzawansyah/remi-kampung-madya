@@ -747,10 +747,13 @@ class Aplikasi implements AppUntukMeja {
       case 'emote': {
         // Penonton (#60) tidak ikut obrolan (meja juga tidak pernah mengirimnya ke penonton).
         if (this.tontonan) break;
-        const nama = this.info?.kursi[p.kursi]?.nama;
+        const kursi = this.info?.kursi[p.kursi];
+        // Label warga kedai dinilai SEKALI saat pesan tiba (kursi warga kedai = celetukan warga) dan
+        // tidak pernah dinilai ulang: kursi pemain yang nanti Keluar diteruskan warga kedai dengan nama
+        // yang sama, tapi pesan-pesannya yang lama tetap pesan orang.
         const baris =
-          nama !== undefined && typeof p.isi === 'string'
-            ? { nama, isi: p.isi, w: Date.now(), milikku: p.kursi === this.info?.kursiSaya }
+          kursi && typeof p.isi === 'string'
+            ? { nama: kursi.nama, isi: p.isi, w: Date.now(), milikku: p.kursi === this.info?.kursiSaya, ...(kursi.jenis === 'bot' ? { warga: true as const } : {}) }
             : undefined;
         // Di meja, barisnya masuk obrolan bersamaan dengan gelembungnya (ikut ditunda selama animasi,
         // supaya celetukan tidak mendahului pentungan yang belum terbuka). Di lobi tidak ada animasi.

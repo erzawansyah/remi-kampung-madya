@@ -117,8 +117,6 @@ export interface OpsiPanelObrolan {
   kirim: (isi: string) => void;
   /** Nama pemain di meja ini (untuk menandai pesan sendiri di riwayat). */
   namaSaya: () => string | null;
-  /** Nama ini milik kursi warga kedai di meja (barisnya diberi label "warga kedai"). */
-  wargaKedai?: (nama: string) => boolean;
   /** Alasan belum bisa mengirim (sambungan belum siap); '' = boleh. */
   alasanTolak?: () => string;
   /** Lobi: pesan orang diumumkan di sini (tidak ada gelembung meja); lembar meja: gelembung meja yang mengumumkan. */
@@ -172,9 +170,9 @@ export function jamObrolan(w: number): string {
 
 /**
  * Elemen satu baris: gelembung berisi nama (pesan orang), isi, dan jam. Semuanya lewat textContent.
- * Pesanku di kanan tanpa nama (pembaca layar tetap mendengar "Kamu:"); pesan warga kedai diberi label.
+ * Pesanku di kanan tanpa nama (pembaca layar tetap mendengar "Kamu:"); celetukan warga kedai diberi label.
  */
-function elBaris(b: BarisObrolan, opsi: Pick<OpsiPanelObrolan, 'namaSaya' | 'wargaKedai'>): HTMLLIElement {
+function elBaris(b: BarisObrolan, opsi: Pick<OpsiPanelObrolan, 'namaSaya'>): HTMLLIElement {
   const li = document.createElement('li');
   const milikku = milikkuBaris(b, opsi.namaSaya());
   li.className = `baris-obrolan${milikku ? ' milikku' : ''}${apaEmoji(b.isi) ? ' emoji' : ''}`;
@@ -193,7 +191,9 @@ function elBaris(b: BarisObrolan, opsi: Pick<OpsiPanelObrolan, 'namaSaya' | 'war
     nama.dataset.warna = String(warnaNama(b.nama));
     nama.textContent = b.nama;
     kepala.append(nama);
-    if (opsi.wargaKedai?.(b.nama)) {
+    // Ditandai meja saat celetukan dikirim (EntriObrolan.warga), tidak ditebak dari kursi sekarang:
+    // kursi pemain yang keluar dipegang warga kedai dengan nama yang sama.
+    if (b.warga) {
       const label = document.createElement('span');
       label.className = 'label-warga';
       label.textContent = TEKS_OBROLAN.warga;

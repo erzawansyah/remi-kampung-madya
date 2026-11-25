@@ -28,7 +28,6 @@ import {
   berikutnya,
 } from '@remi/engine';
 import {
-  kunciNama,
   MAKS_LEDEK_PER_PUTARAN,
   type AksiKlien,
   type InfoMeja,
@@ -2725,7 +2724,6 @@ export class KontrolMeja implements AksiAdegan {
       obrolan: this.obrolan,
       kirim: (isi) => this.app.kirim({ t: 'emote', isi }),
       namaSaya: () => (this.info?.kursiSaya != null ? (this.info.kursi[this.info.kursiSaya]?.nama ?? null) : null),
-      wargaKedai: (nama) => !!this.info?.kursi.some((k) => k.jenis === 'bot' && kunciNama(k.nama) === kunciNama(nama)),
       alasanTolak: () => this.alasanPutus(),
       susunan: 'lembar',
       idIsian: 'isian-obrolan-meja',
@@ -2759,7 +2757,8 @@ export class KontrolMeja implements AksiAdegan {
 
   /** Back di HP (main.ts): lembar obrolan yang terbuka ditutup dulu, meja tidak ditinggalkan. */
   tutupObrolanTerbuka(): boolean {
-    if (!this.lembarObrolan || this.hancur) return false;
+    // Jendela di atasnya (popup joker, panel mentung, dialog) yang memegang Back, bukan lembar di bawahnya.
+    if (!this.lembarObrolan || this.hancur || adaJendelaTerbuka()) return false;
     this.tutupObrolan(true);
     return true;
   }

@@ -301,6 +301,24 @@ describe('Aplikasi: obrolan (0.7.0)', () => {
     app.keluarMeja();
     expect(o.daftar).toHaveLength(0);
   });
+
+  it('tanda warga kedai: riwayat dari tanda meja, emote dari kursi saat tiba; pemain yang lalu Keluar tidak ikut ditandai', async () => {
+    const { ws, app, g } = await diMeja();
+    const o = app.obrolan!;
+    ws.kirimDariServer({ t: 'obrolan', pesan: [{ nama: 'Budi', isi: 'tadi', w: 1 }, { nama: 'Kipas Dua', isi: 'GG', w: 2, warga: true }] });
+    expect(o.daftar.map((b) => b.warga)).toEqual([undefined, true]);
+    // Kursi 1 (manusia) menulis, lalu Keluar: kursinya diteruskan warga kedai dengan nama yang sama.
+    ws.kirimDariServer({ t: 'emote', kursi: 1, isi: 'aku pamit' });
+    const info = infoMeja(g);
+    ws.kirimDariServer({ t: 'meja', info: { ...info, kursi: info.kursi.map((k, i) => (i === 1 ? { ...k, jenis: 'bot' as const, terhubung: false } : k)) } });
+    // Celetukan warga kedai di kursi itu sekarang.
+    ws.kirimDariServer({ t: 'emote', kursi: 1, isi: 'Waduh!' });
+    expect(o.daftar.slice(2).map((b) => [b.nama, b.isi, b.warga])).toEqual([
+      [g.pemain[1]!.nama, 'aku pamit', undefined],
+      [g.pemain[1]!.nama, 'Waduh!', true],
+    ]);
+    expect(o.daftar[2]).not.toHaveProperty('warga');
+  });
 });
 
 describe('Aplikasi: kursi dibuka di tab/perangkat lain (kode 4000)', () => {

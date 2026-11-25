@@ -8,7 +8,7 @@
 // mulai sendiri begitu semua kursi terisi peserta yang tersambung), aturannya ditampilkan sebagai teks.
 
 import type { LevelBot } from '@remi/engine';
-import { kunciNama, type InfoKursi, type InfoMeja, type PengaturanMeja, type PesanKlien } from '@remi/meja';
+import { type InfoKursi, type InfoMeja, type PengaturanMeja, type PesanKlien } from '@remi/meja';
 import { TEKS_KALDU } from '../konten/kaldu';
 import { TEKS_KOMPETISI, teksMenungguPeserta } from '../konten/kompetisi';
 import { DAFTAR_LEVEL_WARGA, infoLevel, labelLevelKecil } from '../konten/levelWarga';
@@ -203,7 +203,6 @@ export function renderLobi(
         obrolan: obrolan.obrolan,
         kirim: (isi) => kirim({ t: 'emote', isi }),
         namaSaya: () => (info.kursiSaya != null ? (info.kursi[info.kursiSaya]?.nama ?? null) : null),
-        wargaKedai: (nama) => info.kursi.some((k) => k.jenis === 'bot' && kunciNama(k.nama) === kunciNama(nama)),
         alasanTolak: obrolan.alasanTolak,
         susunan: 'lobi',
         idIsian: ID_ISIAN_OBROLAN,

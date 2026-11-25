@@ -68,7 +68,7 @@ import { LAMA_HANTAM } from '../src/efek/retak';
 import { bunyi, getar } from '../src/efek/suara';
 import { durasi } from '../src/gerak';
 import { sorak } from '../src/efek/sorak';
-import { tutupDialogTeratas, tutupModal, umumkan } from '../src/ui/dom';
+import { bukaModal, tutupDialogTeratas, tutupModal, umumkan } from '../src/ui/dom';
 import {
   geserFokus,
   jejakGiliran,
@@ -1550,6 +1550,17 @@ describe('lembar obrolan layar penuh (0.8.0; dulu palet emote #48)', () => {
     expect(meja.kontrol.tutupObrolanTerbuka()).toBe(false);
   });
 
+  it('Back dengan jendela wajib di atas lembar (popup joker, panel mentung): lembar di bawahnya tidak ditutup', () => {
+    meja = new MejaUji(permainanGiliranku());
+    buka();
+    bukaModal('<h2>Joker</h2><button>OK</button>', undefined, { bisaDitutup: false });
+    expect(meja.kontrol.tutupObrolanTerbuka()).toBe(false);
+    expect(lembar()).not.toBeNull();
+    tutupModal();
+    expect(meja.kontrol.tutupObrolanTerbuka()).toBe(true);
+    expect(lembar()).toBeNull();
+  });
+
   it('usap ke bawah di kepala lembar menutupnya; usap pendek atau ke samping tidak', () => {
     meja = new MejaUji(permainanGiliranku());
     buka();
@@ -1592,26 +1603,29 @@ describe('lembar obrolan layar penuh (0.8.0; dulu palet emote #48)', () => {
     expect(lembar()!.querySelector<HTMLElement>('.spanduk-giliran')!.hidden).toBe(true);
   });
 
-  it('pesan orang di kiri dengan nama dan jam, pesanku di kanan; warga kedai diberi label; emoji saja ditandai', () => {
+  it('pesan orang di kiri dengan nama dan jam, pesanku di kanan; celetukan warga kedai diberi label; emoji saja ditandai', () => {
     const obrolan = new Obrolan();
     const g = permainanGiliranku();
     meja = new MejaUji(g, { kursi: g.pemain.map((p, i) => ({ jenis: i === 1 ? 'manusia' : i === 0 ? 'manusia' : 'bot', nama: p.nama, terhubung: true, level: 'normal' })) }, { obrolan });
     const w = new Date(2026, 10, 25, 20, 5).getTime();
     obrolan.tambah({ nama: 'Bot 1', isi: 'halo', w, milikku: false });
     obrolan.tambah({ nama: 'Aku', isi: 'iya', w, milikku: true });
-    obrolan.tambah({ nama: 'Bot 2', isi: 'Gedein!', w });
+    obrolan.tambah({ nama: 'Bot 2', isi: 'Gedein!', w, warga: true });
     obrolan.tambah({ nama: 'bot 1', isi: '😂', w });
+    // Pemain yang keluar: kursinya jadi warga kedai dengan nama yang sama (Bot 3 di sini), tapi
+    // pesannya sendiri tetap tanpa label. Label hanya dari tanda meja saat celetukan dikirim.
+    obrolan.tambah({ nama: 'Bot 3', isi: 'aku pamit', w });
     buka();
     const baris = [...lembar()!.querySelectorAll<HTMLElement>('.baris-obrolan')];
-    expect(baris.map((b) => b.classList.contains('milikku'))).toEqual([false, true, false, false]);
+    expect(baris.map((b) => b.classList.contains('milikku'))).toEqual([false, true, false, false, false]);
     // Orang lain: nama terlihat; aku: tanpa nama terlihat (pembaca layar tetap mendengar "Kamu:").
     expect(baris[0]!.querySelector('.nama')!.textContent).toBe('Bot 1');
     expect(baris[1]!.querySelector('.nama')).toBeNull();
     expect(baris[1]!.querySelector('.sr-saja')!.textContent).toBe('Kamu: ');
     for (const b of baris) expect(b.querySelector('.jam')!.textContent).toBe('20.05');
-    // Bot 1 manusia di meja ini; Bot 2 warga kedai.
     expect(baris[0]!.querySelector('.label-warga')).toBeNull();
     expect(baris[2]!.querySelector('.label-warga')!.textContent).toBe('warga kedai');
+    expect(baris[4]!.querySelector('.label-warga')).toBeNull();
     // Nama yang sama (tanpa beda huruf besar/kecil) selalu sewarna.
     expect(baris[3]!.querySelector<HTMLElement>('.nama')!.dataset.warna).toBe(baris[0]!.querySelector<HTMLElement>('.nama')!.dataset.warna);
     expect(baris[3]!.classList.contains('emoji')).toBe(true);
