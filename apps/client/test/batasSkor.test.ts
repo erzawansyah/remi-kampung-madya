@@ -17,7 +17,7 @@ import { htmlIsianBatas, KET_BATAS_SKOR, tampilIsianBatas, teksBatas } from '../
 import { renderBeranda, type AksiBeranda } from '../src/ui/beranda';
 import { tutupDialogTeratas } from '../src/ui/dom';
 import { renderLobi } from '../src/ui/lobi';
-import { pasangMatchMediaPalsu } from './bantu';
+import { pasangMatchMediaPalsu, teksTerlihat } from './bantu';
 
 const aksiPalsu = (): AksiBeranda => ({
   buatMeja: vi.fn(),
@@ -79,8 +79,11 @@ describe('htmlIsianBatas', () => {
     }
     // Batas bawah tampil positif di isian; tandanya di label dan di depan isian.
     expect([isian('x-atas').value, isian('x-bawah').value]).toEqual(['250', '120']);
-    expect(isian('x-atas').closest('label')!.textContent).toBe('Batas skor atas');
-    expect(isian('x-bawah').closest('label')!.textContent).toBe('Batas skor bawah (minus)−');
+    expect(teksTerlihat(isian('x-atas').closest('label')!)).toBe('Batas skor atas');
+    // Satu "?" di baris pertama; teksnya (tersembunyi) dirujuk kedua isian.
+    expect(akar().querySelectorAll('button[data-info="x-ket"]')).toHaveLength(1);
+    expect(akar().querySelector<HTMLElement>('#x-ket')!.hidden).toBe(true);
+    expect(teksTerlihat(isian('x-bawah').closest('label')!)).toBe('Batas skor bawah (minus)−');
     expect(akar().querySelector('#x-ket')!.textContent).toBe(KET_BATAS_SKOR);
   });
 

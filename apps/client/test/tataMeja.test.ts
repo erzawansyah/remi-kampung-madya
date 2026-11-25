@@ -491,11 +491,11 @@ describe('area meja tidak saling bertabrakan (panel, deck, buangan, tangan, kart
               const labelDeck = t.teks.find((x) => x.kunci === 'deck-label')!;
               const lebarLabel = kiraLebarTeks(labelDeck.isi, labelDeck.ukuran * u.skalaTeks * u.d, labelDeck.tebal);
               if (labelDeck.x - lebarLabel / 2 < 0) salah.push(`label deck terpotong (x ${labelDeck.x.toFixed(0)})`);
-              // ... dan tidak menjorok ke kolom info (arah/giliran/putaran) di kanannya. Saat menyusun mulung di
+              // ... dan tidak menjorok ke kolom info (arah) di kanannya. Saat menyusun mulung di
               // HP lanskap kolom info disembunyikan (deck & buangan ringkas): label deck tidak menimpa buangan.
-              const lebarAmbil = kiraLebarTeks('ketuk = ambil', labelDeck.ukuran * u.skalaTeks * u.d, true);
+              const lebarDeckMaks = kiraLebarTeks('deck 000', labelDeck.ukuran * u.skalaTeks * u.d, true);
               const arah = t.teks.find((x) => x.kunci === 'arah');
-              if (arah && labelDeck.x + lebarAmbil / 2 > arah.x + 0.5) salah.push('label deck menimpa kolom info');
+              if (arah && labelDeck.x + lebarDeckMaks / 2 > arah.x + 0.5) salah.push('label deck menimpa kolom info');
               if (!arah && labelDeck.x + lebarLabel / 2 > t.area.buangan!.x + 0.5) salah.push('label deck menimpa buangan');
               // Kartu jadi lawan tetap di dalam panelnya.
               for (const [pi, k] of t.area.panel) {
@@ -1285,36 +1285,21 @@ describe('nama lawan warga kedai & penanda kursi', () => {
     }
   });
 
-  it("'Giliran <nama>' di kolom info tengah: utuh di tablet & desktop, nama saja kalau kolomnya sempit", () => {
-    const layarLega = [
-      { nama: 'tablet 820×1180', w: 820, h: 1180, d: 2, bawah: 148 },
-      { nama: 'desktop 1440×900', w: 1440, h: 900, d: 1, bawah: 151 },
-    ];
-    const layarSempit = [
-      { nama: 'HP 360×640', w: 360, h: 640, d: 2, bawah: 139 },
-      { nama: 'HP 360×640 teks besar', w: 360, h: 640, d: 2, bawah: 143, teksBesar: true },
-      { nama: 'HP lanskap 740×360', w: 740, h: 360, d: 2, bawah: 128 },
-      { nama: 'HP lanskap 844×390', w: 844, h: 390, d: 3, bawah: 128 },
-    ];
+  it('tengah meja tanpa "Giliran …", "Giliranmu", "Putaran N", dan "ketuk = ambil" (cukup bingkai panel dan bar atas)', () => {
     for (const n of [2, 4, 6]) {
       const v0 = viewUntuk(permainan(n), 0);
-      for (const nama of NAMA_LAWAN_BAWAAN) {
-        const v: ViewPemain = {
-          ...v0,
-          pemain: v0.pemain.map((p, i) => (i === 0 ? p : { ...p, nama })),
-          putaran: { ...v0.putaran!, giliran: 1 },
-        };
-        for (const layar of [...layarLega, ...layarSempit]) {
-          const u = ukuran(layar);
-          const t = hitungTataMeja(model(v), u);
-          const giliran = t.teks.find((x) => x.kunci === 'giliran')!;
-          const px = giliran.ukuran * u.skalaTeks * u.d;
-          expect(giliran.isi).toBe(`Giliran ${nama}`);
-          // Kalau 'Giliran <nama>' ternyata tidak muat (diukur scene), scene memakai nama saja.
-          expect(giliran.cadangan).toBe(nama);
-          const pesan = `${n} pemain, ${layar.nama}: '${giliran.isi}'`;
-          if (layarLega.includes(layar)) expect(kiraLebarTeks(giliran.isi, px, true), pesan).toBeLessThanOrEqual(giliran.maks!);
-          else expect(kiraLebarTeks(nama, px, true), pesan).toBeLessThanOrEqual(giliran.maks!);
+      for (const giliran of [0, 1]) {
+        const v: ViewPemain = { ...v0, putaran: { ...v0.putaran!, giliran, tahap: 'ambil' } };
+        for (const layar of [...POTRET, ...LANSKAP]) {
+          const t = hitungTataMeja(model(v), ukuran(layar));
+          expect(t.teks.find((x) => x.kunci === 'giliran')).toBeUndefined();
+          expect(t.teks.find((x) => x.kunci === 'putaran')).toBeUndefined();
+          expect(t.teks.some((x) => /^Giliran|^Putaran \d|ketuk = ambil/.test(x.isi))).toBe(false);
+          // Arah tetap ditulis; label deck selalu sisa deck.
+          expect(t.teks.find((x) => x.kunci === 'arah')!.isi).toMatch(/searah|berbalik/);
+          expect(t.teks.find((x) => x.kunci === 'deck-label')!.isi).toBe(`deck ${v.putaran!.jumlahDeck}`);
+          // Giliranku tetap disorot (bingkai) dan tertulis di label tanganku.
+          expect(t.sorotGiliran?.saya ?? false).toBe(giliran === 0);
         }
       }
     }

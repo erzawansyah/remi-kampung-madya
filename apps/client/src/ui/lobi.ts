@@ -200,8 +200,7 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   const pilihanBatas = (id: string, nilai: number | null, opsi: number[], label: (n: number) => string) =>
     `<select id="${id}" ${disAturan}>${opsi.map((n) => `<option value="${n}" ${n === (nilai ?? 0) ? 'selected' : ''}>${label(n)}</option>`).join('')}</select>`;
   const kaldu = p.modeKaldu === true;
-  // Host: kotak centang + satu baris keterangan. Bukan host: keadaannya sebagai teks (keterangan
-  // hanya kalau nyala).
+  // Host: kotak centang. Bukan host: keadaannya sebagai teks. Penjelasannya lewat "?".
   const labelKaldu = htmlLabelInfo(TEKS_KALDU.label, TEKS_KALDU.ket, 'ket-kaldu');
   const htmlKaldu = ubahAturan
     ? `<label class="baris">${labelKaldu}<input type="checkbox" id="kaldu" aria-describedby="ket-kaldu" ${kaldu ? 'checked' : ''} /></label>`

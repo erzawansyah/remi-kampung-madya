@@ -283,7 +283,6 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
             <span>Server-nya belum bisa dihubungi, Bos.</span>
             <button type="button" class="kecil" id="coba-lagi">Coba lagi</button>
           </div>
-          <p class="redup rapat">Main bareng teman pakai kode meja atau link undangan.</p>
           <button type="button" class="penuh" id="buat">Buat meja baru</button>
           <div class="gabung-deret">
             <input type="text" id="kode" class="input-kode" maxlength="5" placeholder="KODE" aria-label="Kode meja (5 karakter)" value="${esc(opsi.kodeAwal ?? '')}" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" />
@@ -336,7 +335,12 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
     const sampai = namaTerkunciSampai(keadaanNama(), Date.now());
     isianNama.readOnly = sampai !== null;
     ketNama.textContent = sampai !== null ? `${TEKS_NAMA.bisaGantiLagi} ${labelTanggalGanti(sampai)}.` : TEKS_NAMA.ketBaru;
+    // "Cuma bisa diganti seminggu sekali" hanya selama isian nama sedang diisi; tanggal buka kunci
+    // tetap terlihat selama namanya terkunci.
+    ketNama.hidden = sampai === null && document.activeElement !== isianNama;
   };
+  isianNama.addEventListener('focus', aturTampilNama);
+  isianNama.addEventListener('blur', aturTampilNama);
   /** Cek nama di isian, konfirmasi kalau diganti, lalu simpan. Null = belum bisa main. */
   const cekNama = async (): Promise<string | null> => {
     const k = keadaanNama();

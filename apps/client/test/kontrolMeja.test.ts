@@ -951,7 +951,7 @@ describe('bar aksi', () => {
     expect(document.activeElement).toBe(ambil);
   });
 
-  it('bukan giliranku: pil giliran, petunjuk, dan tombol tidak mengulang teks yang sama', () => {
+  it('bukan giliranku: tanpa pil "Giliran X" dan tanpa petunjuk "Sambil nunggu…"; tombol "Tunggu giliranmu" tetap', () => {
     const g = permainanGiliranku();
     const h = terapkanAksi(g, { jenis: 'ambilDeck', pemain: 0 });
     if (!h.ok) throw new Error(h.error.pesan);
@@ -962,10 +962,11 @@ describe('bar aksi', () => {
     const lawan = h2.state.pemain[h2.state.putaran!.giliran].nama;
     const langkah = meja.akar.querySelector('.langkah')!.textContent!;
     const tombol = meja.akar.querySelector('.tombol-aksi button.utama')!.textContent!;
-    expect(langkah).toContain(lawan);
-    expect(meja.petunjuk()).not.toContain(lawan);
+    // Giliran lawan cukup ditandai bingkai panelnya (dan "lagi mikir…" di panel warga kedai).
+    expect(langkah).toBe('');
+    expect(meja.petunjuk()).toBe('');
+    expect(tombol).toBe('Tunggu giliranmu');
     expect(tombol).not.toContain(lawan);
-    expect(tombol).not.toContain('Aku');
   });
 
   it('menunggu joker di giliranku: tidak menampilkan "Menunggu <namaku>"', () => {
@@ -1348,6 +1349,15 @@ describe('keyboard saat putaran berganti', () => {
 });
 
 describe('modal hasil putaran', () => {
+  it('teks ringkas: tanpa "Diurutkan…" dan tanpa pengocok berikutnya; arah berikutnya tetap', async () => {
+    meja = await mejaSiapMentung();
+    const dlg = await sampaiHasil(meja);
+    const teks = dlg.textContent!;
+    expect(teks).not.toContain('Diurutkan dari skor tertinggi');
+    expect(teks).not.toContain('Pengocok berikutnya');
+    expect([...dlg.querySelectorAll('p')].some((p) => /^Arah berikutnya: (searah|berbalik)( \((dibalik|lompat, tetap)\))?\.$/.test(p.textContent!.trim()))).toBe(true);
+  });
+
   it('voting berubah: diperbarui di tempat, fokus & gulir tidak direbut; tombol di kaki sticky', async () => {
     meja = await mejaSiapMentung();
     const dlg = await sampaiHasil(meja);
@@ -2172,7 +2182,7 @@ describe('petunjuk & bar atas', () => {
     expect(teksBarAtas('Offline', null, 6, true).putaran).toBe('');
     meja = new MejaUji(permainanGiliranku());
     expect(meja.akar.querySelector('.info .info-putaran')!.textContent).toMatch(/^Putaran 1/);
-    expect(meja.akar.querySelector('.info .info-jenis')!.textContent).toBe('Offline');
+    expect(meja.akar.querySelector('.info .info-jenis')!.textContent).toBe(''); // meja offline: tanpa subjudul "Offline" (audit teks, butir 8)
   });
 });
 

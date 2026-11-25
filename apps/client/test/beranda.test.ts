@@ -109,6 +109,28 @@ describe('nama wajib dan ganti seminggu sekali (#49)', () => {
     expect(document.querySelector('#toast')!.textContent).toContain('Isi namamu dulu');
   });
 
+  it('"seminggu sekali" hanya terlihat selama isian nama difokus; tanggal kunci selalu terlihat', async () => {
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    const elKet = document.querySelector<HTMLElement>('#ket-nama')!;
+    expect(elKet.hidden).toBe(true);
+    expect(isian().getAttribute('aria-describedby')).toBe('ket-nama');
+    isian().focus();
+    expect(elKet.hidden).toBe(false);
+    expect(ket()).toBe('Nama cuma bisa diganti seminggu sekali.');
+    isian().blur();
+    expect(elKet.hidden).toBe(true);
+
+    localStorage.setItem('remi.namaDiganti', JSON.stringify(Date.now() - HARI));
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    expect(document.querySelector<HTMLElement>('#ket-nama')!.hidden).toBe(false);
+    expect(ket()).toContain('Bisa ganti lagi');
+  });
+
+  it('beranda tanpa kalimat "Main bareng teman pakai kode meja…" di Main online', () => {
+    renderBeranda(document.getElementById('ui')!, aksiPalsu());
+    expect(document.querySelector('.panel-online')!.textContent).not.toContain('Main bareng teman');
+  });
+
   it('isi nama pertama kali: tersimpan tanpa konfirmasi dan tanpa jeda', async () => {
     localStorage.removeItem('remi.nama');
     const aksi = aksiPalsu();

@@ -20,7 +20,7 @@ import { _setelUlangCache } from '../src/preferensi';
 import { renderBeranda, type AksiBeranda } from '../src/ui/beranda';
 import { tutupDialogTeratas } from '../src/ui/dom';
 import { renderLobi } from '../src/ui/lobi';
-import { pasangMatchMediaPalsu } from './bantu';
+import { pasangMatchMediaPalsu, teksTerlihat } from './bantu';
 
 const aksiPalsu = (): AksiBeranda => ({
   buatMeja: vi.fn(),
@@ -80,7 +80,9 @@ describe('beranda: Atur meja', () => {
     const kaldu = isian('o-kaldu');
     expect(kaldu.type).toBe('checkbox');
     expect(kaldu.checked).toBe(false);
-    expect(kaldu.closest('label')!.textContent).toBe(TEKS_KALDU.label);
+    expect(teksTerlihat(kaldu.closest('label')!)).toBe(TEKS_KALDU.label);
+    expect(q('button[data-info="ket-kaldu"]')).not.toBeNull();
+    expect(q('#ket-kaldu')!.hidden).toBe(true);
     expect(kaldu.getAttribute('aria-describedby')).toBe('ket-kaldu');
     expect(q('#ket-kaldu')!.textContent).toBe(TEKS_KALDU.ket);
     // Kotak centangnya di dalam Atur meja, sebelum isian batas skor.
@@ -264,8 +266,9 @@ describe('lobi online', () => {
     lobi('tamu');
     expect(q('input#kaldu')).toBeNull();
     expect(q('#kaldu')!.textContent).toBe(TEKS_KALDU.mati);
-    expect(q('#kaldu')!.closest('.baris-teks')!.textContent).toBe(`${TEKS_KALDU.label}${TEKS_KALDU.mati}`);
-    expect(q('#ket-kaldu')).toBeNull();
+    expect(teksTerlihat(q('#kaldu')!.closest('.baris-teks')!)).toBe(`${TEKS_KALDU.label}${TEKS_KALDU.mati}`);
+    // Penjelasannya lewat "?" (teks tersembunyi), baik nyala maupun mati.
+    expect(q('#ket-kaldu')!.hidden).toBe(true);
     expect(q('.isian-batas-skor')).not.toBeNull();
 
     lobi('tamu', { modeKaldu: true });

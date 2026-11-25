@@ -14,6 +14,16 @@ import type { PesanKlien } from '@remi/meja';
 import type { PesanDariMeja } from '../src/koneksi';
 import { vi } from 'vitest';
 
+/**
+ * Teks yang terlihat di sebuah elemen: tanpa tombol "?" dan teks penjelasan tersembunyinya
+ * (`ui/info.ts`), yang hanya muncul di gelembung saat "?" diketuk.
+ */
+export function teksTerlihat(el: Element): string {
+  const salinan = el.cloneNode(true) as Element;
+  salinan.querySelectorAll('.tombol-info, .teks-info').forEach((x) => x.remove());
+  return salinan.textContent ?? '';
+}
+
 export interface LangkahPermainan {
   aksi: Aksi;
   sebelum: GameState;

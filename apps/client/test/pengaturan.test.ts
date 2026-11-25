@@ -39,6 +39,34 @@ describe('bukaPengaturan', () => {
     expect(aktif.tabIndex).toBe(0);
   });
 
+  it('penjelasan tiap pilihan lewat "?" (teks tersembunyi via aria-describedby), bukan teks di bawahnya', () => {
+    vi.stubGlobal('navigator', { ...navigator, vibrate: () => true });
+    bukaPengaturan({ tempoBot: { nilai: 'santai', ubah: () => {} } });
+    const d = dialog();
+    // Tidak ada keterangan terlihat di bawah pilihan; status Gerak hanya selama "Ikut sistem".
+    const terlihat = [...d.querySelectorAll<HTMLElement>('small.bantuan')].filter((s) => !s.hidden);
+    expect(terlihat.map((s) => s.textContent)).toEqual(['Setelan HP-mu sekarang: gerak penuh.']);
+    for (const k of ['suara', 'musik', 'getar', 'gerak', 'kecepatan', 'efek', 'warnaKartu', 'ukuranTeks', 'tempo', 'tutorial', 'bawaan']) {
+      const ket = d.querySelector<HTMLElement>(`#ket-${k}`);
+      expect(ket, k).not.toBeNull();
+      expect(ket!.hidden).toBe(true);
+      expect(ket!.textContent!.length).toBeGreaterThan(5);
+      expect(d.querySelector(`button[data-info="ket-${k}"]`)).not.toBeNull();
+      expect(d.querySelector(`[aria-describedby="ket-${k}"]`), k).not.toBeNull();
+      // Nama aksesibel kontrol tidak ikut memuat "?".
+      const lbl = d.querySelector(`#lbl-${k}`);
+      if (lbl) expect(lbl.textContent).not.toContain('?');
+    }
+    klik('[data-pilihan=gerak] [data-nilai=penuh]');
+    expect(d.querySelector<HTMLElement>('[data-ket-gerak]')!.hidden).toBe(true);
+  });
+
+  it('getar tidak didukung: kabarnya tetap terlihat', () => {
+    vi.stubGlobal('navigator', { ...navigator, vibrate: undefined });
+    bukaPengaturan();
+    expect(dialog().textContent).toContain('Getar nggak didukung di HP atau browser ini.');
+  });
+
   it('penggeser volume langsung mengubah preferensi', () => {
     bukaPengaturan();
     const r = dialog().querySelector<HTMLInputElement>('[data-volume=volumeMusik]')!;

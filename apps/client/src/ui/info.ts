@@ -108,7 +108,10 @@ export function bukaInfo(b: HTMLButtonElement, tahan: boolean): void {
 export function pasangInfo(doc: Document = document): void {
   if (terpasang) return;
   terpasang = true;
-  doc.addEventListener(
+  // Klik dan Escape didengar di window (fase capture), jadi selalu lebih dulu daripada penangan
+  // jendela di document (`ui/dom.ts`), berapa pun urutan pemasangannya.
+  const win: Window = doc.defaultView ?? window;
+  win.addEventListener(
     'click',
     (e) => {
       const t = e.target as Element | null;
@@ -120,11 +123,15 @@ export function pasangInfo(doc: Document = document): void {
         else bukaInfo(b, true);
         return;
       }
-      if (gelembung && !(t && gelembung.contains(t))) tutupInfo();
+      if (gelembung && !(t && gelembung.contains(t))) {
+        tutupInfo();
+        // Ketuk latar jendela selagi gelembung terbuka: cukup gelembungnya yang ditutup.
+        if (t instanceof HTMLElement && t.classList.contains('latar')) e.stopPropagation();
+      }
     },
     true,
   );
-  doc.addEventListener(
+  win.addEventListener(
     'keydown',
     (e) => {
       if (e.key !== 'Escape' || !gelembung) return;

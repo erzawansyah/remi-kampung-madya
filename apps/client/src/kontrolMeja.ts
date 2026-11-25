@@ -1896,7 +1896,7 @@ export class KontrolMeja implements AksiAdegan {
       return `${sebab} Turunkan kartu jadi dari tanganmu kalau ada (tanpa mulung), lalu tekan Selesai.`;
     }
     if (this.info?.diambilAlihBot && p.giliran === this.saya) return 'Waktu habis, giliranmu dijalankan warga kedai.';
-    if (p.giliran !== this.saya) return 'Sambil nunggu, kamu boleh memilih dan mengatur urutan kartumu.';
+    if (p.giliran !== this.saya) return '';
     if (this.pilihJumlah) return 'Ketuk kartu di buangan: kamu mungut kartu itu dan semua di atasnya.';
     if (this.mulung) {
       return this.mulung.kombinasi.length
@@ -1968,7 +1968,7 @@ export class KontrolMeja implements AksiAdegan {
       this.app.jenis === 'offline'
         ? this.app.tutorial
           ? 'Latihan'
-          : 'Offline'
+          : '' // offline: cukup nomor putaran
         : kompetisi
           ? `🏅 ${kompetisi.nama}`
           : // Nonton (#60): penonton tidak diberi kode meja.
@@ -2190,8 +2190,8 @@ export class KontrolMeja implements AksiAdegan {
       return { langkah: '<span>Giliranmu dijalankan warga kedai</span>', isi: tunggu('Dijalankan warga kedai', st.ambil.alasan) };
     }
     if (p.giliran !== this.saya) {
-      const mikir = info.botMikir === p.giliran ? ' · lagi mikir' : '';
-      return { langkah: `<span>Giliran <b>${esc(v.pemain[p.giliran].nama)}</b>${mikir}</span>`, isi: tunggu('Tunggu giliranmu', st.ambil.alasan) };
+      // Tanpa pil "Giliran X": bingkai panel yang jalan (dan 'lagi mikir…' di panelnya) sudah cukup.
+      return { langkah: '', isi: tunggu('Tunggu giliranmu', st.ambil.alasan) };
     }
 
     // Giliranku. Penunjuk langkah: ① Ambil → ② Turunkan (boleh) → ③ Buang.
@@ -2958,8 +2958,6 @@ export class KontrolMeja implements AksiAdegan {
     this.hasilDianimasikan = h.nomor;
     const baris = `<div data-hasil-rincian>${htmlRincianPutaran(h, (i) => v.pemain[i].nama, this.saya, terbuka)}</div>`;
     const cara = esc(teksCaraSelesai(h, (i) => v.pemain[i].nama));
-    const min = Math.min(...v.skor);
-    const kandidat = v.skor.map((s, i) => (s === min ? i : -1)).filter((i) => i >= 0);
     const arah = `Arah berikutnya: ${h.arahBerikutnya === 1 ? 'searah' : 'berbalik'}${h.cara === 'mentung' ? (h.dibalik ? ' (dibalik)' : ' (lompat, tetap)') : ''}.`;
     this.htmlLanjutTerpasang = lanjut;
     this.htmlLedekTerpasang = ledek;
@@ -2968,9 +2966,8 @@ export class KontrolMeja implements AksiAdegan {
        <h2>Hasil putaran ${h.nomor}</h2>
        ${this.tutorial?.htmlCatatan('skor') ?? ''}
        <p class="rapat">${cara}</p>
-       <p class="redup rapat">Diurutkan dari skor tertinggi. Ketuk nama untuk melihat rinciannya.</p>
        ${baris}
-       <p class="redup rapat">${arah} Pengocok berikutnya: skor terendah (${kandidat.map((i) => esc(v.pemain[i].nama)).join(', ')}).</p>
+       <p class="redup rapat">${arah}</p>
        <div class="wadah-ledek" data-ledek-wadah>${ledek}</div>
        <div class="kaki-dialog aksi-hasil">
          <p class="info-kaldu${infoKaldu ? '' : ' tersembunyi'}" data-info-kaldu>${esc(infoKaldu)}</p>

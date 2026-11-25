@@ -27,8 +27,19 @@
   gap: 2px;
   font-weight: 600;
 }
-.atur-baris > label {
+.atur-baris > label,
+.atur-baris > .label-info > label {
   cursor: pointer;
+}
+/* Nama pilihan + "?" (ui/info.ts) sebaris */
+.atur-baris > .label-info {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--ruang-1);
+}
+.atur-blok > .label-info {
+  align-self: flex-start;
+  font-weight: 600;
 }
 .atur-baris .bantuan {
   font-weight: 400;
