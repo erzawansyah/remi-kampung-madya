@@ -23,7 +23,7 @@
 //   E2E_OPSIONAL=1                     Chrome tidak ditemukan → exit 0 (untuk CI yang opsional)
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +32,8 @@ const DI_SINI = dirname(fileURLToPath(import.meta.url));
 const KLIEN = resolve(DI_SINI, '..');
 const HASIL = join(DI_SINI, 'hasil');
 const DIST = join(HASIL, 'dist');
+/** Versi aplikasi yang diuji: dianggap sudah dilihat, supaya dialog "Yang baru" (0.8.0) tidak menghalangi langkah uji. */
+const VERSI = JSON.parse(readFileSync(resolve(KLIEN, '..', '..', 'package.json'), 'utf8')).version;
 
 const argumen = new Map(
   process.argv.slice(2).map((a) => {
@@ -287,14 +289,15 @@ async function jalankanPerangkat(chromium, executablePath, url, nama) {
   try {
     await langkahKe('beranda', async () => {
       await page.goto(url, { waitUntil: 'load' });
-      await page.evaluate(() => {
+      await page.evaluate((versi) => {
         localStorage.clear();
         // Tutorial dianggap sudah dilihat supaya beranda langsung ke menu main.
         localStorage.setItem('remi.preferensi', JSON.stringify({ tutorialSelesai: true }));
+        localStorage.setItem('remi.versiDilihat', JSON.stringify(versi));
         // Tombol pasang melayang (keputusan #46) tidak ikut alur ini: punya alur sendiri ("pasang").
         // tundaSampai ikut diisi untuk berjaga-jaga kalau Chrome menawarkan prompt (yang menghapus sudahPasang).
         localStorage.setItem('remi.tawaranPasang', JSON.stringify({ sudahPasang: Date.now(), tundaSampai: Date.now() + 2 * 24 * 3600e3 }));
-      });
+      }, VERSI);
       await page.reload({ waitUntil: 'load' });
       await page.locator('#mulai-bot').waitFor({ state: 'visible', timeout: 20_000 });
       // Tunggu event 'console' penanda secara deterministik (bukan jeda tetap): event Playwright
@@ -561,10 +564,11 @@ async function jalankanTawaranPasang(chromium, executablePath, url) {
       masalah.push(`${label}: console.error: ${teks.slice(0, 300)}`);
     });
     await page.goto(url, { waitUntil: 'load' });
-    await page.evaluate((preferensi) => {
+    await page.evaluate(([preferensi, versi]) => {
       localStorage.clear();
       localStorage.setItem('remi.preferensi', JSON.stringify(preferensi));
-    }, preferensi);
+      localStorage.setItem('remi.versiDilihat', JSON.stringify(versi));
+    }, [preferensi, VERSI]);
     await page.reload({ waitUntil: 'load' });
     await page.locator('#mulai-bot').waitFor({ state: 'visible', timeout: 20_000 });
     return { ctx, page };
