@@ -27,6 +27,7 @@ import { bangunkanGame, buatGame, tidurkanGame, type PenampungGame } from './gam
 import { KontrolMeja, masihGiliranku, type AppUntukMeja, type PesanHasilKompetisi } from './kontrolMeja';
 import { aturLaken } from './game/warnaMeja';
 import {
+  adalahPemainBaru,
   konfirmasiTimpaSimpanan,
   renderBeranda,
   renderDaftarPublik,
@@ -88,6 +89,7 @@ import {
   type PenyimpananSesi,
 } from './pembaruan';
 import { BUILD_SHA, BUILD_WAKTU, labelVersi, VERSI } from './versi';
+import { putuskanYangBaru } from './yangBaru';
 
 // Paling awal: jawab sapaan SW baru (jembatan transisi 0.1 → 0.2, lihat public/sw-transisi.js). Kalau
 // terlambat, halaman ini dikira versi lama dan dimuat ulang begitu SW baru aktif.
@@ -214,6 +216,10 @@ class Aplikasi implements AppUntukMeja {
    * ulang) dan belum dijawab 'tontonan'. Error yang datang selama itu = tontonnya ditolak.
    */
   private menungguTonton = false;
+  /** "Yang baru" sudah beres di halaman ini (ditampilkan, disimpan diam-diam, atau tidak perlu). */
+  private yangBaruBeres = false;
+  /** Modul jendela "Yang baru" sedang dimuat. */
+  private yangBaruDimuat = false;
 
   get jenis(): 'online' | 'offline' {
     return this.koneksi?.jenis ?? 'online';
@@ -926,6 +932,57 @@ class Aplikasi implements AppUntukMeja {
     );
     // Versi baru yang tertunda (mis. keluar dari meja di tengah putaran) dipasang/ditawarkan sekarang.
     this.nilaiPembaruan();
+    this.cekYangBaru();
+  }
+
+  // ---------- "Yang baru" sesudah pembaruan (permintaan pemilik, 0.8.0) ----------
+
+  /**
+   * Beranda benar-benar tampil dan pemain bebas: tidak sedang melanjutkan meja online (sesi tersimpan),
+   * tidak menunggu jawaban server, tidak di meja offline, dan tidak ada jendela lain.
+   */
+  private bolehYangBaru(): boolean {
+    return (
+      this.layar === 'beranda' &&
+      !!this.beranda &&
+      !simpan.sesi() &&
+      !this.niatOnline &&
+      this.koneksi?.jenis !== 'offline' &&
+      !adaJendelaTerbuka()
+    );
+  }
+
+  /**
+   * Sekali per versi, hanya di beranda: jendela "Yang baru di versi X" (ui/yangBaru.ts). Pemain baru
+   * (tawaran latihan tampil) cukup disimpan versinya tanpa jendela. Kalau aplikasi dibuka langsung ke
+   * meja/lobi, ditunggu sampai beranda tampil lagi. Modul gagal dimuat = dicoba lagi lain kali, diam-diam.
+   */
+  private cekYangBaru() {
+    if (this.yangBaruBeres || this.yangBaruDimuat || !this.bolehYangBaru()) return;
+    const k = putuskanYangBaru(simpan.versiDilihat(), VERSI, adalahPemainBaru());
+    if (k.jenis !== 'tampil') {
+      if (k.jenis === 'diam') simpan.setVersiDilihat(VERSI);
+      this.yangBaruBeres = true;
+      return;
+    }
+    this.yangBaruDimuat = true;
+    import('./ui/yangBaru').then(
+      (m) => {
+        this.yangBaruDimuat = false;
+        if (this.yangBaruBeres) return;
+        const daftar = m.daftarYangBaru(k.dari, VERSI);
+        if (daftar.length && !this.bolehYangBaru()) return;
+        this.yangBaruBeres = true;
+        simpan.setVersiDilihat(VERSI);
+        if (!daftar.length) return;
+        m.bukaYangBaru(VERSI, daftar, {
+          catatanLengkap: () => bukaTentang({ usulFitur: () => bukaUsulan(), bukaCatatan: true }),
+        });
+      },
+      () => {
+        this.yangBaruDimuat = false;
+      },
+    );
   }
 
   // ---------- pasang aplikasi (keputusan #46, hanya beranda) ----------

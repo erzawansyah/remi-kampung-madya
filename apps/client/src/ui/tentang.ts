@@ -265,8 +265,9 @@ function daftarPerubahan(pemain: string): { judul: string; tebal: boolean }[] {
     const tebal = /^\*\*(.+?)\*\*/.exec(isi);
     // Tanpa lookbehind regex: Safari lama (iOS < 16.4) gagal mem-parse seluruh modul karenanya.
     const polos = teksPolos(isi);
-    const akhir = /[.!?:](?:\s|$)/.exec(polos);
-    let judul = tebal ? teksPolos(tebal[1]!).replace(/[.:,;]+$/, '') : (akhir ? polos.slice(0, akhir.index) : polos);
+    // Akhir kalimat = tanda baca yang menempel ke kata (bukan "Ikon **?** di samping…", yang jadi "Ikon ? di").
+    const akhir = /\S[.!?:](?:\s|$)/.exec(polos);
+    let judul = tebal ? teksPolos(tebal[1]!).replace(/[.:,;]+$/, '') : (akhir ? polos.slice(0, akhir.index + 1) : polos);
     if (judul.length > MAKS_JUDUL_PERUBAHAN) {
       const potong = judul.slice(0, MAKS_JUDUL_PERUBAHAN);
       judul = `${potong.slice(0, Math.max(potong.lastIndexOf(' '), 40)).replace(/[\s,;:(]+$/, '')}…`;
@@ -306,11 +307,16 @@ export interface OpsiTentang {
    * meja tidak ada, supaya usulan tidak pernah muncul di tengah permainan.
    */
   usulFitur?: () => void;
+  /** Langsung buka "Catatan perubahan" dan gulir ke sana (dari "Catatan lengkap" di jendela Yang baru). */
+  bukaCatatan?: boolean;
 }
 
 export function bukaTentang(opsi: OpsiTentang = {}): void {
   const ada = document.querySelector<HTMLElement>('.dialog.tentang');
-  if (ada) return ada.focus();
+  if (ada) {
+    if (opsi.bukaCatatan) tampilkanCatatan(ada);
+    return ada.focus();
+  }
   const waktu = waktuBuild();
   bukaDialog(
     `<div class="kepala-dialog">
@@ -366,7 +372,16 @@ export function bukaTentang(opsi: OpsiTentang = {}): void {
       });
       // Dialog Usul fitur menumpuk di atas Tentang; sesudah ditutup, pemain kembali ke Tentang.
       d.querySelector('[data-usulan]')?.addEventListener('click', () => opsi.usulFitur?.());
+      if (opsi.bukaCatatan) tampilkanCatatan(d);
     },
     { kelas: 'lebar tentang' },
   );
+}
+
+function tampilkanCatatan(d: HTMLElement): void {
+  const catatan = d.querySelector<HTMLDetailsElement>('.tentang-changelog');
+  if (!catatan) return;
+  catatan.open = true;
+  // Sesudah jendela terpasang dan fokus awal dipasang bukaDialog, baru digulir ke Catatan perubahan.
+  requestAnimationFrame(() => catatan.scrollIntoView?.({ block: 'start' }));
 }
