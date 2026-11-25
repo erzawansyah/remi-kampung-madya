@@ -32,6 +32,15 @@ export interface PengaturanMeja {
    * Hanya bisa diubah di lobi. Meja kompetisi tidak pernah bisa ditonton, apa pun nilainya.
    */
   tanpaPenonton?: boolean;
+  /**
+   * Acak urutan duduk (#62): true = urutan duduk tetap seperti urutan masuk lobi, dan host memilih
+   * pengocok pertama. Bawaan (tidak ada) = kursi diacak waktu permainan dimulai, dan yang dapat
+   * kursi pertama ngocok putaran pertama. Sengaja tidak ada di PENGATURAN_BAWAAN (seperti
+   * tanpaPenonton). Hanya bisa diubah di lobi; meja kompetisi selalu diacak. Pengacakan hanya jalan
+   * kalau meja diberi sumber acak (`OpsiMeja.acakDuduk`): server dan meja offline memberinya, test
+   * dan golden tidak.
+   */
+  urutanTetap?: boolean;
 }
 
 export type TempoBot = 'santai' | 'normal' | 'cepat';

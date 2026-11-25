@@ -45,7 +45,7 @@ class JamUji implements Penjadwal {
 
 let server: ServerRemi | null = null;
 async function nyalakan(opsi: Partial<OpsiServer> = {}) {
-  server = await jalankanServer({ port: 0, host: '127.0.0.1', jedaBotMs: 5, log: () => undefined, ...opsi });
+  server = await jalankanServer({ acakDuduk: false, port: 0, host: '127.0.0.1', jedaBotMs: 5, log: () => undefined, ...opsi });
   return server;
 }
 afterEach(async () => {

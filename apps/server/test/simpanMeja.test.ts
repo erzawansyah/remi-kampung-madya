@@ -81,7 +81,7 @@ async function nyalakan(path: string, opsi: Partial<OpsiServer> = {}) {
   const db = new DatabaseSync(path);
   const riwayat = bukaRiwayat(db);
   const log: string[] = [];
-  const server = await jalankanServer({
+  const server = await jalankanServer({ acakDuduk: false,
     port: 0,
     host: '127.0.0.1',
     jedaBotMs: 5,

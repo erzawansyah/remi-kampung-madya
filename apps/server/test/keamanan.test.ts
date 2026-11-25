@@ -13,7 +13,7 @@ import { BAWAAN_MAKS_SAMBUNGAN_PER_IP, jalankanServer, type OpsiServer, type Ser
 let server: ServerRemi | null = null;
 const log: unknown[][] = [];
 async function nyalakan(opsi: Partial<OpsiServer> = {}) {
-  server = await jalankanServer({ port: 0, host: '127.0.0.1', jedaBotMs: 5, log: (...x) => log.push(x), ...opsi });
+  server = await jalankanServer({ acakDuduk: false, port: 0, host: '127.0.0.1', jedaBotMs: 5, log: (...x) => log.push(x), ...opsi });
   return server;
 }
 afterEach(async () => {

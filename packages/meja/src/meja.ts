@@ -189,6 +189,12 @@ export interface OpsiMeja {
   /** Sumber acak untuk celetukan bot (bisa diganti di test). Tidak dipakai untuk nama lawan. */
   acak?: () => number;
   /**
+   * Sumber acak urutan duduk (#62). Kosong = kursi tidak pernah diacak (test, golden, latihan);
+   * server dan meja offline memberi Math.random. Sengaja terpisah dari seed permainan supaya
+   * permainan ber-seed tetap sama.
+   */
+  acakDuduk?: () => number;
+  /**
    * Urutan calon nama lawan otomatis (warga kedai). Kosong = NAMA_LAWAN_BAWAAN. Server dan meja
    * offline mengirim daftar yang sudah diacak; latihan dengan panduan memakai urutan tetap.
    * Sengaja di opsi (bukan PengaturanMeja/DataMeja): nama yang sudah dipilih tersimpan di kursi.
@@ -1062,6 +1068,7 @@ export class Meja {
     if (this.d.kompetisi && ubahanTerkunci(this.d.kompetisi.pengaturan, ubah).length) {
       galat('Aturan meja kompetisi ikut kompetisinya, nggak bisa diubah.');
     }
+    if (this.d.kompetisi && ubah.urutanTetap === true) galat('Urutan duduk di meja kompetisi selalu diacak, Bos.');
     const baru = { ...this.d.pengaturan, ...ubah };
     const n = baru.jumlahPemain;
     if (n < this.d.kursi.length) {
@@ -1089,6 +1096,8 @@ export class Meja {
     if (this.d.kompetisi && this.d.kursi.some((k) => k.jenis !== 'manusia')) galat('Masih ada kursi kosong. Tunggu peserta lain masuk.');
     if (this.d.kursi.some((k) => k.jenis === 'kosong')) galat('Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.');
     hapusTandaKeluar(this.d.kursi);
+    // Kursi diacak (#62): yang dapat kursi pertama ngocok putaran pertama, pilihan host diabaikan.
+    if (this.acakUrutanDuduk()) pengocok = 0;
     const p = this.d.pengaturan;
     const kaldu = p.modeKaldu === true;
     const game = buatPermainan({
@@ -1114,6 +1123,43 @@ export class Meja {
     // Meja kompetisi: waktu mulai dicatat (dihitung kalau dimulai selagi kompetisinya berjalan).
     if (this.d.kompetisi) this.d.kompetisi.mulaiPada = this.penjadwal.sekarang();
     this.terapkan(game, { jenis: 'mulaiPutaran', pengocok });
+  }
+
+  /**
+   * Acak urutan duduk (#62) waktu permainan baru dimulai dari lobi. Jalan kalau meja diberi sumber
+   * acak dan host tidak mematikannya (meja kompetisi selalu diacak). Semua catatan yang dikunci
+   * nomor kursi ikut dipindahkan, jadi pemain membawa semua miliknya ke kursi barunya. True kalau
+   * kursi diacak.
+   */
+  private acakUrutanDuduk(): boolean {
+    const acakDuduk = this.opsi.acakDuduk;
+    if (!acakDuduk || (!this.d.kompetisi && this.d.pengaturan.urutanTetap === true)) return false;
+    const n = this.d.kursi.length;
+    // urut[kursiBaru] = kursiLama (Fisher–Yates).
+    const urut = Array.from({ length: n }, (_, i) => i);
+    for (let i = n - 1; i > 0; i--) {
+      const j = Math.floor(acakDuduk() * (i + 1)) % (i + 1);
+      [urut[i], urut[j]] = [urut[j]!, urut[i]!];
+    }
+    const baru = new Map(urut.map((lama, b) => [lama, b]));
+    const ke = (i: number) => baru.get(i) ?? i;
+    const pindah = <T>(m: Map<number, T>) => new Map([...m].map(([i, v]) => [ke(i), v] as const));
+    this.d.kursi = urut.map((lama) => this.d.kursi[lama]!);
+    this.d.host = ke(this.d.host);
+    this.emoteTerakhir = pindah(this.emoteTerakhir);
+    this.putusSejak = pindah(this.putusSejak);
+    this.dijalankanWarga = pindah(this.dijalankanWarga);
+    this.jokerSambungUlang = pindah(this.jokerSambungUlang);
+    this.jokerHabisWaktu = pindah(this.jokerHabisWaktu);
+    this.siapLanjut = new Set([...this.siapLanjut].map(ke));
+    for (const [k, m] of this.tolakLihat) this.tolakLihat.set(k, pindah(m));
+    for (const p of this.penonton.values()) {
+      if (p.melihat !== null) p.melihat = ke(p.melihat);
+      p.minta = pindah(p.minta);
+    }
+    this.jadwalBot = null;
+    this.botMikir = null;
+    return true;
   }
 
   private putaranBerikut(oleh: number, pengocok?: number): void {

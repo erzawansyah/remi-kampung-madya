@@ -167,6 +167,8 @@ const rapikanPengaturanOffline: Rapikan<Partial<PengaturanMeja>> = (x) => {
   if ('levelBot' in p) p.levelBot = rapikanLevel(p.levelBot);
   // Mode kaldu (#42): hanya boolean yang dipakai; bentuk lain dibuang (jatuh ke bawaan: mati).
   if ('modeKaldu' in p && typeof p.modeKaldu !== 'boolean') delete p.modeKaldu;
+  // Acak urutan duduk (#62): bentuk lain dibuang (jatuh ke bawaan: diacak).
+  if ('urutanTetap' in p && typeof p.urutanTetap !== 'boolean') delete p.urutanTetap;
   for (const [k, arah] of [
     ['batasSkorAtas', 'atas'],
     ['batasSkorBawah', 'bawah'],

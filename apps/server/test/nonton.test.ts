@@ -43,7 +43,7 @@ class Klien {
 
 let server: ServerRemi;
 beforeAll(async () => {
-  server = await jalankanServer({ port: 0, host: '127.0.0.1', jedaBotMs: 5, log: () => undefined });
+  server = await jalankanServer({ acakDuduk: false, port: 0, host: '127.0.0.1', jedaBotMs: 5, log: () => undefined });
 });
 afterAll(async () => {
   await server.tutup();
@@ -211,7 +211,7 @@ describe('nonton (#60)', () => {
 describe('nonton (#60): kode tonton dibuang bersama mejanya', () => {
   it('meja yang dihapus pembersih ikut membuang kode tontonnya', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-    const srv = await jalankanServer({
+    const srv = await jalankanServer({ acakDuduk: false,
       port: 0,
       host: '127.0.0.1',
       jedaBotMs: 5,
@@ -255,7 +255,7 @@ describe('nonton (#60): kode tonton selamat dari restart', () => {
   async function nyalakan(path: string) {
     const db = new DatabaseSync(path);
     const riwayat = bukaRiwayat(db);
-    const srv = await jalankanServer({ port: 0, host: '127.0.0.1', jedaBotMs: 5, riwayat, log: () => undefined });
+    const srv = await jalankanServer({ acakDuduk: false, port: 0, host: '127.0.0.1', jedaBotMs: 5, riwayat, log: () => undefined });
     return {
       srv,
       riwayat,

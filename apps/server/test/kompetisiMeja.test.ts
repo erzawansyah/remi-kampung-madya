@@ -47,7 +47,7 @@ class JamUji implements Penjadwal {
 const dibuka: { server: ServerRemi; riwayat: PenyimpanRiwayat }[] = [];
 async function nyalakan(opsi: Partial<OpsiServer> = {}) {
   const riwayat = bukaRiwayat(':memory:');
-  const server = await jalankanServer({ port: 0, host: '127.0.0.1', jedaBotMs: 5, riwayat, log: () => undefined, ...opsi });
+  const server = await jalankanServer({ acakDuduk: false, port: 0, host: '127.0.0.1', jedaBotMs: 5, riwayat, log: () => undefined, ...opsi });
   dibuka.push({ server, riwayat });
   return { server, riwayat, alamat: `http://127.0.0.1:${server.port}` };
 }

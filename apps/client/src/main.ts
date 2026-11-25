@@ -67,6 +67,7 @@ import {
   tutupSemuaJendela,
   umumkan,
 } from './ui/dom';
+import { pasangInfo } from './ui/info';
 import { siapkanAudio, suasanaMusik } from './efek/suara';
 import { adaJaringan } from './jaringan';
 import { PESAN_MEJA_MASIH_PUTUS, renderGalatMeja, renderPemuatMeja } from './ui/pemuatMeja';
@@ -1273,6 +1274,7 @@ class Aplikasi implements AppUntukMeja {
 }
 
 pasangLandmarkUtama();
+pasangInfo();
 const aplikasi = new Aplikasi();
 aplikasi.mulai();
 

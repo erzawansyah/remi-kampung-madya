@@ -188,6 +188,10 @@ export function validasiPengaturan(x: unknown): Partial<PengaturanMeja> | null {
     if (typeof x.tanpaPenonton !== 'boolean') return null;
     hasil.tanpaPenonton = x.tanpaPenonton;
   }
+  if (x.urutanTetap !== undefined) {
+    if (typeof x.urutanTetap !== 'boolean') return null;
+    hasil.urutanTetap = x.urutanTetap;
+  }
   return hasil;
 }
 

@@ -163,6 +163,11 @@ export interface OpsiServer {
    * (2 detik); untuk test.
    */
   jedaMulaiKompetisiMs?: number;
+  /**
+   * Sumber acak urutan duduk (#62). Bawaan Math.random; false = kursi tidak pernah diacak (test yang
+   * bergantung pada nomor kursi).
+   */
+  acakDuduk?: (() => number) | false;
   /** Pengajuan kompetisi yang masih menunggu peserta: maksimal per jaringan (bawaan 3) dan total (bawaan 50). */
   maksPengajuanPerIp?: number;
   maksPengajuan?: number;
@@ -976,6 +981,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     // Meja kompetisi: mulai sendiri dan menerima peserta baru hanya selama kompetisinya berjalan.
     kompetisiBerjalan: (k: string) => opsi.riwayat?.kompetisi.status(k, jam()) === 'berjalan',
     buatSeed: () => randomBytes(4).readInt32LE(0),
+    ...(opsi.acakDuduk === false ? {} : { acakDuduk: opsi.acakDuduk ?? Math.random }),
     // Nama warga kedai: urutan acak per meja, supaya lawan pertama tidak selalu "Kipas Dua".
     namaLawan: namaLawanAcak(),
     // Disimpan ke database (tertunda sebentar) supaya meja selamat dari restart/deploy.

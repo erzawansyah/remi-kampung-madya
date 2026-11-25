@@ -134,8 +134,9 @@ describe('KoneksiOffline: simpanan di HP', () => {
   });
 
   it('tutup() saat giliran bot: jeda bot ikut berhenti, tidak ada view sesudahnya, simpanan tidak berubah', async () => {
-    // Giliran pertama di kursi bot, jadi saat tutup() ada timer "bot mikir" yang menunggu.
-    const k = baru({ jumlahPemain: 3 }, 1);
+    // Giliran pertama di kursi bot, jadi saat tutup() ada timer "bot mikir" yang menunggu. Urutan duduk
+    // tetap (#62) supaya pengocok pilihan (kursi 1) dipakai.
+    const k = baru({ jumlahPemain: 3, urutanTetap: true }, 1);
     const pesan: PesanDariMeja[] = [];
     k.saatPesan((p) => pesan.push(p));
     k.kirim({ t: 'siapJoker' });
