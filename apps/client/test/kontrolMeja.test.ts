@@ -40,8 +40,8 @@ import {
   type GameState,
   type ViewPemain,
 } from '@remi/engine';
-import { MAKS_PESAN, PENGATURAN_BAWAAN, type InfoMeja, type PesanKlien } from '@remi/meja';
-import { Obrolan } from '../src/ui/obrolan';
+import { MAKS_PESAN, PENGATURAN_BAWAAN, rapikanPesan, type InfoMeja, type PesanKlien } from '@remi/meja';
+import { MAKS_ISIAN_PESAN, Obrolan } from '../src/ui/obrolan';
 import { ctx, id, kartuJadi, semuaSelesaiSusun, skenario, spek, type Skenario } from '../../../packages/engine/test/bantu';
 
 vi.mock('../src/efek/suara', () => ({ bunyi: vi.fn(), getar: vi.fn() }));
@@ -1329,7 +1329,9 @@ describe('lembar obrolan (0.7.0; dulu palet emote #48)', () => {
     for (const isi of ['Gedein!', 'Buruan!', 'Lumayan!', 'CEKI!', 'Njir lah!', 'Give me!', 'GG']) expect(celetukan).toContain(isi);
     expect(lembar.querySelectorAll('.palet-emoji button').length).toBeGreaterThanOrEqual(20);
     const isian = lembar.querySelector<HTMLInputElement>('.obrolan-tulis input')!;
-    expect(isian.maxLength).toBe(MAKS_PESAN);
+    expect(isian.maxLength).toBe(MAKS_ISIAN_PESAN);
+    // Pesan terpanjang yang masih diterima meja (MAKS_PESAN emoji keluarga) tidak dipotong isian.
+    expect(isian.maxLength).toBeGreaterThanOrEqual(rapikanPesan('👨\u200d👩\u200d👧'.repeat(MAKS_PESAN))!.length);
     expect(isian.getAttribute('enterkeyhint')).toBe('send');
     expect(lembar.querySelector('.obrolan-kosong')).not.toBeNull();
     // Pesan cepat: terkirim dan lembar tertutup (reaksi kilat seperti palet lama).
@@ -1436,6 +1438,61 @@ describe('lembar obrolan (0.7.0; dulu palet emote #48)', () => {
     buka(); // tutup
     for (let i = 0; i < 12; i++) obrolan.tambah({ nama: 'Budi', isi: `p${i}`, w: 5 + i, milikku: false });
     expect(lencana.textContent).toBe('9+');
+  });
+
+  it('dibuka: daftar digulir ke pesan terbaru sesudah lembar terpasang di dokumen', () => {
+    const obrolan = new Obrolan();
+    for (let i = 0; i < 20; i++) obrolan.tambah({ nama: 'Budi', isi: `p${i}`, w: i, milikku: false });
+    meja = new MejaUji(permainanGiliranku(), {}, { obrolan });
+    // Tanpa tata letak (happy-dom), catat apakah daftar sudah di dokumen saat scrollTop ditulis.
+    const tulis: boolean[] = [];
+    Object.defineProperty(HTMLOListElement.prototype, 'scrollTop', {
+      configurable: true,
+      get: () => 0,
+      set(this: HTMLElement) {
+        tulis.push(this.isConnected);
+      },
+    });
+    try {
+      buka();
+    } finally {
+      delete (HTMLOListElement.prototype as { scrollTop?: number }).scrollTop;
+    }
+    expect(tulis.length).toBeGreaterThan(0);
+    expect(tulis.every(Boolean)).toBe(true);
+  });
+
+  it('emote selama animasi: baris obrolan dan lencana ikut ditunda bersama gelembungnya', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      const obrolan = new Obrolan();
+      meja = new MejaUji(permainanGiliranku(), {}, { obrolan });
+      const lencana = meja.akar.querySelector<HTMLElement>('[data-a=obrolan] .lencana-baru')!;
+      const k = meja.kontrol as unknown as { animasi: boolean };
+      k.animasi = true; // mis. pentungan belum terbuka
+      meja.kontrol.terimaEmote(1, 'Waduh!', { nama: 'Budi', isi: 'Waduh!', w: 1, milikku: false });
+      expect(obrolan.daftar).toHaveLength(0);
+      expect(lencana.classList.contains('tersembunyi')).toBe(true);
+      expect(meja.akar.querySelector('.gelembung')).toBeNull();
+      k.animasi = false;
+      vi.advanceTimersByTime(4000);
+      expect(obrolan.daftar.map((b) => b.isi)).toEqual(['Waduh!']);
+      expect(lencana.textContent).toBe('1');
+      // Tanpa animasi: langsung.
+      meja.kontrol.terimaEmote(1, 'GG', { nama: 'Budi', isi: 'GG', w: 2, milikku: false });
+      expect(obrolan.daftar.map((b) => b.isi)).toEqual(['Waduh!', 'GG']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('dihancurkan selagi emote tertunda: barisnya tetap masuk obrolan', () => {
+    const obrolan = new Obrolan();
+    const m = new MejaUji(permainanGiliranku(), {}, { obrolan });
+    (m.kontrol as unknown as { animasi: boolean }).animasi = true;
+    m.kontrol.terimaEmote(1, 'GG', { nama: 'Budi', isi: 'GG', w: 1, milikku: false });
+    m.hancurkan();
+    expect(obrolan.daftar.map((b) => b.isi)).toEqual(['GG']);
   });
 
   it('penonton (#60): tombol obrolan tidak ada', () => {

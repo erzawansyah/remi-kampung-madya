@@ -67,7 +67,7 @@ import { TEKS_TONTONAN } from './konten/tontonan';
 import { TEKS_TURUNKAN } from './konten/turunkan';
 import { TEKS_PENGINGAT_SUSUN } from './konten/susunAkhir';
 import { TEKS_OBROLAN, teksBelumDibaca } from './konten/obrolan';
-import { htmlPanelObrolan, Obrolan, pasangPanelObrolan, type PeristiwaObrolan } from './ui/obrolan';
+import { htmlPanelObrolan, Obrolan, pasangPanelObrolan, type BarisObrolan, type PeristiwaObrolan } from './ui/obrolan';
 import { simpan } from './penyimpanan';
 import { gerakDikurangi } from './preferensi';
 import { durasi } from './gerak';
@@ -588,7 +588,7 @@ export class KontrolMeja implements AksiAdegan {
   private timerAksi = new Map<number, ReturnType<typeof setTimeout>>();
   private giliranSayaSebelumnya = false;
   private hancur = false;
-  private emoteTertunda: [number, string][] = [];
+  private emoteTertunda: [number, string, BarisObrolan | undefined][] = [];
   private timerDetak: ReturnType<typeof setInterval> | null = null;
   /** Klasemen akhir sudah ditampilkan untuk permainan yang selesai ini. */
   private selesaiDitampilkan = false;
@@ -773,6 +773,8 @@ export class KontrolMeja implements AksiAdegan {
   hancurkan() {
     this.hancur = true;
     this.lepasDengarObrolan();
+    // Baris obrolan yang masih menunggu animasi tetap masuk obrolan meja ini (tanpa gelembung).
+    for (const [, , baris] of this.emoteTertunda.splice(0)) if (baris) this.obrolan.tambah(baris);
     this.lepasPanelObrolan?.();
     this.lepasPanelObrolan = null;
     if (this.modePenonton) delete document.documentElement.dataset.penonton;
@@ -2666,6 +2668,9 @@ export class KontrolMeja implements AksiAdegan {
     el.innerHTML = `<div class="kepala-obrolan"><h2>${esc(TEKS_OBROLAN.judul)}</h2><button type="button" class="tombol-ikon kecil" data-tutup aria-label="${esc(TEKS_OBROLAN.tutup)}"><span aria-hidden="true">✕</span></button></div>
       ${htmlPanelObrolan({ susunan: 'lembar', idIsian: 'isian-obrolan-meja' })}`;
     el.querySelector('[data-tutup]')!.addEventListener('click', () => this.tutupObrolan(true));
+    // Dipasang ke dokumen dulu: gulir ke pesan terbaru (atau posisi tersimpan) tidak berefek pada elemen
+    // yang belum punya tata letak.
+    this.akar.appendChild(el);
     this.lepasPanelObrolan?.();
     this.lepasPanelObrolan = pasangPanelObrolan(el, {
       obrolan: this.obrolan,
@@ -2684,7 +2689,6 @@ export class KontrolMeja implements AksiAdegan {
         this.tutupObrolan(true);
       }
     });
-    this.akar.appendChild(el);
     this.belumDibaca = 0;
     this.aturLencanaObrolan();
     this.elAtas.querySelector('[data-a=obrolan]')?.setAttribute('aria-expanded', 'true');
@@ -2736,19 +2740,30 @@ export class KontrolMeja implements AksiAdegan {
     if (milikku) umumkan(`${TEKS_KOMPETISI.judulHasil}: ${teksHasilKompetisi(milikku, h.minMain, h.jumlahPeringkat)}`);
   }
 
-  /** Emote masuk. Kalau animasi sedang berjalan, ditunda sebentar supaya tidak mendahului kejadiannya. */
-  terimaEmote(kursi: number, isi: string) {
-    if (this.hancur) return;
+  /**
+   * Emote masuk. Kalau animasi sedang berjalan, ditunda sebentar supaya tidak mendahului kejadiannya
+   * (mis. celetukan "Waduh!" sebelum pentungan terbuka). `baris` = baris obrolannya: masuk obrolan
+   * (dan lencana 💬) bersamaan dengan gelembungnya, jadi ikut tertunda juga.
+   */
+  terimaEmote(kursi: number, isi: string, baris?: BarisObrolan) {
+    if (this.hancur) {
+      if (baris) this.obrolan.tambah(baris);
+      return;
+    }
     if (this.animasi) {
-      this.emoteTertunda.push([kursi, isi]);
+      this.emoteTertunda.push([kursi, isi, baris]);
       setTimeout(() => this.lepasEmoteTertunda(), 4000);
       return;
     }
+    if (baris) this.obrolan.tambah(baris);
     this.gelembung(kursi, isi);
   }
 
   private lepasEmoteTertunda() {
-    for (const [kursi, isi] of this.emoteTertunda.splice(0)) this.gelembung(kursi, isi);
+    for (const [kursi, isi, baris] of this.emoteTertunda.splice(0)) {
+      if (baris) this.obrolan.tambah(baris);
+      this.gelembung(kursi, isi);
+    }
   }
 
   /**

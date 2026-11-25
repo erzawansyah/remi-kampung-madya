@@ -743,10 +743,14 @@ class Aplikasi implements AppUntukMeja {
         // Penonton (#60) tidak ikut obrolan (meja juga tidak pernah mengirimnya ke penonton).
         if (this.tontonan) break;
         const nama = this.info?.kursi[p.kursi]?.nama;
-        if (nama !== undefined && typeof p.isi === 'string') {
-          this.obrolan.tambah({ nama, isi: p.isi, w: Date.now(), milikku: p.kursi === this.info?.kursiSaya });
-        }
-        this.kontrol?.terimaEmote(p.kursi, p.isi);
+        const baris =
+          nama !== undefined && typeof p.isi === 'string'
+            ? { nama, isi: p.isi, w: Date.now(), milikku: p.kursi === this.info?.kursiSaya }
+            : undefined;
+        // Di meja, barisnya masuk obrolan bersamaan dengan gelembungnya (ikut ditunda selama animasi,
+        // supaya celetukan tidak mendahului pentungan yang belum terbuka). Di lobi tidak ada animasi.
+        if (this.kontrol) this.kontrol.terimaEmote(p.kursi, p.isi, baris);
+        else if (baris) this.obrolan.tambah(baris);
         break;
       }
       case 'obrolan': {

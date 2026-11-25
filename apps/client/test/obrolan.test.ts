@@ -8,10 +8,12 @@ vi.hoisted(() => {
   Object.assign(globalThis, { __VERSI_APP__: '0.0.0', __BUILD_SHA__: 'dev', __BUILD_WAKTU__: '2026-11-25T00:00:00.000Z' });
 });
 
-import { MAKS_OBROLAN, MAKS_PESAN, PENGATURAN_BAWAAN, type InfoMeja, type PesanKlien } from '@remi/meja';
+import { MAKS_OBROLAN, MAKS_PESAN, PENGATURAN_BAWAAN, rapikanPesan, type InfoMeja, type PesanKlien } from '@remi/meja';
 import { renderLobi } from '../src/ui/lobi';
-import { Obrolan } from '../src/ui/obrolan';
-import { tutupSemuaJendela } from '../src/ui/dom';
+import { MAKS_ISIAN_PESAN, Obrolan } from '../src/ui/obrolan';
+import { tutupSemuaJendela, umumkan } from '../src/ui/dom';
+
+vi.mock('../src/ui/dom', async (asli) => ({ ...(await asli<typeof import('../src/ui/dom')>()), umumkan: vi.fn() }));
 
 function infoLobi(kursiSaya = 1): InfoMeja {
   return {
@@ -48,12 +50,13 @@ function lobi(obrolan: Obrolan, info = infoLobi()) {
 }
 
 describe('obrolan di lobi', () => {
-  it('panel berjudul Obrolan dengan isian (maxlength MAKS_PESAN, enterkeyhint send) dan pesan cepat', () => {
+  it('panel berjudul Obrolan dengan isian (maxlength tidak memotong pesan yang diterima meja, enterkeyhint send) dan pesan cepat', () => {
     const { akar } = lobi(new Obrolan());
     const panel = akar.querySelector('.panel-obrolan')!;
     expect(panel.querySelector('h2')!.textContent).toBe('Obrolan');
     const isian = panel.querySelector<HTMLInputElement>('.obrolan-tulis input')!;
-    expect(isian.maxLength).toBe(MAKS_PESAN);
+    expect(isian.maxLength).toBe(MAKS_ISIAN_PESAN);
+    expect(isian.maxLength).toBeGreaterThanOrEqual(rapikanPesan('👨\u200d👩\u200d👧'.repeat(MAKS_PESAN))!.length);
     expect(isian.getAttribute('enterkeyhint')).toBe('send');
     expect(panel.querySelectorAll('.obrolan-cepat [data-emote]').length).toBeGreaterThan(20);
     expect(panel.querySelector('.obrolan-kosong')).not.toBeNull();
@@ -103,6 +106,17 @@ describe('obrolan di lobi', () => {
     obrolan.tambah({ nama: 'Ani', isi: 'siap?', w: 1, milikku: false });
     expect([...akar.querySelectorAll('.baris-obrolan .isi')].map((e) => e.textContent)).toEqual(['siap?']);
     expect(akar.querySelector('.obrolan-kosong')).toBeNull();
+  });
+
+  it('pesan orang di lobi diumumkan ke pembaca layar sekali (walau lobi digambar ulang); pesanku tidak', () => {
+    vi.mocked(umumkan).mockClear();
+    const obrolan = new Obrolan();
+    const { gambar } = lobi(obrolan);
+    gambar();
+    gambar();
+    obrolan.tambah({ nama: 'Ani', isi: 'siap?', w: 1, milikku: false });
+    obrolan.tambah({ nama: 'Budi', isi: 'gas', w: 2, milikku: true });
+    expect(vi.mocked(umumkan).mock.calls).toEqual([['Ani: siap?']]);
   });
 
   it('lobi digambar ulang: pesan, draf, fokus, kursor, dan posisi gulir tetap', () => {

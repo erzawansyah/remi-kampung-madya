@@ -51,7 +51,13 @@ vi.mock('../src/kontrolMeja', async (asli) => {
     saatError = catat('saatError');
     teksPenolakan = (pesan: string) => pesan;
     koneksiBerubah = catat('koneksiBerubah');
-    terimaEmote = catat('terimaEmote');
+    // Seperti KontrolMeja tanpa animasi: baris obrolan langsung masuk simpanan obrolan aplikasi.
+    terimaEmote = (kursi: number, isi: string, baris?: unknown) => {
+      kontrol.panggilan.push({ nama: 'terimaEmote', arg: [kursi, isi] });
+      if (!baris) return;
+      kontrol.panggilan.push({ nama: 'barisEmote', arg: [baris] });
+      (kontrol.app as { obrolan: { tambah(b: unknown): void } }).obrolan.tambah(baris);
+    };
     hancurkan = catat('hancurkan');
     keadaanTampil = () => ({ status: null, sibuk: false, klasemen: false });
   }
@@ -230,6 +236,9 @@ describe('Aplikasi: obrolan (0.7.0)', () => {
       ['Budi', 'GG', false],
       ['Aku', '😂', true],
     ]);
+    // Di meja barisnya diserahkan ke KontrolMeja (ditunda bersama gelembung selama animasi), tidak
+    // ditambahkan aplikasi sendiri.
+    expect(dipanggil('barisEmote')).toHaveLength(2);
     // Gelembung di kursi tetap jalan.
     expect(dipanggil('terimaEmote')).toEqual([
       [1, 'GG'],

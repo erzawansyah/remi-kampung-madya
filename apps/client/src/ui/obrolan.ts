@@ -9,11 +9,19 @@
 
 import { DAFTAR_EMOTE, kunciNama, MAKS_OBROLAN, MAKS_PESAN, rapikanPesan, type EntriObrolan } from '@remi/meja';
 import { TEKS_OBROLAN } from '../konten/obrolan';
-import { esc, toast } from './dom';
+import { esc, toast, umumkan } from './dom';
 import { apaEmoji } from './ledek';
 
 /** Jarak minimal antarkiriman (meja membuang emote < 1,2 detik dari kursi yang sama). */
 export const JEDA_KIRIM_OBROLAN_MS = 1250;
+
+/**
+ * Batas `maxlength` isian pesan. Browser menghitung maxlength dalam code unit UTF-16, sedangkan meja
+ * (rapikanPesan) membatasi MAKS_PESAN huruf terlihat dan paling banyak MAKS_PESAN × 3 code point (tiap
+ * code point paling banyak 2 code unit). Jadi isian tidak pernah memotong pesan yang masih diterima meja;
+ * pemotongan ke MAKS_PESAN huruf tetap dilakukan rapikanPesan saat dikirim.
+ */
+export const MAKS_ISIAN_PESAN = MAKS_PESAN * 3 * 2;
 
 /** Satu baris obrolan di aplikasi. `milikku` diketahui untuk pesan langsung; riwayat dinilai dari nama. */
 export interface BarisObrolan extends EntriObrolan {
@@ -107,16 +115,21 @@ export function htmlPanelObrolan(o: Pick<OpsiPanelObrolan, 'susunan' | 'idIsian'
   return `
     <ol class="obrolan-daftar" tabindex="0" aria-label="${esc(TEKS_OBROLAN.labelDaftar)}"></ol>
     <form class="obrolan-tulis palet-tulis">
-      <input type="text" id="${esc(o.idIsian)}" name="pesan" maxlength="${MAKS_PESAN}" placeholder="${esc(TEKS_OBROLAN.isian)}" aria-label="${esc(TEKS_OBROLAN.labelIsian)}" autocomplete="off" enterkeyhint="send" />
+      <input type="text" id="${esc(o.idIsian)}" name="pesan" maxlength="${MAKS_ISIAN_PESAN}" placeholder="${esc(TEKS_OBROLAN.isian)}" aria-label="${esc(TEKS_OBROLAN.labelIsian)}" autocomplete="off" enterkeyhint="send" />
       <button type="submit" class="utama">${esc(TEKS_OBROLAN.kirim)}</button>
     </form>
     ${cepat}`;
 }
 
+/** Pesan sendiri: langsung dari `milikku`, untuk riwayat dinilai dari nama. */
+function milikkuBaris(b: BarisObrolan, namaSaya: string | null): boolean {
+  return b.milikku ?? (namaSaya !== null && kunciNama(b.nama) === kunciNama(namaSaya));
+}
+
 /** Elemen satu baris (nama tebal + isi), semuanya lewat textContent. */
 function elBaris(b: BarisObrolan, namaSaya: string | null): HTMLLIElement {
   const li = document.createElement('li');
-  const milikku = b.milikku ?? (namaSaya !== null && kunciNama(b.nama) === kunciNama(namaSaya));
+  const milikku = milikkuBaris(b, namaSaya);
   li.className = `baris-obrolan${milikku ? ' milikku' : ''}${apaEmoji(b.isi) ? ' emoji' : ''}`;
   const nama = document.createElement('b');
   nama.className = 'nama';
@@ -166,6 +179,9 @@ export function pasangPanelObrolan(wadah: HTMLElement, opsi: OpsiPanelObrolan): 
     // Pesan sendiri selalu menggulir ke bawah; pesan orang hanya kalau sedang menempel di bawah.
     if (e.baris.milikku) obrolan.gulir = null;
     aturGulir(daftar, obrolan);
+    // Lobi tidak punya gelembung (yang di meja mengumumkan pesan orang), jadi pesan orang diumumkan
+    // di sini. Hanya panel yang sedang terpasang yang mendengar, jadi tidak terumumkan dua kali.
+    if (opsi.susunan === 'lobi' && !milikkuBaris(e.baris, opsi.namaSaya())) umumkan(`${e.baris.nama}: ${e.baris.isi}`);
   });
 
   daftar.addEventListener('scroll', () => {
