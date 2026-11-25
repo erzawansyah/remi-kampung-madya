@@ -305,14 +305,31 @@ describe('sprint di server', () => {
     a.ws.close();
   }, 40_000);
 
+  it('Keluar sebelum putaran pertama selesai: tidak tercatat sama sekali, mejanya tetap langsung dihapus', async () => {
+    const { server, db, log } = await nyalakan();
+    const a = await klien(server.port);
+    a.kirim({ t: 'sprint', nama: 'Dodi' });
+    await tungguPesan(a, (p) => p.t === 'view');
+    a.kirim({ t: 'keluar' });
+    await tungguPesan(a, (p) => p.t === 'keluar');
+    await sampai(() => server.jumlahMeja() === 0);
+    expect(barisSprint(db)).toEqual([]);
+    expect(log.some((l) => l.includes('dicatat'))).toBe(false);
+    const papan = (await (await fetch(`http://127.0.0.1:${server.port}/api/sprint`)).json()) as PapanSprint;
+    expect(papan.baris).toEqual([]);
+    a.ws.close();
+  }, 20_000);
+
   it('simpanan sprint yang tidak dipulihkan (terlalu lama) tercatat ditinggal; yang dipulihkan bisa dilanjutkan', async () => {
     const path = dbBaru();
     const jam = new JamGeser();
     const s1 = await nyalakan({ penjadwal: jam, jedaSimpanMejaMs: 0 }, path);
-    const a = await klien(s1.server.port);
+    const a = await klien(s1.server.port, pemainOtomatis(1));
     a.kirim({ t: 'sprint', nama: 'Cici' });
     const masuk = await tungguPesan(a, (p) => p.t === 'masuk');
-    await tungguPesan(a, (p) => p.t === 'view');
+    // Satu putaran selesai dulu: percobaan tanpa putaran yang selesai tidak pernah dicatat.
+    const v1 = await tungguPesan(a, (p) => p.t === 'view' && (p.view as ViewPemain).status === 'putaranSelesai', 30_000);
+    const r1 = (v1.view as ViewPemain).riwayat[0];
     a.ws.close();
     await s1.matikan();
 
@@ -331,21 +348,37 @@ describe('sprint di server', () => {
     jam.geser += UMUR_MAKS_SIMPANAN_MEJA_MS + 60_000;
     const s3 = await nyalakan({ penjadwal: jam }, path);
     expect(s3.server.jumlahMeja()).toBe(0);
+    const k = masuk.kursi as number;
     expect(barisSprint(s3.db)).toEqual([
-      { kode_meja: masuk.kode, nama: 'Cici', kunci_nama: 'cici', putaran: 0, skor: 0, menang: 0, mentung: 0, kepentung: 0, selesai: 0 },
+      {
+        kode_meja: masuk.kode,
+        nama: 'Cici',
+        kunci_nama: 'cici',
+        putaran: 1,
+        skor: r1.skorAkumulasi[k],
+        menang: 0,
+        mentung: r1.pementung === k ? 1 : 0,
+        kepentung: r1.kepentung.includes(k) ? 1 : 0,
+        selesai: 0,
+      },
     ]);
-  }, 30_000);
+  }, 60_000);
 
   it('tanpa simpanan meja: sprint yang belum selesai tercatat ditinggal saat server dimatikan', async () => {
     const { server, db, matikan } = await nyalakan({ simpanMeja: false });
-    const a = await klien(server.port);
+    const a = await klien(server.port, pemainOtomatis(1));
     a.kirim({ t: 'sprint', nama: 'Dodi' });
-    await tungguPesan(a, (p) => p.t === 'view');
+    await tungguPesan(a, (p) => p.t === 'view' && (p.view as ViewPemain).status === 'putaranSelesai', 30_000);
+    // Percobaan kedua yang belum menyelesaikan satu putaran pun: tidak ikut tercatat.
+    const b = await klien(server.port);
+    b.kirim({ t: 'sprint', nama: 'Eli' });
+    await tungguPesan(b, (p) => p.t === 'view');
     a.ws.close();
+    b.ws.close();
     await server.tutup();
-    expect(barisSprint(db)).toMatchObject([{ nama: 'Dodi', selesai: 0, menang: 0 }]);
+    expect(barisSprint(db)).toMatchObject([{ nama: 'Dodi', putaran: 1, selesai: 0, menang: 0 }]);
     await matikan();
-  });
+  }, 40_000);
 
   it('server tanpa riwayat menolak sprint', async () => {
     const server = await jalankanServer({ port: 0, host: '127.0.0.1', log: () => undefined });

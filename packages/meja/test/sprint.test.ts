@@ -317,6 +317,24 @@ describe('meja sprint', () => {
     expect(c.skor).toBe(meja.data.game!.riwayat[0].skorAkumulasi[0]);
   });
 
+  it('Keluar sebelum putaran pertama selesai: tidak ada catatan (bukan skor 0 yang mengalahkan percobaan minus)', () => {
+    const { meja, surat, jam } = mejaSprint();
+    // Keluar di popup joker.
+    expect(meja.data.game).not.toBeNull();
+    expect(catatanSprint(meja.data, 1_500_000)).toBeNull();
+    siapSemua(meja);
+    const rng = new Rng(5);
+    // Main beberapa langkah di putaran pertama, lalu keluar.
+    for (let i = 0; i < 6 && meja.data.game!.status === 'putaranBerjalan'; i++) {
+      if (aksiManusia(meja, surat, 'p1', rng)) continue;
+      if (!jam.langkah()) break;
+    }
+    meja.terima('p1', { t: 'keluar' });
+    expect(meja.adaKursiManusia).toBe(false);
+    expect(meja.data.game!.riwayat).toHaveLength(0);
+    expect(catatanSprint(meja.data, 2_000_000)).toBeNull();
+  });
+
   it('bukan meja sprint atau belum ada permainan: tidak ada catatan; info meja biasa tanpa `sprint`', () => {
     const { opsi, surat } = siapkan();
     const biasa = Meja.buat(opsi, 'h', 'Ani');

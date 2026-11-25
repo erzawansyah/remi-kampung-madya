@@ -850,7 +850,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Aturan mejanya dikunci: 4 pemain, 1 deck, tanpa batas skor, tanpa batas waktu giliran, dan urutan duduk diacak. Kartunya dikocok baru setiap main. Yang bisa diganti cuma tempo warga kedai (menu ☰, Pengaturan).',
           `Nggak ada voting akhiri dan nggak ada Main lagi. Di klasemen akhir, tekan ${TEKS_SPRINT.sprintLagi} buat percobaan baru. Boleh coba sesering apa pun.`,
           `Menang kalau sesudah ${JUMLAH_PUTARAN_SPRINT} putaran skor totalmu nggak kalah dari ketiga warga kedai. Skor sama dihitung menang.`,
-          'Keluar di tengah jalan: percobaannya tetap dicatat dengan putaran yang sudah selesai, tapi nggak dihitung menang.',
+          'Keluar di tengah jalan: putaran yang sudah selesai tetap dicatat, tapi nggak dihitung menang. Keluar sebelum putaran pertama selesai nggak dicatat sama sekali.',
         ],
       },
       {

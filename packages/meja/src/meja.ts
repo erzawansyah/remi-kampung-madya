@@ -2203,12 +2203,14 @@ export interface CatatanSprint extends HasilSprint {
 
 /**
  * Catatan percobaan sprint dari data meja (selesai, atau ditinggal di tengah jalan: Keluar, meja dihapus,
- * atau simpanannya tidak dipulihkan). Null = bukan meja sprint, belum mulai, atau sudah tercatat. `data`
- * tidak diubah (boleh data mentah dari simpanan).
+ * atau simpanannya tidak dipulihkan). Null = bukan meja sprint, belum mulai, sudah tercatat, atau belum
+ * ada putaran yang selesai: percobaan yang ditinggal sebelum putaran pertama selesai tidak dicatat sama
+ * sekali (kalau dicatat skornya 0 dan mengalahkan setiap percobaan tuntas yang minus). `data` tidak diubah
+ * (boleh data mentah dari simpanan).
  */
 export function catatanSprint(data: DataMeja, waktu: number): CatatanSprint | null {
   const s = data.sprint;
-  if (!s || s.tercatat || !data.game) return null;
+  if (!s || s.tercatat || !data.game || !data.game.riwayat?.length) return null;
   const k = data.kursi[s.kursi];
   if (!k) return null;
   return { ...hasilSprint(migrasiState(data.game), s.kursi), kode: data.kode, mulaiPada: s.mulaiPada, nama: k.nama, waktu };

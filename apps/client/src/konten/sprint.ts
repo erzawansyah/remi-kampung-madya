@@ -45,7 +45,8 @@ export const TEKS_SPRINT = {
   sprintLagi: 'Sprint lagi',
   keBeranda: 'Ke beranda',
   /** Konfirmasi keluar meja sprint (lewat opsiKonfirmasiKeluar). */
-  keluarMain: 'Percobaan sprint ini berhenti di sini. Tetap dicatat di papan dengan putaran yang sudah selesai, tapi nggak dihitung menang.',
+  keluarMain:
+    'Percobaan sprint ini berhenti di sini. Putaran yang sudah selesai tetap dicatat di papan, tapi nggak dihitung menang. Kalau belum ada putaran yang selesai, nggak ada yang dicatat.',
   keluarSelesai: 'Hasil sprint ini sudah dicatat di papan.',
 } as const;
 

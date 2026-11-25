@@ -82,7 +82,7 @@ export interface KeadaanKeluar {
   kompetisi?: boolean;
   /**
    * Meja sprint (25 Nov 2026): keluar di tengah permainan = percobaannya berhenti, tetap dicatat dengan
-   * putaran yang sudah selesai (tidak dihitung menang).
+   * putaran yang sudah selesai (tidak dihitung menang); sebelum putaran pertama selesai tidak dicatat.
    */
   sprint?: boolean;
 }
