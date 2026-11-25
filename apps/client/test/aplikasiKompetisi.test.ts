@@ -54,6 +54,7 @@ vi.mock('../src/kontrolMeja', async (asli) => {
     perbarui = catat('perbarui');
     aksiDiterima = catat('aksiDiterima');
     saatError = catat('saatError');
+    teksPenolakan = (pesan: string) => pesan;
     koneksiBerubah = catat('koneksiBerubah');
     terimaEmote = catat('terimaEmote');
     terimaLedek = catat('terimaLedek');

@@ -41,7 +41,7 @@ import { idAcak, KabarKoneksi, type Kabar, type PesanKeMeja, type StatusKoneksi 
 import type { AksiAdegan, KotakLayar, MejaScene, ModelMeja } from './game/MejaScene';
 import { gambarKartuKeKanvas } from './game/kartuGrafisGambar';
 import { PENANDA_WARGA_KEDAI } from './game/tataMeja';
-import { adaJendelaTerbuka, bukaDialog, bukaModal, esc, konfirmasi, modalTerbuka, toast, tutupModal, tutupSemuaJendela, umumkan } from './ui/dom';
+import { adaJendelaTerbuka, bukaDialog, bukaModal, esc, konfirmasi, konfirmasiRinci, modalTerbuka, toast, tutupModal, tutupSemuaJendela, umumkan } from './ui/dom';
 import {
   htmlKartuJadiAsal,
   htmlKlasemen,
@@ -67,6 +67,8 @@ import { TEKS_LANJUT, TEKS_LEDEK } from './konten/ledek';
 import { apaEmoji, hapusLapisanLedek, htmlLedek, lapisanLedek, LedekBesar, sasaranLedekBawaan } from './ui/ledek';
 import { TEKS_KONEKSI, teksMentungTerlewat } from './konten/koneksi';
 import { TEKS_TONTONAN } from './konten/tontonan';
+import { TEKS_TURUNKAN } from './konten/turunkan';
+import { TEKS_PENGINGAT_SUSUN } from './konten/susunAkhir';
 import { simpan } from './penyimpanan';
 import { gerakDikurangi } from './preferensi';
 import { durasi } from './gerak';
@@ -512,6 +514,15 @@ export class KontrolMeja implements AksiAdegan {
   private kunciKirim: KunciKirim | null = null;
   /** Aksi online terakhir yang belum dipastikan sampai (id + keadaan saat dikirim). */
   private aksiTertunda: AksiTertunda | null = null;
+  /** Jenis aksi giliran terakhir yang dikirim (penolakan server untuk turunkan diganti pesan umum, #63). */
+  private jenisDikirim: AksiKlien['jenis'] | null = null;
+  /**
+   * Jendela "Joker-nya jadi apa?" yang sedang terbuka (#63: tanpa Batal). Ditutup dari sini begitu keadaan
+   * giliranku berubah (waktu habis, putaran berganti), karena pemain tidak bisa menutupnya sendiri.
+   */
+  private jendelaPeran: { tutup: () => void; jejak: string } | null = null;
+  /** Pengingat sebelum Selesai di susun akhir (#64) yang sedang terbuka; ditutup kalau fasenya berakhir. */
+  private tutupPengingat: (() => void) | null = null;
   /** Server sudah pernah menjawab `aksiDiterima` (server baru: aman mengirim ulang dengan id yang sama). */
   private serverKonfirmasi = false;
   /** View terakhir yang DITERIMA (bisa belum tampil) dan nomor sambungan tempat ia diterima. */
@@ -791,11 +802,13 @@ export class KontrolMeja implements AksiAdegan {
       // Jawaban (atau keadaan baru) datang: bar aksi boleh dipakai lagi.
       this.lepasKunciKirim();
       this.nilaiAksiTertunda(view);
+      if (!this.penonton) this.rapikanPengingatSusun(view);
       this.antrian.push({ v: view, nomor });
       // Sesudah view diterima (bukan menunggu antrian animasi habis): siapJoker yang hilang dikirim ulang.
       this.kirimUlangSiapJokerBilaPerlu();
       void this.putarAntrian();
     } else if (!this.sedangMemutar) this.tampilkan();
+    this.tutupJendelaBasi();
   }
 
   /**
@@ -1499,6 +1512,7 @@ export class KontrolMeja implements AksiAdegan {
     }
     // Kunci dipasang SEBELUM kirim: offline, view jawabannya bisa datang di dalam kirim() itu sendiri.
     this.pasangKunciKirim();
+    this.jenisDikirim = aksi.jenis;
     let id: string | undefined;
     if (this.app.jenis === 'online') {
       id = idAcak();
@@ -1625,7 +1639,7 @@ export class KontrolMeja implements AksiAdegan {
     this.kirimAksi({ jenis: 'ambilDeck' });
   }
 
-  /** Tentukan peran joker; bila ambigu tanya pemain. */
+  /** Tentukan peran joker untuk rancangan mulung; bila ambigu tanya pemain. */
   private tentukanPeran(kartu: Kartu[], lanjut: (spek: SpesifikasiKartuJadi) => void) {
     const ctx = this.ctx();
     const opsi = opsiPeranJoker(kartu, ctx);
@@ -1633,22 +1647,54 @@ export class KontrolMeja implements AksiAdegan {
       const h = coba(() => validasiKartuJadi(kartu.map((k) => ({ kartu: k })), ctx));
       return this.tolak(h.ok ? 'Kombinasi tidak sah.' : h.pesan, 'tangan');
     }
+    this.pilihPeran(opsi, lanjut);
+  }
+
+  /**
+   * Satu susunan: langsung dipakai. Beberapa: pemain wajib memilih salah satu (#63). Jendelanya tanpa Batal
+   * dan tidak bisa ditutup dengan Escape/ketuk latar, jadi membukanya tidak pernah gratis: pilihannya
+   * langsung dipakai. Kalau keadaan giliranku berubah selagi terbuka, jendelanya ditutup dari sini
+   * (lihat tutupJendelaBasi) dan pilihan apa pun sesudahnya diabaikan.
+   */
+  private pilihPeran(opsi: readonly HasilValidasiKartuJadi[], lanjut: (spek: SpesifikasiKartuJadi) => void) {
     const keSpek = (h: HasilValidasiKartuJadi): SpesifikasiKartuJadi =>
       h.kartu.map((d) => ({ id: d.kartu.id, sebagai: d.pengganti ? d.sebagai : undefined }));
     if (opsi.length === 1) return lanjut(keSpek(opsi[0]));
-    bukaDialog(
-      `<h2>Joker-nya jadi apa?</h2>
-       <p class="redup">Kombinasi ini bisa dibaca lebih dari satu cara. Pilih salah satu.</p>
-       <div class="rincian">${opsi.map((o, i) => `<button type="button" data-opsi="${i}">${esc(deskripsiKartuJadi(o))}</button>`).join('')}</div>
-       <button type="button" data-tutup>Batal</button>`,
+    this.jendelaPeran?.tutup();
+    const jejak = jejakGiliran(this.viewTerbaru ?? this.view);
+    const jendela = { tutup: () => {}, jejak };
+    const { tutup } = bukaDialog(
+      `<h2>${esc(TEKS_TURUNKAN.judulPeran)}</h2>
+       <p class="redup">${esc(TEKS_TURUNKAN.ketPeran)}</p>
+       <div class="rincian">${opsi.map((o, i) => `<button type="button" data-opsi="${i}">${esc(deskripsiKartuJadi(o))}</button>`).join('')}</div>`,
       (dlg, tutup) =>
         dlg.querySelectorAll<HTMLElement>('[data-opsi]').forEach((b) =>
           b.addEventListener('click', () => {
+            if (this.jendelaPeran !== jendela) return;
             tutup();
+            if (this.hancur || jejakGiliran(this.viewTerbaru ?? this.view) !== jejak) return;
             lanjut(keSpek(opsi[Number(b.dataset.opsi)]));
           }),
         ),
+      {
+        bisaDitutup: false,
+        saatTutup: () => {
+          if (this.jendelaPeran === jendela) this.jendelaPeran = null;
+        },
+      },
     );
+    jendela.tutup = tutup;
+    this.jendelaPeran = jendela;
+  }
+
+  /**
+   * Jendela milik giliranku yang tidak bisa (atau tidak perlu lagi) ditutup pemain: pilih susunan joker
+   * kalau keadaan giliranku sudah berubah, pengingat susun akhir kalau fasenya sudah lewat untukku.
+   */
+  private tutupJendelaBasi() {
+    const v = this.viewTerbaru ?? this.view;
+    if (this.jendelaPeran && (jejakGiliran(v) !== this.jendelaPeran.jejak || this.info?.diambilAlihBot)) this.jendelaPeran.tutup();
+    if (this.tutupPengingat && !(v?.status === 'susunAkhir' && masihGiliranku(v, this.info))) this.tutupPengingat();
   }
 
   private jadikanMulung() {
@@ -1705,21 +1751,105 @@ export class KontrolMeja implements AksiAdegan {
     this.kirimAksi({ jenis: 'mulung', jumlah, kartuJadi: kombinasi }, draf);
   }
 
+  /**
+   * Turunkan kartu yang dipilih (#63). Tombolnya tidak pernah mati karena isi pilihan: sah = langsung turun,
+   * tidak sah = SATU pesan yang sama untuk semua alasan (alasan dari mesin aturan bisa membocorkan joker).
+   * Susunan yang ditawarkan hanya yang lolos validasiTurunkan, jadi jendela pilih susunan (tanpa Batal)
+   * hanya muncul kalau pilihan mana pun pasti turun.
+   */
   private turunkan() {
     const s = this.statusTombol().turunkan;
     if (!s.aktif) return this.tolak(s.alasan, 'tangan');
     const kartu = this.tanganUrut().filter((k) => this.dipilih.has(k.id));
-    this.tentukanPeran(kartu, (spek) => {
-      const p = this.view?.putaran;
-      if (!p || this.hancur) return;
-      const mode = this.view!.status === 'susunAkhir' ? 'akhir' : p.sumberAmbil!;
-      // Pungutan giliran ini (info publik di view): kembarannya tidak boleh tersisa sendirian (#53).
-      const cek = coba(() =>
-        validasiTurunkan(this.tanganServer(), [spek], p.kartuJadi[this.saya].length > 0, mode, this.ctx(), pungutanBerlaku(p)),
-      );
-      if (!cek.ok) return this.tolak(cek.pesan, 'tangan');
+    if (kartu.length < 3) return this.tolak(TEKS_TURUNKAN.minimalTiga, 'tangan');
+    const v = this.view!;
+    const p = v.putaran!;
+    const mode = v.status === 'susunAkhir' ? 'akhir' : p.sumberAmbil!;
+    // Pungutan giliran ini (info publik di view): kembarannya tidak boleh tersisa sendirian (#53).
+    const sah = opsiPeranJoker(kartu, this.ctx()).filter(
+      (h) =>
+        coba(() =>
+          validasiTurunkan(
+            this.tanganServer(),
+            [h.kartu.map((d) => ({ id: d.kartu.id, sebagai: d.pengganti ? d.sebagai : undefined }))],
+            p.kartuJadi[this.saya].length > 0,
+            mode,
+            this.ctx(),
+            pungutanBerlaku(p),
+          ),
+        ).ok,
+    );
+    if (!sah.length) return this.tolak(TEKS_TURUNKAN.belumJadi, 'tangan');
+    this.pilihPeran(sah, (spek) => {
+      if (this.hancur || !this.view?.putaran) return;
       this.kirimAksi({ jenis: 'turunkan', kartuJadi: [spek] });
     });
+  }
+
+  /**
+   * Selesai di susun akhir (#64). Masih memegang kartu: tanya dulu, tanpa melihat isi tangan (pengingatnya
+   * sama persis ada kombinasi atau tidak). Kotak "Jangan tanya lagi" berlaku sampai permainan ini selesai.
+   */
+  private async selesaiSusun() {
+    if (this.tanganServer().length === 0 || this.tanpaPengingatSusun()) return this.kirimAksi({ jenis: 'selesaiSusun' });
+    if (this.tutupPengingat) return;
+    let ditutupSistem = false;
+    const j = await konfirmasiRinci({
+      judul: TEKS_PENGINGAT_SUSUN.judul,
+      pesan: TEKS_PENGINGAT_SUSUN.pesan,
+      centang: TEKS_PENGINGAT_SUSUN.centang,
+      tidak: TEKS_PENGINGAT_SUSUN.kembali,
+      ya: TEKS_PENGINGAT_SUSUN.selesai,
+      saatBuka: (tutup) =>
+        (this.tutupPengingat = () => {
+          ditutupSistem = true;
+          tutup();
+        }),
+    });
+    this.tutupPengingat = null;
+    if (this.hancur || ditutupSistem) return;
+    if (j.centang) this.matikanPengingatSusun();
+    if (!j.ya) return;
+    // Keadaan bisa berubah selama dialog terbuka: periksa lagi seperti tombolnya ditekan sekarang.
+    const s = this.statusTombol().selesai;
+    if (!s.aktif) return this.tolak(s.alasan, 'tangan');
+    this.kirimAksi({ jenis: 'selesaiSusun' });
+  }
+
+  /** Kode meja untuk penanda "jangan tanya lagi" (#64). */
+  private kodePermainan(): string {
+    return this.info?.kode ?? '';
+  }
+
+  private tanpaPengingatSusun(): boolean {
+    const t = simpan.tanpaPengingatSusun();
+    return !!t && t.kode === this.kodePermainan();
+  }
+
+  private matikanPengingatSusun() {
+    const kode = this.kodePermainan();
+    if (kode) simpan.setTanpaPengingatSusun({ kode, riwayat: this.view?.riwayat.length ?? 0 });
+  }
+
+  /**
+   * Penanda "jangan tanya lagi" hanya untuk permainan yang sedang jalan: dibuang begitu permainannya selesai
+   * atau permainan baru dimulai di meja yang sama (jumlah putaran selesai lebih sedikit dari yang pernah
+   * terlihat, mis. sesudah Main lagi). Main offline baru juga membuangnya (main.ts).
+   */
+  private rapikanPengingatSusun(v: ViewPemain) {
+    const t = simpan.tanpaPengingatSusun();
+    if (!t || t.kode !== this.kodePermainan()) return;
+    if (v.status === 'selesai' || v.riwayat.length < t.riwayat) simpan.setTanpaPengingatSusun(null);
+    else if (v.riwayat.length > t.riwayat) simpan.setTanpaPengingatSusun({ ...t, riwayat: v.riwayat.length });
+  }
+
+  /**
+   * Teks penolakan server untuk ditampilkan. Turunkan yang ditolak (keadaan sudah berubah di server) memakai
+   * pesan umum yang sama dengan penolakan di HP (#63), bukan alasan dari mesin aturan.
+   */
+  teksPenolakan(pesan: string): string {
+    if (this.hancur || this.penonton || !this.kunciKirim || this.jenisDikirim !== 'turunkan') return pesan;
+    return TEKS_TURUNKAN.belumJadi;
   }
 
   /**
@@ -1769,17 +1899,12 @@ export class KontrolMeja implements AksiAdegan {
         : this.info?.diambilAlihBot
           ? 'Waktu habis, kartumu disusun warga kedai.'
           : 'Kamu sudah selesai menyusun.';
-      const terpilih = this.tanganServer().filter((k) => this.dipilih.has(k.id));
-      let turunkanAlasan = alasan || (terpilih.length < 3 ? 'Pilih minimal 3 kartu untuk diturunkan.' : '');
-      if (!turunkanAlasan && opsiPeranJoker(terpilih, this.ctx()).length === 0) {
-        const h = coba(() => validasiKartuJadi(terpilih.map((k) => ({ kartu: k })), this.ctx()));
-        turunkanAlasan = h.ok ? '' : h.pesan;
-      }
+      // Turunkan (#63) tidak pernah bergantung pada kartu yang dipilih; sah tidaknya baru dinilai saat ditekan.
       const tutup = mati(p.mentung ? 'Sudah ada yang mentung, tinggal menyusun kartu.' : 'Deck sudah habis.');
       return {
         ambil: tutup,
         mulung: tutup,
-        turunkan: turunkanAlasan ? mati(turunkanAlasan) : hidup,
+        turunkan: alasan ? mati(alasan) : hidup,
         buang: tutup,
         selesai: alasan ? mati(alasan) : hidup,
         mentung: false,
@@ -1817,15 +1942,10 @@ export class KontrolMeja implements AksiAdegan {
           asJokerBolehDibuangTanpaJadi: v!.konfigurasi.asJokerBolehDibuangTanpaJadi,
         }),
       );
-    let turunkanAlasan = mainAlasan || (terpilih.length < 3 ? 'Pilih minimal 3 kartu untuk diturunkan.' : '');
     let buangAlasan = mainAlasan || (terpilih.length === 0 ? 'Pilih kartu yang mau dibuang.' : '');
     if (!buangAlasan) {
       const h = cekBuang(terpilih.map((k) => k.id));
       if (!h.ok) buangAlasan = h.pesan;
-    }
-    if (!turunkanAlasan && opsiPeranJoker(terpilih, this.ctx()).length === 0) {
-      const h = coba(() => validasiKartuJadi(terpilih.map((k) => ({ kartu: k })), this.ctx()));
-      turunkanAlasan = h.ok ? '' : h.pesan;
     }
     // Penanda "tinggal satu kartu: buang untuk mentung" hanya dari buang SATU kartu (validasiBuang, bukan
     // hitungan sendiri). Seluruh tangan sengaja tidak pernah dicoba sebagai nutup beberapa kartu sebelum
@@ -1839,7 +1959,8 @@ export class KontrolMeja implements AksiAdegan {
     return {
       ambil: ambilAlasan ? mati(ambilAlasan) : hidup,
       mulung: mulungAlasan ? mati(mulungAlasan) : hidup,
-      turunkan: turunkanAlasan ? mati(turunkanAlasan) : hidup,
+      // Turunkan (#63): hidup di tahap main giliranku, apa pun kartu yang dipilih (lihat turunkan()).
+      turunkan: mainAlasan ? mati(mainAlasan) : hidup,
       buang: buangAlasan ? mati(buangAlasan) : hidup,
       selesai: mati('Belum waktunya.'),
       mentung,
@@ -1912,6 +2033,7 @@ export class KontrolMeja implements AksiAdegan {
 
   private render() {
     if (this.hancur) return;
+    this.tutupJendelaBasi();
     const v = this.view;
     const info = this.info;
     if (!v || !info) return;
@@ -2309,7 +2431,7 @@ export class KontrolMeja implements AksiAdegan {
       case 'buang':
         return this.buang();
       case 'selesai':
-        return this.kirimAksi({ jenis: 'selesaiSusun' });
+        return void this.selesaiSusun();
       case 'urut':
         this.urutan = this.urutan === 'bunga' ? 'angka' : 'bunga';
         umumkan(`Kartu diurutkan menurut ${this.urutan}.`);

@@ -541,6 +541,17 @@ label.baris > input[type='checkbox'] {
 .dialog.konfirmasi .deret {
   margin-top: var(--ruang-2);
 }
+/* Kotak centang di konfirmasi (mis. "Jangan tanya lagi …"): seluruh baris bisa diketuk. */
+.centang-konfirmasi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.centang-konfirmasi > input {
+  flex: none;
+}
 .kepala-dialog {
   display: flex;
   align-items: center;
