@@ -141,14 +141,6 @@ let lepasKipasLama: (() => void) | null = null;
  * Ringkasan simpanan offline yang masih bisa dilanjutkan, atau null. `latihan` = simpanan itu
  * latihan dengan panduan (dilanjutkan lengkap dengan gelembung tutorial), bukan permainan biasa.
  */
-/**
- * Beranda menawarkan latihan ("Warga baru, ya?"): belum pernah menutup tawaran/tutorial, belum punya riwayat,
- * dan tidak ada simpanan offline. Dipakai juga main.ts supaya jendela "Yang baru" tidak menimpa tawaran itu.
- */
-export function adalahPemainBaru(adaRiwayat = simpan.riwayat().length > 0, adaSimpanan = !!infoSimpanan()): boolean {
-  return !preferensi().tutorialSelesai && !adaRiwayat && !adaSimpanan;
-}
-
 export function infoSimpanan(): { teks: string; latihan: boolean } | null {
   const d: DataMeja | null = simpan.mejaOffline();
   if (!d || d.versi !== 1 || d.game?.status === 'selesai') return null;
@@ -164,6 +156,14 @@ export function infoSimpanan(): { teks: string; latihan: boolean } | null {
   } catch {
     return { teks: 'Tersimpan otomatis', latihan };
   }
+}
+
+/**
+ * Beranda menawarkan latihan ("Warga baru, ya?"): belum pernah menutup tawaran/tutorial, belum punya riwayat,
+ * dan tidak ada simpanan offline. Dipakai juga main.ts supaya jendela "Yang baru" tidak menimpa tawaran itu.
+ */
+export function adalahPemainBaru(adaRiwayat = simpan.riwayat().length > 0, adaSimpanan = !!infoSimpanan()): boolean {
+  return !preferensi().tutorialSelesai && !adaRiwayat && !adaSimpanan;
 }
 
 /**
