@@ -5,3 +5,4 @@ export * from './peringkat.js';
 export * from './gayaWarga.js';
 export * from './kompetisi.js';
 export * from './usulan.js';
+export * from './sprint.js';
