@@ -253,7 +253,7 @@ describe('header keamanan & /healthz', () => {
       await r.arrayBuffer();
       expect(r.headers.get('content-security-policy'), jalur).toBe(CSP);
       expect(r.headers.get('x-frame-options'), jalur).toBe('DENY');
-      expect(r.headers.get('permissions-policy'), jalur).toBe('camera=(), microphone=(), geolocation=()');
+      expect(r.headers.get('permissions-policy'), jalur).toBe('camera=(), microphone=(self), geolocation=()');
       expect(r.headers.get('x-content-type-options'), jalur).toBe('nosniff');
     }
   });

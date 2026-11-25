@@ -49,7 +49,14 @@ export interface ModelTata {
   kartukuDiAtas: boolean;
   berikutnya: string | null;
   fokus?: string | null;
+  /**
+   * Obrolan suara (0.9.0): ikon mic per kursi (null = tidak ikut suara: warga kedai, aplikasi lama). Hanya
+   * dari tingkat suara (SuaraLangsung), tidak pernah dari keadaan permainan. Tidak ada = tanpa ikon.
+   */
+  suara?: readonly (KeadaanMicTata | null)[];
 }
+
+export type KeadaanMicTata = 'bicara' | 'nyala' | 'mati' | 'lemah';
 
 export interface UkuranLayar {
   /** Lebar & tinggi kanvas (piksel perangkat). */
@@ -132,7 +139,9 @@ export type HiasTata =
   | { jenis: 'denyutMerah'; kotak: Kotak }
   | { jenis: 'slot'; kotak: Kotak }
   /** Bingkai fokus keyboard untuk area tanpa kartu (buangan kosong, deck habis). */
-  | { jenis: 'fokus'; kotak: Kotak };
+  | { jenis: 'fokus'; kotak: Kotak }
+  /** Obrolan suara (0.9.0): lencana mic di sudut panel lawan. `kotak` = lingkaran lencananya. */
+  | { jenis: 'mic'; kotak: Kotak; kursi: number; keadaan: KeadaanMicTata };
 
 export interface TataMeja {
   d: number;
@@ -1016,6 +1025,15 @@ function gambarPanel(
   const bahaya = jumlah === 1 && v.status === 'putaranBerjalan';
   t.hias.push({ jenis: 'panel', kotak, aktif, bahaya });
   if (bahaya) t.hias.push({ jenis: 'denyutMerah', kotak });
+  // Obrolan suara (0.9.0): lencana mic kecil berpusat di sudut kiri atas panel (tidak menggeser teks; nama
+  // mulai 8 px dari tepi panel). Dijepit supaya tidak keluar layar atau masuk ke bawah bar atas.
+  const mic = m.suara?.[pi];
+  if (mic && !diriku) {
+    const r = 8 * d;
+    const cx = Math.max(kotak.x, r + d);
+    const cy = Math.max(kotak.y, u.atasCss * d + r + d);
+    t.hias.push({ jenis: 'mic', kotak: { x: cx - r, y: cy - r, w: 2 * r, h: 2 * r }, kursi: pi, keadaan: mic });
+  }
   // Panel diriku (lanskap sangat pendek): bukan panel lawan (area.panel/titik.panel hanya untuk lawan; kartu
   // yang terbang ke/dari aku tetap memakai tangan), kotaknya jadi area kartu jadiku.
   if (diriku) {

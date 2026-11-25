@@ -6,6 +6,24 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.9.0] - 2026-11-25
+
+Ngobrol pakai suara di meja online. Aturan main tidak berubah.
+
+### Untuk pemain
+
+#### Ditambahkan
+
+- **Suara:** tombol mic di bar atas meja online dan lobi (mic selalu mati waktu masuk meja). Ikon mic di samping nama menyala saat orang itu ngomong.
+- **Dengar suara** dan **Bisukan** per orang, hanya berlaku di HP-mu sendiri.
+- Kalau sinyal lemah, kualitas suara diturunkan; kalau sinyal buruk, suara dijeda sendiri lalu nyala lagi saat sinyal pulih. Permainan selalu didahulukan.
+
+### Teknis
+
+- WebRTC antarpemain satu meja; sinyal lewat pesan `suara`/`suaraSinyal` di WebSocket (hanya antaranggota meja, tidak ke penonton, dibatasi lajunya), `GET /api/suara/ice` (STUN, plus TURN kalau `TURN_URLS`/`TURN_SECRET` diisi dan peminta duduk di meja online). Meja sprint tanpa suara.
+- `apps/client/src/suaraLangsung.ts`, `ui/suaraLangsung.ts`, `konten/suara.ts`; `permissions-policy: microphone=(self)`.
+- coturn opsional di `docker-compose.yml` (profil `suara`) dan `coturn/`; langkah VPS di `docs/deploy.md`, bagian "Suara dan TURN".
+
 ## [0.8.0] - 2026-11-25
 
 Mode Sprint, obrolan model WhatsApp, dan kabar "Yang baru" sesudah pembaruan. Aturan main tidak berubah.

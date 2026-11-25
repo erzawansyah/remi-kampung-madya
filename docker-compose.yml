@@ -21,12 +21,48 @@ services:
       # cuma disimpan di database, lalu terkirim begitu diisi dan container dibuat ulang.
       - NOTION_TOKEN=${NOTION_TOKEN:-}
       - NOTION_USULAN_DB=${NOTION_USULAN_DB:-}
+      # Obrolan suara (docs/deploy.md, "Suara dan TURN"). Kosong = suara hanya pakai STUN (jalan di banyak
+      # Wi-Fi, sering gagal di data seluler). TURN_URLS dipisah koma, TURN_SECRET sama dengan rahasia coturn.
+      - TURN_URLS=${TURN_URLS:-}
+      - TURN_SECRET=${TURN_SECRET:-}
     volumes:
       # Database klasemen akhir (SQLite). Tetap ada walaupun container dibuat ulang.
       - remi-data:/app/data
     # Server menutup WebSocket, meja, dan database dengan rapi saat SIGTERM (biasanya < 1 detik).
     stop_grace_period: 10s
     # Healthcheck ke /healthz sudah ada di Dockerfile.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Server TURN untuk obrolan suara (opsional). Tidak ikut jalan kecuali dinyalakan dengan profil:
+  #   docker compose --profile suara up -d
+  # Wajib: TURN_SECRET di .env, port UDP/TCP 3478 dan UDP 49160-49200 dibuka di firewall VPS, dan
+  # TURN_DENIED_IP = alamat publik VPS (supaya relay tidak bisa menjangkau VPS sendiri). Opsional:
+  # TURN_REALM, TURN_EXTERNAL_IP (hanya VPS di balik NAT).
+  # Langkah lengkap: docs/deploy.md, "Suara dan TURN".
+  coturn:
+    image: coturn/coturn:4.6.3
+    profiles: ["suara"]
+    restart: unless-stopped
+    # Jaringan host: rentang port relay tidak perlu dipetakan satu per satu, dan alamat IP asli pemain terlihat.
+    network_mode: host
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./coturn/mulai.sh:/etc/coturn/mulai.sh:ro
+    # Rahasia TURN tidak pernah jadi argumen perintah (terlihat lewat `ps` di VPS): mulai.sh menulisnya ke
+    # berkas konfigurasi sementara yang hanya bisa dibaca coturn, lalu menjalankan turnserver.
+    entrypoint: ["/bin/sh", "/etc/coturn/mulai.sh"]
+    command: []
+    environment:
+      # Sengaja tanpa ":?": compose membaca seluruh berkas walau profil "suara" tidak dipakai, jadi deploy
+      # biasa tanpa TURN_SECRET tidak boleh gagal di sini (mulai.sh yang menolak jalan kalau kosong).
+      - TURN_SECRET=${TURN_SECRET:-}
+      - TURN_REALM=${TURN_REALM:-remi-madya}
+      - TURN_DENIED_IP=${TURN_DENIED_IP:-}
+      - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
     logging:
       driver: json-file
       options:

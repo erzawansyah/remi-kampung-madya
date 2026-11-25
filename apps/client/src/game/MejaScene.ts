@@ -26,7 +26,7 @@ import {
   ukuranBayangan,
   ukuranSorot,
 } from './kartuGrafis';
-import { acakId, geserBayangan, hitungTataMeja, IKON_KARTU, LAPIS, lebarIkonKartu, LETAK_LABEL_KARTU, PAD_LABEL_KARTU, TINGGI_TANGAN, ukuranLabelKartu, type AksiKetuk, type JenisSorot, type KartuTata, type Kotak, type TataMeja, type TeksTata, type Titik } from './tataMeja';
+import { acakId, geserBayangan, hitungTataMeja, IKON_KARTU, LAPIS, lebarIkonKartu, LETAK_LABEL_KARTU, PAD_LABEL_KARTU, TINGGI_TANGAN, ukuranLabelKartu, type AksiKetuk, type JenisSorot, type KeadaanMicTata, type KartuTata, type Kotak, type TataMeja, type TeksTata, type Titik } from './tataMeja';
 import { bacaPalet, saatLakenBerubah, type PaletMeja } from './warnaMeja';
 import { persegiBulat } from './kartuGrafisGambar';
 import { DURASI, EASE, durasi, easePegas, efekHemat, kurangiGerak } from '../gerak';
@@ -72,6 +72,8 @@ export interface ModelMeja {
    * area buangan saat kosong (begitu juga deck yang habis).
    */
   fokus?: string | null;
+  /** Obrolan suara (0.9.0): ikon mic per kursi untuk lencana di panel lawan (lihat ModelTata.suara). */
+  suara?: readonly (KeadaanMicTata | null)[];
 }
 
 /** Area meja yang bisa disorot (mis. oleh tutorial). */
@@ -490,6 +492,36 @@ export class MejaScene extends Phaser.Scene {
   // Penggambaran (rekonsiliasi)
   // ---------------------------------------------------------------------------------------------
 
+  /**
+   * Lencana mic (0.9.0) di sudut panel: hijau berpendar = lagi ngomong, gelap = mic nyala tapi diam, abu-abu
+   * dicoret = mic mati, kuning dicoret = suaranya dijeda karena sinyal lemah. Digambar di grafik statis
+   * (berubah hanya saat keadaannya berubah).
+   */
+  private gambarMic(g: Phaser.GameObjects.Graphics, k: { x: number; y: number; w: number; h: number }, keadaan: KeadaanMicTata, d: number) {
+    const r = k.w / 2;
+    const cx = k.x + r;
+    const cy = k.y + r;
+    const hijau = this.palet.positif;
+    const warnaLatar = keadaan === 'bicara' ? hijau : keadaan === 'lemah' ? 0xe0a030 : keadaan === 'mati' ? 0x4a524e : 0x16201a;
+    const warnaIkon = keadaan === 'bicara' ? 0x0b1a10 : keadaan === 'mati' ? 0xb4bcb8 : keadaan === 'lemah' ? 0x1d1404 : 0xffffff;
+    if (keadaan === 'bicara') {
+      g.fillStyle(hijau, 0.25).fillCircle(cx, cy, r + 4 * d);
+      g.fillStyle(hijau, 0.18).fillCircle(cx, cy, r + 7 * d);
+    }
+    g.fillStyle(warnaLatar, 1).fillCircle(cx, cy, r);
+    g.lineStyle(1 * d, 0x000000, 0.45).strokeCircle(cx, cy, r);
+    const s = r / 8;
+    g.fillStyle(warnaIkon, 1).fillRoundedRect(cx - 1.6 * s, cy - 4.6 * s, 3.2 * s, 5.6 * s, 1.6 * s);
+    g.lineStyle(Math.max(1, 1.1 * s), warnaIkon, 1);
+    g.beginPath();
+    g.arc(cx, cy - 0.6 * s, 3 * s, 0, Math.PI, false);
+    g.strokePath();
+    g.lineBetween(cx, cy + 2.4 * s, cx, cy + 4.4 * s);
+    if (keadaan === 'mati' || keadaan === 'lemah') {
+      g.lineStyle(Math.max(1, 1.4 * s), warnaIkon, 1).lineBetween(cx - 4.5 * s, cy - 4.5 * s, cx + 4.5 * s, cy + 4.5 * s);
+    }
+  }
+
   override update(waktu: number, delta: number) {
     if (this.kotor) this.gambar();
     this.perbaruiSeret(delta);
@@ -520,6 +552,8 @@ export class MejaScene extends Phaser.Scene {
       } else if (h.jenis === 'slot') {
         g.fillStyle(0x000000, 0.14).fillRoundedRect(k.x, k.y, k.w, k.h, 7 * d);
         g.lineStyle(1.5 * d, 0xffffff, 0.16).strokeRoundedRect(k.x, k.y, k.w, k.h, 7 * d);
+      } else if (h.jenis === 'mic') {
+        this.gambarMic(g, k, h.keadaan, d);
       } else if (h.jenis === 'fokus') {
         // Bingkai fokus keyboard (area kosong): sama gayanya dengan cincin fokus kartu.
         const p = 5 * d;

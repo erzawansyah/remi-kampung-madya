@@ -19,6 +19,8 @@ import { htmlInfo, htmlLabelInfo } from './info';
 import { TEKS_ACAK_DUDUK } from '../konten/acakDuduk';
 import { TEKS_OBROLAN } from '../konten/obrolan';
 import { htmlPanelObrolan, pasangPanelObrolan, type Obrolan } from './obrolan';
+import type { SuaraLangsung } from '../suaraLangsung';
+import { htmlTombolSuara, pasangIkonKursi, pasangTombolSuara } from './suaraLangsung';
 
 /** Id isian pesan obrolan di lobi (fokus dan kursornya dipulihkan saat lobi digambar ulang). */
 const ID_ISIAN_OBROLAN = 'isian-obrolan-lobi';
@@ -28,7 +30,12 @@ export interface ObrolanLobi {
   obrolan: Obrolan;
   /** Alasan pesan belum bisa dikirim (sambungan belum siap); '' = boleh. */
   alasanTolak?: () => string;
+  /** Obrolan suara (0.9.0): tombol Mic/Dengar suara di panel kursi dan ikon mic di samping nama. */
+  suara?: SuaraLangsung;
 }
+
+/** Pelepas pendengar suara lobi yang terakhir dipasang (lobi digambar ulang setiap info meja berubah). */
+const lepasSuaraLobi = new WeakMap<HTMLElement, () => void>();
 
 const htmlObrolanLobi = () =>
   `<section class="kartu-panel panel-obrolan" aria-labelledby="judul-obrolan"><h2 id="judul-obrolan">${esc(TEKS_OBROLAN.judul)}</h2>${htmlPanelObrolan({ idIsian: ID_ISIAN_OBROLAN })}</section>`;
@@ -201,13 +208,25 @@ export function renderLobi(
           : pilih
             ? ''
             : `<span class="redup">${kompetisi ? 'menunggu peserta…' : 'kosong'}</span>`;
-      return `<div class="kursi"><span class="redup" aria-label="Kursi ${i + 1}">${i + 1}</span><span class="nama">${nama}</span>${lencana}${pilih}</div>`;
+      // Ikon mic (0.9.0) hanya untuk kursi orang; isinya dari SuaraLangsung (kosong = tidak ikut suara).
+      const mic = k.jenis === 'manusia' && obrolan?.suara ? `<span class="slot-mic" data-mic-kursi="${i}"></span>` : '';
+      return `<div class="kursi"><span class="redup" aria-label="Kursi ${i + 1}">${i + 1}</span><span class="nama">${nama}${mic}</span>${lencana}${pilih}</div>`;
     })
     .join('');
 
   const q = <T extends HTMLElement>(sel: string) => akar.querySelector(sel) as T | null;
   /** Sesudah digambar ulang: gulir dan fokus dikembalikan, tombol keluar dan pilihan kursi dipasang. */
   const pasangUmum = () => {
+    lepasSuaraLobi.get(akar)?.();
+    const suara = obrolan?.suara;
+    if (suara) {
+      const lepasTombol = pasangTombolSuara(akar, suara, obrolan.alasanTolak);
+      const lepasIkon = pasangIkonKursi(akar, suara);
+      lepasSuaraLobi.set(akar, () => {
+        lepasTombol();
+        lepasIkon();
+      });
+    }
     const wadahObrolan = q('.panel-obrolan');
     if (wadahObrolan && obrolan) {
       pasangPanelObrolan(wadahObrolan, {
@@ -272,7 +291,7 @@ export function renderLobi(
     <div class="deret"><button type="button" id="salin">Salin link undangan</button>${'share' in navigator ? '<button type="button" id="bagi">Bagikan</button>' : ''}</div>
 
     <div class="kartu-panel">
-      <h2>Kursi (${info.kursi.length - kosong}/${info.kursi.length})</h2>
+      <div class="kepala-kursi"><h2>Kursi (${info.kursi.length - kosong}/${info.kursi.length})</h2>${obrolan?.suara ? htmlTombolSuara() : ''}</div>
       ${barisKursi}
       ${host && kosong ? '<button type="button" id="isi-bot" class="kecil">Ajak warga kedai isi kursi kosong</button>' : ''}
     </div>

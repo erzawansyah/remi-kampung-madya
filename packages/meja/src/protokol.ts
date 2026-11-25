@@ -226,6 +226,44 @@ export interface PenontonKursi {
   nama: string;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Suara (0.9.0, keputusan pemilik 25 Nov 2026): obrolan suara langsung di meja online, WebRTC mesh
+// antarpemain manusia satu meja. Meja/server hanya meneruskan sinyal (SDP/kandidat ICE) di antara
+// anggota suara meja yang sama; suaranya sendiri tidak pernah lewat server. Penonton tidak pernah ikut
+// dan tidak pernah tahu siapa yang bicara. Semuanya hanya di memori (tidak di DataMeja).
+
+/** Anggota suara paling banyak per meja (meja paling banyak 6 pemain). */
+export const MAKS_ANGGOTA_SUARA = 6;
+/** Panjang SDP paling besar yang diteruskan (huruf). SDP audio saja dengan semua kandidat ±2–6 KB. */
+export const MAKS_SDP = 16_000;
+/** Panjang baris kandidat ICE paling besar (huruf). */
+export const MAKS_KANDIDAT = 1_000;
+/** Sinyal suara paling banyak per pemain per jendela waktu; kelebihannya dibuang diam-diam. */
+export const MAKS_SINYAL_SUARA = 60;
+export const JENDELA_SINYAL_SUARA_MS = 10_000;
+
+/**
+ * Isi sinyal WebRTC: deskripsi sesi (offer/answer) atau satu kandidat ICE. Aplikasi ini mengirim SDP
+ * lengkap (kandidat sudah di dalamnya); kandidat terpisah tetap diterima untuk aplikasi lain.
+ */
+export type DataSinyalSuara =
+  | { sdp: { type: 'offer' | 'answer'; sdp: string } }
+  | { kandidat: { candidate: string; sdpMid: string | null; sdpMLineIndex: number | null } };
+
+/**
+ * Satu anggota suara meja. `id`: nomor anggota (tetap selama ia di suara, tidak ikut nomor kursi yang
+ * bisa diacak saat mulai, #62); `kursi`: kursinya sekarang; `mic`: mic-nya nyala; `jeda` (hanya kalau
+ * true): suaranya dijeda sendiri karena sinyal lemah, jangan dikirimi suara.
+ */
+export interface AnggotaSuara {
+  id: number;
+  kursi: number;
+  mic: boolean;
+  jeda?: true;
+}
+
+export type AksiSuara = 'gabung' | 'keluar' | 'mic' | 'jeda';
+
 export type JenisKursi = 'kosong' | 'manusia' | 'bot';
 
 export interface InfoKursi {
@@ -451,6 +489,16 @@ export type PesanKlien =
    * Pengirim dapat `masuk` seperti biasa; aplikasi lama tidak mengirimnya.
    */
   | { t: 'sprint'; nama: string }
+  /**
+   * Suara (0.9.0): gabung/keluar dari obrolan suara meja ini, atau ubah keadaan mic (`mic`) dan jeda
+   * karena sinyal lemah (`jeda`). `nyala`: untuk `gabung` = keadaan mic sekarang (sambung ulang; tidak
+   * ada = mic yang tercatat tidak diubah), untuk `mic`/`jeda` = keadaan barunya. `jeda` (hanya untuk
+   * `gabung`): suara HP itu masih dijeda karena sinyal lemah (tidak ada = tidak dijeda). Aplikasi lama
+   * tidak mengirimnya.
+   */
+  | { t: 'suara'; aksi: AksiSuara; nyala?: boolean; jeda?: boolean }
+  /** Suara: sinyal WebRTC ke anggota suara `ke` (id anggota, bukan kursi) di meja yang sama. */
+  | { t: 'suaraSinyal'; ke: number; data: DataSinyalSuara }
   | { t: 'ping' };
 
 export type PesanServer =
@@ -527,6 +575,15 @@ export type PesanServer =
    * papan sprint minggu ini sesudah percobaan ini (1 = teratas); null kalau tidak ketemu. Aplikasi lama
    * mengabaikannya.
    */
+  /**
+   * Suara (0.9.0): siapa saja yang ikut obrolan suara meja ini (hanya nomor kursi, id anggota, dan
+   * keadaan mic; tidak pernah alamat IP). `saya`: id anggota penerima, null kalau belum ikut. Dikirim ke
+   * kursi manusia yang terhubung setiap anggota/kursi/mic berubah, tidak pernah ke penonton. Aplikasi
+   * lama mengabaikannya.
+   */
+  | { t: 'suara'; saya: number | null; anggota: AnggotaSuara[] }
+  /** Suara: sinyal WebRTC dari anggota `dari` (id anggota), diteruskan meja apa adanya. */
+  | { t: 'suaraSinyal'; dari: number; data: DataSinyalSuara }
   | {
       t: 'sprintHasil';
       menang: boolean;
