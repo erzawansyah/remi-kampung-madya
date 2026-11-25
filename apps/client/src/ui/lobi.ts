@@ -16,6 +16,21 @@ import { htmlIsianBatas, lepasIsianBatas, pasangIsianBatas } from './batasSkor';
 import { esc, konfirmasi, toast, type OpsiKonfirmasi } from './dom';
 import { htmlInfo, htmlLabelInfo } from './info';
 import { TEKS_ACAK_DUDUK } from '../konten/acakDuduk';
+import { TEKS_OBROLAN } from '../konten/obrolan';
+import { htmlPanelObrolan, pasangPanelObrolan, type Obrolan } from './obrolan';
+
+/** Id isian pesan obrolan di lobi (fokus dan kursornya dipulihkan saat lobi digambar ulang). */
+const ID_ISIAN_OBROLAN = 'isian-obrolan-lobi';
+
+/** Panel obrolan di lobi (0.7.0). Isi, draf, dan posisi gulirnya disimpan di `Obrolan` milik aplikasi. */
+export interface ObrolanLobi {
+  obrolan: Obrolan;
+  /** Alasan pesan belum bisa dikirim (sambungan belum siap); '' = boleh. */
+  alasanTolak?: () => string;
+}
+
+const htmlObrolanLobi = () =>
+  `<section class="kartu-panel panel-obrolan" aria-labelledby="judul-obrolan"><h2 id="judul-obrolan">${esc(TEKS_OBROLAN.judul)}</h2>${htmlPanelObrolan({ susunan: 'lobi', idIsian: ID_ISIAN_OBROLAN })}</section>`;
 
 /** Nilai <select> kursi untuk warga kedai level tertentu, mis. "bot-jago". */
 const nilaiBot = (level: string) => `bot-${level}`;
@@ -117,7 +132,13 @@ export function opsiKonfirmasiKeluar(k: KeadaanKeluar): OpsiKonfirmasi {
   };
 }
 
-export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKlien) => void, keluar: () => void): void {
+export function renderLobi(
+  akar: HTMLElement,
+  info: InfoMeja,
+  kirim: (p: PesanKlien) => void,
+  keluar: () => void,
+  obrolan?: ObrolanLobi,
+): void {
   const host = info.kursiSaya === info.host;
   // Lobi digambar ulang setiap info meja berubah (ada yang masuk, kursi diatur). Angka batas skor
   // yang sedang diketik host jangan sampai hilang: dicatat di sini, dipulihkan sesudah digambar.
@@ -134,6 +155,11 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
         : aktif.dataset.kursi !== undefined
           ? `[data-kursi="${Number(aktif.dataset.kursi)}"]`
           : null
+      : null;
+  // Kursor di isian obrolan (yang sedang mengetik) ikut dipulihkan, bukan lompat ke akhir.
+  const kursorObrolan =
+    aktif instanceof HTMLInputElement && aktif.id === ID_ISIAN_OBROLAN && akar.contains(aktif)
+      ? { awal: aktif.selectionStart, akhir: aktif.selectionEnd }
       : null;
   lepasIsianBatas(akar);
   const p = info.pengaturan;
@@ -169,9 +195,24 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   const q = <T extends HTMLElement>(sel: string) => akar.querySelector(sel) as T | null;
   /** Sesudah digambar ulang: gulir dan fokus dikembalikan, tombol keluar dan pilihan kursi dipasang. */
   const pasangUmum = () => {
+    const wadahObrolan = q('.panel-obrolan');
+    if (wadahObrolan && obrolan) {
+      pasangPanelObrolan(wadahObrolan, {
+        obrolan: obrolan.obrolan,
+        kirim: (isi) => kirim({ t: 'emote', isi }),
+        namaSaya: () => (info.kursiSaya != null ? (info.kursi[info.kursiSaya]?.nama ?? null) : null),
+        alasanTolak: obrolan.alasanTolak,
+        susunan: 'lobi',
+        idIsian: ID_ISIAN_OBROLAN,
+      });
+    }
     const layarBaru = q('.layar-lobi');
     if (layarBaru && gulirLama !== null) layarBaru.scrollTop = gulirLama;
     if (fokusLama && !sedangDiisi) q(fokusLama)?.focus({ preventScroll: true });
+    const isianObrolan = q<HTMLInputElement>(`#${ID_ISIAN_OBROLAN}`);
+    if (kursorObrolan && isianObrolan && kursorObrolan.awal !== null && kursorObrolan.akhir !== null) {
+      isianObrolan.setSelectionRange(kursorObrolan.awal, kursorObrolan.akhir);
+    }
     q('#keluar')!.addEventListener('click', async () => {
       const ya = await konfirmasi(opsiKonfirmasiKeluar({ asal: 'lobi', offline: false, masukPeringkat: false, kompetisi: !!kompetisi }));
       // Selagi dialog terbuka permainan bisa saja mulai (layar sudah jadi meja): teks
@@ -191,7 +232,7 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
   };
 
   if (kompetisi) {
-    akar.innerHTML = htmlLobiKompetisi(info, barisKursi, kosong);
+    akar.innerHTML = htmlLobiKompetisi(info, barisKursi, kosong, obrolan ? htmlObrolanLobi() : '');
     pasangUmum();
     jalankanHitungMundur(akar, info);
     return;
@@ -223,6 +264,8 @@ export function renderLobi(akar: HTMLElement, info: InfoMeja, kirim: (p: PesanKl
       ${barisKursi}
       ${host && kosong ? '<button type="button" id="isi-bot" class="kecil">Ajak warga kedai isi kursi kosong</button>' : ''}
     </div>
+
+    ${obrolan ? htmlObrolanLobi() : ''}
 
     <div class="kartu-panel">
       <h2>Pengaturan ${host ? '' : '<span class="redup">(diatur host)</span>'}</h2>
@@ -321,7 +364,7 @@ export function teksStatusLobiKompetisi(info: Pick<InfoMeja, 'kursi'>, sisaMs: n
 }
 
 /** Lobi meja kompetisi: nama kompetisi (tanpa kode/undangan), kursi, status mulai sendiri, aturan sebagai teks. */
-function htmlLobiKompetisi(info: InfoMeja, barisKursi: string, kosong: number): string {
+function htmlLobiKompetisi(info: InfoMeja, barisKursi: string, kosong: number, htmlObrolan: string): string {
   const p = info.pengaturan;
   const k = info.kompetisi!;
   const baris = (label: string, nilai: string, id: string) =>
@@ -336,6 +379,8 @@ function htmlLobiKompetisi(info: InfoMeja, barisKursi: string, kosong: number): 
       <h2 class="label-info">Kursi (${info.kursi.length - kosong}/${info.kursi.length})${htmlInfo(TEKS_KOMPETISI.ketLobi, 'kursi meja kompetisi', 'ket-lobi-kompetisi')}</h2>
       ${barisKursi}
     </div>
+
+    ${htmlObrolan}
 
     <div class="kartu-panel">
       <p class="rapat status-lobi-kompetisi${sisa !== null ? ' penuh' : ''}" id="status-lobi" role="status">${esc(teksStatusLobiKompetisi(info, sisa))}</p>
