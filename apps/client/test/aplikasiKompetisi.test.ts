@@ -395,6 +395,12 @@ describe('Aplikasi: meja kompetisi yang sudah hilang', () => {
 });
 
 describe('Kompetisi segera hadir (0.7.0, KOMPETISI_DIBUKA = false)', () => {
+  /** Selama ditutup tidak ada toast yang menyuruh ke layar Kompetisi, juga tidak dua kabar sekaligus. */
+  const tanpaArahanKompetisi = () => {
+    expect(toastTeks()).not.toContain(TEKS_KOMPETISI.dirombak);
+    expect(toastTeks().filter((t) => /layar Kompetisi|menu Kompetisi|daftar meja/.test(t))).toEqual([]);
+  };
+
   beforeEach(() => {
     saklar.dibuka = false;
   });
@@ -424,12 +430,36 @@ describe('Kompetisi segera hadir (0.7.0, KOMPETISI_DIBUKA = false)', () => {
     expect(url.some((u) => u.startsWith('/api/kompetisi'))).toBe(false);
   });
 
-  it('lobi kompetisi dibubarkan server: beranda + toast', async () => {
+  it('lobi kompetisi dibubarkan server: beranda + satu toast yang tidak menyuruh ke layar Kompetisi', async () => {
     const { ws } = await diMejaKompetisi({ status: 'lobi' });
-    ws.kirimDariServer({ t: 'keluar', alasan: TEKS_LOBI_KOMPETISI_BUBAR });
+    ws.kirimDariServer({ t: 'keluar', alasan: TEKS_LOBI_KOMPETISI_BUBAR, kompetisi: 'KOMPA' });
     await vi.advanceTimersByTimeAsync(0);
-    expect(toastTeks()).toContain(TEKS_KOMPETISI.dirombak);
+    expect(toastTeks()).toContain(TEKS_KOMPETISI.lobiBubarDitutup);
+    tanpaArahanKompetisi();
     expect(document.querySelector('#ui .layar-kompetisi')).toBeNull();
     expect(document.querySelector('#ui .layar.beranda')).not.toBeNull();
   });
+
+  it('kursi kompetisi dilepas server: beranda + satu toast tanpa "daftar meja"', async () => {
+    const { ws } = await diMejaKompetisi({ status: 'lobi' });
+    ws.kirimDariServer({ t: 'keluar', alasan: TEKS_KURSI_KOMPETISI_LEPAS, kompetisi: 'KOMPA' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(toastTeks()).toContain(TEKS_KOMPETISI.kursiLepasDitutup);
+    tanpaArahanKompetisi();
+    expect(document.querySelector('#ui .layar.beranda')).not.toBeNull();
+  });
+
+  for (const status of ['lobi', 'main'] as const) {
+    it(`${status} kompetisi hilang ("Meja nggak ketemu"): beranda + toast meja biasa saja`, async () => {
+      const { ws } = await diMejaKompetisi({ status });
+      const url = pasangFetch();
+      ws.kirimDariServer({ t: 'error', pesan: 'Meja MJKOM nggak ketemu.' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(toastTeks()).toContain('Mejanya sudah bubar, Bos. Balik ke beranda ya.');
+      tanpaArahanKompetisi();
+      expect(localStorage.getItem(KUNCI_SESI)).toBeNull();
+      expect(url.some((u) => u.startsWith('/api/kompetisi'))).toBe(false);
+      expect(document.querySelector('#ui .layar.beranda')).not.toBeNull();
+    });
+  }
 });

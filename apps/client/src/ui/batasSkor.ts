@@ -56,7 +56,7 @@ export function htmlIsianBatas(o: OpsiIsianBatas): string {
     const minus = arah === 'bawah' ? '<span class="tanda" aria-hidden="true">−</span>' : '';
     // Satu "?" untuk kedua isian (di baris pertama); teksnya dirujuk keduanya lewat aria-describedby.
     const label = arah === 'atas' ? htmlLabelInfo(LABEL_ISIAN_BATAS[arah], KET_BATAS_SKOR, ket) : LABEL_ISIAN_BATAS[arah];
-    return `<label class="baris">${label}<span class="isian-angka">${minus}<input type="number" id="${o.id}-${arah}" data-batas-skor="${arah}" inputmode="numeric" min="${BATAS_SKOR_MIN}" max="${BATAS_SKOR_MAKS}" step="${KELIPATAN_BATAS_SKOR}" placeholder="${TANPA_BATAS}" value="${tampilIsianBatas(o.nilai[kunci(arah)])}" autocomplete="off" enterkeyhint="done" aria-describedby="${ket}" /></span></label>`;
+    return `<label class="baris" for="${o.id}-${arah}">${label}<span class="isian-angka">${minus}<input type="number" id="${o.id}-${arah}" data-batas-skor="${arah}" inputmode="numeric" min="${BATAS_SKOR_MIN}" max="${BATAS_SKOR_MAKS}" step="${KELIPATAN_BATAS_SKOR}" placeholder="${TANPA_BATAS}" value="${tampilIsianBatas(o.nilai[kunci(arah)])}" autocomplete="off" enterkeyhint="done" aria-describedby="${ket}" /></span></label>`;
   };
   return `<div class="isian-batas-skor">${isian('atas')}${isian('bawah')}</div>`;
 }

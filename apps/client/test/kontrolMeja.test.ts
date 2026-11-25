@@ -51,6 +51,18 @@ vi.mock('../src/ui/pengaturan', () => ({ bukaPengaturan: vi.fn() }));
 vi.mock('../src/ui/bantuan', () => ({ bukaBantuan: vi.fn() }));
 vi.mock('../src/ui/tentang', () => ({ bukaTentang: vi.fn() }));
 vi.mock('../src/ui/dom', async (asli) => ({ ...(await asli<typeof import('../src/ui/dom')>()), umumkan: vi.fn() }));
+// Kompetisi ditutup sementara di 0.7.0 (KOMPETISI_DIBUKA = false). Meja kompetisi diuji dengan saklar
+// dinyalakan; tombol klasemen akhir selama ditutup diuji terpisah.
+const saklarKompetisi = vi.hoisted(() => ({ dibuka: true }));
+vi.mock('../src/konten/kompetisi', async (asli) => {
+  const m = await asli<typeof import('../src/konten/kompetisi')>();
+  return {
+    ...m,
+    get KOMPETISI_DIBUKA() {
+      return saklarKompetisi.dibuka;
+    },
+  };
+});
 
 import { LAMA_HANTAM } from '../src/efek/retak';
 import { bunyi, getar } from '../src/efek/suara';
@@ -2258,6 +2270,20 @@ describe('meja kompetisi (#51 versi 2)', () => {
     const dlg = await sampaiHasil(meja);
     expect(dlg.querySelector('[data-lanjut-otomatis]')).toBeNull();
     expect(dlg.querySelector('[data-akhiri]')!.textContent).toBe('Akhiri permainan (0/3)');
+  });
+
+  it('kompetisi ditutup sementara: klasemen akhir tanpa "Kembali ke kompetisi" (dan tanpa Main lagi)', async () => {
+    saklarKompetisi.dibuka = false;
+    try {
+      meja = await mejaKompetisiSiapMentung();
+      const dlg = await sampaiHasil(meja, '[data-selesai]');
+      expect(dlg.querySelector('[data-a="kompetisi"]')).toBeNull();
+      expect(dlg.querySelector('[data-a="lagi"]')).toBeNull();
+      expect(dlg.textContent).not.toContain(TEKS_KOMPETISI.kembaliKompetisi);
+      expect(dlg.querySelector('[data-a="keluar"]')).not.toBeNull();
+    } finally {
+      saklarKompetisi.dibuka = true;
+    }
   });
 
   it('meja online biasa tidak berubah: kode di bar atas, Main lagi untuk host, tanpa bagian kompetisi', async () => {
