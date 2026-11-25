@@ -7,6 +7,7 @@ import type { ViewPemain } from '@remi/engine';
 import { MAKS_TIKET, rapikanBatasSkor, rapikanLevel, type DataMeja, type InfoKursi, type PengaturanMeja } from '@remi/meja';
 import type { TawaranPasang } from './pasangAplikasi';
 import { aturPreferensi, preferensi } from './preferensi';
+import { rapikanVersi } from './yangBaru';
 
 const KUNCI = {
   nama: 'remi.nama',
@@ -33,6 +34,8 @@ const KUNCI = {
    * di meja `kode`; `riwayat` = jumlah putaran selesai terbanyak yang sudah terlihat di permainan itu.
    */
   tanpaPengingatSusun: 'remi.tanpaPengingatSusun',
+  /** Versi aplikasi terakhir yang "Yang baru"-nya sudah dilihat (atau disimpan diam-diam untuk pemain baru). */
+  versiDilihat: 'remi.versiDilihat',
 } as const;
 
 /** Riwayat lokal yang disimpan (permainan terbaru di depan). */
@@ -324,6 +327,10 @@ export const simpan = {
   tanpaPengingatSusun: () => baca<TanpaPengingatSusun | null>(KUNCI.tanpaPengingatSusun, null, rapikanTanpaPengingat),
   /** null menghapus kuncinya (permainan baru, atau permainannya sudah selesai). */
   setTanpaPengingatSusun: (t: TanpaPengingatSusun | null) => tulis(KUNCI.tanpaPengingatSusun, t),
+
+  /** Rusak atau bukan "x.y.z" = null (kuncinya dihapus), lihat putuskanYangBaru(). */
+  versiDilihat: () => baca<string | null>(KUNCI.versiDilihat, null, (x) => rapikanVersi(x) ?? undefined),
+  setVersiDilihat: (v: string) => tulis(KUNCI.versiDilihat, rapikanVersi(v)),
 
   urutanTangan: () => baca<string[]>(KUNCI.urutanTangan, [], rapikanDaftarString),
   setUrutanTangan: (u: string[]) => tulis(KUNCI.urutanTangan, u),

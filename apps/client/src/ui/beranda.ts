@@ -162,6 +162,14 @@ export function infoSimpanan(): { teks: string; latihan: boolean } | null {
 }
 
 /**
+ * Beranda menawarkan latihan ("Warga baru, ya?"): belum pernah menutup tawaran/tutorial, belum punya riwayat,
+ * dan tidak ada simpanan offline. Dipakai juga main.ts supaya jendela "Yang baru" tidak menimpa tawaran itu.
+ */
+export function adalahPemainBaru(adaRiwayat = simpan.riwayat().length > 0, adaSimpanan = !!infoSimpanan()): boolean {
+  return !preferensi().tutorialSelesai && !adaRiwayat && !adaSimpanan;
+}
+
+/**
  * Gerbang sebelum permainan baru (main baru / latihan) menimpa slot simpanan offline.
  * Tanpa simpanan: langsung boleh. Ada simpanan: konfirmasi bahaya yang menyebut apa yang hilang.
  * Simpanan dibaca saat dipanggil, jadi aman dipakai dari mana saja (beranda, Pengaturan).
@@ -197,7 +205,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   const p = pengaturanTersimpan();
   const simpanan = infoSimpanan();
   const riwayat = simpan.riwayat();
-  const pemainBaru = !preferensi().tutorialSelesai && !riwayat.length && !simpanan;
+  const pemainBaru = adalahPemainBaru(riwayat.length > 0, !!simpanan);
   const pilihan = <T extends string | number>(nilai: T, opsiPilih: [T, string][]) =>
     opsiPilih.map(([v, label]) => `<option value="${v}" ${v === nilai ? 'selected' : ''}>${esc(label)}</option>`).join('');
 
