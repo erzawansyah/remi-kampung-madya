@@ -7,6 +7,7 @@ import { bukaRiwayat } from './riwayat.js';
 import { pasangPenjagaProses } from './penjaga.js';
 import { daftarEnv } from './keamanan.js';
 import { normalkanIdNotion } from './notion.js';
+import { bacaTurnEnv } from './suara.js';
 
 const di = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 2567);
@@ -37,6 +38,13 @@ else if (tokenNotion || isianDbNotion) {
   log(`usul fitur: ${!tokenNotion ? 'NOTION_TOKEN kosong' : !isianDbNotion ? 'NOTION_USULAN_DB kosong' : 'NOTION_USULAN_DB bukan id database Notion'}, usulan disimpan dulu di database`);
 } else log('usul fitur: Notion belum diatur (NOTION_TOKEN, NOTION_USULAN_DB), usulan disimpan dulu di database');
 
+// Suara (0.9.0, docs/deploy.md "Suara dan TURN"): tanpa TURN_URLS + TURN_SECRET, obrolan suara hanya
+// memakai STUN (jalan di banyak Wi-Fi, sering gagal di data seluler). Rahasia tidak pernah ditulis ke log.
+const turn = bacaTurnEnv(process.env);
+if (turn) log(`suara: TURN aktif (${turn.urls.length} alamat, kredensial berumur ${turn.ttlDetik} detik)`);
+else if (process.env.TURN_URLS || process.env.TURN_URL || process.env.TURN_SECRET) log('suara: TURN_URLS atau TURN_SECRET kosong/tidak sah, suara hanya pakai STUN');
+else log('suara: TURN belum diatur, suara hanya pakai STUN');
+
 const server = await jalankanServer({
   port,
   folderStatis,
@@ -51,6 +59,7 @@ const server = await jalankanServer({
   originDiizinkan: daftarEnv(process.env.ORIGIN_DIIZINKAN),
   healthzDetail: process.env.HEALTHZ_DETAIL === '1' || process.env.HEALTHZ_DETAIL?.toLowerCase() === 'true',
   notion,
+  turn,
   // Meja disimpan di database yang sama supaya selamat dari restart/deploy (bawaan nyala).
   // SIMPAN_MEJA=0 mematikannya (meja kembali hanya di memori; simpanan lama tidak dipulihkan).
   simpanMeja: !['0', 'false'].includes((process.env.SIMPAN_MEJA ?? '').toLowerCase()),

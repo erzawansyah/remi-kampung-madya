@@ -1293,3 +1293,192 @@ details.akordion[open] > summary::after {
   font-size: 1.5rem;
   padding: var(--ruang-1) 0;
 }
+
+/* ------------------------------------------------------------------------------------------------
+   Obrolan suara (0.9.0): grup tombol Mic ▾ Dengar suara (bar atas meja dan panel kursi lobi), ikon mic
+   di samping nama kursi, dan lembar "Suara". Hijau berpendar = lagi ngomong, abu-abu dicoret = mic mati,
+   kuning = suara dijeda karena sinyal lemah.
+   ------------------------------------------------------------------------------------------------ */
+.svg-suara {
+  width: 1.25em;
+  height: 1.25em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
+}
+.svg-suara .isi {
+  fill: currentColor;
+  stroke: none;
+}
+.svg-suara .coret {
+  stroke-width: 2.4;
+}
+.grup-suara {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.grup-suara.tersembunyi {
+  display: none;
+}
+.grup-suara button.tombol-ikon {
+  position: relative;
+  color: var(--teks);
+}
+.grup-suara .tombol-lembar-suara {
+  width: 26px;
+  min-width: 26px;
+  font-size: var(--teks-sm);
+}
+.tombol-mic[data-keadaan='mati'],
+.tombol-dengar[data-keadaan='mati'] {
+  color: var(--teks-redup);
+}
+.tombol-mic[data-keadaan='nyala'],
+.tombol-mic[data-keadaan='bicara'] {
+  color: var(--positif);
+  border-color: var(--positif);
+}
+.tombol-mic[data-keadaan='bicara'] {
+  box-shadow: 0 0 0 3px rgba(139, 226, 139, 0.35), 0 0 14px rgba(139, 226, 139, 0.55);
+}
+.tombol-mic[data-keadaan='minta'] {
+  opacity: 0.7;
+}
+.tombol-mic[data-keadaan='lemah'] {
+  color: var(--emas);
+  border-color: var(--emas);
+}
+.tombol-mic .tanda-lemah {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  border-radius: var(--radius-pil);
+  background: var(--emas);
+  color: #1d1404;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.1rem;
+}
+.kepala-kursi {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ruang-2);
+  flex-wrap: wrap;
+}
+.slot-mic:empty {
+  display: none;
+}
+.slot-mic {
+  display: inline-flex;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.ikon-mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+  flex: none;
+}
+.ikon-mic[data-keadaan='mati'] {
+  color: #b4bcb8;
+  background: #4a524e;
+}
+.ikon-mic[data-keadaan='lemah'] {
+  color: #1d1404;
+  background: #e0a030;
+}
+.ikon-mic[data-keadaan='bicara'] {
+  color: #0b1a10;
+  background: var(--positif);
+  box-shadow: 0 0 0 3px rgba(139, 226, 139, 0.3), 0 0 10px rgba(139, 226, 139, 0.6);
+}
+.lembar-suara .deret-sakelar {
+  display: grid;
+  gap: var(--ruang-2);
+}
+.lembar-suara .sakelar-suara {
+  display: flex;
+  align-items: center;
+  gap: var(--ruang-3);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--ruang-3);
+  text-align: left;
+}
+.lembar-suara .ikon-sakelar {
+  font-size: 1.5rem;
+  color: var(--teks-redup);
+}
+.lembar-suara .sakelar-suara[aria-checked='true'] .ikon-sakelar {
+  color: var(--positif);
+}
+.lembar-suara .teks-sakelar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lembar-suara .teks-sakelar small {
+  color: var(--teks-redup);
+  font-weight: 400;
+}
+.lembar-suara .tanda-sakelar {
+  width: 44px;
+  height: 26px;
+  border-radius: var(--radius-pil);
+  background: rgba(255, 255, 255, 0.18);
+  position: relative;
+  flex: none;
+}
+.lembar-suara .tanda-sakelar::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+.lembar-suara .sakelar-suara[aria-checked='true'] .tanda-sakelar {
+  background: var(--positif-latar);
+}
+.lembar-suara .sakelar-suara[aria-checked='true'] .tanda-sakelar::after {
+  transform: translateX(18px);
+  background: var(--positif);
+}
+.lembar-suara h3 {
+  margin: var(--ruang-3) 0 var(--ruang-2);
+}
+.lembar-suara .daftar-suara {
+  display: grid;
+  gap: var(--ruang-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lembar-suara .daftar-suara .kursi .nama {
+  display: flex;
+  flex-direction: column;
+}
+.lembar-suara .catatan-lemah {
+  margin: 0 0 var(--ruang-2);
+  padding: var(--ruang-2) var(--ruang-3);
+  border-radius: var(--radius-sedang);
+  background: rgba(224, 160, 48, 0.18);
+  color: var(--emas);
+}

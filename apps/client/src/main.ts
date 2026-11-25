@@ -6,6 +6,8 @@ import { registerSW } from 'virtual:pwa-register';
 import type { ViewPemain } from '@remi/engine';
 import { TEKS_KURSI_KOMPETISI_LEPAS, TEKS_LOBI_KOMPETISI_BUBAR, validasiObrolan, type InfoMeja, type InfoTontonan, type PengaturanMeja } from '@remi/meja';
 import { Obrolan } from './ui/obrolan';
+import { lingkunganBrowser, SuaraLangsung, type SambunganSuara } from './suaraLangsung';
+import { redamMusik } from './efek/musik';
 import { pasangPreferensi } from './preferensi';
 import {
   idAcak,
@@ -145,6 +147,14 @@ class Aplikasi implements AppUntukMeja {
   private kontrol: KontrolMeja | null = null;
   /** Obrolan meja yang sedang diduduki (0.7.0): dari lobi terbawa ke meja, dibuang saat meninggalkan meja. */
   readonly obrolan = new Obrolan();
+  /**
+   * Obrolan suara meja online (0.9.0). Mic selalu mati tiap masuk meja; semua sambungan dan mic dibersihkan
+   * saat keluar/pindah meja, ke beranda, mulai nonton, dan saat halaman ditutup.
+   */
+  readonly suara = new SuaraLangsung(
+    lingkunganBrowser({ toast: (pesan, salah) => toast(pesan, salah), umumkan: (pesan) => umumkan(pesan), redamMusik: () => redamMusik(0.35, 0.5) }),
+    () => this.sambunganSuara(),
+  );
   private game: PenampungGame | null = null;
   private beranda: BerandaTerpasang | null = null;
   private promptPasang: PromptPasang | null = null;
@@ -243,6 +253,13 @@ class Aplikasi implements AppUntukMeja {
     return this.tontonan !== null;
   }
 
+  /** Jalur kirim suara: lewat kirim() aplikasi (gerbang penonton yang sama), hanya di meja online. */
+  private sambunganSuara(): SambunganSuara | null {
+    const k = this.koneksi;
+    if (k?.jenis !== 'online') return null;
+    return { kirim: (p) => this.kirim(p), siapKirim: () => k.siapKirim(), rtt: () => k.rtt?.() ?? null, ukurRtt: () => k.ukurRtt?.() };
+  }
+
   statusKoneksi(): StatusKoneksi {
     return this.koneksi?.jenis === 'online' ? this.statusKini : 'tersambung';
   }
@@ -309,6 +326,8 @@ class Aplikasi implements AppUntukMeja {
       this.cekPembaruan();
     });
     window.addEventListener('offline', () => this.layar === 'beranda' && this.beranda?.aturStatusOnline('offline'));
+    // Halaman ditutup/ditinggal: mic dan semua sambungan suara dilepas (sambung ulang = gabung lagi, mic mati).
+    window.addEventListener('pagehide', () => this.suara.hentikan());
     document.addEventListener('visibilitychange', () => {
       const terlihat = document.visibilityState === 'visible';
       // Aplikasi dibuka lagi di beranda dengan sesi meja online yang belum tersambung: sambung lagi.
@@ -535,6 +554,7 @@ class Aplikasi implements AppUntukMeja {
   // ---------- koneksi ----------
 
   private pasangKoneksi(k: Koneksi) {
+    this.suara.hentikan();
     this.koneksi?.tutup();
     this.koneksi = k;
     this.obrolan.kosongkan();
@@ -671,12 +691,15 @@ class Aplikasi implements AppUntukMeja {
         this.sesiDitendang = false;
         // Meja lain = obrolan mulai kosong; meja yang sama (sambung ulang) = obrolannya tetap.
         this.obrolan.pakaiMeja(p.kode);
+        // Suara: meja lain = bersih dulu; gabung (lagi) begitu info meja datang.
+        if (this.koneksi?.jenis === 'online') this.suara.masukMeja(p.kode, p.token);
         if (typeof p.dijalankanWarga === 'number' && Number.isFinite(p.dijalankanWarga) && p.dijalankanWarga > 0) {
           this.kabarWarga = Math.floor(p.dijalankanWarga);
         }
         break;
       case 'meja':
         this.info = p.info;
+        this.suara.aturInfo(p.info, { online: this.jenis === 'online', penonton: this.tontonan !== null });
         this.niatOnline = null;
         this.koneksi?.aturLanjutSesi(false);
         // Lobi/meja kompetisi memakai laken biru (dilepas lagi saat meninggalkan meja).
@@ -791,6 +814,11 @@ class Aplikasi implements AppUntukMeja {
       }
       case 'ledek':
         this.kontrol?.terimaLedek(p.dari, p.ke, p.isi);
+        break;
+      case 'suara':
+      case 'suaraSinyal':
+        // Penonton tidak pernah ikut suara (meja juga tidak pernah mengirimnya ke penonton).
+        if (!this.tontonan) this.suara.terimaPesan(p);
         break;
       case 'tontonan':
         return this.terimaTontonan(p.info);
@@ -914,6 +942,7 @@ class Aplikasi implements AppUntukMeja {
   }
 
   private tampilkanBeranda() {
+    this.suara.hentikan();
     this.layar = 'beranda';
     this.sembunyikanGame();
     aturLaken('biasa');
@@ -1207,6 +1236,7 @@ class Aplikasi implements AppUntukMeja {
     const takSampai = this.keluarTakSampai;
     this.keluarTakSampai = null;
     if (this.koneksi?.jenis === 'online' && hapusSesi) simpan.setSesi(null);
+    this.suara.hentikan();
     this.koneksi?.tutup();
     this.koneksi = null;
     this.obrolan.kosongkan();
@@ -1227,6 +1257,7 @@ class Aplikasi implements AppUntukMeja {
 
   /** Mulai menonton meja `kode` dari daftar meja publik. */
   private mulaiTonton(kode: string) {
+    this.suara.hentikan();
     this.tontonan = null;
     this.menungguTonton = true;
     this.kirimOnline({ t: 'tonton', kode, nama: simpan.nama() || 'Penonton', token: simpan.tokenPenonton(idAcak) });
@@ -1357,6 +1388,7 @@ class Aplikasi implements AppUntukMeja {
       },
       {
         obrolan: this.obrolan,
+        suara: this.suara,
         // Sambungan belum siap: pesan ditahan (draf tetap), sama seperti tombol meja.
         alasanTolak: () => (this.koneksi?.jenis === 'online' && (this.statusKini !== 'tersambung' || !this.koneksi.siapKirim()) ? TEKS_KONEKSI.nyambung : ''),
       },

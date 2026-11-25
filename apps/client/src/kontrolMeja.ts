@@ -70,6 +70,8 @@ import { TEKS_TURUNKAN } from './konten/turunkan';
 import { TEKS_PENGINGAT_SUSUN } from './konten/susunAkhir';
 import { TEKS_OBROLAN, teksBelumDibaca, teksPeserta, teksSisaGiliran } from './konten/obrolan';
 import { htmlPanelObrolan, Obrolan, pasangPanelObrolan, type BarisObrolan, type PeristiwaObrolan } from './ui/obrolan';
+import type { KeadaanMic, SuaraLangsung } from './suaraLangsung';
+import { htmlTombolSuara, pasangTombolSuara } from './ui/suaraLangsung';
 import { simpan } from './penyimpanan';
 import { gerakDikurangi } from './preferensi';
 import { durasi } from './gerak';
@@ -115,6 +117,11 @@ export interface AppUntukMeja {
    * (test) = meja memakai simpanan sendiri yang kosong.
    */
   readonly obrolan?: Obrolan;
+  /**
+   * Obrolan suara meja online (0.9.0). Tidak ada (offline, test) = tanpa tombol dan ikon suara. Penonton
+   * tidak pernah mendapat tombol maupun ikon mic.
+   */
+  readonly suara?: SuaraLangsung;
 }
 
 /** Pesan server kompetisiHasil: nilai dan naik-turun peringkat kompetisi sesudah permainan selesai. */
@@ -601,6 +608,10 @@ export class KontrolMeja implements AksiAdegan {
   private belumDibaca = 0;
   private lepasPanelObrolan: (() => void) | null = null;
   private readonly lepasDengarObrolan: () => void;
+  /** Pelepas tombol suara dan pendengar ikon mic di kanvas (0.9.0). */
+  private lepasSuara: (() => void) | null = null;
+  /** Model kanvas terakhir: ikon mic di panel diperbarui tanpa menggambar ulang bar dan tombol aksi. */
+  private modelTerakhir: ModelMeja | null = null;
   /** Lembar obrolan layar penuh yang sedang terbuka (null = tertutup). */
   private lembarObrolan: HTMLElement | null = null;
   /** Pelepas pendengar visualViewport lembar obrolan (bar tulis tetap di atas papan ketik HP). */
@@ -730,6 +741,10 @@ export class KontrolMeja implements AksiAdegan {
         <button type="button" data-a="log" aria-haspopup="dialog">Log</button>
         <button type="button" class="tombol-penonton tersembunyi" data-a="penonton" aria-haspopup="dialog"></button>
         ${
+          // Suara (0.9.0): hanya pemain di meja online (grupnya tersembunyi sampai suara tersedia, mis. sprint tidak).
+          !this.modePenonton && app.suara && app.jenis === 'online' ? htmlTombolSuara() : ''
+        }
+        ${
           // Penonton tidak ikut obrolan (#60): tombolnya tidak ada sama sekali.
           this.modePenonton
             ? ''
@@ -784,6 +799,15 @@ export class KontrolMeja implements AksiAdegan {
     });
     this.elPetunjuk.addEventListener('click', () => this.ketukPetunjuk());
     this.elInfo.innerHTML = '<span class="info-jenis"></span><span class="info-putaran"></span>';
+    if (!this.modePenonton && app.suara && app.jenis === 'online') {
+      const suara = app.suara;
+      const lepasTombol = pasangTombolSuara(this.elAtas, suara, () => this.alasanPutus());
+      const lepasIkon = suara.dengarkan(() => this.perbaruiIkonSuara());
+      this.lepasSuara = () => {
+        lepasTombol();
+        lepasIkon();
+      };
+    }
 
     this.timerWaktu = setInterval(() => this.detik(), 500);
     document.addEventListener('keydown', this.saatTombol);
@@ -825,6 +849,9 @@ export class KontrolMeja implements AksiAdegan {
   hancurkan() {
     this.hancur = true;
     this.lepasDengarObrolan();
+    this.lepasSuara?.();
+    this.lepasSuara = null;
+    this.modelTerakhir = null;
     // Baris obrolan yang masih menunggu animasi tetap masuk obrolan meja ini (tanpa gelembung).
     for (const [, , baris] of this.emoteTertunda.splice(0)) if (baris) this.obrolan.tambah(baris);
     this.lepasPanelObrolan?.();
@@ -2170,10 +2197,31 @@ export class KontrolMeja implements AksiAdegan {
           }
         : null,
       fokus: this.modusKeyboard ? this.fokus : null,
+      ...this.modelSuara(info),
     };
+    this.modelTerakhir = model;
     this.scene.pasang(model, this);
     this.aturDetak(model.kartukuDiAtas);
     this.tutorial?.perbarui(this.keadaanTutorial(st));
+  }
+
+  /** Ikon mic per kursi untuk panel di kanvas (0.9.0); kosong kalau suara tidak tersedia di meja ini. */
+  private modelSuara(info: InfoMeja): { suara?: (KeadaanMic | null)[] } {
+    const suara = this.app.suara;
+    if (this.penonton || !suara?.tersedia) return {};
+    const k = info.kursi.map((_, i) => suara.keadaanKursi(i));
+    return k.some((x) => x !== null) ? { suara: k } : {};
+  }
+
+  /** Keadaan suara berubah (ngomong, mic, anggota): cukup ikon di panel kanvas yang digambar ulang. */
+  private perbaruiIkonSuara() {
+    const m = this.modelTerakhir;
+    if (this.hancur || !m || !this.info) return;
+    const baru = this.modelSuara(this.info);
+    if (JSON.stringify(baru.suara ?? null) === JSON.stringify(m.suara ?? null)) return;
+    const { suara: _, ...tanpa } = m;
+    this.modelTerakhir = { ...tanpa, ...baru };
+    this.scene.pasang(this.modelTerakhir, this);
   }
 
   private renderAtas() {

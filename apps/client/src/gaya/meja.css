@@ -1262,3 +1262,35 @@ html[data-gerak='kurang'] .status-koneksi .titik {
   text-align: center;
   overflow-wrap: anywhere;
 }
+
+/* Obrolan suara (0.9.0) di bar atas meja: Mic ▾ Dengar suara. Di layar HP (potret) tombol Dengar suara
+   mengalah ke lembar Suara (tetap bisa diatur dari ▾, sakelar besar) supaya nomor putaran di bar atas
+   tidak terpotong. Mic dan ▾ menempel jadi satu tombol terbelah. */
+.bar-atas .grup-suara {
+  gap: 0;
+}
+.bar-atas .grup-suara button.tombol-ikon {
+  width: 40px;
+  min-width: 40px;
+}
+.bar-atas .grup-suara button.tombol-mic {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.bar-atas .grup-suara button.tombol-lembar-suara {
+  width: 22px;
+  min-width: 22px;
+  padding: 0;
+  border-left-width: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  font-size: 0.75rem;
+}
+.bar-atas .grup-suara button.tombol-dengar {
+  margin-left: 6px;
+}
+@media (max-width: 520px) {
+  .bar-atas .grup-suara .tombol-dengar {
+    display: none;
+  }
+}
