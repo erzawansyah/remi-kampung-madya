@@ -48,7 +48,7 @@ export function kredensialTurn(rahasia: string, sekarangMs: number, ttlDetik: nu
 }
 
 /**
- * Isi jawaban /api/suara/ice. `bolehTurn`: peminta sedang duduk di meja online (token kursinya cocok),
+ * Isi jawaban /api/suara/ice. `bolehTurn`: peminta anggota suara di meja online yang punya teman suara terhubung (Meja.bolehRelaySuara),
  * supaya relay TURN tidak bisa dipakai sembarang orang dari luar. Tanpa itu, atau tanpa konfigurasi
  * TURN, hanya STUN.
  */

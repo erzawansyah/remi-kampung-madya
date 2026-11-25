@@ -335,17 +335,23 @@ export function validasiPesan(x: unknown): PesanKlien | null {
     }
     case 'suara': {
       // Suara (0.9.0): `nyala` wajib boolean untuk mic/jeda, opsional untuk gabung, tidak ada untuk keluar.
+      // `jeda` hanya untuk gabung, opsional (boolean).
       if (x.aksi === 'keluar') return { t: 'suara', aksi: 'keluar' };
       if (x.aksi === 'gabung') {
-        if (x.nyala === undefined) return { t: 'suara', aksi: 'gabung' };
-        return typeof x.nyala === 'boolean' ? { t: 'suara', aksi: 'gabung', nyala: x.nyala } : null;
+        if ((x.nyala !== undefined && typeof x.nyala !== 'boolean') || (x.jeda !== undefined && typeof x.jeda !== 'boolean')) return null;
+        return {
+          t: 'suara',
+          aksi: 'gabung',
+          ...(typeof x.nyala === 'boolean' ? { nyala: x.nyala } : {}),
+          ...(x.jeda === true ? { jeda: true } : {}),
+        };
       }
       if ((x.aksi === 'mic' || x.aksi === 'jeda') && typeof x.nyala === 'boolean') return { t: 'suara', aksi: x.aksi, nyala: x.nyala };
       return null;
     }
     case 'suaraSinyal': {
-      // `ke` = id anggota suara (bukan kursi); sah tidaknya diputuskan meja.
-      if (!isInt(x.ke) || x.ke < 1 || x.ke > 1_000_000_000) return null;
+      // `ke` = id anggota suara (bukan kursi; berbasis jam meja, jadi bisa besar); sah tidaknya diputuskan meja.
+      if (!isInt(x.ke) || x.ke < 1 || !Number.isSafeInteger(x.ke)) return null;
       const data = validasiSinyalSuara(x.data);
       return data ? { t: 'suaraSinyal', ke: x.ke, data } : null;
     }

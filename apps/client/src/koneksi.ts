@@ -103,13 +103,24 @@ export interface Koneksi {
   /** Mode lanjut sesi sedang aktif. */
   readonly melanjutkanSesi: boolean;
   /**
-   * Suara (0.9.0): RTT ping/pong terakhir ke server (ms); null kalau belum ada atau offline. Dipakai untuk
-   * menilai kualitas sinyal, tidak untuk apa pun di meja.
+   * Suara (0.9.0): RTT ping/pong ke server; null kalau socket tidak terbuka atau offline. Dipakai untuk
+   * menilai kualitas sinyal, tidak untuk apa pun di meja. Lihat {@link InfoRtt}.
    */
-  rtt?(): number | null;
+  rtt?(): InfoRtt | null;
   /** Suara: kirim satu ping sekarang (mengukur RTT lebih sering selama suara dijeda karena sinyal lemah). */
   ukurRtt?(): void;
   tutup(): void;
+}
+
+/**
+ * Suara: keadaan ukur RTT. `ms`: RTT pong terakhir (null = belum ada). `ke`: banyaknya pong yang sudah
+ * dicatat koneksi ini (naik tiap pong), supaya satu pengukuran tidak dihitung berkali-kali. `tungguMs`:
+ * umur ping tertua yang belum dijawab (null = tidak ada yang menunggu).
+ */
+export interface InfoRtt {
+  ms: number | null;
+  ke: number;
+  tungguMs: number | null;
 }
 
 /** Detak ping biasa. Sambungan yang diam lebih lama dari BATAS_PONG_MS dianggap setengah mati. */
@@ -268,6 +279,8 @@ export class KoneksiOnline implements Koneksi {
   private pingTerkirim: number[] = [];
   /** RTT ping/pong terakhir (ms), untuk penilai kualitas suara. */
   private rttTerakhir: number | null = null;
+  /** Banyaknya pong yang sudah dicatat (lihat InfoRtt.ke). */
+  private jumlahPong = 0;
   /** Sampel jam ber-RTT terkecil di sambungan ini. */
   private sampelJam: { rtt: number; selisih: number } | null = null;
   private selisihPakai = 0;
@@ -457,7 +470,10 @@ export class KoneksiOnline implements Koneksi {
    */
   private catatPong(w: unknown) {
     const t0 = this.pingTerkirim.shift();
-    if (t0 !== undefined) this.rttTerakhir = Math.max(0, Date.now() - t0);
+    if (t0 !== undefined) {
+      this.rttTerakhir = Math.max(0, Date.now() - t0);
+      this.jumlahPong++;
+    }
     if (t0 === undefined || typeof w !== 'number' || !Number.isFinite(w)) return;
     const t1 = Date.now();
     const rtt = Math.max(0, t1 - t0);
@@ -597,8 +613,10 @@ export class KoneksiOnline implements Koneksi {
     return this.selisihPakai;
   }
 
-  rtt(): number | null {
-    return this.ws?.readyState === WebSocket.OPEN ? this.rttTerakhir : null;
+  rtt(): InfoRtt | null {
+    if (this.ws?.readyState !== WebSocket.OPEN) return null;
+    const t0 = this.pingTerkirim[0];
+    return { ms: this.rttTerakhir, ke: this.jumlahPong, tungguMs: t0 === undefined ? null : Math.max(0, Date.now() - t0) };
   }
 
   ukurRtt() {

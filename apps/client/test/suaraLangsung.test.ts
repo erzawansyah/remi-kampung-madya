@@ -153,10 +153,16 @@ function hp(meja: Meja, pemainId: string, antrian: [string, PesanServer][], ubah
   const toast = vi.fn();
   const umumkan = vi.fn();
   const redamMusik = vi.fn();
-  const timer: (() => void)[] = [];
+  /** Timer yang masih menunggu (clearTimeout membuangnya). */
+  const timerMap = new Map<number, () => void>();
+  let nomorTimer = 0;
   const terkirim: PesanKlien[] = [];
-  let rtt: number | null = 50;
-  const ukurRtt = vi.fn();
+  /** RTT WebSocket tiruan: `ke` naik tiap pong baru. */
+  const rtt = { ms: 50 as number | null, ke: 0, tungguMs: null as number | null };
+  // Ping yang dikirim selama jeda langsung dijawab (pong baru dengan RTT yang sedang berlaku).
+  const ukurRtt = vi.fn(() => {
+    rtt.ke++;
+  });
   let ketuk: (() => void) | null = null;
   const peers: PeerPalsu[] = [];
   const env: LingkunganSuara = {
@@ -190,10 +196,16 @@ function hp(meja: Meja, pemainId: string, antrian: [string, PesanServer][], ubah
     setInterval: () => 1,
     clearInterval: () => undefined,
     setTimeout: (fn) => {
-      timer.push(fn);
-      return timer.length;
+      const id = ++nomorTimer;
+      timerMap.set(id, () => {
+        timerMap.delete(id);
+        fn();
+      });
+      return id;
     },
-    clearTimeout: () => undefined,
+    clearTimeout: (h) => {
+      timerMap.delete(h as number);
+    },
     toast,
     umumkan,
     redamMusik,
@@ -205,13 +217,16 @@ function hp(meja: Meja, pemainId: string, antrian: [string, PesanServer][], ubah
     },
     ...ubah,
   };
+  let siap = true;
   const suara = new SuaraLangsung(env, () => ({
+    // Socket putus: pesan dibuang (seperti koneksi.ts untuk pesan suara).
     kirim: (p) => {
+      if (!siap) return;
       terkirim.push(p as PesanKlien);
       meja.terima(pemainId, p as PesanKlien);
     },
-    siapKirim: () => true,
-    rtt: () => rtt,
+    siapKirim: () => siap,
+    rtt: () => ({ ...rtt }),
     ukurRtt,
   }));
   return {
@@ -222,11 +237,29 @@ function hp(meja: Meja, pemainId: string, antrian: [string, PesanServer][], ubah
     toast,
     umumkan,
     redamMusik,
-    timer,
+    get timer() {
+      return [...timerMap.values()];
+    },
     terkirim,
     ukurRtt,
-    aturRtt: (n: number | null) => (rtt = n),
+    /** Pong baru dengan RTT `n`. */
+    aturRtt: (n: number | null) => {
+      rtt.ms = n;
+      rtt.ke++;
+    },
+    /** Pong baru dengan RTT yang sama. */
+    pong: () => {
+      rtt.ke++;
+    },
+    /** Ping yang belum dijawab selama `ms`. */
+    aturTunggu: (ms: number | null) => {
+      rtt.tungguMs = ms;
+    },
     ketuk: () => ketuk?.(),
+    /** Socket terbuka/putus. */
+    aturSiap: (b: boolean) => {
+      siap = b;
+    },
     masuk: () => {
       suara.masukMeja('ABCDE', pemainId);
       const i = meja.data.kursi.findIndex((k) => k.pemainId === pemainId);
@@ -283,7 +316,7 @@ describe('SuaraLangsung: gabung dan mic', () => {
     ani.masuk();
     budi.masuk();
     await alirkan();
-    expect(ani.terkirim).toEqual([{ t: 'suara', aksi: 'gabung' }]);
+    expect(ani.terkirim).toEqual([{ t: 'suara', aksi: 'gabung', nyala: false }]);
     expect(ani.suara.tersedia).toBe(true);
     expect(ani.suara.ikut).toBe(true);
     expect(ani.suara.tombolMic).toBe('mati');
@@ -541,6 +574,7 @@ describe('SuaraLangsung: kualitas sinyal', () => {
     m.ani.aturRtt(2500);
     await m.ani.suara.ukurKualitas();
     expect(m.ani.suara.tingkat).toBe('normal');
+    m.ani.pong();
     await m.ani.suara.ukurKualitas();
     await m.alirkan();
     expect(m.ani.suara.tingkat).toBe('jeda');
@@ -637,7 +671,7 @@ describe('SuaraLangsung: bersih-bersih', () => {
     expect(peerAktif()).toHaveLength(0);
     // Masuk lagi: gabung dengan mic mati.
     m.ani.masuk();
-    expect(m.ani.terkirim.at(-1)).toEqual({ t: 'suara', aksi: 'gabung' });
+    expect(m.ani.terkirim.at(-1)).toEqual({ t: 'suara', aksi: 'gabung', nyala: false });
     expect(m.ani.suara.tombolMic).toBe('mati');
   });
 
@@ -681,5 +715,159 @@ describe('SuaraLangsung: bersih-bersih', () => {
     await m.alirkan();
     const baru = PeerPalsu.semua.filter((p) => !p.ditutup && p.localDescription?.type === 'offer');
     expect(baru).toHaveLength(1);
+  });
+});
+
+describe('SuaraLangsung: sinyal hilang dan sambung ulang', () => {
+  it('tawaran tidak terkirim (socket putus): peer ditutup dan dicoba lagi sesudah jeda', async () => {
+    const m = meja3();
+    m.ani.masuk();
+    m.budi.masuk();
+    await m.alirkan();
+    // Ani (penawar) menyalakan mic tepat saat socket-nya putus.
+    await m.budi.suara.ketukMic();
+    m.ani.aturSiap(false);
+    await m.alirkan();
+    const pertama = m.ani.peers[0]!;
+    expect(pertama.ditutup).toBe(true);
+    expect(m.ani.timer).toHaveLength(1);
+    m.ani.aturSiap(true);
+    m.ani.timer[0]!();
+    await m.alirkan();
+    const baru = m.ani.peers.filter((p) => !p.ditutup);
+    expect(baru).toHaveLength(1);
+    expect(baru[0]!.remoteDescription?.type).toBe('answer');
+  });
+
+  it('tawaran tidak dijawab dalam BATAS_JAWAB_MS: peer ditutup dan ditawarkan ulang', async () => {
+    const m = meja3();
+    m.ani.masuk();
+    m.budi.masuk();
+    await m.alirkan();
+    await m.budi.suara.ketukMic();
+    // Tawaran Ani hilang di jalan (mis. dibuang batas laju): daftar anggota sampai, sinyalnya tidak.
+    const ke = { ani: m.ani, budi: m.budi, cici: m.cici } as Record<string, typeof m.ani>;
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 0));
+      for (const [id, p] of m.ani.antrian.splice(0)) if (p.t !== 'suaraSinyal') ke[id]!.suara.terimaPesan(p);
+    }
+    const tawaran = m.ani.peers[0]!;
+    expect(tawaran.signalingState).toBe('have-local-offer');
+    expect(m.ani.timer).toHaveLength(1);
+    // Batas jawab habis.
+    m.ani.timer[0]!();
+    expect(tawaran.ditutup).toBe(true);
+    // Coba lagi sesudah jeda; kali ini sinyalnya sampai.
+    expect(m.ani.timer).toHaveLength(1);
+    m.ani.timer[0]!();
+    await m.alirkan();
+    const baru = m.ani.peers.filter((p) => !p.ditutup);
+    expect(baru).toHaveLength(1);
+    expect(baru[0]!.remoteDescription?.type).toBe('answer');
+    // Jawaban datang: batas jawab dibatalkan, tidak ada timer tersisa.
+    expect(m.ani.timer).toHaveLength(0);
+  });
+
+  it('sambung ulang ke meja yang sama: sambungan yang belum jadi ditawarkan ulang, yang sudah jalan dibiarkan', async () => {
+    const m = meja3();
+    m.ani.masuk();
+    m.budi.masuk();
+    m.cici.masuk();
+    await m.alirkan();
+    await m.budi.suara.ketukMic();
+    await m.cici.suara.ketukMic();
+    await m.alirkan();
+    // Ani menawarkan ke Budi lalu Cici. Ani–Budi tersambung, Ani–Cici belum (menggantung).
+    expect(m.ani.peers).toHaveLength(2);
+    const [keBudi, keCici] = m.ani.peers;
+    keBudi!.sambung();
+    await m.alirkan();
+    m.ani.masuk();
+    await m.alirkan();
+    expect(keBudi!.ditutup).toBe(false);
+    expect(keCici!.ditutup).toBe(true);
+    const aktif = m.ani.peers.filter((p) => !p.ditutup);
+    expect(aktif).toHaveLength(2);
+    expect(aktif[1]!.remoteDescription?.type).toBe('answer');
+  });
+
+  it('gabung ulang membawa keadaan mic dan jeda yang sekarang (perubahan selama putus tidak hilang)', async () => {
+    const m = meja3();
+    m.ani.masuk();
+    m.budi.masuk();
+    await m.alirkan();
+    await m.ani.suara.ketukMic();
+    await m.alirkan();
+    expect(m.budi.suara.keadaanKursi(0)).toBe('nyala');
+    // Putus, lalu mic dimatikan selama putus: pesan mic-nya dibuang.
+    m.ani.aturSiap(false);
+    await m.ani.suara.ketukMic();
+    m.ani.aturSiap(true);
+    m.ani.masuk();
+    await m.alirkan();
+    expect(m.ani.terkirim.at(-1)).toEqual({ t: 'suara', aksi: 'gabung', nyala: false });
+    expect(m.budi.suara.keadaanKursi(0)).toBe('mati');
+    // Sinyal buruk sampai dijeda, lalu sambung ulang: server tetap tahu HP ini dijeda.
+    await m.ani.suara.ketukMic();
+    m.ani.aturRtt(2500);
+    await m.ani.suara.ukurKualitas();
+    m.ani.pong();
+    await m.ani.suara.ukurKualitas();
+    expect(m.ani.suara.tingkat).toBe('jeda');
+    m.ani.masuk();
+    await m.alirkan();
+    expect(m.ani.terkirim.at(-1)).toEqual({ t: 'suara', aksi: 'gabung', nyala: true, jeda: true });
+    expect(m.budi.suara.keadaanKursi(0)).toBe('lemah');
+  });
+
+  it('satu pong lambat hanya dihitung satu sampel (tidak menjeda suara sendirian)', async () => {
+    const m = meja3();
+    m.ani.masuk();
+    m.budi.masuk();
+    await m.alirkan();
+    await m.ani.suara.ketukMic();
+    await m.alirkan();
+    m.ani.aturRtt(2000);
+    for (let i = 0; i < 5; i++) await m.ani.suara.ukurKualitas();
+    expect(m.ani.suara.tingkat).toBe('normal');
+    // Pong kedua yang juga lambat = dua sampel buruk berturut-turut.
+    m.ani.pong();
+    await m.ani.suara.ukurKualitas();
+    expect(m.ani.suara.tingkat).toBe('jeda');
+  });
+
+  it('selama dijeda, ping yang tidak dijawab dihitung buruk (jaringan mati tidak dianggap pulih)', async () => {
+    const m = meja3();
+    m.ani.masuk();
+    m.budi.masuk();
+    await m.alirkan();
+    m.ani.aturRtt(2000);
+    await m.ani.suara.ukurKualitas();
+    m.ani.pong();
+    await m.ani.suara.ukurKualitas();
+    expect(m.ani.suara.tingkat).toBe('jeda');
+    m.ani.ukurRtt.mockImplementation(() => undefined);
+    m.ani.aturTunggu(2_000);
+    for (let i = 0; i < 6; i++) await m.ani.suara.ukurKualitas();
+    expect(m.ani.suara.tingkat).toBe('jeda');
+  });
+
+  it('tawaran dari teman yang mic-nya mati tidak dijawab kalau mic sendiri juga mati (alamat IP tidak dibagikan)', async () => {
+    const m = meja3();
+    m.ani.masuk();
+    m.budi.masuk();
+    await m.alirkan();
+    const idAni = m.meja.data.kursi.findIndex((k) => k.pemainId === 'ani');
+    const anggota = m.budi.suara.daftarOrang().find((o) => o.kursi === idAni)!;
+    m.budi.suara.terimaPesan({ t: 'suaraSinyal', dari: anggota.id, data: { sdp: { type: 'offer', sdp: SDP } } });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(m.budi.peers).toHaveLength(0);
+    expect(m.budi.terkirim.some((p) => p.t === 'suaraSinyal')).toBe(false);
+    // Begitu Ani menyalakan mic (terlihat semua orang), tawarannya dijawab.
+    await m.ani.suara.ketukMic();
+    await m.alirkan();
+    expect(m.budi.peers.filter((p) => !p.ditutup)).toHaveLength(1);
+    expect(m.budi.terkirim.some((p) => p.t === 'suaraSinyal')).toBe(true);
   });
 });

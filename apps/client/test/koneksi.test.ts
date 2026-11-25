@@ -746,11 +746,23 @@ describe('KoneksiOnline: socket setengah mati ketahuan cepat (langkah 1)', () =>
     baru.buka();
     expect(baru.terkirim.some((p) => p.t === 'suaraSinyal')).toBe(false);
     // RTT ping/pong untuk penilai kualitas suara.
+    const awal = k.rtt()!;
     baru.jawabPing = true;
     k.ukurRtt();
     expect(baru.terkirim.at(-1)).toEqual({ t: 'ping' });
     await microtask();
-    expect(k.rtt()).not.toBeNull();
+    const sesudah = k.rtt()!;
+    expect(sesudah.ms).not.toBeNull();
+    // Satu pong = satu hitungan: penilai suara tidak memakai pengukuran yang sama berkali-kali.
+    expect(sesudah.ke).toBeGreaterThan(awal.ke);
+    expect(sesudah.tungguMs).toBeNull();
+    expect(k.rtt()!.ke).toBe(sesudah.ke);
+    // Ping yang belum dijawab terlihat umurnya.
+    baru.jawabPing = false;
+    k.ukurRtt();
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(k.rtt()!.tungguMs).toBeGreaterThanOrEqual(2_500);
+    expect(k.rtt()!.ke).toBe(sesudah.ke);
   });
 
   it('socket sehat yang menjawab: aksi beruntun tidak pernah memutus sambungan', async () => {

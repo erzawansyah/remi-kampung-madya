@@ -3,7 +3,7 @@
 // Penonton tidak pernah ikut, tidak pernah dikirimi daftar anggota, dan tidak bisa mengirim sinyal.
 
 import { describe, expect, it } from 'vitest';
-import { Meja } from '../src/meja.js';
+import { dataMejaDipulihkan, Meja } from '../src/meja.js';
 import {
   JENDELA_SINYAL_SUARA_MS,
   MAKS_SINYAL_SUARA,
@@ -157,7 +157,7 @@ describe('suara: sinyal', () => {
 
   it('dibatasi MAKS_SINYAL_SUARA per jendela waktu per pemain', () => {
     const { meja, surat, jam } = mejaLobi();
-    meja.terima('ani', { t: 'suara', aksi: 'gabung' });
+    meja.terima('ani', { t: 'suara', aksi: 'gabung', nyala: true });
     meja.terima('budi', { t: 'suara', aksi: 'gabung' });
     const idBudi = suaraTerakhir(surat, 'ani')!.anggota[1]!.id;
     for (let i = 0; i < MAKS_SINYAL_SUARA + 10; i++) meja.terima('ani', { t: 'suaraSinyal', ke: idBudi, data: SDP });
@@ -229,5 +229,81 @@ describe('suara: validasi pesan', () => {
     expect(validasiSinyalSuara({ kandidat: { candidate: 'c'.repeat(1001) } })).toBeNull();
     expect(validasiSinyalSuara({ kandidat: { candidate: 'c', sdpMLineIndex: 99 } })).toBeNull();
     expect(validasiSinyalSuara({ kandidat: { candidate: 'c', sdpMid: 5 } })).toBeNull();
+  });
+});
+
+describe('suara: sambung ulang, restart, relay', () => {
+  it('gabung ulang membawa mic dan jeda HP-nya; validasi menerima jeda hanya boolean', () => {
+    const { meja, surat } = mejaLobi();
+    meja.terima('ani', { t: 'suara', aksi: 'gabung', nyala: true });
+    const id = suaraTerakhir(surat, 'ani')!.saya;
+    // Mic dimatikan selama putus (pesannya hilang): gabung ulang dengan nyala false menimpanya.
+    meja.terima('ani', { t: 'suara', aksi: 'gabung', nyala: false });
+    expect(suaraTerakhir(surat, 'budi')!.anggota[0]).toEqual({ id, kursi: 0, mic: false });
+    // Masih dijeda saat gabung ulang: tetap dijeda (teman tidak menawarkan ke HP yang dijeda).
+    meja.terima('ani', { t: 'suara', aksi: 'gabung', nyala: true, jeda: true });
+    expect(suaraTerakhir(surat, 'budi')!.anggota[0]).toEqual({ id, kursi: 0, mic: true, jeda: true });
+    meja.terima('ani', { t: 'suara', aksi: 'gabung', nyala: true });
+    expect(suaraTerakhir(surat, 'budi')!.anggota[0]).toEqual({ id, kursi: 0, mic: true });
+    expect(validasiPesan({ t: 'suara', aksi: 'gabung', nyala: false, jeda: true })).toEqual({ t: 'suara', aksi: 'gabung', nyala: false, jeda: true });
+    expect(validasiPesan({ t: 'suara', aksi: 'gabung', jeda: false })).toEqual({ t: 'suara', aksi: 'gabung' });
+    expect(validasiPesan({ t: 'suara', aksi: 'gabung', jeda: 'ya' })).toBeNull();
+    expect(validasiPesan({ t: 'suara', aksi: 'gabung', nyala: 1 })).toBeNull();
+  });
+
+  it('id suara sesudah restart (#58) tidak pernah sama dengan id sebelum restart', () => {
+    const { meja, surat, jam } = mejaLobi();
+    meja.terima('ani', { t: 'suara', aksi: 'gabung' });
+    meja.terima('budi', { t: 'suara', aksi: 'gabung' });
+    meja.terima('cici', { t: 'suara', aksi: 'gabung' });
+    const lama = suaraTerakhir(surat, 'ani')!.anggota.map((a) => a.id);
+    expect(new Set(lama).size).toBe(3);
+    // Server restart: meja dibangun ulang dari data (tanpa daftar suara), jamnya terus berjalan.
+    jam.maju(5_000);
+    const s2 = siapkan({ namaLawan: ['Warga A'], penjadwal: jam });
+    const pulih = new Meja(s2.opsi, dataMejaDipulihkan(meja.data));
+    for (const [id, nama] of [['cici', 'Cici'], ['budi', 'Budi'], ['ani', 'Ani']] as const) {
+      pulih.masuk(id, nama);
+      pulih.terima(id, { t: 'suara', aksi: 'gabung' });
+    }
+    const baru = s2.surat.terakhir('ani', 'suara')!.anggota.map((a) => a.id);
+    expect(baru).toHaveLength(3);
+    for (const id of baru) expect(lama).not.toContain(id);
+    expect(validasiPesan({ t: 'suaraSinyal', ke: Math.max(...baru), data: SDP })).not.toBeNull();
+  });
+
+  it('tawaran hanya diteruskan kalau salah satu mic nyala dan tidak ada yang dijeda', () => {
+    const { meja, surat } = mejaLobi();
+    meja.terima('ani', { t: 'suara', aksi: 'gabung' });
+    meja.terima('budi', { t: 'suara', aksi: 'gabung' });
+    const [idAni, idBudi] = suaraTerakhir(surat, 'ani')!.anggota.map((a) => a.id);
+    const jawab: DataSinyalSuara = { sdp: { type: 'answer', sdp: 'v=0\r\n' } };
+    // Dua-duanya mic mati: tawaran (jawabannya membawa alamat IP) dibuang; jawaban tetap diteruskan.
+    meja.terima('ani', { t: 'suaraSinyal', ke: idBudi!, data: SDP });
+    meja.terima('budi', { t: 'suaraSinyal', ke: idAni!, data: jawab });
+    expect(sinyal(surat, 'budi')).toEqual([]);
+    expect(sinyal(surat, 'ani')).toHaveLength(1);
+    // Mic penerima nyala: boleh.
+    meja.terima('budi', { t: 'suara', aksi: 'mic', nyala: true });
+    meja.terima('ani', { t: 'suaraSinyal', ke: idBudi!, data: SDP });
+    expect(sinyal(surat, 'budi')).toHaveLength(1);
+    // Penerima dijeda: dibuang.
+    meja.terima('budi', { t: 'suara', aksi: 'jeda', nyala: true });
+    meja.terima('ani', { t: 'suaraSinyal', ke: idBudi!, data: SDP });
+    expect(sinyal(surat, 'budi')).toHaveLength(1);
+  });
+
+  it('bolehRelaySuara: hanya anggota suara terhubung yang punya teman suara terhubung', () => {
+    const { meja } = mejaLobi();
+    expect(meja.bolehRelaySuara('ani')).toBe(false);
+    meja.terima('ani', { t: 'suara', aksi: 'gabung' });
+    expect(meja.bolehRelaySuara('ani')).toBe(false);
+    meja.terima('budi', { t: 'suara', aksi: 'gabung' });
+    expect(meja.bolehRelaySuara('ani')).toBe(true);
+    expect(meja.bolehRelaySuara('budi')).toBe(true);
+    expect(meja.bolehRelaySuara('cici')).toBe(false);
+    expect(meja.bolehRelaySuara('orangLuar')).toBe(false);
+    meja.terputus('budi');
+    expect(meja.bolehRelaySuara('ani')).toBe(false);
   });
 });

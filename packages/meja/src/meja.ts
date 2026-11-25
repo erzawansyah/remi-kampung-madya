@@ -847,7 +847,7 @@ export class Meja {
       case 'mainLagi':
         return this.mainLagi(kursi);
       case 'suara':
-        return this.aksiSuara(pemainId, pesan.aksi, pesan.nyala);
+        return this.aksiSuara(pemainId, pesan.aksi, pesan.nyala, pesan.jeda);
       case 'suaraSinyal':
         return this.teruskanSinyalSuara(pemainId, pesan.ke, pesan.data);
       case 'jawabLihat':
@@ -2093,7 +2093,7 @@ export class Meja {
   }
 
   /** Gabung/keluar suara, atau ubah mic/jeda. Meja sprint (satu pemain) tidak punya suara. */
-  private aksiSuara(pemainId: string, aksi: AksiSuara, nyala?: boolean): void {
+  private aksiSuara(pemainId: string, aksi: AksiSuara, nyala?: boolean, jeda?: boolean): void {
     if (aksi === 'keluar') {
       if (!this.suara.delete(pemainId)) return;
       this.sinyalSuara.delete(pemainId);
@@ -2104,11 +2104,15 @@ export class Meja {
     if (aksi === 'gabung') {
       if (!a) {
         if (this.anggotaSuara().length >= MAKS_ANGGOTA_SUARA) galat('Suaranya sudah penuh, Bos.');
-        a = { id: ++this.nomorSuara, mic: false, jeda: false };
+        // Id berbasis jam meja (bukan mulai dari 1): sesudah server restart (#58) meja dibangun ulang tanpa
+        // daftar suara, dan id baru tidak boleh sama dengan id lama yang masih dipegang aplikasi teman.
+        this.nomorSuara = Math.max(this.nomorSuara, Math.floor(this.penjadwal.sekarang())) + 1;
+        a = { id: this.nomorSuara, mic: false, jeda: false };
         this.suara.set(pemainId, a);
       }
       if (nyala !== undefined) a.mic = nyala;
-      a.jeda = false;
+      // Gabung ulang membawa keadaan jeda HP-nya sendiri (sinyal masih lemah = tetap dijeda).
+      a.jeda = jeda === true;
       return this.siarkanSuara(pemainId);
     }
     // mic/jeda tanpa gabung dulu (pesan lama sesudah dikeluarkan): diabaikan diam-diam.
@@ -2131,6 +2135,9 @@ export class Meja {
     if (!tujuan || tujuan.id === dari.id) return;
     const bersih = validasiSinyalSuara(data);
     if (!bersih) return;
+    // Tawaran hanya kalau salah satu mic nyala dan tidak ada yang dijeda: pemain yang cuma mendengar tidak
+    // pernah disodori tawaran (jawaban SDP memuat alamat IP-nya) dari teman yang mic-nya mati.
+    if ('sdp' in bersih && bersih.sdp.type === 'offer' && ((!dari.mic && !tujuan.mic) || dari.jeda || tujuan.jeda)) return;
     const sekarang = this.penjadwal.sekarang();
     let jatah = this.sinyalSuara.get(pemainId);
     if (!jatah || sekarang - jatah.mulai >= JENDELA_SINYAL_SUARA_MS) {
@@ -2140,6 +2147,23 @@ export class Meja {
     if (++jatah.jumlah > MAKS_SINYAL_SUARA) return;
     const k = this.d.kursi[tujuan.kursi];
     if (k?.pemainId) this.kirimKe(k.pemainId, { t: 'suaraSinyal', dari: dari.id, data: bersih });
+  }
+
+  /**
+   * Suara: pemain ini boleh mendapat kredensial TURN (relay di VPS). Hanya anggota suara di kursi manusia
+   * yang terhubung, dan hanya kalau ada anggota suara lain yang terhubung (ada yang diajak ngobrol), supaya
+   * relay tidak bisa dipakai orang yang cuma membuat meja sendirian. Tidak mengubah apa pun.
+   */
+  bolehRelaySuara(pemainId: string): boolean {
+    if (this.d.sprint || !this.suara.has(pemainId)) return false;
+    let anggota = 0;
+    let saya = false;
+    for (const k of this.d.kursi) {
+      if (k.jenis !== 'manusia' || !k.terhubung || !k.pemainId || !this.suara.has(k.pemainId)) continue;
+      anggota++;
+      if (k.pemainId === pemainId) saya = true;
+    }
+    return saya && anggota >= 2;
   }
 
   info(kursiSaya: number | null): InfoMeja {

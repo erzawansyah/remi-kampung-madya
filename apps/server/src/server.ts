@@ -200,6 +200,8 @@ export interface OpsiServer {
    * docs/deploy.md). Kosong = /api/suara/ice hanya memberi STUN.
    */
   turn?: KonfigurasiTurn | null;
+  /** Suara: permintaan GET /api/suara/ice per jaringan per menit (bawaan {@link BATAS_ICE_PER_MENIT}). */
+  batasIcePerMenit?: number;
   log?: (...x: unknown[]) => void;
 }
 
@@ -248,6 +250,11 @@ const BAWAAN_MAKS_USULAN_PER_JAM_PER_IP = 5;
 const BAWAAN_MAKS_USULAN_PER_HARI = 200;
 /** Permintaan POST /api/usulan per menit per jaringan (termasuk yang ditolak), jaga-jaga banjir. */
 const BATAS_TULIS_USULAN_PER_MENIT = 20;
+/**
+ * Suara: GET /api/suara/ice per jaringan per menit. Satu HP meminta sekali per sambungan teman yang
+ * dibuat (kredensial di-cache), jadi satu meja penuh di satu Wi-Fi tetap jauh di bawahnya.
+ */
+export const BATAS_ICE_PER_MENIT = 60;
 
 /** Penolakan permintaan HTTP yang pesannya boleh ditampilkan ke pemain apa adanya. */
 class GalatPermintaan extends Error {
@@ -351,6 +358,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   const tulisKompetisi = new Map<string, number>();
   /** Permintaan POST /api/usulan per jaringan di menit ini. */
   const tulisUsulan = new Map<string, number>();
+  /** Permintaan GET /api/suara/ice per jaringan di menit ini. */
+  const tanyaIce = new Map<string, number>();
   /** Jaringan → waktu usulan yang diterima dalam sejam terakhir (hanya di memori, IP tidak disimpan). */
   const usulanPerJaringan = new Map<string, number[]>();
   /** Penerus usul fitur ke Notion; dinyalakan sesudah server jalan (lihat di bawah). */
@@ -834,13 +843,21 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       }
     }
     if (url.pathname === '/api/suara/ice') {
-      // Suara (0.9.0): STUN untuk semua; kredensial TURN hanya untuk yang sedang duduk di meja online
-      // (header x-token-meja = token kursinya), supaya relay tidak dipakai orang luar.
+      // Suara (0.9.0): STUN untuk semua; kredensial TURN hanya untuk anggota suara yang terhubung di meja
+      // online yang punya anggota suara lain yang terhubung (header x-token-meja = token kursinya), supaya
+      // relay tidak dipakai orang luar atau orang yang cuma membuat meja sendirian. Dibatasi per jaringan.
       if (req.method !== 'GET') return jawabJson(res, 405, { error: 'Hanya GET.' });
+      const jaringan = kunciIp(alamatKlien(req, opsi.percayaProxy ?? 'lokal'));
+      const kali = (tanyaIce.get(jaringan) ?? 0) + 1;
+      tanyaIce.set(jaringan, kali);
+      if (kali > (opsi.batasIcePerMenit ?? BATAS_ICE_PER_MENIT)) return jawabJson(res, 429, { error: 'Pelan-pelan, Bos. Coba lagi semenit lagi.' });
       const token = req.headers['x-token-meja'];
-      const duduk =
-        typeof token === 'string' && token.length > 0 && token.length <= 100 && [...daftarMeja.values()].some((m) => !m.sprint && m.punyaPemain(token));
-      return jawabJson(res, 200, jawabanIce(opsi.turn ?? null, jam(), duduk));
+      const boleh =
+        typeof token === 'string' &&
+        token.length > 0 &&
+        token.length <= 100 &&
+        [...daftarMeja.values()].some((m) => !m.sprint && m.punyaPemain(token) && m.bolehRelaySuara(token));
+      return jawabJson(res, 200, jawabanIce(opsi.turn ?? null, jam(), boleh));
     }
     if (url.pathname === '/api/kompetisi' || url.pathname.startsWith('/api/kompetisi/')) {
       void layaniKompetisi(req, res, url);
@@ -1496,7 +1513,10 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   const timerPesan = setInterval(() => {
     for (const s of semuaSambungan) s.jumlahPesan = 0;
   }, 1000);
-  const timerTulisKompetisi = setInterval(() => tulisKompetisi.clear(), 60_000);
+  const timerTulisKompetisi = setInterval(() => {
+    tulisKompetisi.clear();
+    tanyaIce.clear();
+  }, 60_000);
   // Tiap menit: jatah POST /api/usulan per menit diulang, catatan per jam yang sudah lewat dibuang.
   const timerUsulan = setInterval(() => {
     tulisUsulan.clear();

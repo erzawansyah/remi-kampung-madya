@@ -491,10 +491,12 @@ export type PesanKlien =
   | { t: 'sprint'; nama: string }
   /**
    * Suara (0.9.0): gabung/keluar dari obrolan suara meja ini, atau ubah keadaan mic (`mic`) dan jeda
-   * karena sinyal lemah (`jeda`). `nyala`: untuk `gabung` = mic langsung nyala (sambung ulang), untuk
-   * `mic`/`jeda` = keadaan barunya. Aplikasi lama tidak mengirimnya.
+   * karena sinyal lemah (`jeda`). `nyala`: untuk `gabung` = keadaan mic sekarang (sambung ulang; tidak
+   * ada = mic yang tercatat tidak diubah), untuk `mic`/`jeda` = keadaan barunya. `jeda` (hanya untuk
+   * `gabung`): suara HP itu masih dijeda karena sinyal lemah (tidak ada = tidak dijeda). Aplikasi lama
+   * tidak mengirimnya.
    */
-  | { t: 'suara'; aksi: AksiSuara; nyala?: boolean }
+  | { t: 'suara'; aksi: AksiSuara; nyala?: boolean; jeda?: boolean }
   /** Suara: sinyal WebRTC ke anggota suara `ke` (id anggota, bukan kursi) di meja yang sama. */
   | { t: 'suaraSinyal'; ke: number; data: DataSinyalSuara }
   | { t: 'ping' };

@@ -16,7 +16,7 @@
 // tidak pernah dari keadaan permainan.
 
 import { kunciNama, type AnggotaSuara, type DataSinyalSuara, type InfoMeja, type PesanServer } from '@remi/meja';
-import type { PesanKeMeja } from './koneksi';
+import type { InfoRtt, PesanKeMeja } from './koneksi';
 import { TEKS_SUARA } from './konten/suara';
 
 /** Keadaan ikon mic di kursi seseorang. */
@@ -38,6 +38,13 @@ export const TAHAN_BICARA_MS = 450;
 export const BATAS_KUMPUL_ICE_MS = 2_500;
 /** Percobaan sambung ulang satu teman sebelum menyerah (sampai anggota berubah lagi). */
 export const MAKS_GAGAL_PEER = 3;
+/**
+ * Paling lama penawar menunggu jawaban sesudah tawarannya dikirim. Tawaran bisa hilang di jalan (socket
+ * sempat putus, teman sedang dijeda, batas laju meja); tanpa batas ini pasangan itu diam selamanya.
+ */
+export const BATAS_JAWAB_MS = 10_000;
+/** Jawaban server ICE tanpa TURN hanya diingat sebentar (siapa tahu TURN baru boleh sesudah teman masuk). */
+export const INGAT_ICE_TANPA_TURN_MS = 60_000;
 
 // ---------------------------------------------------------------------------------------------
 // Kualitas sinyal (murni)
@@ -206,7 +213,7 @@ export interface LingkunganSuara {
 export interface SambunganSuara {
   kirim(p: PesanKeMeja): void;
   siapKirim(): boolean;
-  rtt(): number | null;
+  rtt(): InfoRtt | null;
   ukurRtt(): void;
 }
 
@@ -315,6 +322,8 @@ interface Peer {
   /** Kapan terakhir terdengar ngomong (jam lingkungan). */
   keras: number;
   paket: { hilang: number; terima: number } | null;
+  /** Penawar: timer batas menunggu jawaban (BATAS_JAWAB_MS). */
+  timerJawab: unknown;
 }
 
 export interface OrangSuara {
@@ -362,6 +371,8 @@ export class SuaraLangsung {
   /** Tawaran yang sedang disiapkan (async): jangan menawarkan dua kali ke teman yang sama. */
   private menawar = new Set<number>();
   private timerUlang = new Map<number, unknown>();
+  /** Hitungan pong RTT yang sudah dipakai penilai kualitas (satu pong = satu sampel). */
+  private pongDipakai = -1;
 
   constructor(
     private readonly env: LingkunganSuara,
@@ -455,6 +466,15 @@ export class SuaraLangsung {
   /** Pesan 'masuk' dari meja online: meja lain = semua suara lama dibersihkan, lalu gabung lagi. */
   masukMeja(kode: string, token: string): void {
     if (this.kode !== kode) this.bersihkan();
+    else {
+      // Sambung ulang ke meja yang sama: sambungan teman yang sudah jalan dibiarkan (suaranya langsung antar-HP),
+      // yang belum tersambung dibuang supaya ditawarkan ulang (sinyalnya mungkin hilang selama putus), dan
+      // hitungan gagal diulang dari nol.
+      for (const [id, p] of [...this.peers]) if (p.status !== 'tersambung') this.tutupPeer(id);
+      for (const t of this.timerUlang.values()) this.env.clearTimeout(t);
+      this.timerUlang.clear();
+      this.gagal.clear();
+    }
     this.kode = kode;
     this.token = token;
     this.perluGabung = true;
@@ -474,7 +494,8 @@ export class SuaraLangsung {
       const s = this.sambungan();
       if (s?.siapKirim()) {
         this.perluGabung = false;
-        s.kirim({ t: 'suara', aksi: 'gabung', ...(this.tombolMic === 'nyala' ? { nyala: true } : {}) });
+        // Keadaan mic dan jeda selalu dikirim lengkap: perubahan selama putus (pesannya dibuang) ikut terbawa.
+        s.kirim({ t: 'suara', aksi: 'gabung', nyala: this.tombolMic === 'nyala', ...(this.penjaga.tingkat === 'jeda' ? { jeda: true } : {}) });
       }
     }
     this.mulaiTimer();
@@ -536,6 +557,7 @@ export class SuaraLangsung {
     if (this.timerLevel !== null) this.env.clearInterval(this.timerLevel);
     if (this.timerKualitas !== null) this.env.clearInterval(this.timerKualitas);
     this.timerLevel = this.timerKualitas = null;
+    this.pongDipakai = -1;
     this.kabari();
   }
 
@@ -624,6 +646,8 @@ export class SuaraLangsung {
     // Id sendiri berganti (sempat dikeluarkan server, mis. putus lama): semua sambungan lama basi.
     if (this.idSaya !== null && saya !== this.idSaya) for (const id of [...this.peers.keys()]) this.tutupPeer(id);
     this.idSaya = saya;
+    // Teman yang baru lepas dari jeda boleh dicoba lagi dari nol.
+    for (const a of anggota) if (!a.jeda && this.anggota.find((x) => x.id === a.id)?.jeda) this.gagal.delete(a.id);
     this.anggota = anggota.map((a) => ({ ...a }));
     this.rukunkan();
     this.kabari();
@@ -665,7 +689,8 @@ export class SuaraLangsung {
     try {
       const r = await this.env.ambilIce(token);
       // Diminta lagi sebelum setengah umur kredensialnya habis.
-      this.ice = { servers: r.iceServers, sampai: sekarang + Math.max(60, r.ttl / 2) * 1000, token };
+      const adaTurn = r.iceServers.some((x) => (Array.isArray(x.urls) ? x.urls : [x.urls]).some((u) => /^turns?:/i.test(u)));
+      this.ice = { servers: r.iceServers, sampai: sekarang + (adaTurn ? Math.max(60, r.ttl / 2) * 1000 : INGAT_ICE_TANPA_TURN_MS), token };
       return r.iceServers;
     } catch {
       return STUN_CADANGAN;
@@ -679,7 +704,7 @@ export class SuaraLangsung {
     this.tutupPeer(id);
     const pc = this.env.buatPeer({ iceServers: servers, bundlePolicy: 'max-bundle' });
     const audio = this.env.buatAudio();
-    const peer: Peer = { id, pc, audio, penawar, status: 'menyambung', keras: -Infinity, paket: null };
+    const peer: Peer = { id, pc, audio, penawar, status: 'menyambung', keras: -Infinity, paket: null, timerJawab: null };
     this.peers.set(id, peer);
     pc.addEventListener('track', (e) => {
       const ev = e as RTCTrackEvent;
@@ -699,19 +724,28 @@ export class SuaraLangsung {
       this.gagal.delete(peer.id);
       void this.aturBitrate(peer);
     } else if (s === 'failed') {
-      peer.status = 'gagal';
-      const kali = (this.gagal.get(peer.id) ?? 0) + 1;
-      this.gagal.set(peer.id, kali);
-      this.tutupPeer(peer.id, true);
-      // Penawar mencoba lagi (sambungan baru) dengan jeda makin panjang; penjawab menunggu tawaran baru.
-      if (peer.penawar && kali < MAKS_GAGAL_PEER) {
-        const t = this.env.setTimeout(() => {
-          this.timerUlang.delete(peer.id);
-          this.rukunkan();
-        }, 1500 * kali);
-        this.timerUlang.set(peer.id, t);
-      }
+      return this.gagalPeer(peer);
     } else if (s === 'closed') return;
+    this.kabari();
+  }
+
+  /**
+   * Sambungan ke satu teman gagal (ICE gagal, tawaran tidak terkirim, atau tidak dijawab): tutup, lalu
+   * penawar mencoba lagi (sambungan baru) dengan jeda makin panjang; penjawab menunggu tawaran baru.
+   */
+  private gagalPeer(peer: Peer): void {
+    if (this.peers.get(peer.id) !== peer) return;
+    peer.status = 'gagal';
+    const kali = (this.gagal.get(peer.id) ?? 0) + 1;
+    this.gagal.set(peer.id, kali);
+    this.tutupPeer(peer.id, true);
+    if (peer.penawar && kali < MAKS_GAGAL_PEER) {
+      const t = this.env.setTimeout(() => {
+        this.timerUlang.delete(peer.id);
+        this.rukunkan();
+      }, 1500 * kali);
+      this.timerUlang.set(peer.id, t);
+    }
     this.kabari();
   }
 
@@ -725,7 +759,11 @@ export class SuaraLangsung {
     await peer.pc.setLocalDescription(offer);
     await tungguIce(peer.pc, BATAS_KUMPUL_ICE_MS, this.env);
     if (this.peers.get(id) !== peer || !peer.pc.localDescription) return;
-    this.kirimSinyal(id, { sdp: { type: 'offer', sdp: sdpOpusHemat(peer.pc.localDescription.sdp) } });
+    if (!this.kirimSinyal(id, { sdp: { type: 'offer', sdp: sdpOpusHemat(peer.pc.localDescription.sdp) } })) return this.gagalPeer(peer);
+    peer.timerJawab = this.env.setTimeout(() => {
+      peer.timerJawab = null;
+      if (this.peers.get(id) === peer && peer.pc.signalingState === 'have-local-offer') this.gagalPeer(peer);
+    }, BATAS_JAWAB_MS);
   }
 
   private async terimaSinyal(dari: number, data: DataSinyalSuara): Promise<void> {
@@ -738,11 +776,17 @@ export class SuaraLangsung {
     if (data.sdp.type === 'answer') {
       const p = this.peers.get(dari);
       if (!p?.penawar || p.pc.signalingState !== 'have-local-offer') return;
+      if (p.timerJawab !== null) this.env.clearTimeout(p.timerJawab);
+      p.timerJawab = null;
       await p.pc.setRemoteDescription(data.sdp);
       return;
     }
-    // Tawaran: hanya dari id yang lebih kecil (aturan penawar), supaya tidak ada tabrakan tawaran.
+    // Tawaran: hanya dari id yang lebih kecil (aturan penawar), supaya tidak ada tabrakan tawaran, dan hanya
+    // dari anggota yang memang perlu disambung (salah satu mic nyala, tidak ada yang dijeda). Jawaban memuat
+    // alamat IP HP ini, jadi tawaran dari teman yang mic-nya mati (dan mic sendiri mati) tidak dijawab.
     if (dari > this.idSaya) return;
+    const pengirim = this.anggota.find((a) => a.id === dari);
+    if (!pengirim || !this.perlu(pengirim)) return;
     const peer = await this.buatPeerUntuk(dari, false);
     if (!peer) return;
     await peer.pc.setRemoteDescription(data.sdp);
@@ -759,9 +803,12 @@ export class SuaraLangsung {
     this.kirimSinyal(dari, { sdp: { type: 'answer', sdp: sdpOpusHemat(peer.pc.localDescription.sdp) } });
   }
 
-  private kirimSinyal(ke: number, data: DataSinyalSuara): void {
+  /** Kirim sinyal ke teman; false kalau tidak bisa dikirim sekarang (socket putus). */
+  private kirimSinyal(ke: number, data: DataSinyalSuara): boolean {
     const s = this.sambungan();
-    if (s?.siapKirim()) s.kirim({ t: 'suaraSinyal', ke, data });
+    if (!s?.siapKirim()) return false;
+    s.kirim({ t: 'suaraSinyal', ke, data });
+    return true;
   }
 
   private tutupPeer(id: number, simpanGagal = false): void {
@@ -769,6 +816,8 @@ export class SuaraLangsung {
     if (!p) return;
     this.peers.delete(id);
     this.bicara.delete(id);
+    if (p.timerJawab !== null) this.env.clearTimeout(p.timerJawab);
+    p.timerJawab = null;
     try {
       p.pc.close();
     } catch {
@@ -877,7 +926,7 @@ export class SuaraLangsung {
   async ukurKualitas(): Promise<void> {
     if (!this.boleh || this.idSaya === null) return;
     const s = this.sambungan();
-    const sampel: SampelKualitas[] = [{ rttMs: s?.rtt() ?? null }];
+    const sampel: SampelKualitas[] = [{ rttMs: this.rttBaru(s) }];
     if (this.penjaga.tingkat === 'jeda') {
       // Selama dijeda tidak ada paket suara: ukur lewat ping saja, lebih sering.
       s?.ukurRtt();
@@ -897,9 +946,30 @@ export class SuaraLangsung {
       }
     }
     if (!this.boleh) return;
+    const gabung = gabungSampel(sampel);
+    // Tanpa pengukuran baru sama sekali (tidak ada pong baru, tidak ada teman tersambung): bukan sampel.
+    if (Object.values(gabung).every((x) => x === null || x === undefined)) return;
     const sebelum = this.penjaga.tingkat;
-    const sesudah = this.penjaga.catat(nilaiSampel(gabungSampel(sampel)));
+    const sesudah = this.penjaga.catat(nilaiSampel(gabung));
     if (sesudah !== sebelum) this.terapkanTingkat(sebelum, sesudah);
+  }
+
+  /**
+   * RTT WebSocket untuk satu sampel: hanya kalau ada pong baru sejak sampel sebelumnya (ping biasa hanya
+   * tiap 10 detik; satu pengukuran tidak boleh dihitung jadi beberapa sampel buruk). Selama dijeda (ping
+   * dikirim tiap sampel), ping yang belum dijawab sampai sampel berikutnya dihitung sebagai RTT sepanjang
+   * umurnya, supaya jaringan yang mati tidak dianggap pulih.
+   */
+  private rttBaru(s: SambunganSuara | null): number | null {
+    const r = s?.rtt() ?? null;
+    if (!r) return null;
+    let ms: number | null = null;
+    if (r.ke !== this.pongDipakai) {
+      this.pongDipakai = r.ke;
+      ms = r.ms;
+    }
+    if (this.penjaga.tingkat === 'jeda' && r.tungguMs !== null && r.tungguMs >= JEDA_KUALITAS_MS * 0.75) ms = Math.max(ms ?? 0, r.tungguMs);
+    return ms;
   }
 
   private terapkanTingkat(sebelum: TingkatSuara, sesudah: TingkatSuara): void {

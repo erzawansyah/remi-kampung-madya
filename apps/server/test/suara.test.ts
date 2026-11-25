@@ -85,13 +85,26 @@ describe('ICE', () => {
     a.tutup();
   });
 
-  it('dengan TURN: kredensial hanya untuk token kursi yang duduk di meja', async () => {
+  it('dengan TURN: kredensial hanya untuk anggota suara yang punya teman suara terhubung di mejanya', async () => {
     const tanpaToken = (await (await ice(serverTurn)).json()) as { iceServers: unknown[] };
     expect(tanpaToken.iceServers).toEqual([{ urls: STUN_BAWAAN }]);
     expect(((await (await ice(serverTurn, 'ngawur')).json()) as { iceServers: unknown[] }).iceServers).toHaveLength(1);
+    const stunSaja = async (tok: string) => ((await (await ice(serverTurn, tok)).json()) as { iceServers: unknown[] }).iceServers.length === 1;
     const a = new Klien(serverTurn.port);
     await a.kirim({ t: 'buat', nama: 'Budi', pengaturan: { jumlahPemain: 2 } });
-    const { token } = await a.tunggu('masuk');
+    const { token, kode } = await a.tunggu('masuk');
+    // Membuat meja sendirian (bahkan sudah gabung suara) tidak cukup untuk mendapat relay.
+    expect(await stunSaja(token)).toBe(true);
+    await a.kirim({ t: 'suara', aksi: 'gabung' });
+    await a.tunggu('suara', (x) => x.saya !== null);
+    expect(await stunSaja(token)).toBe(true);
+    // Teman duduk tapi belum ikut suara: tetap belum.
+    const b = new Klien(serverTurn.port);
+    await b.kirim({ t: 'gabung', kode, nama: 'Siti' });
+    const { token: tokenB } = await b.tunggu('masuk');
+    expect(await stunSaja(token)).toBe(true);
+    await b.kirim({ t: 'suara', aksi: 'gabung' });
+    await a.tunggu('suara', (x) => x.anggota.length === 2);
     const sebelum = Math.floor(Date.now() / 1000);
     const isi = (await (await ice(serverTurn, token)).json()) as { iceServers: { urls: string | string[]; username?: string; credential?: string }[]; ttl: number };
     expect(isi.ttl).toBe(3600);
@@ -104,7 +117,25 @@ describe('ICE', () => {
     expect(acak).toMatch(/^[0-9a-f]{12}$/);
     expect(t.credential).toBe(createHmac('sha1', TURN.rahasia).update(t.username!).digest('base64'));
     expect(JSON.stringify(isi)).not.toContain(TURN.rahasia);
+    expect(await stunSaja(tokenB)).toBe(false);
+    // Teman keluar dari suara: relay ditutup lagi untuk permintaan berikutnya.
+    a.pesan = [];
+    await b.kirim({ t: 'suara', aksi: 'keluar' });
+    await a.tunggu('suara', (x) => x.anggota.length === 1);
+    expect(await stunSaja(token)).toBe(true);
     a.tutup();
+    b.tutup();
+  });
+
+  it('dibatasi per jaringan per menit', async () => {
+    const srv = await jalankanServer({ acakDuduk: false, port: 0, host: '127.0.0.1', log: () => undefined, batasIcePerMenit: 3 });
+    try {
+      const status = [];
+      for (let i = 0; i < 5; i++) status.push((await ice(srv)).status);
+      expect(status).toEqual([200, 200, 200, 429, 429]);
+    } finally {
+      await srv.tutup();
+    }
   });
 });
 
