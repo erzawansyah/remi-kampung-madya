@@ -12,6 +12,8 @@ import * as KOMPETISI from '../src/konten/kompetisi';
 import { TEKS_USULAN } from '../src/konten/usulan';
 import { TEKS_LANJUT, TEKS_LEDEK } from '../src/konten/ledek';
 import { TEKS_KONEKSI, teksDijalankanWarga, teksMentungTerlewat } from '../src/konten/koneksi';
+import { TEKS_TURUNKAN } from '../src/konten/turunkan';
+import { TEKS_PENGINGAT_SUSUN } from '../src/konten/susunAkhir';
 
 // Penjaga gaya teks (antislop) untuk konten yang dibaca pemain: Bantuan, tutorial, info kedai,
 // dan emote/celetukan. Yang dijaga hanya pola formulaik yang jelas (negasi kontras, klise promosi,
@@ -46,6 +48,8 @@ const sumber: [string, string[]][] = [
   ['Pasang aplikasi', semuaTeks(PASANG)],
   // Mode kaldu (keputusan #42, #43): kotak centang di layar persiapan dan teks pendek di meja.
   ['Mode kaldu', semuaTeks(TEKS_KALDU)],
+  // Tombol Turunkan (#63) dan pengingat sebelum Selesai di susun akhir (#64).
+  ['Turunkan dan susun akhir', [...semuaTeks(TEKS_TURUNKAN), ...semuaTeks(TEKS_PENGINGAT_SUSUN)]],
   // Kompetisi (keputusan #51): layar Kompetisi, lobi meja kompetisi, dan hasil di klasemen akhir.
   [
     'Kompetisi',

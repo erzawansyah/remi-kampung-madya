@@ -708,10 +708,13 @@ class Aplikasi implements AppUntukMeja {
             return this.keluarMeja(true, kompetisi);
           }
         }
+        // Turunkan yang ditolak server memakai pesan umum yang sama dengan di HP (#63). Dibaca sebelum
+        // saatError, yang melepas kunci aksi yang menunggu.
+        const pesan = p.pesan !== PESAN_TERTAHAN ? (this.kontrol?.teksPenolakan(p.pesan) ?? p.pesan) : p.pesan;
         // Meja: aksi atau tombol yang menunggu jawaban sudah dijawab (ditolak), kuncinya lepas sekarang.
         this.kontrol?.saatError(p.pesan !== PESAN_TERTAHAN);
         if (this.layar === 'beranda') this.beranda?.aturStatusOnline('tersambung');
-        toast(p.pesan, true);
+        toast(pesan, true);
         break;
       }
       case 'daftar':
@@ -1000,6 +1003,8 @@ class Aplikasi implements AppUntukMeja {
   private mainOffline(nama: string, pengaturan: Partial<PengaturanMeja>, pengocokSaya: boolean, latihan = false) {
     this.niatOnline = null;
     simpan.setMejaOffline(null);
+    // Permainan offline baru: "jangan tanya lagi" di susun akhir (#64) dari permainan lama tidak berlaku.
+    simpan.setTanpaPengingatSusun(null);
     this.modeLatihan = latihan;
     tulisLatihan(latihan);
     // Latihan: nama warga kedai urutan tetap (lawannya selalu sama); main biasa: urutan acak.
