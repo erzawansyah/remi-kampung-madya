@@ -217,16 +217,81 @@ export function bagiChangelog(sumber: string): VersiChangelog[] {
 /** Ada isi nyata (butir daftar), bukan sekadar "Belum ada perubahan". */
 const adaButir = (md: string) => /^\s*(?:[-*+]|\d+[.)])\s+\S/m.test(md);
 
+/** Panjang maksimal judul perubahan yang diambil dari kalimat pertama (tanpa awalan tebal). */
+const MAKS_JUDUL_PERUBAHAN = 90;
+
+/** Buang penanda markdown sebaris: **tebal**, `kode`, dan [teks](url) jadi teks saja. */
+function teksPolos(md: string): string {
+  return md
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*|`/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
- * Catatan perubahan untuk pemain: per versi hanya pembuka + "Untuk pemain"; bagian teknis dalam
- * <details> tertutup. Versi tanpa isi (mis. "[Belum dirilis]" yang masih kosong) tidak ditampilkan.
+ * Judul tiap perubahan di bagian "Untuk pemain" (tinjauan pemilik 25 Nov 2026, C1): satu per butir
+ * daftar tingkat atas. Butir yang diawali **tebal** memakai teks tebalnya; yang lain kalimat
+ * pertamanya, dipotong di batas kata kalau kepanjangan. Hasilnya teks polos (di-escape pemanggil).
+ */
+export function judulPerubahan(pemain: string): string[] {
+  return daftarPerubahan(pemain).map((x) => x.judul);
+}
+
+/** Judul ringkas yang ditampilkan terbuka per versi; sisanya cukup dihitung ("dan N perubahan lain"). */
+const MAKS_RINGKAS = 8;
+
+/**
+ * Pilih judul yang tampil terbuka (urutan asli tetap): perubahan aturan selalu ikut (perubahan aturan
+ * wajib terlihat jelas), lalu butir berawalan tebal (fitur utama), lalu sisanya, sampai MAKS_RINGKAS.
+ */
+export function pilihRingkasan(pemain: string): { tampil: string[]; sisa: number } {
+  const semua = daftarPerubahan(pemain);
+  const prioritas = (x: { judul: string; tebal: boolean }) => (/^aturan\b/i.test(x.judul) ? 0 : x.tebal ? 1 : 2);
+  const urut = semua.map((x, i) => ({ ...x, i })).sort((a, b) => prioritas(a) - prioritas(b) || a.i - b.i);
+  const wajib = urut.filter((x) => prioritas(x) === 0).length;
+  const dipilih = new Set(urut.slice(0, Math.max(MAKS_RINGKAS, wajib)).map((x) => x.i));
+  return { tampil: semua.filter((_, i) => dipilih.has(i)).map((x) => x.judul), sisa: semua.length - dipilih.size };
+}
+
+function daftarPerubahan(pemain: string): { judul: string; tebal: boolean }[] {
+  const hasil: { judul: string; tebal: boolean }[] = [];
+  let dalamKode = false;
+  for (const b of pemain.replace(/\r\n?/g, '\n').split('\n')) {
+    if (b.trim().startsWith('```')) dalamKode = !dalamKode;
+    const m = !dalamKode && /^(?:[-*+]|\d+[.)])\s+(.*\S)\s*$/.exec(b);
+    if (!m) continue;
+    const isi = m[1]!;
+    const tebal = /^\*\*(.+?)\*\*/.exec(isi);
+    // Tanpa lookbehind regex: Safari lama (iOS < 16.4) gagal mem-parse seluruh modul karenanya.
+    const polos = teksPolos(isi);
+    const akhir = /[.!?:](?:\s|$)/.exec(polos);
+    let judul = tebal ? teksPolos(tebal[1]!).replace(/[.:,;]+$/, '') : (akhir ? polos.slice(0, akhir.index) : polos);
+    if (judul.length > MAKS_JUDUL_PERUBAHAN) {
+      const potong = judul.slice(0, MAKS_JUDUL_PERUBAHAN);
+      judul = `${potong.slice(0, Math.max(potong.lastIndexOf(' '), 40)).replace(/[\s,;:(]+$/, '')}…`;
+    }
+    if (judul) hasil.push({ judul, tebal: !!tebal });
+  }
+  return hasil;
+}
+
+/**
+ * Catatan perubahan untuk pemain: per versi kalimat pembuka + daftar judul perubahan; rincian
+ * "Untuk pemain" dilipat di "Selengkapnya", bagian teknis di "Catatan teknis" (keduanya tertutup).
+ * Versi tanpa isi (mis. "[Belum dirilis]" yang masih kosong) tidak ditampilkan.
  */
 export function htmlChangelog(sumber: string = changelog): string {
   return bagiChangelog(sumber)
     .filter((v) => adaButir(v.pemain) || adaButir(v.teknis))
     .map((v) => {
+      const { tampil, sisa } = adaButir(v.pemain) ? pilihRingkasan(v.pemain) : { tampil: [], sisa: 0 };
+      const lain = sisa ? `<li class="redup">dan ${sisa} perubahan lain</li>` : '';
       // "#### Ditambahkan" di bawah "Untuk pemain" → h4; di catatan teknis "### Teknis" → h4, "####" → h5.
-      const pemain = adaButir(v.pemain) ? renderMarkdown(v.pemain, { tingkatAwal: 1 }) : '<p>Tidak ada perubahan yang terasa waktu main.</p>';
+      const pemain = tampil.length
+        ? `<ul class="changelog-ringkas">${tampil.map((j) => `<li>${esc(j)}</li>`).join('')}${lain}</ul>` +
+          `<details class="akordion changelog-rinci"><summary>Selengkapnya</summary><div class="md">${renderMarkdown(v.pemain, { tingkatAwal: 1 })}</div></details>`
+        : '<p>Tidak ada perubahan yang terasa waktu main.</p>';
       const teknis = adaButir(v.teknis)
         ? `<details class="akordion changelog-teknis"><summary>Catatan teknis</summary><div class="md">${renderMarkdown(v.teknis, { tingkatAwal: 2 })}</div></details>`
         : '';

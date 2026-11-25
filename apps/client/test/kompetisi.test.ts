@@ -211,7 +211,7 @@ describe('teks kompetisi', () => {
     expect(TEKS_KOMPETISI.caraHitung).toContain('cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0');
     expect(permainanKompetisiDihitung([{ keluar: true }, {}, { keluar: true }, { keluar: true }])).toBe(false);
     expect(kursiDicatatKompetisi([{ keluar: true }, {}, { keluar: true }, { keluar: true }])).toEqual([true, false, true, true]);
-    const online = JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'online'));
+    const online = JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'kompetisi'));
     expect(online).toContain(`Meja 4 orang dengan 1 yang keluar: juara ${contoh[0]}; kedua ${contoh[1]}; ketiga ${contoh[3]}.`);
     expect(online).toContain('Kalau cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0.');
     expect(online).toContain(`Di meja kompetisi tidak ada Akhiri permainan maupun ${TEKS_KALDU.tombol}`);
