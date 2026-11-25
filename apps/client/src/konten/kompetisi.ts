@@ -93,6 +93,13 @@ export const TEKS_KOMPETISI = {
    * kompetisinya bisa masih jalan); aplikasi lalu membuka detail kompetisinya.
    */
   mejaHilang: 'Mejanya sudah bubar, Bos. Balik ke layar Kompetisi ya.',
+  /**
+   * Selama kompetisi ditutup (KOMPETISI_DIBUKA = false), pengganti alasan keluar dari server yang
+   * menyuruh ke layar Kompetisi (TEKS_LOBI_KOMPETISI_BUBAR, TEKS_KURSI_KOMPETISI_LEPAS); pemain
+   * dibawa ke beranda.
+   */
+  lobiBubarDitutup: 'Kompetisinya sudah selesai, mejanya dibubarkan, Bos.',
+  kursiLepasDitutup: 'Kursimu di meja kompetisi dilepas karena kamu lama terputus, Bos.',
   /** Klasemen akhir meja kompetisi: ganti tombol Main lagi. */
   kembaliKompetisi: 'Kembali ke kompetisi',
   /** Judul bagian hasil kompetisi di klasemen akhir (diikuti nama kompetisinya). */

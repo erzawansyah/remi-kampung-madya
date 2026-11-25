@@ -244,13 +244,13 @@ export function renderLobi(
   // Host: kotak centang. Bukan host: keadaannya sebagai teks. Penjelasannya lewat "?".
   const labelKaldu = htmlLabelInfo(TEKS_KALDU.label, TEKS_KALDU.ket, 'ket-kaldu');
   const htmlKaldu = ubahAturan
-    ? `<label class="baris">${labelKaldu}<input type="checkbox" id="kaldu" aria-describedby="ket-kaldu" ${kaldu ? 'checked' : ''} /></label>`
+    ? `<label class="baris" for="kaldu">${labelKaldu}<input type="checkbox" id="kaldu" aria-describedby="ket-kaldu" ${kaldu ? 'checked' : ''} /></label>`
     : `<div class="baris baris-teks">${labelKaldu}<b id="kaldu">${esc(kaldu ? TEKS_KALDU.nyala : TEKS_KALDU.mati)}</b></div>`;
   // Acak urutan duduk (#62): bawaan menyala. Kalau mati, host memilih pengocok pertama.
   const acakDuduk = p.urutanTetap !== true;
   const labelAcak = htmlLabelInfo(TEKS_ACAK_DUDUK.label, TEKS_ACAK_DUDUK.ket, 'ket-acak');
   const htmlAcak = host
-    ? `<label class="baris">${labelAcak}<input type="checkbox" id="acak-duduk" aria-describedby="ket-acak" ${acakDuduk ? 'checked' : ''} /></label>`
+    ? `<label class="baris" for="acak-duduk">${labelAcak}<input type="checkbox" id="acak-duduk" aria-describedby="ket-acak" ${acakDuduk ? 'checked' : ''} /></label>`
     : `<div class="baris baris-teks">${labelAcak}<b id="acak-duduk">${esc(acakDuduk ? TEKS_ACAK_DUDUK.nyala : TEKS_ACAK_DUDUK.mati)}</b></div>`;
 
   akar.innerHTML = `
@@ -280,7 +280,7 @@ export function renderLobi(
           .map((t) => `<option value="${t}" ${t === (p.tempoBot ?? 'santai') ? 'selected' : ''}>${t[0]!.toUpperCase() + t.slice(1)}</option>`)
           .join('')}</select></label>
       <label class="baris">Meja publik (muncul di daftar)<input type="checkbox" id="publik" ${p.publik ? 'checked' : ''} ${dis} /></label>
-      <label class="baris">${htmlLabelInfo('Boleh ditonton', 'Penonton cuma lihat kartu buangan. Kartumu baru kelihatan kalau kamu izinkan.', 'ket-ditonton')}<input type="checkbox" id="ditonton" aria-describedby="ket-ditonton" ${p.tanpaPenonton === true ? '' : 'checked'} ${dis} /></label>
+      <label class="baris" for="ditonton">${htmlLabelInfo('Boleh ditonton', 'Penonton cuma lihat kartu buangan. Kartumu baru kelihatan kalau kamu izinkan.', 'ket-ditonton')}<input type="checkbox" id="ditonton" aria-describedby="ket-ditonton" ${p.tanpaPenonton === true ? '' : 'checked'} ${dis} /></label>
       ${htmlAcak}
     </div>
 

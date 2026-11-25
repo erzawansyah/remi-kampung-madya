@@ -59,7 +59,7 @@ import { bukaBantuan, bukaTentang } from './ui/jendelaMalas';
 import { teksPengumuman, Tutorial, type KeadaanTutorial } from './ui/tutorial';
 import { TEKS_TUTORIAL } from './konten/tutorial';
 import { TEKS_KALDU } from './konten/kaldu';
-import { TEKS_KOMPETISI, teksHasilKompetisi } from './konten/kompetisi';
+import { KOMPETISI_DIBUKA, TEKS_KOMPETISI, teksHasilKompetisi } from './konten/kompetisi';
 import { TEKS_LANJUT, TEKS_LEDEK } from './konten/ledek';
 import { apaEmoji, hapusLapisanLedek, htmlLedek, lapisanLedek, LedekBesar, sasaranLedekBawaan } from './ui/ledek';
 import { TEKS_KONEKSI, teksMentungTerlewat } from './konten/koneksi';
@@ -3384,7 +3384,10 @@ export class KontrolMeja implements AksiAdegan {
        <div class="deret">
          ${
            kompetisi
-             ? `<button type="button" class="utama" data-a="kompetisi">${esc(TEKS_KOMPETISI.kembaliKompetisi)}</button>`
+             ? // Kompetisi ditutup sementara: tombolnya disembunyikan (Ke beranda tetap ada).
+               KOMPETISI_DIBUKA
+               ? `<button type="button" class="utama" data-a="kompetisi">${esc(TEKS_KOMPETISI.kembaliKompetisi)}</button>`
+               : ''
              : offline
                ? `<button type="button" class="utama" data-a="lagi">${esc(labelLagi)}</button>`
                : host

@@ -247,7 +247,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
               <label class="baris">Jumlah pemain
                 <select id="o-jumlah">${pilihan(p.jumlahPemain, [2, 3, 4, 5, 6].map((n) => [n, String(n)]))}</select></label>
               <label class="baris" id="o-dua-baris">Pakai 2 deck (12 kartu)<input type="checkbox" id="o-dua" ${p.duaDeckUntukEmpat ? 'checked' : ''} /></label>
-              <label class="baris"><span class="label-info">Level warga kedai<span id="info-level"${LEVEL_WARGA[p.levelBot].ket ? '' : ' hidden'}>${htmlInfo(
+              <label class="baris" for="o-level"><span class="label-info">Level warga kedai<span id="info-level"${LEVEL_WARGA[p.levelBot].ket ? '' : ' hidden'}>${htmlInfo(
                 LEVEL_WARGA[p.levelBot].ket ?? '',
                 'level warga kedai',
                 'ket-level',
@@ -264,9 +264,9 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
                 ])}</select></label>
               <label class="baris">Batas putaran
                 <select id="o-putaran">${pilihan(p.batasPutaran ?? 0, [3, 5, 10, 15, 20, 0].map((n) => [n, n ? String(n) : 'Tanpa batas']))}</select></label>
-              <label class="baris">${htmlLabelInfo(TEKS_KALDU.label, TEKS_KALDU.ket, 'ket-kaldu')}<input type="checkbox" id="o-kaldu" aria-describedby="ket-kaldu" ${p.modeKaldu === true ? 'checked' : ''} /></label>
+              <label class="baris" for="o-kaldu">${htmlLabelInfo(TEKS_KALDU.label, TEKS_KALDU.ket, 'ket-kaldu')}<input type="checkbox" id="o-kaldu" aria-describedby="ket-kaldu" ${p.modeKaldu === true ? 'checked' : ''} /></label>
               ${htmlIsianBatas({ id: 'o-skor', nilai: p, bisaUbah: true })}
-              <label class="baris">${htmlLabelInfo(TEKS_ACAK_DUDUK.label, TEKS_ACAK_DUDUK.ket, 'ket-o-acak')}<input type="checkbox" id="o-acak" aria-describedby="ket-o-acak" ${p.urutanTetap === true ? '' : 'checked'} /></label>
+              <label class="baris" for="o-acak">${htmlLabelInfo(TEKS_ACAK_DUDUK.label, TEKS_ACAK_DUDUK.ket, 'ket-o-acak')}<input type="checkbox" id="o-acak" aria-describedby="ket-o-acak" ${p.urutanTetap === true ? '' : 'checked'} /></label>
               <label class="baris${p.urutanTetap === true ? '' : ' tersembunyi'}" id="o-kocok-baris">Pengocok pertama
                 <select id="o-kocok"><option value="acak">Acak</option><option value="saya">Saya</option></select></label>
             </div>
@@ -336,16 +336,36 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   const isianNama = el<HTMLInputElement>('nama')!;
   const ketNama = el('ket-nama')!;
   const keadaanNama = (): KeadaanNama => ({ nama: simpan.nama().trim(), diganti: simpan.namaDiganti() });
+  /** Ada tekanan pointer di beranda yang belum selesai (klik/batal). */
+  let ditekan = false;
   const aturTampilNama = () => {
     const sampai = namaTerkunciSampai(keadaanNama(), Date.now());
     isianNama.readOnly = sampai !== null;
     ketNama.textContent = sampai !== null ? `${TEKS_NAMA.bisaGantiLagi} ${labelTanggalGanti(sampai)}.` : TEKS_NAMA.ketBaru;
     // "Cuma bisa diganti seminggu sekali" hanya selama isian nama sedang diisi; tanggal buka kunci
-    // tetap terlihat selama namanya terkunci.
-    ketNama.hidden = sampai === null && document.activeElement !== isianNama;
+    // tetap terlihat selama namanya terkunci. Selama tekanan yang meninggalkan isian belum selesai,
+    // keterangannya tetap (lihat `ditekan` di bawah; `change` yang menyimpan nama juga jalan di sela itu).
+    ketNama.hidden = sampai === null && document.activeElement !== isianNama && !ditekan;
   };
   isianNama.addEventListener('focus', aturTampilNama);
-  isianNama.addEventListener('blur', aturTampilNama);
+  // Isian ditinggalkan karena layar beranda ditekan (mis. tombol Main tepat di bawahnya): blur jalan
+  // di antara tekan dan lepas, dan menyembunyikan keterangan saat itu juga menggeser tombol di bawah
+  // jari, sehingga kliknya jatuh di luar tombol. Jadi tunggu sampai tekanan itu selesai (klik, atau
+  // dibatalkan), baru keterangannya disembunyikan. Blur lewat papan ketik (Tab) langsung.
+  layarEl.addEventListener('pointerdown', () => (ditekan = true), true);
+  isianNama.addEventListener('blur', () => {
+    if (!ditekan) return aturTampilNama();
+    const win = layarEl.ownerDocument.defaultView ?? window;
+    const jenis = ['click', 'auxclick', 'contextmenu', 'pointercancel'] as const;
+    const selesai = () => {
+      jenis.forEach((j) => win.removeEventListener(j, selesai, true));
+      ditekan = false;
+      setTimeout(aturTampilNama, 0);
+    };
+    jenis.forEach((j) => win.addEventListener(j, selesai, true));
+  });
+  layarEl.addEventListener('click', () => (ditekan = false));
+  layarEl.addEventListener('pointercancel', () => (ditekan = false));
   /** Cek nama di isian, konfirmasi kalau diganti, lalu simpan. Null = belum bisa main. */
   const cekNama = async (): Promise<string | null> => {
     const k = keadaanNama();

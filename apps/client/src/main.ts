@@ -4,7 +4,7 @@
 import './gaya.css';
 import { registerSW } from 'virtual:pwa-register';
 import type { ViewPemain } from '@remi/engine';
-import { TEKS_LOBI_KOMPETISI_BUBAR, validasiObrolan, type InfoMeja, type InfoTontonan, type PengaturanMeja } from '@remi/meja';
+import { TEKS_KURSI_KOMPETISI_LEPAS, TEKS_LOBI_KOMPETISI_BUBAR, validasiObrolan, type InfoMeja, type InfoTontonan, type PengaturanMeja } from '@remi/meja';
 import { Obrolan } from './ui/obrolan';
 import { pasangPreferensi } from './preferensi';
 import {
@@ -709,7 +709,8 @@ class Aplikasi implements AppUntukMeja {
             // ulang, atau dihapus karena lama kosong): ke detail kompetisinya, seperti pesan keluar
             // {kompetisi} dari server. Sebabnya tidak diketahui (kompetisinya bisa saja masih jalan), jadi
             // teksnya netral, bukan TEKS_LOBI_KOMPETISI_BUBAR.
-            const kompetisi = this.info?.kompetisi?.kode;
+            // Selama kompetisi ditutup tujuannya beranda, jadi pesannya pesan meja biasa.
+            const kompetisi = KOMPETISI_DIBUKA ? this.info?.kompetisi?.kode : undefined;
             toast(kompetisi ? TEKS_KOMPETISI.mejaHilang : 'Mejanya sudah bubar, Bos. Balik ke beranda ya.', true);
             return this.keluarMeja(true, kompetisi);
           }
@@ -789,6 +790,18 @@ class Aplikasi implements AppUntukMeja {
         // Kursinya dipegang tab/perangkat lain: sesi disimpan (bisa masuk lagi lewat kode), tapi jangan
         // disambung ulang sendiri, nanti saling rebut.
         if (ditendang) this.sesiDitendang = true;
+        // Kompetisi ditutup sementara: jangan menyuruh ke layar Kompetisi, pemain dibawa ke beranda.
+        if (!KOMPETISI_DIBUKA) {
+          const alasan =
+            p.alasan === TEKS_LOBI_KOMPETISI_BUBAR
+              ? TEKS_KOMPETISI.lobiBubarDitutup
+              : p.alasan === TEKS_KURSI_KOMPETISI_LEPAS
+                ? TEKS_KOMPETISI.kursiLepasDitutup
+                : p.alasan;
+          toast(alasan);
+          this.keluarMeja(!ditendang);
+          break;
+        }
         toast(p.alasan);
         // Lobi kompetisi yang dibubarkan karena kompetisinya sudah selesai, atau kursi lobi kompetisi
         // yang sudah dilepas: langsung ke detail kompetisinya (klasemen dan daftar meja). Server baru
