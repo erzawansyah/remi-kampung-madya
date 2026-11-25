@@ -8,7 +8,7 @@
 // mulai sendiri begitu semua kursi terisi peserta yang tersambung), aturannya ditampilkan sebagai teks.
 
 import type { LevelBot } from '@remi/engine';
-import type { InfoKursi, InfoMeja, PengaturanMeja, PesanKlien } from '@remi/meja';
+import { kunciNama, type InfoKursi, type InfoMeja, type PengaturanMeja, type PesanKlien } from '@remi/meja';
 import { TEKS_KALDU } from '../konten/kaldu';
 import { TEKS_KOMPETISI, teksMenungguPeserta } from '../konten/kompetisi';
 import { DAFTAR_LEVEL_WARGA, infoLevel, labelLevelKecil } from '../konten/levelWarga';
@@ -30,7 +30,7 @@ export interface ObrolanLobi {
 }
 
 const htmlObrolanLobi = () =>
-  `<section class="kartu-panel panel-obrolan" aria-labelledby="judul-obrolan"><h2 id="judul-obrolan">${esc(TEKS_OBROLAN.judul)}</h2>${htmlPanelObrolan({ susunan: 'lobi', idIsian: ID_ISIAN_OBROLAN })}</section>`;
+  `<section class="kartu-panel panel-obrolan" aria-labelledby="judul-obrolan"><h2 id="judul-obrolan">${esc(TEKS_OBROLAN.judul)}</h2>${htmlPanelObrolan({ idIsian: ID_ISIAN_OBROLAN })}</section>`;
 
 /** Nilai <select> kursi untuk warga kedai level tertentu, mis. "bot-jago". */
 const nilaiBot = (level: string) => `bot-${level}`;
@@ -154,7 +154,9 @@ export function renderLobi(
         ? `#${aktif.id}`
         : aktif.dataset.kursi !== undefined
           ? `[data-kursi="${Number(aktif.dataset.kursi)}"]`
-          : null
+          : aktif.classList.contains('tombol-baki')
+            ? '.panel-obrolan .tombol-baki'
+            : null
       : null;
   // Kursor di isian obrolan (yang sedang mengetik) ikut dipulihkan, bukan lompat ke akhir.
   const kursorObrolan =
@@ -201,6 +203,7 @@ export function renderLobi(
         obrolan: obrolan.obrolan,
         kirim: (isi) => kirim({ t: 'emote', isi }),
         namaSaya: () => (info.kursiSaya != null ? (info.kursi[info.kursiSaya]?.nama ?? null) : null),
+        wargaKedai: (nama) => info.kursi.some((k) => k.jenis === 'bot' && kunciNama(k.nama) === kunciNama(nama)),
         alasanTolak: obrolan.alasanTolak,
         susunan: 'lobi',
         idIsian: ID_ISIAN_OBROLAN,

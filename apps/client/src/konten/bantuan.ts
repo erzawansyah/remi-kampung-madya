@@ -759,7 +759,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
         t: 'daftar',
         butir: [
           'Kalau kartu pilihanmu bisa disusun lebih dari satu cara, kamu akan diminta memilih susunannya.',
-          `Obrolan: tekan 💬 di bar atas (atau panel Obrolan di lobi) untuk ngobrol. Ada riwayat pesan, emoji, celetukan khas warga Madya (Gedein!, CEKI!, Give me!, dan lainnya), atau pesan yang kamu tulis sendiri (paling panjang ${MAKS_PESAN} huruf). Gelembungnya juga muncul di samping nama.`,
+          `Obrolan: tekan 💬 di bar atas (atau panel Obrolan di lobi) untuk ngobrol. Kirim pesan yang kamu tulis sendiri (paling panjang ${MAKS_PESAN} huruf), atau tekan 😊 untuk celetukan khas warga Madya (Gedein!, CEKI!, Give me!, dan lainnya) dan emoji. Gelembungnya juga muncul di samping nama. Kalau giliranmu tiba selagi obrolan terbuka, ketuk pita kuning di atas atau ‹ Meja untuk kembali.`,
           'Skor dan log permainan bisa dibuka dari bar atas.',
         ],
       },

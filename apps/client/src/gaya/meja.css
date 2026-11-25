@@ -402,95 +402,119 @@ html[data-penonton] #modal .info-kaldu {
   font-weight: 700;
 }
 
-/* ---------- Emote ---------- */
-/* Palet: emoji, celetukan warga Madya, lalu isian pesan sendiri (keputusan #48). */
-.palet-emote {
-  position: absolute;
-  top: var(--tinggi-bar-atas-ukur, calc(var(--tinggi-bar-atas) + var(--aman-atas)));
-  right: calc(var(--ruang-2) + var(--aman-kanan));
-  /* rem: palet ikut melebar saat teks besar. */
-  width: min(22rem, calc(100vw - 2 * var(--ruang-2)));
-  max-height: calc(100dvh - var(--tinggi-bar-atas) - var(--aman-atas) - 2 * var(--ruang-2));
-  overflow-y: auto;
+/* ---------- Obrolan di meja ---------- */
+/* Lembar obrolan layar penuh (0.8.0): menutupi meja dan bar (keduanya inert selama terbuka), di bawah
+   modal, dialog, dan toast (--z-obrolan di dalam #ui). Gelembung pesan dan baki ada di komponen.css. */
+.lembar-obrolan {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-obrolan);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  background: var(--panel);
-  border: 1px solid var(--garis-kuat);
-  border-radius: var(--radius-besar);
-  box-shadow: var(--bayangan-3);
-  z-index: var(--z-palet);
-  transform-origin: top right;
-  animation: palet-masuk var(--durasi-cepat) var(--ease-pegas);
+  background: linear-gradient(180deg, var(--dialog-atas), var(--dialog) 40%, var(--dialog-bawah));
+  color: var(--teks);
+  padding-bottom: var(--aman-bawah);
+  outline: none;
+  animation: lembar-naik var(--durasi-sedang) var(--ease-keluar);
 }
-.palet-emote button {
-  min-width: 0;
-  min-height: var(--sentuh);
-  padding: var(--ruang-2) var(--ruang-1);
-  font-size: var(--teks-sm);
+/* Papan ketik HP terbuka (tinggi disamakan dengan visualViewport): safe area bawah tertutup papan ketik. */
+.lembar-obrolan.papan-ketik {
+  bottom: auto;
+  padding-bottom: 0;
 }
-.palet-emoji {
-  display: grid;
-  /* minmax(0, 1fr): kolom tidak melebar mengikuti isi (meluber ke kanan di HP sempit). */
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 4px;
-}
-.palet-emoji button {
-  font-size: 1.5rem;
-  padding: var(--ruang-1) 0;
-}
-.palet-celetukan {
+.spanduk-giliran {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-}
-.palet-celetukan button {
-  flex: 1 1 auto;
-  padding-inline: var(--ruang-2);
-  /* Celetukan panjang dilipat di spasi; kata yang tetap tidak muat baru dipotong. */
-  overflow-wrap: anywhere;
-}
-.palet-tulis {
-  display: flex;
-  gap: 6px;
-}
-.palet-tulis input {
-  flex: 1;
-  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 10px;
+  width: 100%;
   min-height: var(--sentuh);
+  margin: 0;
+  padding: calc(var(--aman-atas) + 6px) calc(var(--ruang-3) + var(--aman-kanan)) 6px calc(var(--ruang-3) + var(--aman-kiri));
+  border: 0;
+  border-radius: 0;
+  background: var(--emas);
+  color: var(--teks-di-emas);
+  font-weight: 700;
+  font-size: var(--teks-sm);
+  box-shadow: none;
 }
-/* Lembar obrolan (0.7.0): menggantikan palet emote, di lapisan yang sama (.palet-emote). */
-.lembar-obrolan {
-  gap: 6px;
+.spanduk-giliran[hidden],
+.spanduk-giliran .sisa[hidden] {
+  display: none;
 }
-.lembar-obrolan .kepala-obrolan {
+.spanduk-giliran .sisa {
+  padding: 1px 8px;
+  border-radius: var(--radius-pil);
+  background: rgba(0, 0, 0, 0.14);
+  font-variant-numeric: tabular-nums;
+}
+.kepala-obrolan {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--ruang-2);
+  padding: calc(var(--aman-atas) + 6px) calc(var(--ruang-3) + var(--aman-kanan)) 6px calc(var(--ruang-2) + var(--aman-kiri));
+  background: var(--panel);
+  border-bottom: 1px solid var(--garis);
+  /* Usap ke bawah di kepala = kembali ke meja (kontrolMeja.ts pasangUsapObrolan). */
+  touch-action: none;
 }
-.lembar-obrolan h2 {
+.spanduk-giliran:not([hidden]) + .kepala-obrolan {
+  padding-top: 6px;
+}
+.kepala-obrolan .tombol-kembali {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: var(--sentuh);
+  padding: 0 var(--ruang-3) 0 var(--ruang-2);
+  font-size: var(--teks-lg);
+  font-weight: 700;
+}
+.kepala-obrolan .tombol-kembali span:first-child {
+  font-size: 1.6em;
+  line-height: 1;
+  margin-top: -0.12em;
+}
+.judul-obrolan {
+  min-width: 0;
+  flex: 1;
+}
+.judul-obrolan h2 {
   margin: 0;
-  font-size: var(--teks-md);
+  font-size: var(--teks-lg);
+  line-height: var(--baris-rapat);
 }
-.lembar-obrolan .kepala-obrolan button {
+.peserta-obrolan {
+  margin: 0;
+  font-size: var(--teks-xs);
+  color: var(--teks-redup);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.badan-obrolan {
+  flex: 1;
   min-height: 0;
-  width: var(--sentuh);
-  height: var(--sentuh);
-  padding: 0;
-}
-.lembar-obrolan .obrolan-tulis {
-  margin-top: 0;
-}
-.lembar-obrolan .obrolan-cepat {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  padding: 0 calc(var(--ruang-3) + var(--aman-kanan)) var(--ruang-2) calc(var(--ruang-3) + var(--aman-kiri));
 }
-.lembar-obrolan .palet-emoji button.emoji {
-  font-size: 1.5rem;
-  padding: var(--ruang-1) 0;
+.lembar-obrolan .obrolan-daftar {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  margin: 0 calc(-1 * var(--ruang-1));
+  padding: var(--ruang-3) var(--ruang-1);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: var(--teks-md);
+}
+.lembar-obrolan .baki-obrolan {
+  max-height: 42dvh;
 }
 /* Tombol 💬 di bar atas + lencana jumlah pesan yang belum dibaca. */
 .bar-atas .tombol-obrolan {
@@ -512,14 +536,6 @@ html[data-penonton] #modal .info-kaldu {
   text-align: center;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
-}
-@media (max-width: 400px) {
-  .palet-emoji {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-  .palet-emoji button {
-    font-size: 1.375rem;
-  }
 }
 
 /* Gelembung emote/celetukan di atas kursi pemain */

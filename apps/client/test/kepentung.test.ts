@@ -363,7 +363,10 @@ describe('lapisan tidak menutupi jendela', () => {
     expect(css('tutorial.css')).toMatch(/#ui > \.tutorial \{[^}]*z-index: calc\(var\(--z-palet\) - 1\);/);
     expect(z('--z-retak')).toBeLessThan(z('--z-palet') - 1);
     expect(z('--z-retak')).toBeLessThan(z('--z-gelembung'));
-    expect(css('meja.css')).toMatch(/\.palet-emote \{[^}]*z-index: var\(--z-palet\);/);
+    // Lembar obrolan layar penuh (0.8.0): menutupi retakan dan gelembung, tetapi di bawah modal.
+    expect(css('meja.css')).toMatch(/\.lembar-obrolan \{[^}]*z-index: var\(--z-obrolan\);/);
+    expect(z('--z-obrolan')).toBeGreaterThan(z('--z-gelembung'));
+    expect(z('--z-obrolan')).toBeLessThan(z('--z-modal'));
     expect(css('meja.css')).toMatch(/\.gelembung \{[^}]*z-index: var\(--z-gelembung\);/);
     const aturan = css('meja.css').match(/#ui > #retak \{[^}]*\}/)?.[0] ?? '';
     expect(aturan).toContain('z-index: var(--z-retak)');
@@ -381,7 +384,7 @@ describe('lapisan tidak menutupi jendela', () => {
     document.body.appendChild(ui);
     try {
       const palet = ui.appendChild(document.createElement('div'));
-      palet.className = 'palet-emote';
+      palet.className = 'lembar-obrolan';
       const gelembung = ui.appendChild(document.createElement('div'));
       gelembung.className = 'gelembung';
       void jotos({ titik: null, benih: 4 });

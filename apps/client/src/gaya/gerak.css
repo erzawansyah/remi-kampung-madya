@@ -23,10 +23,11 @@
     transform: translateY(8px) scale(0.98);
   }
 }
-@keyframes palet-masuk {
+/* Lembar obrolan layar penuh naik dari bawah (gerak kurang: pudar-masuk, lihat di bawah). */
+@keyframes lembar-naik {
   from {
     opacity: 0;
-    transform: translateY(-6px) scale(0.95);
+    transform: translateY(32px);
   }
 }
 /* Dipertahankan untuk kode yang masih memakai nama lama */
@@ -322,7 +323,7 @@
   }
   html:not([data-gerak='penuh']) .dialog,
   html:not([data-gerak='penuh']) .toast,
-  html:not([data-gerak='penuh']) .palet-emote,
+  html:not([data-gerak='penuh']) .lembar-obrolan,
   html:not([data-gerak='penuh']) .pasang-melayang {
     animation-name: pudar-masuk;
   }
@@ -362,7 +363,7 @@ html[data-gerak='kurang'] .pemuat-kartu span {
 }
 html[data-gerak='kurang'] .dialog,
 html[data-gerak='kurang'] .toast,
-html[data-gerak='kurang'] .palet-emote,
+html[data-gerak='kurang'] .lembar-obrolan,
 html[data-gerak='kurang'] .pasang-melayang {
   animation-name: pudar-masuk;
 }

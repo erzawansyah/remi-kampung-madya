@@ -159,6 +159,49 @@ describe('obrolan di lobi', () => {
     }
   });
 
+  it('gelembung: pesan orang di kiri dengan nama dan jam, pesanku di kanan tanpa nama; warga kedai diberi label', () => {
+    const obrolan = new Obrolan();
+    const w = new Date(2026, 10, 25, 9, 7).getTime();
+    obrolan.ganti([
+      { nama: 'Ani', isi: 'halo', w },
+      { nama: 'Budi', isi: 'iya', w },
+      { nama: 'Kipas Dua', isi: 'Gedein!', w },
+      { nama: 'Ani', isi: '🔥', w },
+    ]);
+    const info = infoLobi();
+    info.kursi[2] = { jenis: 'bot', nama: 'Kipas Dua', terhubung: true, level: 'normal' };
+    const { akar } = lobi(obrolan, info);
+    const baris = [...akar.querySelectorAll<HTMLElement>('.baris-obrolan')];
+    expect(baris.map((b) => b.classList.contains('milikku'))).toEqual([false, true, false, false]);
+    expect(baris[0]!.querySelector('.nama')!.textContent).toBe('Ani');
+    expect(baris[1]!.querySelector('.nama')).toBeNull();
+    expect(baris.map((b) => b.querySelector('.jam')!.textContent)).toEqual(['09.07', '09.07', '09.07', '09.07']);
+    expect(baris[0]!.querySelector('.label-warga')).toBeNull();
+    expect(baris[2]!.querySelector('.label-warga')!.textContent).toBe('warga kedai');
+    expect(baris[3]!.classList.contains('emoji')).toBe(true);
+  });
+
+  it('😊 membuka baki celetukan + emoji (tertutup bawaan); keadaannya dan fokus tombolnya bertahan saat lobi digambar ulang', () => {
+    const obrolan = new Obrolan();
+    const { akar, gambar } = lobi(obrolan);
+    const tombol = () => akar.querySelector<HTMLElement>('.panel-obrolan .tombol-baki')!;
+    const baki = () => akar.querySelector<HTMLElement>('.panel-obrolan .baki-obrolan')!;
+    expect(baki().hidden).toBe(true);
+    expect(baki().querySelectorAll('.palet-celetukan [data-emote]').length).toBeGreaterThan(5);
+    expect(baki().querySelectorAll('.palet-emoji [data-emote]').length).toBeGreaterThan(10);
+    tombol().focus();
+    tombol().click();
+    expect(baki().hidden).toBe(false);
+    expect(tombol().getAttribute('aria-expanded')).toBe('true');
+    gambar();
+    expect(baki().hidden).toBe(false);
+    expect(document.activeElement).toBe(tombol());
+    tombol().click();
+    expect(baki().hidden).toBe(true);
+    gambar();
+    expect(baki().hidden).toBe(true);
+  });
+
   it('sambungan belum siap: pesan ditahan dan drafnya tetap', () => {
     const obrolan = new Obrolan();
     const akar = document.createElement('div');

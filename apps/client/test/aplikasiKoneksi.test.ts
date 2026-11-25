@@ -34,7 +34,7 @@ vi.mock('../src/game/game', () => ({
 }));
 
 /** Panggilan ke KontrolMeja tiruan (nama metode + argumen) dan aplikasi yang diberikan kepadanya. */
-const kontrol = vi.hoisted(() => ({ panggilan: [] as { nama: string; arg: unknown[] }[], app: null as unknown, tahanKeluar: false }));
+const kontrol = vi.hoisted(() => ({ panggilan: [] as { nama: string; arg: unknown[] }[], app: null as unknown, tahanKeluar: false, obrolanTerbuka: false }));
 vi.mock('../src/kontrolMeja', async (asli) => {
   const m = await asli<typeof import('../src/kontrolMeja')>();
   const catat =
@@ -61,6 +61,12 @@ vi.mock('../src/kontrolMeja', async (asli) => {
     hancurkan = catat('hancurkan');
     keadaanTampil = () => ({ status: null, sibuk: false, klasemen: false });
     menahanKeluar = () => kontrol.tahanKeluar;
+    tutupObrolanTerbuka = () => {
+      const ada = kontrol.obrolanTerbuka;
+      kontrol.obrolanTerbuka = false;
+      if (ada) kontrol.panggilan.push({ nama: 'tutupObrolan', arg: [] });
+      return ada;
+    };
   }
   return { ...m, KontrolMeja: KontrolPalsu };
 });
@@ -151,6 +157,7 @@ beforeEach(() => {
   kontrol.panggilan.length = 0;
   kontrol.app = null;
   kontrol.tahanKeluar = false;
+  kontrol.obrolanTerbuka = false;
   vi.mocked(umumkan).mockClear();
   WsPalsu.semua = [];
   vi.stubGlobal('WebSocket', WsPalsu);
@@ -241,6 +248,21 @@ describe('Aplikasi: tombol Back di meja', () => {
 
     // Pembanding: tanpa jendela itu, Back menawarkan keluar seperti biasa.
     kontrol.tahanKeluar = false;
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dialogKeluar().length).toBeGreaterThan(0);
+  });
+});
+
+describe('Aplikasi: Back dengan lembar obrolan terbuka (0.8.0)', () => {
+  it('Back menutup lembar obrolan dulu, tidak menawarkan keluar meja; Back berikutnya baru menawarkan keluar', async () => {
+    await diMeja();
+    const dialogKeluar = () => [...document.querySelectorAll('#lapisan-dialog .dialog')].filter((d) => /keluar/i.test(d.textContent ?? ''));
+    kontrol.obrolanTerbuka = true;
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(kontrol.panggilan.filter((p) => p.nama === 'tutupObrolan')).toHaveLength(1);
+    expect(dialogKeluar()).toHaveLength(0);
     window.dispatchEvent(new PopStateEvent('popstate'));
     await vi.advanceTimersByTimeAsync(0);
     expect(dialogKeluar().length).toBeGreaterThan(0);

@@ -485,6 +485,8 @@ class Aplikasi implements AppUntukMeja {
         this.pastikanJaga();
         // Penonton yang sedang melihat kartu pemain: kembali ke tontonan buangan.
         if (this.layar === 'meja' && this.tontonan) return this.berhentiLihat();
+        // Lembar obrolan terbuka: Back menutupnya dulu (kembali ke meja), tidak menawarkan keluar meja.
+        if (this.layar === 'meja' && this.kontrol?.tutupObrolanTerbuka()) return;
         // Jendela pilih susunan joker (#63) wajib dipilih: Back tidak menawarkan keluar meja.
         if (this.layar === 'meja' && this.kontrol?.menahanKeluar()) return;
         return this.konfirmasiKeluar(this.layar);
