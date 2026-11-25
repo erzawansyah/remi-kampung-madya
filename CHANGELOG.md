@@ -6,6 +6,14 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.7.1] - 2026-11-25
+
+### Untuk pemain
+
+#### Diperbaiki
+
+- Ikon **?** di samping pilihan lebih kecil dan tidak lagi menempel ke tulisannya.
+
 ## [0.7.0] - 2026-11-25
 
 Obrolan di lobi dan meja, urutan duduk diacak, joker tidak bisa ditebak lewat tombol Turunkan, dan tampilan yang lebih bersih. Aturan main tidak berubah.

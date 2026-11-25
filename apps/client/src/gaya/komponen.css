@@ -1027,24 +1027,25 @@ details.akordion[open] > summary::after {
 .label-info {
   display: inline-flex;
   align-items: center;
-  gap: var(--ruang-1);
+  gap: 0.5em;
   min-width: 0;
 }
 .tombol-info {
   flex: none;
   display: inline-grid;
   place-items: center;
-  width: 1.5em;
-  height: 1.5em;
+  /* Kecil dan tidak menempel ke teks (0.7.1): ±15 px di teks 16 px, jarak lewat gap .label-info. */
+  width: 1.45em;
+  height: 1.45em;
   min-height: 0;
   padding: 0;
-  margin: -0.4em -0.2em;
+  margin: -0.3em 0;
   border: 1.5px solid var(--teks-redup);
   border-radius: 50%;
   background: transparent;
   background-clip: content-box;
   color: var(--teks-redup);
-  font-size: 0.8em;
+  font-size: 0.68em;
   font-weight: 700;
   line-height: 1;
   box-shadow: none;
