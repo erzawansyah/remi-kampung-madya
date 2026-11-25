@@ -423,6 +423,28 @@ mark {
 .tentang-changelog .changelog-teknis > summary {
   font-size: var(--teks-sm);
 }
+/* Jendela "Yang baru di versi X" sesudah pembaruan (ui/yangBaru.ts). */
+.yang-baru-versi + .yang-baru-versi {
+  margin-top: var(--ruang-3);
+  padding-top: var(--ruang-3);
+  border-top: 1px solid var(--garis);
+}
+.yang-baru-versi h3 {
+  margin: 0 0 var(--ruang-1);
+  font-size: var(--teks-md);
+  color: var(--emas-muda);
+}
+.yang-baru .changelog-ringkas {
+  margin: var(--ruang-2) 0 0;
+  padding-left: 1.3em;
+}
+.yang-baru .changelog-ringkas li {
+  line-height: var(--baris-normal);
+}
+.yang-baru-lain {
+  margin-top: var(--ruang-3);
+  font-size: var(--teks-sm);
+}
 /* Markdown mini (catatan perubahan) */
 .md h3,
 .md h4,

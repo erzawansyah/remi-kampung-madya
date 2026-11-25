@@ -280,6 +280,7 @@ const aksiPalsu = (): AksiBeranda => ({
   lihatPublik: vi.fn(),
   lihatRiwayat: vi.fn(),
   lihatKompetisi: vi.fn(),
+  lihatSprint: vi.fn(),
   mainOffline: vi.fn(),
   lanjutOffline: vi.fn(),
   latihan: vi.fn(),
@@ -328,9 +329,12 @@ describe('jalan masuk Usul fitur', () => {
     expect(kontrol).not.toMatch(/\busulan|usul fitur|usulFitur/i);
     const main = readFileSync(join(src, 'main.ts'), 'utf8');
     const pemakai = main.split('\n').filter((b) => /bukaUsulan|usulFitur/.test(b) && !/^\s*(import|\/\/)/.test(b));
+    // Ketiganya hanya dari beranda: ubin, Tentang dari beranda, dan "Catatan lengkap" di jendela
+    // "Yang baru" (yang hanya tampil di beranda, lihat aplikasiYangBaru.test.ts).
     expect(pemakai.map((b) => b.trim())).toEqual([
       'tentang: () => bukaTentang({ usulFitur: () => bukaUsulan() }),',
       'usulFitur: () => bukaUsulan(),',
+      'catatanLengkap: () => bukaTentang({ usulFitur: () => bukaUsulan(), bukaCatatan: true }),',
     ]);
   });
 });

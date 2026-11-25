@@ -28,6 +28,7 @@ import {
   berikutnya,
 } from '@remi/engine';
 import {
+  hasilSprint,
   MAKS_LEDEK_PER_PUTARAN,
   type AksiKlien,
   type InfoMeja,
@@ -60,13 +61,14 @@ import { teksPengumuman, Tutorial, type KeadaanTutorial } from './ui/tutorial';
 import { TEKS_TUTORIAL } from './konten/tutorial';
 import { TEKS_KALDU } from './konten/kaldu';
 import { KOMPETISI_DIBUKA, TEKS_KOMPETISI, teksHasilKompetisi } from './konten/kompetisi';
+import { TEKS_SPRINT, teksPeringkatMinggu } from './konten/sprint';
 import { TEKS_LANJUT, TEKS_LEDEK } from './konten/ledek';
 import { apaEmoji, hapusLapisanLedek, htmlLedek, lapisanLedek, LedekBesar, sasaranLedekBawaan } from './ui/ledek';
 import { TEKS_KONEKSI, teksMentungTerlewat } from './konten/koneksi';
 import { TEKS_TONTONAN } from './konten/tontonan';
 import { TEKS_TURUNKAN } from './konten/turunkan';
 import { TEKS_PENGINGAT_SUSUN } from './konten/susunAkhir';
-import { TEKS_OBROLAN, teksBelumDibaca } from './konten/obrolan';
+import { TEKS_OBROLAN, teksBelumDibaca, teksPeserta, teksSisaGiliran } from './konten/obrolan';
 import { htmlPanelObrolan, Obrolan, pasangPanelObrolan, type BarisObrolan, type PeristiwaObrolan } from './ui/obrolan';
 import { simpan } from './penyimpanan';
 import { gerakDikurangi } from './preferensi';
@@ -95,6 +97,11 @@ export interface AppUntukMeja {
   selisihJam?(): number;
   /** Meja kompetisi (#51 versi 2): tinggalkan meja lalu buka detail kompetisi `kode`. */
   kembaliKeKompetisi?(kode: string): void;
+  /**
+   * Klasemen akhir meja sprint (25 Nov 2026): tinggalkan meja, lalu `lagi` = langsung mulai percobaan
+   * sprint baru ("Sprint lagi"), selain itu ke beranda.
+   */
+  tinggalkanSprint?(lagi: boolean): void;
   /**
    * Nonton (#60): meja ini ditampilkan untuk penonton yang diizinkan melihat kartu pemain
    * `info.kursiSaya`. Semua aksi, emote, ledekan, voting, dan tombol host dimatikan; yang tampil sama
@@ -130,6 +137,45 @@ export function htmlHasilKompetisi(h: PesanHasilKompetisi | null, saya: number |
           <span class="teks-hasil-kompetisi">${esc(teksHasilKompetisi(p, h.minMain, h.jumlahPeringkat))}</span></li>`,
       )
       .join('')}</ul>`;
+}
+
+/** Pesan server sprintHasil: hasil percobaan sprint yang sudah tercatat, plus peringkat minggu ini. */
+export type PesanHasilSprint = Extract<PesanServer, { t: 'sprintHasil' }>;
+
+/**
+ * Bagian "Hasil sprint" di klasemen akhir meja sprint. Selama pesan sprintHasil belum datang, angkanya
+ * dihitung dari view dengan aturan yang sama (hasilSprint di @remi/meja) dan ditandai sedang dicatat;
+ * begitu datang, angka dari server yang dipakai plus peringkat minggu ini.
+ */
+export function htmlHasilSprint(v: ViewPemain, h: PesanHasilSprint | null): string {
+  if (v.saya === null) return '';
+  const lokal = hasilSprint(v, v.saya);
+  const r = h ?? lokal;
+  const peringkat = h && typeof h.peringkatMinggu === 'number' ? teksPeringkatMinggu(h.peringkatMinggu) : '';
+  return `<h3 class="judul-hasil-sprint"><span aria-hidden="true">⏱️</span> ${esc(TEKS_SPRINT.judulHasil)}</h3>
+    <p class="status-sprint${r.menang ? ' menang' : ''}" data-status-sprint>${esc(r.menang ? TEKS_SPRINT.menang : TEKS_SPRINT.kalah)} <span class="redup">${esc(
+      r.menang ? TEKS_SPRINT.ketMenang : TEKS_SPRINT.ketKalah,
+    )}</span></p>
+    <ul class="angka-sprint">
+      <li>${esc(TEKS_SPRINT.labelSkor)} <b class="${r.skor > 0 ? 'positif' : r.skor < 0 ? 'negatif' : ''}">${angkaSkor(r.skor)}</b></li>
+      <li>${esc(TEKS_SPRINT.labelMentung)} <b>${r.mentung}</b></li>
+      <li>${esc(TEKS_SPRINT.labelKepentung)} <b>${r.kepentung}</b></li>
+    </ul>
+    <p class="redup rapat" data-peringkat-sprint>${esc(h ? peringkat : TEKS_SPRINT.mencatat)}</p>`;
+}
+
+/** Kalimat hasil sprint untuk pembaca layar. */
+function teksHasilSprintSingkat(v: ViewPemain, h: PesanHasilSprint | null): string {
+  if (v.saya === null) return '';
+  const r = h ?? hasilSprint(v, v.saya);
+  const bagian = [
+    `${TEKS_SPRINT.judulHasil}: ${r.menang ? TEKS_SPRINT.menang : TEKS_SPRINT.kalah}`,
+    `${TEKS_SPRINT.labelSkor} ${angkaSkor(r.skor)}`,
+    `${TEKS_SPRINT.labelMentung} ${r.mentung}`,
+    `${TEKS_SPRINT.labelKepentung} ${r.kepentung}`,
+  ];
+  if (h && typeof h.peringkatMinggu === 'number') bagian.push(teksPeringkatMinggu(h.peringkatMinggu));
+  return `${bagian.join(', ')}.`;
 }
 
 /** Aksi online yang sudah dikirim tapi belum dipastikan sampai (lihat KontrolMeja.nilaiAksiTertunda). */
@@ -555,6 +601,10 @@ export class KontrolMeja implements AksiAdegan {
   private belumDibaca = 0;
   private lepasPanelObrolan: (() => void) | null = null;
   private readonly lepasDengarObrolan: () => void;
+  /** Lembar obrolan layar penuh yang sedang terbuka (null = tertutup). */
+  private lembarObrolan: HTMLElement | null = null;
+  /** Pelepas pendengar visualViewport lembar obrolan (bar tulis tetap di atas papan ketik HP). */
+  private lepasViewportObrolan: (() => void) | null = null;
   private readonly elMinta: HTMLElement;
   /** Permintaan yang sudah kujawab (disembunyikan sebelum info baru dari server datang). */
   private mintaDijawab = new Set<number>();
@@ -594,6 +644,8 @@ export class KontrolMeja implements AksiAdegan {
   private selesaiDitampilkan = false;
   /** Hasil kompetisi permainan ini (meja kompetisi), untuk klasemen akhir. */
   private hasilKompetisi: PesanHasilKompetisi | null = null;
+  /** Hasil sprint permainan ini (meja sprint, pesan sprintHasil), untuk klasemen akhir. */
+  private hasilSprint: PesanHasilSprint | null = null;
   /** Putaran yang popup jokernya sudah kutekan OK (jangan dibuka lagi sambil menunggu server). */
   private jokerDiOk = -1;
   /** Nomor sambungan tempat siapJoker terakhir dikirim (lihat perluKirimUlangSiapJoker). */
@@ -777,6 +829,8 @@ export class KontrolMeja implements AksiAdegan {
     for (const [, , baris] of this.emoteTertunda.splice(0)) if (baris) this.obrolan.tambah(baris);
     this.lepasPanelObrolan?.();
     this.lepasPanelObrolan = null;
+    this.lepasViewportObrolan?.();
+    this.lepasViewportObrolan = null;
     if (this.modePenonton) delete document.documentElement.dataset.penonton;
     this.elLapisanMinta.remove();
     this.antrian = [];
@@ -1153,6 +1207,7 @@ export class KontrolMeja implements AksiAdegan {
     if (this.hancur) return;
     const v = this.view;
     if (!v || !this.info) return;
+    this.perbaruiLembarObrolan();
     const p = v.putaran;
     // Giliran/tahap berganti: buang mode mulung dan petunjuk yang basi.
     const kunci = p ? `${p.nomor}:${p.giliran}:${p.tahap}:${v.status}` : v.status;
@@ -2137,7 +2192,10 @@ export class KontrolMeja implements AksiAdegan {
           : // Nonton (#60): penonton tidak diberi kode meja.
             this.penonton
             ? TEKS_TONTONAN.labelAtas
-            : `Meja ${info.kode}`,
+            : // Meja sprint: "Sprint · Putaran N/5" (kodenya tidak berguna, kursinya penuh warga kedai).
+              info.sprint
+              ? TEKS_SPRINT.labelAtas
+              : `Meja ${info.kode}`,
       p ? p.nomor : null,
       v.konfigurasi.batasPutaran,
       p?.kaldu === true,
@@ -2232,6 +2290,7 @@ export class KontrolMeja implements AksiAdegan {
   private detik() {
     if (this.hancur || !this.view || !this.info) return;
     this.perbaruiWaktu();
+    this.perbaruiLembarObrolan();
     // Cadangan kalau kabar koneksiBerubah() dari aplikasi terlewat: status berganti = tombol ikut berganti.
     if (this.perbaruiKoneksi()) {
       this.cekKunciKoneksi();
@@ -2490,6 +2549,14 @@ export class KontrolMeja implements AksiAdegan {
     if (this.penonton) return;
     // Jendela terbuka: keyboard milik jendela itu (dom.ts mengurus Tab/Escape).
     if (adaJendelaTerbuka()) return;
+    // Lembar obrolan menutupi meja: pintasan meja mati, Esc (juga dari isian pesan) menutup lembar.
+    if (this.lembarObrolan) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.tutupObrolan(true);
+      }
+      return;
+    }
     const t = e.target as HTMLElement | null;
     if (t?.closest('input, textarea, select, [contenteditable="true"], .tutorial')) return;
     const diTombol = !!t?.closest('button');
@@ -2513,8 +2580,6 @@ export class KontrolMeja implements AksiAdegan {
         e.preventDefault();
         return this.ketukSorotan();
       case 'Escape': {
-        const palet = this.akar.querySelector('.palet-emote');
-        if (palet) return this.tutupObrolan(true);
         if (this.pilihJumlah || this.mulung) return this.batalMulung();
         if (this.dipilih.size) {
           this.dipilih.clear();
@@ -2672,55 +2737,150 @@ export class KontrolMeja implements AksiAdegan {
   // ---------- emote ----------
 
   /**
-   * Lembar obrolan (0.7.0, menggantikan palet emote): isi obrolan, isian pesan, dan pesan cepat
-   * (emoji + celetukan). Bukan jendela: antrian animasi dan popup joker tidak tertahan, dan lembar ini
-   * ikut lapisan/z-index palet emote yang lama (`.palet-emote`). Pesan cepat menutup lembar (reaksi
-   * kilat seperti dulu); pesan yang diketik membiarkannya terbuka.
+   * Lembar obrolan layar penuh (0.8.0, menggantikan lembar kecil 0.7.0): kepala dengan tombol "‹ Meja",
+   * judul, dan siapa saja di meja; isi obrolan bergelembung; bar tulis dengan baki 😊 di bawah. Bukan
+   * jendela dom.ts: antrian animasi dan popup joker tidak tertahan, dan modal (popup joker, panel
+   * mentung, hasil putaran) serta dialog tetap tampil di atasnya (lapisan --z-obrolan di dalam #ui).
+   * Selama terbuka bar atas dan bar aksi inert dan pintasan meja mati. Ditutup lewat "‹ Meja", spanduk
+   * giliran, Esc, Back (main.ts), atau usap ke bawah di kepalanya.
    */
   private bukaObrolan(dariKeyboard: boolean) {
     if (this.penonton) return;
-    if (this.akar.querySelector('.palet-emote')) return this.tutupObrolan(dariKeyboard);
-    const el = document.createElement('div');
-    el.className = 'palet-emote lembar-obrolan';
-    el.setAttribute('role', 'group');
-    el.setAttribute('aria-label', TEKS_OBROLAN.judul);
-    el.innerHTML = `<div class="kepala-obrolan"><h2>${esc(TEKS_OBROLAN.judul)}</h2><button type="button" class="tombol-ikon kecil" data-tutup aria-label="${esc(TEKS_OBROLAN.tutup)}"><span aria-hidden="true">✕</span></button></div>
-      ${htmlPanelObrolan({ susunan: 'lembar', idIsian: 'isian-obrolan-meja' })}`;
-    el.querySelector('[data-tutup]')!.addEventListener('click', () => this.tutupObrolan(true));
+    if (this.lembarObrolan) return this.tutupObrolan(dariKeyboard);
+    const el = document.createElement('section');
+    el.className = 'lembar-obrolan';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'judul-lembar-obrolan');
+    el.tabIndex = -1;
+    el.innerHTML = `
+      <button type="button" class="spanduk-giliran" data-kembali hidden><span class="teks">${esc(TEKS_OBROLAN.giliran)}</span><span class="sisa"></span></button>
+      <header class="kepala-obrolan">
+        <button type="button" class="tombol-kembali" data-kembali aria-label="${esc(TEKS_OBROLAN.labelKembali)}"><span aria-hidden="true">‹</span><span aria-hidden="true">${esc(TEKS_OBROLAN.kembali)}</span></button>
+        <div class="judul-obrolan"><h2 id="judul-lembar-obrolan">${esc(TEKS_OBROLAN.judul)}</h2><p class="peserta-obrolan"></p></div>
+      </header>
+      <div class="badan-obrolan">${htmlPanelObrolan({ idIsian: 'isian-obrolan-meja' })}</div>`;
+    el.addEventListener('click', (ev) => {
+      if ((ev.target as HTMLElement).closest('[data-kembali]')) this.tutupObrolan(true);
+    });
+    this.pasangUsapObrolan(el.querySelector<HTMLElement>('.kepala-obrolan')!);
+    // Baki selalu tertutup saat lembar dibuka.
+    this.obrolan.baki = false;
     // Dipasang ke dokumen dulu: gulir ke pesan terbaru (atau posisi tersimpan) tidak berefek pada elemen
     // yang belum punya tata letak.
     this.akar.appendChild(el);
+    this.lembarObrolan = el;
     this.lepasPanelObrolan?.();
     this.lepasPanelObrolan = pasangPanelObrolan(el, {
       obrolan: this.obrolan,
       kirim: (isi) => this.app.kirim({ t: 'emote', isi }),
       namaSaya: () => (this.info?.kursiSaya != null ? (this.info.kursi[this.info.kursiSaya]?.nama ?? null) : null),
       alasanTolak: () => this.alasanPutus(),
-      sesudahCepat: (k) => this.tutupObrolan(k),
       susunan: 'lembar',
       idIsian: 'isian-obrolan-meja',
     });
-    const isian = el.querySelector<HTMLInputElement>('.obrolan-tulis input')!;
-    // Pintasan meja diabaikan selama mengetik, jadi Esc ditangani di isian sendiri.
-    isian.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape') {
-        ev.preventDefault();
-        this.tutupObrolan(true);
-      }
-    });
+    this.aturViewportObrolan(el);
+    this.elAtas.inert = true;
+    this.elAksi.inert = true;
     this.belumDibaca = 0;
     this.aturLencanaObrolan();
     this.elAtas.querySelector('[data-a=obrolan]')?.setAttribute('aria-expanded', 'true');
-    if (dariKeyboard) isian.focus();
+    this.perbaruiLembarObrolan();
+    // Fokus pindah ke lembar. Dari keyboard langsung ke isian; dari sentuhan ke lembarnya saja supaya
+    // papan ketik HP tidak muncul sendiri.
+    if (dariKeyboard) el.querySelector<HTMLInputElement>('.obrolan-tulis input')!.focus();
+    else el.focus({ preventScroll: true });
   }
 
   private tutupObrolan(kembalikanFokus: boolean) {
     this.lepasPanelObrolan?.();
     this.lepasPanelObrolan = null;
-    this.akar.querySelector('.palet-emote')?.remove();
+    this.lepasViewportObrolan?.();
+    this.lepasViewportObrolan = null;
+    this.lembarObrolan?.remove();
+    this.lembarObrolan = null;
+    this.elAtas.inert = false;
+    this.elAksi.inert = false;
     const b = this.elAtas.querySelector<HTMLElement>('[data-a=obrolan]');
     b?.setAttribute('aria-expanded', 'false');
     if (kembalikanFokus) b?.focus();
+  }
+
+  /** Back di HP (main.ts): lembar obrolan yang terbuka ditutup dulu, meja tidak ditinggalkan. */
+  tutupObrolanTerbuka(): boolean {
+    // Jendela di atasnya (popup joker, panel mentung, dialog) yang memegang Back, bukan lembar di bawahnya.
+    if (!this.lembarObrolan || this.hancur || adaJendelaTerbuka()) return false;
+    this.tutupObrolan(true);
+    return true;
+  }
+
+  /** Spanduk giliran (+ sisa waktu kalau meja punya batas) dan daftar peserta di kepala lembar. */
+  private perbaruiLembarObrolan() {
+    const el = this.lembarObrolan;
+    if (!el || this.hancur) return;
+    const info = this.info;
+    const peserta = el.querySelector<HTMLElement>('.peserta-obrolan')!;
+    const nama = (info?.kursi ?? [])
+      .map((k, i) => (k.jenis === 'kosong' ? null : i === info?.kursiSaya ? TEKS_OBROLAN.kamu : k.nama))
+      .filter((n): n is string => !!n);
+    const teks = teksPeserta(nama);
+    if (peserta.textContent !== teks) peserta.textContent = teks;
+
+    const spanduk = el.querySelector<HTMLButtonElement>('.spanduk-giliran')!;
+    const giliran = this.giliranSaya() || this.susunSaya();
+    if (spanduk.hidden === giliran) spanduk.hidden = !giliran;
+    let sisa = '';
+    if (giliran && info?.batasWaktu && info.pengaturan.detikGiliran) {
+      const sekarang = Date.now() + (this.app.selisihJam?.() ?? 0);
+      sisa = teksSisaGiliran((info.batasWaktu - sekarang) / 1000);
+    }
+    const elSisa = spanduk.querySelector<HTMLElement>('.sisa')!;
+    if (elSisa.textContent !== sisa) elSisa.textContent = sisa;
+    elSisa.hidden = !sisa;
+  }
+
+  /** Usap ke bawah di kepala lembar = kembali ke meja (seperti menurunkan lembar). */
+  private pasangUsapObrolan(kepala: HTMLElement) {
+    let awal: { x: number; y: number; id: number } | null = null;
+    kepala.addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      awal = { x: ev.clientX, y: ev.clientY, id: ev.pointerId };
+    });
+    const selesai = (ev: PointerEvent) => {
+      if (!awal || ev.pointerId !== awal.id) return;
+      const dy = ev.clientY - awal.y;
+      const dx = Math.abs(ev.clientX - awal.x);
+      awal = null;
+      if (dy > 60 && dy > dx * 1.5) {
+        ev.preventDefault();
+        this.tutupObrolan(false);
+      }
+    };
+    kepala.addEventListener('pointerup', selesai);
+    kepala.addEventListener('pointercancel', () => (awal = null));
+  }
+
+  /**
+   * Papan ketik HP: di Chrome Android dan Safari iOS papan ketik hanya mengecilkan visual viewport,
+   * jadi lembar disamakan dengan visualViewport supaya bar tulis tetap tepat di atas papan ketik.
+   */
+  private aturViewportObrolan(el: HTMLElement) {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const atur = () => {
+      // Hanya kalau papan ketik memang mengecilkan layar; selain itu CSS (inset 0) yang berlaku.
+      const kecil = vv.height < window.innerHeight - 1;
+      el.style.height = kecil ? `${vv.height}px` : '';
+      el.style.top = kecil ? `${vv.offsetTop}px` : '';
+      el.classList.toggle('papan-ketik', kecil);
+    };
+    vv.addEventListener('resize', atur);
+    vv.addEventListener('scroll', atur);
+    atur();
+    this.lepasViewportObrolan = () => {
+      vv.removeEventListener('resize', atur);
+      vv.removeEventListener('scroll', atur);
+    };
   }
 
   /** Pesan baru selagi lembar obrolan tertutup: hitung dan tampilkan di lencana tombol 💬. */
@@ -2728,7 +2888,7 @@ export class KontrolMeja implements AksiAdegan {
     if (this.hancur || this.penonton) return;
     if (e.jenis === 'ganti') {
       if (!this.obrolan.daftar.length) this.belumDibaca = 0;
-    } else if (!e.baris.milikku && !this.akar.querySelector('.lembar-obrolan')) this.belumDibaca++;
+    } else if (!e.baris.milikku && !this.lembarObrolan) this.belumDibaca++;
     this.aturLencanaObrolan();
   }
 
@@ -2757,6 +2917,20 @@ export class KontrolMeja implements AksiAdegan {
     if (h.tidakDihitung === 'keluar') return umumkan(TEKS_KOMPETISI.tidakDihitungKeluar);
     const milikku = h.pemain.find((p) => p.kursi === this.view?.saya);
     if (milikku) umumkan(`${TEKS_KOMPETISI.judulHasil}: ${teksHasilKompetisi(milikku, h.minMain, h.jumlahPeringkat)}`);
+  }
+
+  /**
+   * Hasil sprint percobaan ini masuk (pesan sprintHasil): disimpan untuk klasemen akhir. Kalau klasemen
+   * akhir sudah tampil, bagiannya diganti angka dari server dan peringkat mingguan diumumkan.
+   */
+  terimaHasilSprint(h: PesanHasilSprint) {
+    if (this.hancur) return;
+    this.hasilSprint = h;
+    const wadah = document.querySelector<HTMLElement>('#modal [data-hasil-sprint]');
+    const v = this.view;
+    if (!wadah || !v || !this.selesaiDitampilkan) return;
+    wadah.innerHTML = htmlHasilSprint(v, h);
+    umumkan(teksHasilSprintSingkat(v, h));
   }
 
   /**
@@ -3061,7 +3235,8 @@ export class KontrolMeja implements AksiAdegan {
    * permainan jalan sampai batas putaran. Meja menolak keduanya; tombolnya tidak ditampilkan.
    */
   private tanpaVoting(): boolean {
-    return this.app.jenis === 'online' && !!this.info?.kompetisi;
+    // Meja sprint juga: jalan terus sampai 5 putaran.
+    return this.app.jenis === 'online' && (!!this.info?.kompetisi || this.info?.sprint === true);
   }
 
   /** Keadaan tombol "Akhiri permainan" (voting) di modal hasil. Null di meja kompetisi (tanpa voting). */
@@ -3399,6 +3574,10 @@ export class KontrolMeja implements AksiAdegan {
     // Meja kompetisi (#51 versi 2): cuma sekali main. Ganti Main lagi dengan Kembali ke kompetisi,
     // dan tampilkan nilai kompetisi tiap peserta (pesan kompetisiHasil, bisa datang belakangan).
     const kompetisi = offline ? null : (info.kompetisi ?? null);
+    // Meja sprint: satu percobaan, tanpa Main lagi. Hasil percobaannya di atas klasemen, lalu "Sprint lagi"
+    // (percobaan baru di meja baru) dan "Ke beranda". Penonton cuma melihat klasemennya.
+    const sprint = !offline && info.sprint === true;
+    const sprintSaya = sprint && !this.penonton && v.saya !== null;
     const menang = v.saya !== null && peringkat[v.saya] === 1;
     // Putaran terakhir tidak sempat tampil di modal hasil (langsung ke klasemen): ringkasannya di sini.
     const terakhir = v.riwayat.at(-1);
@@ -3411,13 +3590,18 @@ export class KontrolMeja implements AksiAdegan {
        <p class="juara-teks"><span aria-hidden="true">🏆</span> ${esc(juara.join(' & '))} ${juara.length > 1 ? 'juara bareng' : 'juara'}!</p>
        <p class="redup rapat">${esc(v.alasanSelesai ? alasan[v.alasanSelesai] : '')} ${v.riwayat.length} putaran.</p>
        ${kompetisi ? `<div class="hasil-kompetisi" data-hasil-kompetisi aria-live="polite">${htmlHasilKompetisi(this.hasilKompetisi, v.saya)}</div>` : ''}
+       ${sprintSaya ? `<div class="hasil-sprint" data-hasil-sprint>${htmlHasilSprint(v, this.hasilSprint)}</div>` : ''}
        ${penutup.skor}
        ${htmlKlasemen(nama, v.skor, v.saya, terakhir)}
        ${terakhir ? htmlRingkasPutaranTerakhir(terakhir, (i) => nama[i], v.saya) : ''}
        ${penutup.selesai}
        <div class="deret">
          ${
-           kompetisi
+           sprintSaya
+             ? `<button type="button" class="utama" data-a="sprint-lagi">${esc(TEKS_SPRINT.sprintLagi)}</button>`
+             : sprint
+               ? ''
+               : kompetisi
              ? // Kompetisi ditutup sementara: tombolnya disembunyikan (Ke beranda tetap ada).
                KOMPETISI_DIBUKA
                ? `<button type="button" class="utama" data-a="kompetisi">${esc(TEKS_KOMPETISI.kembaliKompetisi)}</button>`
@@ -3453,6 +3637,12 @@ export class KontrolMeja implements AksiAdegan {
             this.app.kirim({ t: 'mainLagi' });
           });
         });
+        dlg.querySelector('[data-a=sprint-lagi]')?.addEventListener('click', () => {
+          bunyi('klik');
+          tutupModal();
+          if (this.app.tinggalkanSprint) this.app.tinggalkanSprint(true);
+          else this.app.keluarMeja();
+        });
         dlg.querySelector('[data-a=kompetisi]')?.addEventListener('click', () => {
           bunyi('klik');
           tutupModal();
@@ -3463,6 +3653,7 @@ export class KontrolMeja implements AksiAdegan {
         dlg.querySelector('[data-a=keluar]')!.addEventListener('click', () => {
           tutupModal();
           if (this.penonton) return this.app.berhentiLihat?.();
+          if (sprintSaya && this.app.tinggalkanSprint) return this.app.tinggalkanSprint(false);
           this.app.keluarMeja();
         });
       },
@@ -3473,7 +3664,7 @@ export class KontrolMeja implements AksiAdegan {
       if (menang) getar('menang');
       const hasil = menang ? 'Selamat, kamu juara!' : `Permainan selesai. Kamu peringkat ${peringkat[v.saya]}.`;
       const tutup = penutup.selesai ? ` ${teksPengumuman(TEKS_TUTORIAL.selesai.judul, TEKS_TUTORIAL.selesai.teks)}` : '';
-      umumkan(hasil + (kompetisi ? this.pengumumanHasilKompetisi(v.saya) : '') + tutup);
+      umumkan(hasil + (kompetisi ? this.pengumumanHasilKompetisi(v.saya) : '') + (sprintSaya ? ` ${teksHasilSprintSingkat(v, this.hasilSprint)}` : '') + tutup);
     }
     // Penutup latihan sudah tampil: baru sekarang tutorial dianggap tuntas (tidak ditawarkan lagi).
     if (penutup.selesai) this.tutorial?.tuntaskan();
@@ -3570,7 +3761,9 @@ export class KontrolMeja implements AksiAdegan {
              : // Nonton (#60): penonton tidak diberi kode meja (yang dipegangnya kode tonton).
                this.penonton
                ? esc(TEKS_TONTONAN.menuPenonton)
-               : `Kode meja: <b>${esc(info?.kode)}</b>. Ajak teman gabung pakai kode ini.`
+               : info?.sprint
+                 ? esc(TEKS_SPRINT.menuMeja)
+                 : `Kode meja: <b>${esc(info?.kode)}</b>. Ajak teman gabung pakai kode ini.`
        }</p>
        <div class="menu-meja">
          <button type="button" class="utama" data-tutup>Lanjut main</button>
@@ -3629,6 +3822,7 @@ export class KontrolMeja implements AksiAdegan {
                   selesai: this.view?.status === 'selesai',
                   masukPeringkat: mejaMasukPeringkat(this.info),
                   kompetisi: !!this.info?.kompetisi,
+                  sprint: this.info?.sprint === true,
                 }),
               ).then((ya) => {
                 if (!ya || this.hancur) return;

@@ -477,6 +477,7 @@ Kartu bergambar joker tidak dipakai.
 | 62 | Urutan duduk harus sesuai urutan masuk lobi? | Tidak: bawaannya diacak waktu permainan dimulai, yang dapat kursi pertama ngocok putaran pertama. Host bisa mematikan "Acak urutan duduk" di lobi (offline: Atur meja); kalau mati, urutan = urutan masuk dan pengocok pertama dipilih. Meja kompetisi selalu diacak, latihan tidak pernah ([rinci](docs/keputusan-pemilik.md#k62)) | Diputuskan pemilik (25 Nov 2026) |
 | 63 | Boleh menebak joker lewat tombol Turunkan? | Tidak gratis: Turunkan selalu bisa ditekan; sah = langsung turun, tidak sah = satu pesan yang sama untuk semua alasan. Jendela pilih susunan joker tanpa Batal ([rinci](docs/keputusan-pemilik.md#k63)) | Diputuskan pemilik (25 Nov 2026) |
 | 64 | Pemain lupa menurunkan kartu di susun akhir | Pengingat "Sudah selesai menyusun?" setiap menekan Selesai dengan kartu di tangan (tanpa melihat isinya), bisa dimatikan sampai permainan selesai. Tanpa turunkan otomatis ([rinci](docs/keputusan-pemilik.md#k64)) | Diputuskan pemilik (25 Nov 2026) |
+| 65 | Kompetisi antar-pemain tidak terpakai | Diganti **Sprint**: selalu bisa dimainkan, 5 putaran melawan Kipas Dua, Cak Kopag, Mbak Teras level Suhu, kocokan acak, papan Minggu ini/Sepanjang masa berkolom Menang, Mentung, Kepentung, Skor, juara mingguan 🏆. Jalan di server ([rinci](docs/keputusan-pemilik.md#k65)) | Diputuskan pemilik (25 Nov 2026) |
 
 ## Test
 

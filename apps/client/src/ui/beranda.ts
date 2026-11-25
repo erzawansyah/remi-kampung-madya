@@ -18,6 +18,7 @@ import { htmlTautanKedai, KEDAI } from '../konten/kedai';
 import { TEKS_TAWARAN } from '../konten/pasang';
 import { TEKS_KALDU } from '../konten/kaldu';
 import { KOMPETISI_DIBUKA, TEKS_KOMPETISI } from '../konten/kompetisi';
+import { TEKS_SPRINT } from '../konten/sprint';
 import { TEKS_KONEKSI } from '../konten/koneksi';
 import { TEKS_NAMA } from '../konten/nama';
 import { TEKS_USULAN } from '../konten/usulan';
@@ -39,8 +40,10 @@ export interface AksiBeranda {
   gabung(nama: string, kode: string): void;
   lihatPublik(): void;
   lihatRiwayat(): void;
-  /** Layar Kompetisi (keputusan #51). */
+  /** Layar Kompetisi (keputusan #51); hanya terpakai kalau KOMPETISI_DIBUKA. */
   lihatKompetisi(): void;
+  /** Layar Sprint (25 Nov 2026); dipanggil sesudah nama dipastikan ada dan sinyal ada. */
+  lihatSprint(): void;
   mainOffline(nama: string, pengaturan: Partial<PengaturanMeja>, pengocokSaya: boolean): void;
   lanjutOffline(): void;
   /** Permainan latihan dengan panduan (tutorial). */
@@ -159,6 +162,14 @@ export function infoSimpanan(): { teks: string; latihan: boolean } | null {
 }
 
 /**
+ * Beranda menawarkan latihan ("Warga baru, ya?"): belum pernah menutup tawaran/tutorial, belum punya riwayat,
+ * dan tidak ada simpanan offline. Dipakai juga main.ts supaya jendela "Yang baru" tidak menimpa tawaran itu.
+ */
+export function adalahPemainBaru(adaRiwayat = simpan.riwayat().length > 0, adaSimpanan = !!infoSimpanan()): boolean {
+  return !preferensi().tutorialSelesai && !adaRiwayat && !adaSimpanan;
+}
+
+/**
  * Gerbang sebelum permainan baru (main baru / latihan) menimpa slot simpanan offline.
  * Tanpa simpanan: langsung boleh. Ada simpanan: konfirmasi bahaya yang menyebut apa yang hilang.
  * Simpanan dibaca saat dipanggil, jadi aman dipakai dari mana saja (beranda, Pengaturan).
@@ -194,7 +205,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   const p = pengaturanTersimpan();
   const simpanan = infoSimpanan();
   const riwayat = simpan.riwayat();
-  const pemainBaru = !preferensi().tutorialSelesai && !riwayat.length && !simpanan;
+  const pemainBaru = adalahPemainBaru(riwayat.length > 0, !!simpanan);
   const pilihan = <T extends string | number>(nilai: T, opsiPilih: [T, string][]) =>
     opsiPilih.map(([v, label]) => `<option value="${v}" ${v === nilai ? 'selected' : ''}>${esc(label)}</option>`).join('');
 
@@ -289,11 +300,13 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
             <button type="button" id="gabung">Gabung</button>
           </div>
           <button type="button" class="hantu penuh" id="publik">Cari meja publik</button>
+          <button type="button" class="hantu penuh" id="sprint"><span aria-hidden="true">⏱️</span> ${esc(TEKS_SPRINT.tombolBeranda)}</button>
           ${
+            // Kompetisi antar-manusia ditutup sementara (0.7.0); sejak 0.8.0 ubinnya diganti Sprint. Kodenya
+            // tetap ada: tombolnya kembali kalau KOMPETISI_DIBUKA dinyalakan lagi.
             KOMPETISI_DIBUKA
               ? `<button type="button" class="hantu penuh" id="kompetisi"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.tombolBeranda)}</button>`
-              : // Ditutup sementara: tetap terlihat (redup, "Segera hadir"); diketuk = toast.
-                `<button type="button" class="hantu penuh mati tombol-segera" id="kompetisi" aria-disabled="true"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.tombolBeranda)} <small class="label-segera">${esc(TEKS_KOMPETISI.segeraHadir)}</small></button>`
+              : ''
           }
         </section>
       </div>
@@ -512,7 +525,8 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   });
 
   // ---------- main online ----------
-  const tombolOnline = ['buat', 'gabung', 'publik', 'kompetisi'].map((id) => el<HTMLButtonElement>(id)!);
+  // Sprint tidak ikut dimatikan saat offline: diketuk tanpa sinyal = toast yang menjelaskan.
+  const tombolOnline = ['buat', 'gabung', 'publik', 'kompetisi'].flatMap((id) => el<HTMLButtonElement>(id) ?? []);
   const kodeEl = el<HTMLInputElement>('kode')!;
   const sibuk = (b: HTMLElement) => {
     tombolOnline.forEach((x) => x.removeAttribute('aria-busy'));
@@ -545,10 +559,16 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
     aksi.lihatPublik();
   });
   // Ikut serta dan meja kompetisi memakai nama ini, jadi nama dipastikan dulu (#49).
-  el('kompetisi')!.addEventListener('click', async () => {
+  el('kompetisi')?.addEventListener('click', async () => {
     if (!KOMPETISI_DIBUKA) return toast(TEKS_KOMPETISI.dirombak);
     if (!(await pastikanNama())) return;
     aksi.lihatKompetisi();
+  });
+  // Sprint (25 Nov 2026): main online saja, dan rekornya dicatat atas nama ini (#49).
+  el('sprint')!.addEventListener('click', async () => {
+    if (!(await pastikanNama())) return;
+    if (!navigator.onLine) return toast(TEKS_SPRINT.butuhInternet, true);
+    aksi.lihatSprint();
   });
 
   const statusEl = el('status-online')!;
@@ -671,7 +691,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   aturPasang(aksi.pasangAplikasi);
   aturMuatUlang(aksi.muatUlang);
 
-  // Ubin menu, atau tombol dengan id itu (Kompetisi ada di panel Main online).
+  // Ubin menu, atau tombol dengan id itu (Sprint ada di panel Main online).
   const fokusNav = (n: string) => {
     const bersih = n.replace(/[^a-z-]/gi, '');
     (nav.querySelector<HTMLElement>(`[data-nav="${bersih}"]`) ?? (bersih ? el(bersih) : null))?.focus();

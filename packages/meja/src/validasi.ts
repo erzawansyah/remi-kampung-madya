@@ -234,6 +234,9 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       const kompetisi = validasiTiket(x.kompetisi);
       return kompetisi ? { t: 'buat', nama: x.nama, pengaturan, kompetisi } : null;
     }
+    case 'sprint':
+      // Nama dicek sama seperti `buat`; dirapikan (rapikanNama) saat meja dibuat.
+      return isStr(x.nama, 100) ? { t: 'sprint', nama: x.nama } : null;
     case 'gabung': {
       if (!isStr(x.kode, 20) || !isStr(x.nama, 100)) return null;
       if (x.token !== undefined && !isStr(x.token, 100)) return null;
@@ -473,7 +476,7 @@ export function validasiObrolan(x: unknown): EntriObrolan[] | null {
     const isi = (DAFTAR_EMOTE as readonly string[]).includes(b.isi) ? b.isi : rapikanPesan(b.isi);
     if (!isi) continue;
     const w = typeof b.w === 'number' && Number.isFinite(b.w) ? b.w : 0;
-    hasil.push({ nama: rapikanNama(b.nama), isi, w });
+    hasil.push({ nama: rapikanNama(b.nama), isi, w, ...(b.warga === true ? { warga: true as const } : {}) });
   }
   return hasil;
 }

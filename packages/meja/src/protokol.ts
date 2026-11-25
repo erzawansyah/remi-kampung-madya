@@ -148,6 +148,13 @@ export interface EntriObrolan {
   nama: string;
   isi: string;
   w: number;
+  /**
+   * Celetukan warga kedai (Meja.celetukBot); hanya ditulis kalau true. Dicatat saat dikirim, karena
+   * kursi pemain yang keluar dipegang warga kedai dengan nama yang sama: dari kursi sekarang aplikasi
+   * tidak bisa membedakannya. Aplikasi lama mengabaikannya. Pesan `emote` sendiri tidak membawanya
+   * (golden meja tetap): aplikasi menilai emote langsung dari kursi pengirim saat pesan itu tiba.
+   */
+  warga?: true;
 }
 
 /**
@@ -312,6 +319,11 @@ export interface InfoMeja {
    * Aplikasi lama mengabaikannya.
    */
   penonton?: { jumlah: number; minta?: PenontonKursi[]; melihat?: PenontonKursi[] };
+  /**
+   * Meja sprint (keputusan pemilik 25 Nov 2026): satu pemain lawan tiga warga kedai, pengaturan
+   * dikunci (PENGATURAN_SPRINT). Hanya ada di meja sprint; aplikasi lama mengabaikannya.
+   */
+  sprint?: true;
 }
 
 /** Klasemen akhir satu permainan (disimpan server ke database saat permainan selesai). */
@@ -434,6 +446,11 @@ export type PesanKlien =
   /** Ledekan ke kursi `ke`; hanya di hasil putaran. Isi dari DAFTAR_LEDEKAN atau DAFTAR_EMOTE. */
   | { t: 'ledek'; ke: number; isi: string }
   | { t: 'mainLagi' }
+  /**
+   * Sprint (keputusan pemilik 25 Nov 2026): buat meja sprint baru (satu percobaan) dan langsung main.
+   * Pengirim dapat `masuk` seperti biasa; aplikasi lama tidak mengirimnya.
+   */
+  | { t: 'sprint'; nama: string }
   | { t: 'ping' };
 
 export type PesanServer =
@@ -503,4 +520,18 @@ export type PesanServer =
        * akhir kurang dari MIN_BERTAHAN_KOMPETISI (hampir semua pemain keluar; yang keluar dicatat 0).
        */
       tidakDihitung?: 'keluar';
+    }
+  /**
+   * Sprint: hasil percobaan di meja ini sudah tercatat (dikirim server ke pemainnya, dan sekali lagi
+   * kalau ia tersambung kembali selama klasemen akhir masih tampil). `peringkatMinggu`: posisinya di
+   * papan sprint minggu ini sesudah percobaan ini (1 = teratas); null kalau tidak ketemu. Aplikasi lama
+   * mengabaikannya.
+   */
+  | {
+      t: 'sprintHasil';
+      menang: boolean;
+      skor: number;
+      mentung: number;
+      kepentung: number;
+      peringkatMinggu: number | null;
     };

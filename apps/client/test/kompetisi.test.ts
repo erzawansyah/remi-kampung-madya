@@ -212,7 +212,8 @@ describe('teks kompetisi', () => {
     expect(kursiDicatatKompetisi([{ keluar: true }, {}, { keluar: true }, { keluar: true }])).toEqual([true, false, true, true]);
     // Bab Bantuan "Kompetisi" dicabut selama kompetisi ditutup (0.7.0).
     expect(BAB_BANTUAN.find((b) => b.id === 'kompetisi')).toBeUndefined();
-    expect(JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'akhir-permainan'))).toContain('Di meja kompetisi tidak ada sepakat berhenti.');
+    // Sejak 0.8.0 Bantuan menyebut meja sprint (yang juga tanpa voting), bukan meja kompetisi yang disembunyikan.
+    expect(JSON.stringify(BAB_BANTUAN.find((b) => b.id === 'akhir-permainan'))).toContain('Di meja sprint tidak ada sepakat berhenti.');
   });
 
   it('ringkasan aturan memuat pemain per meja dan batas putaran; keterangan waktu sesuai status', () => {

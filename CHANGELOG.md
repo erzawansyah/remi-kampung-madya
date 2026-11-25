@@ -6,6 +6,35 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.8.0] - 2026-11-25
+
+Mode Sprint, obrolan model WhatsApp, dan kabar "Yang baru" sesudah pembaruan. Aturan main tidak berubah.
+
+### Untuk pemain
+
+#### Ditambahkan
+
+- **Sprint** (keputusan pemilik #65): 5 putaran melawan Kipas Dua, Cak Kopag, dan Mbak Teras level Suhu, kapan saja dari beranda. Papan Minggu ini dan Sepanjang masa (Menang, Mentung, Kepentung, Skor), juara mingguan dapat 🏆.
+- **Yang baru:** sesudah aplikasi terbarui, beranda menampilkan sekali apa saja yang berubah.
+
+#### Diubah
+
+- **Obrolan layar penuh** seperti WhatsApp: pesanmu di kanan, orang lain di kiri, celetukan dan emoji di balik 😊, tutup lewat "‹ Meja" atau tombol Back. Kalau giliranmu tiba, muncul pita "Giliranmu!".
+- Ubin Kompetisi di beranda diganti Sprint.
+
+### Teknis
+
+- `packages/meja/src/sprint.ts`, meja sprint (`DataMeja.sprint`, `InfoMeja.sprint`), pesan `sprint`/`sprintHasil`, tabel riwayat `sprint` (skema v7), `GET /api/sprint`.
+- `ui/sprint.ts`, `ui/yangBaru.ts` (`remi.versiDilihat`), obrolan layar penuh di `ui/obrolan.ts`; baris obrolan warga kedai ditandai `warga` di riwayat meja.
+
+## [0.7.1] - 2026-11-25
+
+### Untuk pemain
+
+#### Diperbaiki
+
+- Ikon **?** di samping pilihan lebih kecil dan tidak lagi menempel ke tulisannya.
+
 ## [0.7.0] - 2026-11-25
 
 Obrolan di lobi dan meja, urutan duduk diacak, joker tidak bisa ditebak lewat tombol Turunkan, dan tampilan yang lebih bersih. Aturan main tidak berubah.

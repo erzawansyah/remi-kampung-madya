@@ -54,6 +54,7 @@ import {
   type PengaturanKompetisi,
 } from './kompetisi.js';
 import { isiLedek, kunciNama, rapikanLevel, rapikanNama } from './validasi.js';
+import { hasilSprint, JUMLAH_PUTARAN_SPRINT, LEVEL_SPRINT, NAMA_LAWAN_SPRINT, PENGATURAN_SPRINT, type HasilSprint } from './sprint.js';
 
 export interface Penjadwal {
   setel(ms: number, fn: () => void): unknown;
@@ -105,6 +106,16 @@ export interface KompetisiDataMeja extends KompetisiMeja {
   mulaiPada?: number;
 }
 
+/** Meja sprint (keputusan pemilik 25 Nov 2026): satu percobaan satu pemain lawan tiga warga kedai. */
+export interface SprintDataMeja {
+  /** Kapan percobaan dimulai (jam meja, ms epoch); bersama kode meja jadi penanda percobaannya. */
+  mulaiPada: number;
+  /** Kursi pemain sesudah urutan duduk diacak. */
+  kursi: number;
+  /** Hasilnya sudah tercatat di server (tidak dicatat dua kali). Hanya ada kalau true. */
+  tercatat?: true;
+}
+
 /** Semua yang perlu disimpan supaya meja bisa dilanjutkan (JSON). */
 export interface DataMeja {
   versi: 1;
@@ -133,6 +144,8 @@ export interface DataMeja {
   sudahLihatJoker: number[];
   /** Hanya ada di meja kompetisi (#51); meja biasa tidak berubah (golden). */
   kompetisi?: KompetisiDataMeja;
+  /** Hanya ada di meja sprint; meja biasa tidak berubah (golden). */
+  sprint?: SprintDataMeja;
 }
 
 /** Masa tenggang bawaan sebelum warga kedai mengambil alih giliran pemain yang terputus. */
@@ -406,7 +419,7 @@ export class Meja {
     this.aturSetujuKaldu(Array.isArray(data.setujuKaldu) ? data.setujuKaldu.filter((i) => Number.isInteger(i)) : []);
     // Meja kompetisi tidak punya voting akhiri maupun kaldu (keputusan pemilik 24 Okt 2026): suara dari
     // simpanan build pra-rilis dibuang.
-    if (this.d.kompetisi) {
+    if (this.d.kompetisi || this.d.sprint) {
       this.d.setujuAkhiri = [];
       this.aturSetujuKaldu([]);
     }
@@ -455,8 +468,68 @@ export class Meja {
     return meja;
   }
 
+  /**
+   * Meja sprint baru (keputusan pemilik 25 Nov 2026): pemain + tiga warga kedai NAMA_LAWAN_SPRINT
+   * level LEVEL_SPRINT (gaya mengikuti nama, #47), pengaturan PENGATURAN_SPRINT. Urutan duduk diacak
+   * kalau meja diberi sumber acak (#62; yang dapat kursi pertama ngocok), pemain mendapat `masuk` di
+   * kursi barunya, lalu permainan langsung dimulai.
+   */
+  static buatSprint(opsi: OpsiMeja, pemainId: string, nama: string): Meja {
+    const p: PengaturanMeja = { ...PENGATURAN_SPRINT };
+    const kursi: Kursi[] = Array.from({ length: p.jumlahPemain }, () => kursiKosong(LEVEL_SPRINT));
+    kursi[0] = { jenis: 'manusia', nama: rapikanNama(nama), pemainId, terhubung: true, level: LEVEL_SPRINT };
+    // Nama pemain sama dengan salah satu lawan sprint: warga kedai itu diganti nama berikutnya.
+    const daftar = [...NAMA_LAWAN_SPRINT, ...NAMA_LAWAN_BAWAAN];
+    for (let i = 1; i < kursi.length; i++) {
+      kursi[i] = { jenis: 'bot', nama: namaBot(kursi, i, daftar), pemainId: null, terhubung: false, level: LEVEL_SPRINT };
+    }
+    const sekarang = (opsi.penjadwal ?? penjadwalNyata).sekarang();
+    const data: DataMeja = {
+      versi: 1,
+      kode: opsi.kode,
+      pengaturan: p,
+      kursi,
+      host: 0,
+      game: null,
+      rngBot: (opsi.buatSeed ?? acak)(),
+      setujuAkhiri: [],
+      giliranKe: 0,
+      menungguJoker: [],
+      sudahLihatJoker: [],
+      sprint: { mulaiPada: sekarang, kursi: 0 },
+    };
+    const meja = new Meja(opsi, data);
+    meja.mulaiSprint(pemainId);
+    return meja;
+  }
+
+  /** Urutan duduk diacak, pemain diberi `masuk`, lalu permainan sprint dimulai. */
+  private mulaiSprint(pemainId: string): void {
+    const s = this.d.sprint!;
+    const diacak = this.acakUrutanDuduk();
+    const kursi = this.kursiDari(pemainId) ?? 0;
+    s.kursi = kursi;
+    this.kirimKe(pemainId, { t: 'masuk', kode: this.d.kode, token: pemainId, kursi });
+    this.mulaiPermainan(diacak ? 0 : undefined, false);
+  }
+
   get kode(): string {
     return this.d.kode;
+  }
+
+  /** Meja sprint? */
+  get sprint(): boolean {
+    return !!this.d.sprint;
+  }
+
+  /**
+   * Sprint: hasil percobaan ini sudah dicatat server (supaya tidak dicatat dua kali, juga sesudah
+   * meja dipulihkan). Tidak menyiarkan apa pun.
+   */
+  tandaiSprintTercatat(): void {
+    if (!this.d.sprint || this.d.sprint.tercatat) return;
+    this.d.sprint.tercatat = true;
+    this.opsi.saatBerubah?.(this.d);
   }
 
   /** Salinan data untuk disimpan. */
@@ -1048,6 +1121,7 @@ export class Meja {
     // dengan warga kedai maupun mengosongkan kursi peserta lain (tafsiran pengembang). Kursi yang
     // ditinggal kosong sendiri: Keluar, atau terputus lebih lama dari masa tenggang.
     if (this.d.kompetisi) galat('Kursi meja kompetisi diisi peserta sendiri, nggak bisa diatur host, Bos.');
+    if (this.d.sprint) galat(TEKS_SPRINT_TERKUNCI);
     if (this.status !== 'lobi') galat('Kursi cuma bisa diatur sebelum permainan mulai.');
     if (!Number.isInteger(i) || i < 0 || i >= this.d.kursi.length) galat('Kursinya nggak ada.');
     if (i === oleh) galat('Kursimu sendiri nggak bisa diganti.');
@@ -1066,6 +1140,8 @@ export class Meja {
 
   private ubahPengaturan(oleh: number, ubah: Partial<PengaturanMeja>): void {
     this.wajibHost(oleh);
+    // Sprint: aturannya dikunci, yang boleh diganti hanya tempo warga kedai.
+    if (this.d.sprint && Object.keys(ubah).some((k) => k !== 'tempoBot')) galat(TEKS_SPRINT_TERKUNCI);
     if (this.status !== 'lobi') {
       // Saat main, yang boleh diubah hanya tempo bot.
       if (Object.keys(ubah).some((k) => k !== 'tempoBot')) galat('Pengaturan cuma bisa diubah sebelum permainan mulai.');
@@ -1101,13 +1177,13 @@ export class Meja {
   }
 
   /** Mulai permainan baru dari lobi (tombol Mulai host, atau meja kompetisi yang mulai sendiri). */
-  private mulaiPermainan(pengocok?: number): void {
+  private mulaiPermainan(pengocok?: number, acakDuduk = true): void {
     if (this.status !== 'lobi') galat('Permainan sudah berjalan.');
     if (this.d.kompetisi && this.d.kursi.some((k) => k.jenis !== 'manusia')) galat('Masih ada kursi kosong. Tunggu peserta lain masuk.');
     if (this.d.kursi.some((k) => k.jenis === 'kosong')) galat('Masih ada kursi kosong. Ajak warga kedai atau tunggu orang masuk.');
     hapusTandaKeluar(this.d.kursi);
     // Kursi diacak (#62): yang dapat kursi pertama ngocok putaran pertama, pilihan host diabaikan.
-    if (this.acakUrutanDuduk()) pengocok = 0;
+    if (acakDuduk && this.acakUrutanDuduk()) pengocok = 0;
     const p = this.d.pengaturan;
     const kaldu = p.modeKaldu === true;
     const game = buatPermainan({
@@ -1197,6 +1273,7 @@ export class Meja {
     // Meja kompetisi (keputusan pemilik 24 Okt 2026): tidak ada voting akhiri, permainan jalan sampai
     // batas putaran yang dikunci kompetisi.
     if (this.d.kompetisi) galat(TEKS_TANPA_VOTING_KOMPETISI);
+    if (this.d.sprint) galat(TEKS_SPRINT_TANPA_VOTING);
     if (this.d.game?.status !== 'putaranSelesai') galat('Permainan cuma bisa diakhiri di antara putaran.');
     const set = new Set(this.d.setujuAkhiri);
     if (setuju) set.add(kursi);
@@ -1219,7 +1296,7 @@ export class Meja {
    */
   private cekVotingAkhiri(): boolean {
     const g = this.d.game;
-    if (this.d.kompetisi) {
+    if (this.d.kompetisi || this.d.sprint) {
       if (this.d.setujuAkhiri.length) this.d.setujuAkhiri = [];
       return false;
     }
@@ -1239,6 +1316,7 @@ export class Meja {
    */
   private putaranTerakhir(kursi: number, setuju: boolean): void {
     if (this.d.kompetisi) galat(TEKS_TANPA_VOTING_KOMPETISI);
+    if (this.d.sprint) galat(TEKS_SPRINT_TANPA_VOTING);
     const g = this.d.game;
     if (g?.status !== 'putaranSelesai') galat('Putaran terakhir cuma bisa diminta di antara putaran.');
     if (g.konfigurasi.modeKaldu !== true) galat('Meja ini nggak pakai mode kaldu.');
@@ -1259,7 +1337,7 @@ export class Meja {
     const g = this.d.game;
     const setuju = this.d.setujuKaldu ?? [];
     if (g?.status !== 'putaranSelesai' || !setuju.length) return false;
-    if (g.konfigurasi.modeKaldu !== true || putaranBerikutKaldu(g) || this.d.kompetisi) {
+    if (g.konfigurasi.modeKaldu !== true || putaranBerikutKaldu(g) || this.d.kompetisi || this.d.sprint) {
       // Suara yang sudah tidak berarti (misalnya dari simpanan rusak, atau meja kompetisi yang tidak
       // punya voting ini): dibuang.
       this.aturSetujuKaldu([]);
@@ -1274,6 +1352,7 @@ export class Meja {
 
   private mainLagi(oleh: number): void {
     this.wajibHost(oleh);
+    if (this.d.sprint) galat(TEKS_SPRINT_SEKALI_MAIN);
     if (this.status !== 'selesai') galat('Permainan belum selesai.');
     // Meja kompetisi cuma sekali main (#51 versi 2): duduk lagi lewat daftar meja kompetisinya.
     if (this.d.kompetisi) galat('Meja kompetisi cuma sekali main. Kembali ke kompetisi buat duduk di meja baru, Bos.');
@@ -1333,11 +1412,13 @@ export class Meja {
   }
 
   /** Kirim emote/pesan ke semua pemain manusia. Maksimal satu per 1,2 detik per kursi. */
-  private kirimEmote(kursi: number, isi: string): void {
+  private kirimEmote(kursi: number, isi: string, warga = false): void {
     const sekarang = this.penjadwal.sekarang();
     if (sekarang - (this.emoteTerakhir.get(kursi) ?? -Infinity) < 1200) return;
     this.emoteTerakhir.set(kursi, sekarang);
-    this.obrolan.push({ nama: this.d.kursi[kursi]?.nama ?? 'Pemain', isi, w: sekarang });
+    // `warga` hanya untuk celetukan warga kedai, hanya ditulis kalau true, dan hanya di riwayat obrolan.
+    const tanda = warga ? { warga: true as const } : {};
+    this.obrolan.push({ nama: this.d.kursi[kursi]?.nama ?? 'Pemain', isi, w: sekarang, ...tanda });
     if (this.obrolan.length > MAKS_OBROLAN) this.obrolan.splice(0, this.obrolan.length - MAKS_OBROLAN);
     this.kirimKeManusia({ t: 'emote', kursi, isi });
   }
@@ -1444,7 +1525,7 @@ export class Meja {
         700 + i * 800 + Math.floor(acak() * 400),
         'celetukan warga kedai',
         () => {
-          if (!this.berhenti) this.kirimEmote(kursi, isi);
+          if (!this.berhenti) this.kirimEmote(kursi, isi, true);
         },
         false,
       ),
@@ -1981,6 +2062,8 @@ export class Meja {
         : {}),
       // Nonton (#60): hanya kalau ada penonton, supaya info meja lain (dan golden) tidak berubah.
       ...(this.penonton.size ? { penonton: this.penontonUntuk(kursiSaya) } : {}),
+      // Meja sprint saja, supaya info meja lain (dan golden) tidak berubah.
+      ...(this.d.sprint ? { sprint: true as const } : {}),
     };
   }
 
@@ -2108,6 +2191,37 @@ export function ringkasanDitinggal(data: DataMeja, waktu: number): RingkasanAkhi
   if (!data.kursi.some((x) => x.keluar && x.peserta !== undefined)) return null;
   return buatRingkasanAkhir(data.kode, data.kursi, migrasiState(data.game), waktu, k.kode, k.mulaiPada);
 }
+
+/** Satu percobaan sprint yang siap dicatat server. */
+export interface CatatanSprint extends HasilSprint {
+  /** Kode meja dan waktu mulainya: penanda percobaan (dicatat sekali). */
+  kode: string;
+  mulaiPada: number;
+  /** Nama pemain di kursinya. */
+  nama: string;
+  /** Kapan dicatat (ms epoch). */
+  waktu: number;
+}
+
+/**
+ * Catatan percobaan sprint dari data meja (selesai, atau ditinggal di tengah jalan: Keluar, meja dihapus,
+ * atau simpanannya tidak dipulihkan). Null = bukan meja sprint, belum mulai, sudah tercatat, atau belum
+ * ada putaran yang selesai: percobaan yang ditinggal sebelum putaran pertama selesai tidak dicatat sama
+ * sekali (kalau dicatat skornya 0 dan mengalahkan setiap percobaan tuntas yang minus). `data` tidak diubah
+ * (boleh data mentah dari simpanan).
+ */
+export function catatanSprint(data: DataMeja, waktu: number): CatatanSprint | null {
+  const s = data.sprint;
+  if (!s || s.tercatat || !data.game || !data.game.riwayat?.length) return null;
+  const k = data.kursi[s.kursi];
+  if (!k) return null;
+  return { ...hasilSprint(migrasiState(data.game), s.kursi), kode: data.kode, mulaiPada: s.mulaiPada, nama: k.nama, waktu };
+}
+
+/** Penolakan di meja sprint (aturannya dikunci). */
+export const TEKS_SPRINT_TERKUNCI = 'Aturan sprint udah dikunci, Bos. Yang bisa diganti cuma tempo warga kedai.';
+export const TEKS_SPRINT_TANPA_VOTING = `Sprint jalan terus sampai ${JUMLAH_PUTARAN_SPRINT} putaran, nggak pakai voting, Bos.`;
+export const TEKS_SPRINT_SEKALI_MAIN = 'Satu meja sprint cuma sekali main. Tekan "Sprint lagi" buat coba lagi, Bos.';
 
 /**
  * Cadangan terakhir kalau strategi warga kedai galat: aksi sah paling sederhana, dipilih dari view
