@@ -6,6 +6,18 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.9.1] - 2026-11-25
+
+### Untuk pemain
+
+#### Diperbaiki
+
+- Suara antara dua pemain yang sama-sama pakai data seluler tidak lagi ditolak server.
+
+### Teknis
+
+- coturn: alamat publik VPS sendiri sekarang diizinkan sebagai tujuan relay (`allowed-peer-ip` dari `TURN_PUBLIC_IP`), tidak lagi ditolak. Di 0.9.0 dua pemain yang sama-sama lewat relay (misalnya keduanya pakai data seluler) ditolak coturn (`403 Forbidden IP`), jadi suaranya tidak pernah nyambung. Relay TCP tetap mati dan jaringan privat tetap ditolak. Nama lama `TURN_DENIED_IP` masih dibaca, jadi `.env` tidak perlu diubah; cukup buat ulang container coturn.
+
 ## [0.9.0] - 2026-11-25
 
 Ngobrol pakai suara di meja online. Aturan main tidak berubah.
