@@ -6,6 +6,30 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+Obrolan di lobi dan meja, urutan duduk diacak, joker tidak bisa ditebak lewat tombol Turunkan, dan tampilan yang lebih bersih. Aturan main tidak berubah.
+
+### Untuk pemain
+
+#### Ditambahkan
+
+- **Obrolan:** panel Obrolan di lobi selama menunggu pemain, dan tombol 💬 di meja (riwayat pesan, emoji, celetukan, pesan sendiri).
+- **Acak urutan duduk** (keputusan pemilik #62): kursi diacak waktu permainan dimulai, yang dapat kursi pertama ngocok duluan. Host bisa mematikannya di lobi (offline: Atur meja).
+- **Pengingat sebelum Selesai** di akhir putaran kalau masih ada kartu di tangan (#64), bisa dimatikan sampai permainan selesai.
+- Ikon **?** di samping pilihan meja dan Pengaturan untuk penjelasan singkat.
+
+#### Diubah
+
+- **Tombol Turunkan selalu bisa ditekan** (#63): kalau sah kartunya langsung turun, kalau tidak sah ditolak dengan pesan yang sama apa pun alasannya. Pilihan "Joker-nya jadi apa?" tidak bisa dibatalkan lagi.
+- **Kompetisi disembunyikan sementara** ("Segera hadir"), lagi dirombak.
+- Tulisan yang tidak perlu di meja, hasil putaran, lobi, dan beranda dibuang.
+- Bantuan dipangkas (bab Main online dipecah, Nonton jadi bab sendiri, Tanya jawab lebih ringkas), dan Catatan perubahan di Tentang cukup ringkasan per versi.
+
+### Teknis
+
+- `PengaturanMeja.urutanTetap` + `OpsiMeja.acakDuduk`/`OpsiServer.acakDuduk` (#62); `Meja.acakUrutanDuduk()` memindahkan semua catatan per kursi. Golden tidak bergeser (test tanpa sumber acak).
+- Riwayat obrolan di memori meja (`MAKS_OBROLAN` = 50), pesan server baru `obrolan` sesudah `masuk`; aplikasi lama mengabaikannya. `ui/obrolan.ts`, `konten/obrolan.ts`.
+- `ui/info.ts` (ikon "?"), `konten/turunkan.ts`, `konten/susunAkhir.ts`, `konten/acakDuduk.ts`. Server menolak pengajuan kompetisi baru; kode dan data kompetisi lainnya tetap.
+
 ## [0.6.0] - 2026-11-08
 
 Nonton meja yang sedang main, dan pilihan waktu per giliran 45 detik. Aturan main tidak berubah.
