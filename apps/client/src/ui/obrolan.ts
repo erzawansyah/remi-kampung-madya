@@ -7,7 +7,7 @@
 // posisi gulir. Lobi digambar ulang setiap ada kabar meja, jadi panelnya dibangun lagi dari simpanan
 // ini dan tidak kehilangan apa pun. Lembar obrolan di meja (kontrolMeja.ts) memakai panel yang sama.
 
-import { DAFTAR_EMOTE, kunciNama, MAKS_OBROLAN, MAKS_PESAN, rapikanPesan, type EntriObrolan } from '@remi/meja';
+import { DAFTAR_EMOTE, jumlahHuruf, kunciNama, MAKS_OBROLAN, MAKS_PESAN, rapikanPesan, type EntriObrolan } from '@remi/meja';
 import { TEKS_OBROLAN } from '../konten/obrolan';
 import { esc, toast, umumkan } from './dom';
 import { apaEmoji } from './ledek';
@@ -22,6 +22,28 @@ export const JEDA_KIRIM_OBROLAN_MS = 1250;
  * pemotongan ke MAKS_PESAN huruf tetap dilakukan rapikanPesan saat dikirim.
  */
 export const MAKS_ISIAN_PESAN = MAKS_PESAN * 3 * 2;
+
+/**
+ * Isian dipotong ke MAKS_PESAN huruf terlihat saat diketik, supaya yang terlihat di isian = yang
+ * terkirim (maxlength di atas hanya pengaman kasar dalam code unit).
+ */
+export function potongIsianPesan(teks: string): string {
+  if (jumlahHuruf(teks) <= MAKS_PESAN && Array.from(teks).length <= MAKS_PESAN * 3) return teks;
+  const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+  if (!Segmenter) return Array.from(teks).slice(0, MAKS_PESAN).join('');
+  // Sama dengan potong() di meja: paling banyak MAKS_PESAN huruf dan MAKS_PESAN × 3 code point.
+  let hasil = '';
+  let huruf = 0;
+  let cp = 0;
+  for (const { segment } of new Segmenter(undefined, { granularity: 'grapheme' }).segment(teks)) {
+    const n = Array.from(segment).length;
+    if (huruf >= MAKS_PESAN || cp + n > MAKS_PESAN * 3) break;
+    hasil += segment;
+    huruf++;
+    cp += n;
+  }
+  return hasil;
+}
 
 /** Satu baris obrolan di aplikasi. `milikku` diketahui untuk pesan langsung; riwayat dinilai dari nama. */
 export interface BarisObrolan extends EntriObrolan {
@@ -189,6 +211,8 @@ export function pasangPanelObrolan(wadah: HTMLElement, opsi: OpsiPanelObrolan): 
     obrolan.gulir = bawah ? null : daftar.scrollTop;
   });
   isian.addEventListener('input', () => {
+    const pendek = potongIsianPesan(isian.value);
+    if (pendek !== isian.value) isian.value = pendek;
     obrolan.draf = isian.value;
   });
 

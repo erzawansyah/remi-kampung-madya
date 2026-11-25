@@ -189,3 +189,19 @@ describe('simpanan Obrolan', () => {
     expect(o.draf).toBe('');
   });
 });
+
+describe('batas isian pesan', () => {
+  it('teks biasa dipotong di MAKS_PESAN huruf saat diketik; emoji gabungan dihitung satu huruf', async () => {
+    const { potongIsianPesan } = await import('../src/ui/obrolan');
+    const { MAKS_PESAN, rapikanPesan } = await import('@remi/meja');
+    const panjang = 'a'.repeat(MAKS_PESAN + 40);
+    expect(potongIsianPesan(panjang)).toBe('a'.repeat(MAKS_PESAN));
+    const keluarga = '👨‍👩‍👧'.repeat(MAKS_PESAN + 5);
+    const terpotong = potongIsianPesan(keluarga);
+    // Meja juga membatasi MAKS_PESAN × 3 code point: 👨‍👩‍👧 = 5 code point, jadi 36 emoji.
+    expect(terpotong).toBe('👨‍👩‍👧'.repeat(Math.floor((MAKS_PESAN * 3) / 5)));
+    // Yang terlihat di isian sama dengan yang dikirim meja.
+    expect(rapikanPesan(terpotong)).toBe(terpotong);
+    expect(potongIsianPesan('halo')).toBe('halo');
+  });
+});
