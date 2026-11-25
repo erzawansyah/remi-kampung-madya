@@ -1672,11 +1672,13 @@ export class KontrolMeja implements AksiAdegan {
 
   /**
    * Satu susunan: langsung dipakai. Beberapa: pemain wajib memilih salah satu (#63). Jendelanya tanpa Batal
-   * dan tidak bisa ditutup dengan Escape/ketuk latar, jadi membukanya tidak pernah gratis: pilihannya
-   * langsung dipakai. Kalau keadaan giliranku berubah selagi terbuka, jendelanya ditutup dari sini
+   * dan tidak bisa ditutup dengan Escape/ketuk latar/Back (lihat menahanKeluar), jadi membukanya tidak
+   * pernah gratis: pilihannya langsung dipakai. Jendelanya baru ditutup sesudah pilihan itu terkirim;
+   * `lanjut` yang mengembalikan false (sambungan belum siap) membiarkannya terbuka supaya bisa dipilih
+   * lagi begitu tersambung. Kalau keadaan giliranku berubah selagi terbuka, jendelanya ditutup dari sini
    * (lihat tutupJendelaBasi) dan pilihan apa pun sesudahnya diabaikan.
    */
-  private pilihPeran(opsi: readonly HasilValidasiKartuJadi[], lanjut: (spek: SpesifikasiKartuJadi) => void) {
+  private pilihPeran(opsi: readonly HasilValidasiKartuJadi[], lanjut: (spek: SpesifikasiKartuJadi) => boolean | void) {
     const keSpek = (h: HasilValidasiKartuJadi): SpesifikasiKartuJadi =>
       h.kartu.map((d) => ({ id: d.kartu.id, sebagai: d.pengganti ? d.sebagai : undefined }));
     if (opsi.length === 1) return lanjut(keSpek(opsi[0]));
@@ -1686,14 +1688,21 @@ export class KontrolMeja implements AksiAdegan {
     const { tutup } = bukaDialog(
       `<h2>${esc(TEKS_TURUNKAN.judulPeran)}</h2>
        <p class="redup">${esc(TEKS_TURUNKAN.ketPeran)}</p>
-       <div class="rincian">${opsi.map((o, i) => `<button type="button" data-opsi="${i}">${esc(deskripsiKartuJadi(o))}</button>`).join('')}</div>`,
+       <div class="rincian">${opsi.map((o, i) => `<button type="button" data-opsi="${i}">${esc(deskripsiKartuJadi(o))}</button>`).join('')}</div>
+       <p class="redup" data-status-peran role="status"></p>`,
       (dlg, tutup) =>
         dlg.querySelectorAll<HTMLElement>('[data-opsi]').forEach((b) =>
           b.addEventListener('click', () => {
             if (this.jendelaPeran !== jendela) return;
+            if (this.hancur || jejakGiliran(this.viewTerbaru ?? this.view) !== jejak) return tutup();
+            // Belum terkirim (sambungan belum siap): tetap terbuka, alasannya ditulis di jendela ini juga
+            // (bar petunjuk tertutup jendelanya).
+            if (lanjut(keSpek(opsi[Number(b.dataset.opsi)])) === false) {
+              const status = dlg.querySelector<HTMLElement>('[data-status-peran]');
+              if (status && this.jendelaPeran === jendela) status.textContent = this.alasanPutus();
+              return;
+            }
             tutup();
-            if (this.hancur || jejakGiliran(this.viewTerbaru ?? this.view) !== jejak) return;
-            lanjut(keSpek(opsi[Number(b.dataset.opsi)]));
           }),
         ),
       {
@@ -1711,6 +1720,14 @@ export class KontrolMeja implements AksiAdegan {
    * Jendela milik giliranku yang tidak bisa (atau tidak perlu lagi) ditutup pemain: pilih susunan joker
    * kalau keadaan giliranku sudah berubah, pengingat susun akhir kalau fasenya sudah lewat untukku.
    */
+  /**
+   * Jendela pilih susunan joker (#63) sedang terbuka: Back tidak boleh menawarkan keluar meja (keluar lalu
+   * Lanjutkan = menutupnya tanpa memilih). Dipakai main.ts.
+   */
+  menahanKeluar(): boolean {
+    return !this.hancur && !!this.jendelaPeran;
+  }
+
   private tutupJendelaBasi() {
     const v = this.viewTerbaru ?? this.view;
     if (this.jendelaPeran && (jejakGiliran(v) !== this.jendelaPeran.jejak || this.info?.diambilAlihBot)) this.jendelaPeran.tutup();
@@ -1802,7 +1819,7 @@ export class KontrolMeja implements AksiAdegan {
     if (!sah.length) return this.tolak(TEKS_TURUNKAN.belumJadi, 'tangan');
     this.pilihPeran(sah, (spek) => {
       if (this.hancur || !this.view?.putaran) return;
-      this.kirimAksi({ jenis: 'turunkan', kartuJadi: [spek] });
+      return this.kirimAksi({ jenis: 'turunkan', kartuJadi: [spek] });
     });
   }
 
@@ -1830,9 +1847,11 @@ export class KontrolMeja implements AksiAdegan {
     if (this.hancur || ditutupSistem) return;
     if (j.centang) this.matikanPengingatSusun();
     if (!j.ya) return;
-    // Keadaan bisa berubah selama dialog terbuka: periksa lagi seperti tombolnya ditekan sekarang.
-    const s = this.statusTombol().selesai;
-    if (!s.aktif) return this.tolak(s.alasan, 'tangan');
+    // Pilihan pemain sudah tegas: jangan dibuang karena penghalang sesaat (animasi kartu lawan yang masih
+    // jalan di belakang dialog). Yang diperiksa hanya apakah ini masih susun akhirku (sama dengan
+    // tutupJendelaBasi); sambungan yang belum siap ditolak kirimAksi.
+    const v = this.viewTerbaru ?? this.view;
+    if (!v || v.status !== 'susunAkhir' || !masihGiliranku(v, this.info)) return;
     this.kirimAksi({ jenis: 'selesaiSusun' });
   }
 

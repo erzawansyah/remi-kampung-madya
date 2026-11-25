@@ -950,8 +950,8 @@ describe('#63: tombol Turunkan tidak membocorkan joker', () => {
   const lepasPilihan = () => tekan('Escape');
 
   /** Joker 7, giliranku sudah ambil deck (tahap main). */
-  async function mejaMain(tangan: string[]): Promise<MejaUji> {
-    const m = new MejaUji(skenario({ rankJoker: 7, tangan: [tangan, ...lawan], deck: DECK, giliran: 0 }));
+  async function mejaMain(tangan: string[], appUbah: Partial<AppUntukMeja> = {}): Promise<MejaUji> {
+    const m = new MejaUji(skenario({ rankJoker: 7, tangan: [tangan, ...lawan], deck: DECK, giliran: 0 }), {}, appUbah);
     tekan('d');
     await sampai(() => m.g.putaran!.tahap === 'main' && !!m.tombol('buang'));
     return m;
@@ -1094,6 +1094,46 @@ describe('#63: tombol Turunkan tidak membocorkan joker', () => {
     expect(m.g.putaran!.kartuJadi[0]).toHaveLength(1);
   });
 
+  it('sambungan putus selagi jendela terbuka: memilih tidak menutupnya (alasan tertulis di jendela), tersambung lagi lalu pilih = turun', async () => {
+    let status: StatusKoneksi = 'tersambung';
+    const m = (meja = await mejaMain(['5 love', '6 love', '7 waru', 'K kriting'], { jenis: 'online', statusKoneksi: () => status }));
+    pilih(m, '5 love', '6 love', '7 waru');
+    m.tombol('turunkan')!.click();
+    const dlg = dialogPeran()!;
+    expect(dlg).not.toBeNull();
+    status = 'menyambung';
+    dlg.querySelector<HTMLButtonElement>('[data-opsi="0"]')!.click();
+    await tunggu();
+    // Tidak ada jalan keluar gratis: jendelanya tetap, belum ada yang terkirim.
+    expect(dialogPeran()).toBe(dlg);
+    expect(m.aksi.filter((a) => a.jenis === 'turunkan')).toEqual([]);
+    expect(dlg.querySelector('[data-status-peran]')!.textContent).toBe(TEKS_KONEKSI.nyambung);
+    expect(m.kontrol.menahanKeluar()).toBe(true);
+    status = 'tersambung';
+    m.kontrol.koneksiBerubah();
+    expect(dialogPeran()).toBe(dlg);
+    dlg.querySelector<HTMLButtonElement>('[data-opsi="0"]')!.click();
+    await tunggu();
+    expect(dialogPeran()).toBeNull();
+    expect(m.aksi.at(-1)).toMatchObject({ jenis: 'turunkan' });
+    expect(m.g.putaran!.kartuJadi[0]).toHaveLength(1);
+    expect(m.kontrol.menahanKeluar()).toBe(false);
+  });
+
+  it('menahanKeluar (Back tidak menawarkan keluar meja) hanya selama jendela pilih susunan terbuka', async () => {
+    const m = (meja = await mejaMain(['5 love', '6 love', '7 waru', 'K kriting']));
+    expect(m.kontrol.menahanKeluar()).toBe(false);
+    pilih(m, '5 love', '6 love', '7 waru');
+    m.tombol('turunkan')!.click();
+    expect(dialogPeran()).not.toBeNull();
+    expect(m.kontrol.menahanKeluar()).toBe(true);
+    // Giliran benar-benar berubah (diambil alih): jendela tertutup dan Back kembali normal.
+    m.info = { ...m.info, diambilAlihBot: true };
+    m.kontrol.perbarui(m.info, null);
+    expect(dialogPeran()).toBeNull();
+    expect(m.kontrol.menahanKeluar()).toBe(false);
+  });
+
   it('pilihan susunan ditutup kalau giliranku diambil alih warga kedai selagi terbuka; tidak ada aksi', async () => {
     const m = (meja = await mejaMain(['5 love', '6 love', '7 waru', 'K kriting']));
     pilih(m, '5 love', '6 love', '7 waru');
@@ -1174,6 +1214,18 @@ describe('#64: pengingat sebelum Selesai di susun akhir', () => {
     expect(m.g.putaran!.selesaiSusun[0]).toBe(false);
 
     m.tombol('selesai')!.click();
+    tombolDialog(TEKS_PENGINGAT_SUSUN.selesai).click();
+    await tunggu();
+    expect(selesaiTerkirim(m)).toBe(1);
+    expect(m.g.putaran!.selesaiSusun[0]).toBe(true);
+  });
+
+  it('"Selesai" di pengingat ditekan selagi kartu pemain lain masih beranimasi: tetap terkirim, tidak dibuang', async () => {
+    const m = (meja = await mejaSusun(['5 love', '6 love', '7 love', 'K kriting']));
+    m.tombol('selesai')!.click();
+    expect(dialogPengingat()).not.toBeNull();
+    // Animasi turunkan/selesai milik pemain lain yang sedang diputar di belakang dialog.
+    (m.kontrol as unknown as { animasi: boolean }).animasi = true;
     tombolDialog(TEKS_PENGINGAT_SUSUN.selesai).click();
     await tunggu();
     expect(selesaiTerkirim(m)).toBe(1);
