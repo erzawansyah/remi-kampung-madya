@@ -28,10 +28,7 @@ import {
   berikutnya,
 } from '@remi/engine';
 import {
-  DAFTAR_EMOTE,
   MAKS_LEDEK_PER_PUTARAN,
-  MAKS_PESAN,
-  rapikanPesan,
   type AksiKlien,
   type InfoMeja,
   type PesanServer,
@@ -69,6 +66,8 @@ import { TEKS_KONEKSI, teksMentungTerlewat } from './konten/koneksi';
 import { TEKS_TONTONAN } from './konten/tontonan';
 import { TEKS_TURUNKAN } from './konten/turunkan';
 import { TEKS_PENGINGAT_SUSUN } from './konten/susunAkhir';
+import { TEKS_OBROLAN, teksBelumDibaca } from './konten/obrolan';
+import { htmlPanelObrolan, Obrolan, pasangPanelObrolan, type PeristiwaObrolan } from './ui/obrolan';
 import { simpan } from './penyimpanan';
 import { gerakDikurangi } from './preferensi';
 import { durasi } from './gerak';
@@ -104,6 +103,11 @@ export interface AppUntukMeja {
   readonly penonton?: boolean;
   /** Penonton berhenti melihat kartu (kembali ke tontonan buangan). */
   berhentiLihat?(): void;
+  /**
+   * Obrolan meja ini (0.7.0), dipegang aplikasi supaya pesan dari lobi ikut terbawa ke meja. Tidak ada
+   * (test) = meja memakai simpanan sendiri yang kosong.
+   */
+  readonly obrolan?: Obrolan;
 }
 
 /** Pesan server kompetisiHasil: nilai dan naik-turun peringkat kompetisi sesudah permainan selesai. */
@@ -545,6 +549,12 @@ export class KontrolMeja implements AksiAdegan {
   private readonly elTombol: HTMLElement;
   /** Nonton (#60): tombol jumlah penonton di bar atas dan kotak permintaan lihat kartu. */
   private readonly elPenonton: HTMLElement;
+  /** Obrolan meja (milik aplikasi; test tanpa aplikasi: simpanan sendiri). */
+  private readonly obrolan: Obrolan;
+  /** Pesan orang lain yang masuk selagi lembar obrolan tertutup (lencana di tombol 💬). */
+  private belumDibaca = 0;
+  private lepasPanelObrolan: (() => void) | null = null;
+  private readonly lepasDengarObrolan: () => void;
   private readonly elMinta: HTMLElement;
   /** Permintaan yang sudah kujawab (disembunyikan sebelum info baru dari server datang). */
   private mintaDijawab = new Set<number>();
@@ -655,6 +665,8 @@ export class KontrolMeja implements AksiAdegan {
     private readonly akar: HTMLElement,
   ) {
     this.modePenonton = app.penonton === true;
+    this.obrolan = app.obrolan ?? new Obrolan();
+    this.lepasDengarObrolan = this.obrolan.dengar((e) => this.saatObrolan(e));
     // Penonton melihat tangan orang lain: urutan tersimpan di HP ini (milik tangannya sendiri) tidak dipakai.
     if (this.modePenonton) this.urutanManual = [];
     akar.innerHTML = `
@@ -665,7 +677,12 @@ export class KontrolMeja implements AksiAdegan {
         <button type="button" data-a="skor" aria-haspopup="dialog">Skor</button>
         <button type="button" data-a="log" aria-haspopup="dialog">Log</button>
         <button type="button" class="tombol-penonton tersembunyi" data-a="penonton" aria-haspopup="dialog"></button>
-        <button type="button" class="tombol-ikon" data-a="emote" aria-label="Kirim emote" aria-expanded="false"><span aria-hidden="true">😀</span></button>
+        ${
+          // Penonton tidak ikut obrolan (#60): tombolnya tidak ada sama sekali.
+          this.modePenonton
+            ? ''
+            : `<button type="button" class="tombol-ikon tombol-obrolan" data-a="obrolan" aria-label="${esc(TEKS_OBROLAN.tombol)}" aria-expanded="false"><span aria-hidden="true">💬</span><span class="lencana-baru tersembunyi" aria-hidden="true"></span></button>`
+        }
         <div class="waktu tersembunyi" aria-hidden="true"><div></div></div>
       </div>
       <div class="bar-aksi">
@@ -706,7 +723,7 @@ export class KontrolMeja implements AksiAdegan {
       if (b.dataset.a === 'menu') this.bukaMenu();
       else if (b.dataset.a === 'skor') this.bukaSkor();
       else if (b.dataset.a === 'log') this.bukaLog();
-      else if (b.dataset.a === 'emote') this.bukaPaletEmote(e.detail === 0);
+      else if (b.dataset.a === 'obrolan') this.bukaObrolan(e.detail === 0);
       else if (b.dataset.a === 'penonton') this.bukaPenonton();
     });
     this.elTombol.addEventListener('click', (e) => {
@@ -755,6 +772,9 @@ export class KontrolMeja implements AksiAdegan {
 
   hancurkan() {
     this.hancur = true;
+    this.lepasDengarObrolan();
+    this.lepasPanelObrolan?.();
+    this.lepasPanelObrolan = null;
     if (this.modePenonton) delete document.documentElement.dataset.penonton;
     this.elLapisanMinta.remove();
     this.antrian = [];
@@ -2473,7 +2493,7 @@ export class KontrolMeja implements AksiAdegan {
         return this.ketukSorotan();
       case 'Escape': {
         const palet = this.akar.querySelector('.palet-emote');
-        if (palet) return this.tutupPaletEmote(true);
+        if (palet) return this.tutupObrolan(true);
         if (this.pilihJumlah || this.mulung) return this.batalMulung();
         if (this.dipilih.size) {
           this.dipilih.clear();
@@ -2630,55 +2650,75 @@ export class KontrolMeja implements AksiAdegan {
 
   // ---------- emote ----------
 
-  private bukaPaletEmote(dariKeyboard: boolean) {
+  /**
+   * Lembar obrolan (0.7.0, menggantikan palet emote): isi obrolan, isian pesan, dan pesan cepat
+   * (emoji + celetukan). Bukan jendela: antrian animasi dan popup joker tidak tertahan, dan lembar ini
+   * ikut lapisan/z-index palet emote yang lama (`.palet-emote`). Pesan cepat menutup lembar (reaksi
+   * kilat seperti dulu); pesan yang diketik membiarkannya terbuka.
+   */
+  private bukaObrolan(dariKeyboard: boolean) {
     if (this.penonton) return;
-    if (this.akar.querySelector('.palet-emote')) return this.tutupPaletEmote(dariKeyboard);
+    if (this.akar.querySelector('.palet-emote')) return this.tutupObrolan(dariKeyboard);
     const el = document.createElement('div');
-    el.className = 'palet-emote';
+    el.className = 'palet-emote lembar-obrolan';
     el.setAttribute('role', 'group');
-    el.setAttribute('aria-label', 'Pilih emote');
-    const tombol = (e: string) => `<button type="button" data-emote="${esc(e)}">${esc(e)}</button>`;
-    const emoji = DAFTAR_EMOTE.filter(apaEmoji);
-    const celetukan = DAFTAR_EMOTE.filter((e) => !apaEmoji(e));
-    el.innerHTML = `
-      <div class="palet-emoji">${emoji.map(tombol).join('')}</div>
-      <div class="palet-celetukan">${celetukan.map(tombol).join('')}</div>
-      <form class="palet-tulis">
-        <input type="text" name="pesan" maxlength="${MAKS_PESAN * 2}" placeholder="Tulis pesan…" aria-label="Tulis pesan" autocomplete="off" enterkeyhint="send" />
-        <button type="submit" class="utama">Kirim</button>
-      </form>`;
-    el.addEventListener('click', (ev) => {
-      const b = (ev.target as HTMLElement).closest<HTMLElement>('[data-emote]');
-      if (!b) return;
-      this.app.kirim({ t: 'emote', isi: b.dataset.emote! });
-      this.tutupPaletEmote(ev.detail === 0);
+    el.setAttribute('aria-label', TEKS_OBROLAN.judul);
+    el.innerHTML = `<div class="kepala-obrolan"><h2>${esc(TEKS_OBROLAN.judul)}</h2><button type="button" class="tombol-ikon kecil" data-tutup aria-label="${esc(TEKS_OBROLAN.tutup)}"><span aria-hidden="true">✕</span></button></div>
+      ${htmlPanelObrolan({ susunan: 'lembar', idIsian: 'isian-obrolan-meja' })}`;
+    el.querySelector('[data-tutup]')!.addEventListener('click', () => this.tutupObrolan(true));
+    this.lepasPanelObrolan?.();
+    this.lepasPanelObrolan = pasangPanelObrolan(el, {
+      obrolan: this.obrolan,
+      kirim: (isi) => this.app.kirim({ t: 'emote', isi }),
+      namaSaya: () => (this.info?.kursiSaya != null ? (this.info.kursi[this.info.kursiSaya]?.nama ?? null) : null),
+      alasanTolak: () => this.alasanPutus(),
+      sesudahCepat: (k) => this.tutupObrolan(k),
+      susunan: 'lembar',
+      idIsian: 'isian-obrolan-meja',
     });
-    const form = el.querySelector('form')!;
-    const isian = form.querySelector('input')!;
-    form.addEventListener('submit', (ev) => {
-      ev.preventDefault();
-      const isi = rapikanPesan(isian.value);
-      if (!isi) return isian.focus();
-      this.app.kirim({ t: 'emote', isi });
-      this.tutupPaletEmote(true);
-    });
+    const isian = el.querySelector<HTMLInputElement>('.obrolan-tulis input')!;
     // Pintasan meja diabaikan selama mengetik, jadi Esc ditangani di isian sendiri.
     isian.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape') {
         ev.preventDefault();
-        this.tutupPaletEmote(true);
+        this.tutupObrolan(true);
       }
     });
     this.akar.appendChild(el);
-    this.elAtas.querySelector('[data-a=emote]')!.setAttribute('aria-expanded', 'true');
-    if (dariKeyboard) el.querySelector<HTMLElement>('button')?.focus();
+    this.belumDibaca = 0;
+    this.aturLencanaObrolan();
+    this.elAtas.querySelector('[data-a=obrolan]')?.setAttribute('aria-expanded', 'true');
+    if (dariKeyboard) isian.focus();
   }
 
-  private tutupPaletEmote(kembalikanFokus: boolean) {
+  private tutupObrolan(kembalikanFokus: boolean) {
+    this.lepasPanelObrolan?.();
+    this.lepasPanelObrolan = null;
     this.akar.querySelector('.palet-emote')?.remove();
-    const b = this.elAtas.querySelector<HTMLElement>('[data-a=emote]')!;
-    b.setAttribute('aria-expanded', 'false');
-    if (kembalikanFokus) b.focus();
+    const b = this.elAtas.querySelector<HTMLElement>('[data-a=obrolan]');
+    b?.setAttribute('aria-expanded', 'false');
+    if (kembalikanFokus) b?.focus();
+  }
+
+  /** Pesan baru selagi lembar obrolan tertutup: hitung dan tampilkan di lencana tombol 💬. */
+  private saatObrolan(e: PeristiwaObrolan) {
+    if (this.hancur || this.penonton) return;
+    if (e.jenis === 'ganti') {
+      if (!this.obrolan.daftar.length) this.belumDibaca = 0;
+    } else if (!e.baris.milikku && !this.akar.querySelector('.lembar-obrolan')) this.belumDibaca++;
+    this.aturLencanaObrolan();
+  }
+
+  private aturLencanaObrolan() {
+    const b = this.elAtas.querySelector<HTMLElement>('[data-a=obrolan]');
+    if (!b) return;
+    const n = this.belumDibaca;
+    const lencana = b.querySelector<HTMLElement>('.lencana-baru')!;
+    lencana.classList.toggle('tersembunyi', n === 0);
+    const teks = n > 9 ? '9+' : String(n);
+    if (lencana.textContent !== teks) lencana.textContent = teks;
+    const label = teksBelumDibaca(n);
+    if (b.getAttribute('aria-label') !== label) b.setAttribute('aria-label', label);
   }
 
   /**

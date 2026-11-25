@@ -6,11 +6,13 @@ import {
   DAFTAR_EMOTE,
   DAFTAR_LEDEKAN,
   EMOTE_LAMA,
+  MAKS_OBROLAN,
   MAKS_PESAN,
   MAKS_TIKET,
   PENGATURAN_BAWAAN,
   type AksiKlien,
   type Emote,
+  type EntriObrolan,
   type PengaturanMeja,
   type PesanKlien,
   type TiketKompetisi,
@@ -456,6 +458,24 @@ const BATAS_PESAN_MENTAH = 1000;
  */
 export function rapikanPesan(pesan: string): string | null {
   return rapikanBaris(pesan, MAKS_PESAN);
+}
+
+/**
+ * Isi pesan `obrolan` dari meja/server (0.7.0), dirapikan sebelum ditampilkan aplikasi: bukan array →
+ * null; baris yang rusak dibuang; paling banyak MAKS_OBROLAN baris terakhir. Isi dan nama dibersihkan
+ * lagi (rapikanPesan/rapikanNama) walau meja sudah melakukannya, karena datang dari jaringan.
+ */
+export function validasiObrolan(x: unknown): EntriObrolan[] | null {
+  if (!Array.isArray(x)) return null;
+  const hasil: EntriObrolan[] = [];
+  for (const b of x.slice(-MAKS_OBROLAN)) {
+    if (!isObj(b) || !isStr(b.nama, 200) || !isStr(b.isi, BATAS_PESAN_MENTAH)) continue;
+    const isi = (DAFTAR_EMOTE as readonly string[]).includes(b.isi) ? b.isi : rapikanPesan(b.isi);
+    if (!isi) continue;
+    const w = typeof b.w === 'number' && Number.isFinite(b.w) ? b.w : 0;
+    hasil.push({ nama: rapikanNama(b.nama), isi, w });
+  }
+  return hasil;
 }
 
 /** Panjang maksimal nama kompetisi (huruf yang tampil). */

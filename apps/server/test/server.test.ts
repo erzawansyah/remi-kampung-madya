@@ -162,6 +162,21 @@ describe('server WebSocket', () => {
     b.tutup();
   });
 
+  it('obrolan di lobi: yang baru gabung menerima riwayatnya (0.7.0)', async () => {
+    const a = new Klien(server.port);
+    await a.kirim({ t: 'buat', nama: 'Budi', pengaturan: { jumlahPemain: 3 } });
+    const { kode } = await a.tunggu('masuk');
+    await a.kirim({ t: 'emote', isi: 'ada yang mau main?' });
+    await a.tunggu('emote');
+    const b = new Klien(server.port);
+    await b.kirim({ t: 'gabung', kode, nama: 'Siti' });
+    const o = await b.tunggu('obrolan');
+    expect(o.pesan.map((e) => [e.nama, e.isi])).toEqual([['Budi', 'ada yang mau main?']]);
+    expect(typeof o.pesan[0]!.w).toBe('number');
+    a.tutup();
+    b.tutup();
+  });
+
   it('HP yang masih memakai aplikasi 0.1.0: emote lama diteruskan sebagai padanan baru, bukan ditolak', async () => {
     // Pesan persis seperti yang dikirim client 0.1.0 (JSON mentah, tanpa field baru).
     const lama = new Klien(server.port);

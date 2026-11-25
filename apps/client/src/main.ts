@@ -4,7 +4,8 @@
 import './gaya.css';
 import { registerSW } from 'virtual:pwa-register';
 import type { ViewPemain } from '@remi/engine';
-import { TEKS_LOBI_KOMPETISI_BUBAR, type InfoMeja, type InfoTontonan, type PengaturanMeja } from '@remi/meja';
+import { TEKS_LOBI_KOMPETISI_BUBAR, validasiObrolan, type InfoMeja, type InfoTontonan, type PengaturanMeja } from '@remi/meja';
+import { Obrolan } from './ui/obrolan';
 import { pasangPreferensi } from './preferensi';
 import {
   idAcak,
@@ -135,6 +136,8 @@ class Aplikasi implements AppUntukMeja {
   private info: InfoMeja | null = null;
   private view: ViewPemain | null = null;
   private kontrol: KontrolMeja | null = null;
+  /** Obrolan meja yang sedang diduduki (0.7.0): dari lobi terbawa ke meja, dibuang saat meninggalkan meja. */
+  readonly obrolan = new Obrolan();
   private game: PenampungGame | null = null;
   private beranda: BerandaTerpasang | null = null;
   private promptPasang: PromptPasang | null = null;
@@ -513,6 +516,7 @@ class Aplikasi implements AppUntukMeja {
   private pasangKoneksi(k: Koneksi) {
     this.koneksi?.tutup();
     this.koneksi = k;
+    this.obrolan.kosongkan();
     this.info = null;
     this.view = null;
     this.hasilKompetisi = null;
@@ -641,6 +645,8 @@ class Aplikasi implements AppUntukMeja {
         }
         // Pemain sendiri masuk meja (lagi): sesi ini miliknya, boleh disambung ulang otomatis lagi.
         this.sesiDitendang = false;
+        // Meja lain = obrolan mulai kosong; meja yang sama (sambung ulang) = obrolannya tetap.
+        this.obrolan.pakaiMeja(p.kode);
         if (typeof p.dijalankanWarga === 'number' && Number.isFinite(p.dijalankanWarga) && p.dijalankanWarga > 0) {
           this.kabarWarga = Math.floor(p.dijalankanWarga);
         }
@@ -733,9 +739,22 @@ class Aplikasi implements AppUntukMeja {
         );
         this.pastikanJaga();
         break;
-      case 'emote':
+      case 'emote': {
+        // Penonton (#60) tidak ikut obrolan (meja juga tidak pernah mengirimnya ke penonton).
+        if (this.tontonan) break;
+        const nama = this.info?.kursi[p.kursi]?.nama;
+        if (nama !== undefined && typeof p.isi === 'string') {
+          this.obrolan.tambah({ nama, isi: p.isi, w: Date.now(), milikku: p.kursi === this.info?.kursiSaya });
+        }
         this.kontrol?.terimaEmote(p.kursi, p.isi);
         break;
+      }
+      case 'obrolan': {
+        // Riwayat obrolan meja ini (duduk atau tersambung kembali): menggantikan isi sekarang.
+        const pesan = this.tontonan ? null : validasiObrolan(p.pesan);
+        if (pesan) this.obrolan.ganti(pesan);
+        break;
+      }
       case 'ledek':
         this.kontrol?.terimaLedek(p.dari, p.ke, p.isi);
         break;
@@ -1040,6 +1059,7 @@ class Aplikasi implements AppUntukMeja {
     if (this.koneksi?.jenis === 'online' && hapusSesi) simpan.setSesi(null);
     this.koneksi?.tutup();
     this.koneksi = null;
+    this.obrolan.kosongkan();
     this.info = null;
     this.view = null;
     this.hasilKompetisi = null;
@@ -1173,12 +1193,22 @@ class Aplikasi implements AppUntukMeja {
     this.sembunyikanGame();
     tutupModal();
     suasanaMusik('beranda');
-    renderLobi(this.ui, this.info!, (p) => this.kirim(p), () => {
-      // Lobi kompetisi: kembali ke detail kompetisinya (daftar meja), bukan ke beranda.
-      const kompetisi = this.info?.kompetisi?.kode;
-      this.kirim({ t: 'keluar' });
-      this.keluarMeja(true, kompetisi);
-    });
+    renderLobi(
+      this.ui,
+      this.info!,
+      (p) => this.kirim(p),
+      () => {
+        // Lobi kompetisi: kembali ke detail kompetisinya (daftar meja), bukan ke beranda.
+        const kompetisi = this.info?.kompetisi?.kode;
+        this.kirim({ t: 'keluar' });
+        this.keluarMeja(true, kompetisi);
+      },
+      {
+        obrolan: this.obrolan,
+        // Sambungan belum siap: pesan ditahan (draf tetap), sama seperti tombol meja.
+        alasanTolak: () => (this.koneksi?.jenis === 'online' && (this.statusKini !== 'tersambung' || !this.koneksi.siapKirim()) ? TEKS_KONEKSI.nyambung : ''),
+      },
+    );
     this.pastikanJaga();
     this.nilaiPembaruan();
   }

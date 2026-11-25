@@ -27,9 +27,11 @@ import {
   JEDA_BOT,
   JEDA_TOLAK_LIHAT_MS,
   MAKS_LEDEK_PER_PUTARAN,
+  MAKS_OBROLAN,
   MAKS_PENONTON,
   PENGATURAN_BAWAAN,
   type Emote,
+  type EntriObrolan,
   type InfoMeja,
   type InfoTontonan,
   type KeadaanMintaLihat,
@@ -272,6 +274,12 @@ export class Meja {
   private batasWaktu: number | null = null;
   /** Waktu emote terakhir tiap kursi (batas supaya tidak nyampah). */
   private emoteTerakhir = new Map<number, number>();
+  /**
+   * Obrolan (0.7.0): MAKS_OBROLAN emote/pesan terakhir (manusia dan celetukan warga kedai), dicatat
+   * dengan nama pengirim. Hanya di memori (tidak di DataMeja: golden dan simpanan tetap), ikut Main
+   * lagi, hilang bersama mejanya. Dikirim ke pemain yang duduk atau tersambung kembali.
+   */
+  private obrolan: EntriObrolan[] = [];
   /** Bot yang sedang "mikir" sebelum aksi pertamanya (untuk ditampilkan). */
   private botMikir: number | null = null;
   /** Kunci giliran saat bot terakhir melangkah (untuk jeda awal giliran). */
@@ -536,6 +544,7 @@ export class Meja {
       if (k.jenis === 'bot' && kunciNama(k.nama) === kunci) k.nama = namaBot(this.d.kursi, j, this.opsi.namaLawan);
     });
     this.kirimKe(pemainId, { t: 'masuk', kode: this.d.kode, token: pemainId, kursi: i });
+    this.kirimObrolan(pemainId);
     this.perbaruiHost();
     this.berubah();
     return i;
@@ -579,6 +588,7 @@ export class Meja {
       kursi: i,
       ...(dijalankan > 0 ? { dijalankanWarga: dijalankan } : {}),
     });
+    this.kirimObrolan(pemainId);
     this.perbaruiHost();
     this.berubah();
   }
@@ -1327,7 +1337,19 @@ export class Meja {
     const sekarang = this.penjadwal.sekarang();
     if (sekarang - (this.emoteTerakhir.get(kursi) ?? -Infinity) < 1200) return;
     this.emoteTerakhir.set(kursi, sekarang);
+    this.obrolan.push({ nama: this.d.kursi[kursi]?.nama ?? 'Pemain', isi, w: sekarang });
+    if (this.obrolan.length > MAKS_OBROLAN) this.obrolan.splice(0, this.obrolan.length - MAKS_OBROLAN);
     this.kirimKeManusia({ t: 'emote', kursi, isi });
+  }
+
+  /** Riwayat obrolan untuk pemain yang baru duduk/tersambung kembali (tidak dikirim kalau kosong). */
+  private kirimObrolan(pemainId: string): void {
+    if (this.obrolan.length) this.kirimKe(pemainId, { t: 'obrolan', pesan: this.obrolan.map((e) => ({ ...e })) });
+  }
+
+  /** Salinan riwayat obrolan (paling lama dulu). */
+  get riwayatObrolan(): EntriObrolan[] {
+    return this.obrolan.map((e) => ({ ...e }));
   }
 
   private kirimKeManusia(pesan: PesanServer): void {

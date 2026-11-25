@@ -217,6 +217,37 @@ describe('Aplikasi: pesan server sampai ke meja', () => {
   });
 });
 
+describe('Aplikasi: obrolan (0.7.0)', () => {
+  it('emote dan riwayat obrolan masuk ke simpanan obrolan dengan nama; meja lain mulai kosong; keluar = dibuang', async () => {
+    const { ws, app } = await diMeja();
+    const o = app.obrolan!;
+    ws.kirimDariServer({ t: 'obrolan', pesan: [{ nama: 'Budi', isi: 'tadi', w: 1 }, { nama: 7, isi: 'rusak' } as never] });
+    expect(o.daftar.map((b) => [b.nama, b.isi])).toEqual([['Budi', 'tadi']]);
+    ws.kirimDariServer({ t: 'emote', kursi: 1, isi: 'GG' });
+    ws.kirimDariServer({ t: 'emote', kursi: 0, isi: '😂' });
+    expect(o.daftar.map((b) => [b.nama, b.isi, b.milikku])).toEqual([
+      ['Budi', 'tadi', undefined],
+      ['Budi', 'GG', false],
+      ['Aku', '😂', true],
+    ]);
+    // Gelembung di kursi tetap jalan.
+    expect(dipanggil('terimaEmote')).toEqual([
+      [1, 'GG'],
+      [0, '😂'],
+    ]);
+    // Tersambung lagi ke meja yang sama: obrolannya tetap (riwayat baru menggantikan kalau dikirim).
+    ws.kirimDariServer({ t: 'masuk', kode: 'MADYA', token: 'tok', kursi: 0 });
+    expect(o.daftar).toHaveLength(3);
+    // Meja lain: mulai kosong.
+    ws.kirimDariServer({ t: 'masuk', kode: 'LAINN', token: 'tok', kursi: 0 });
+    expect(o.daftar).toHaveLength(0);
+    ws.kirimDariServer({ t: 'emote', kursi: 1, isi: 'halo' });
+    expect(o.daftar).toHaveLength(1);
+    app.keluarMeja();
+    expect(o.daftar).toHaveLength(0);
+  });
+});
+
 describe('Aplikasi: kursi dibuka di tab/perangkat lain (kode 4000)', () => {
   it('kembali ke beranda, sesi disimpan, dan online/visibility TIDAK menyambung ulang sendiri', async () => {
     const { ws } = await diMeja();

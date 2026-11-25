@@ -40,7 +40,8 @@ import {
   type GameState,
   type ViewPemain,
 } from '@remi/engine';
-import { PENGATURAN_BAWAAN, type InfoMeja, type PesanKlien } from '@remi/meja';
+import { MAKS_PESAN, PENGATURAN_BAWAAN, type InfoMeja, type PesanKlien } from '@remi/meja';
+import { Obrolan } from '../src/ui/obrolan';
 import { ctx, id, kartuJadi, semuaSelesaiSusun, skenario, spek, type Skenario } from '../../../packages/engine/test/bantu';
 
 vi.mock('../src/efek/suara', () => ({ bunyi: vi.fn(), getar: vi.fn() }));
@@ -1313,47 +1314,133 @@ describe('bar aksi', () => {
 
 // ---------- popup joker ----------
 
-describe('palet emote (#48: celetukan dan pesan sendiri)', () => {
-  const buka = () => (meja!.akar.querySelector('[data-a=emote]') as HTMLElement).click();
+describe('lembar obrolan (0.7.0; dulu palet emote #48)', () => {
+  const buka = () => (meja!.akar.querySelector('[data-a=obrolan]') as HTMLElement).click();
   const emote = () => meja!.terkirim.filter((p) => p.t === 'emote');
 
-  it('palet berisi emoji, celetukan warga Madya, dan isian pesan', () => {
+  it('tombol 😀 diganti 💬; lembar berisi obrolan, isian pesan, emoji, dan celetukan warga Madya', () => {
     meja = new MejaUji(permainanGiliranku());
+    expect(meja.akar.querySelector('[data-a=emote]')).toBeNull();
+    expect(meja.akar.querySelector('[data-a=obrolan]')!.textContent).toContain('💬');
     buka();
-    const palet = meja.akar.querySelector('.palet-emote')!;
-    const celetukan = [...palet.querySelectorAll('.palet-celetukan button')].map((b) => b.textContent);
+    const lembar = meja.akar.querySelector('.palet-emote.lembar-obrolan')!;
+    expect(lembar.querySelector('h2')!.textContent).toBe('Obrolan');
+    const celetukan = [...lembar.querySelectorAll('.palet-celetukan button')].map((b) => b.textContent);
     for (const isi of ['Gedein!', 'Buruan!', 'Lumayan!', 'CEKI!', 'Njir lah!', 'Give me!', 'GG']) expect(celetukan).toContain(isi);
-    expect(palet.querySelectorAll('.palet-emoji button').length).toBeGreaterThanOrEqual(20);
-    expect(palet.querySelector('.palet-tulis input')).not.toBeNull();
-    (palet.querySelector('[data-emote="CEKI!"]') as HTMLElement).click();
+    expect(lembar.querySelectorAll('.palet-emoji button').length).toBeGreaterThanOrEqual(20);
+    const isian = lembar.querySelector<HTMLInputElement>('.obrolan-tulis input')!;
+    expect(isian.maxLength).toBe(MAKS_PESAN);
+    expect(isian.getAttribute('enterkeyhint')).toBe('send');
+    expect(lembar.querySelector('.obrolan-kosong')).not.toBeNull();
+    // Pesan cepat: terkirim dan lembar tertutup (reaksi kilat seperti palet lama).
+    (lembar.querySelector('[data-emote="CEKI!"]') as HTMLElement).click();
     expect(emote()).toEqual([{ t: 'emote', isi: 'CEKI!' }]);
     expect(meja.akar.querySelector('.palet-emote')).toBeNull();
   });
 
-  it('pesan yang diketik dikirim sesudah dirapikan; kosong tidak dikirim', () => {
+  it('pesan yang diketik dikirim sesudah dirapikan, lembar tetap terbuka; kosong tidak dikirim', () => {
     meja = new MejaUji(permainanGiliranku());
     buka();
-    const form = meja.akar.querySelector<HTMLFormElement>('.palet-tulis')!;
+    const form = meja.akar.querySelector<HTMLFormElement>('.obrolan-tulis')!;
     const isian = form.querySelector('input')!;
     isian.value = '   ';
     form.requestSubmit();
     expect(emote()).toEqual([]);
-    expect(meja.akar.querySelector('.palet-emote')).not.toBeNull();
     isian.value = '  gedein   dong ';
     form.requestSubmit();
     expect(emote()).toEqual([{ t: 'emote', isi: 'gedein dong' }]);
-    expect(meja.akar.querySelector('.palet-emote')).toBeNull();
+    expect(isian.value).toBe('');
+    expect(meja.akar.querySelector('.palet-emote')).not.toBeNull();
   });
 
-  it('mengetik huruf pintasan di isian pesan tidak memicu aksi meja; Esc menutup palet', () => {
+  it('kiriman kedua < 1,2 detik ditahan (draf tetap), sesudahnya boleh', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      meja = new MejaUji(permainanGiliranku());
+      buka();
+      const form = meja.akar.querySelector<HTMLFormElement>('.obrolan-tulis')!;
+      const isian = form.querySelector('input')!;
+      isian.value = 'satu';
+      form.requestSubmit();
+      isian.value = 'dua';
+      form.requestSubmit();
+      expect(emote()).toEqual([{ t: 'emote', isi: 'satu' }]);
+      expect(isian.value).toBe('dua');
+      vi.advanceTimersByTime(1300);
+      form.requestSubmit();
+      expect(emote()).toEqual([
+        { t: 'emote', isi: 'satu' },
+        { t: 'emote', isi: 'dua' },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('sambungan belum siap: pesan tidak dikirim, draf tetap', () => {
+    meja = new MejaUji(permainanGiliranku(), {}, { jenis: 'online', statusKoneksi: () => 'terputus', nomorSambungan: () => 1 });
+    buka();
+    const form = meja.akar.querySelector<HTMLFormElement>('.obrolan-tulis')!;
+    const isian = form.querySelector('input')!;
+    isian.value = 'halo';
+    form.requestSubmit();
+    expect(emote()).toEqual([]);
+    expect(isian.value).toBe('halo');
+  });
+
+  it('mengetik huruf pintasan di isian pesan tidak memicu aksi meja; Esc menutup lembar', () => {
     meja = new MejaUji(permainanGiliranku());
     buka();
-    const isian = meja.akar.querySelector<HTMLInputElement>('.palet-tulis input')!;
+    const isian = meja.akar.querySelector<HTMLInputElement>('.obrolan-tulis input')!;
     isian.focus();
     tekan('d', isian);
     expect(meja.aksi).toEqual([]);
     isian.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(meja.akar.querySelector('.palet-emote')).toBeNull();
+  });
+
+  it('isi obrolan ditulis sebagai teks (bukan HTML), pesanku ditandai', () => {
+    const obrolan = new Obrolan();
+    meja = new MejaUji(permainanGiliranku(), {}, { obrolan });
+    obrolan.tambah({ nama: '<i>Budi</i>', isi: '<img src=x onerror=alert(1)>', w: 1, milikku: false });
+    obrolan.tambah({ nama: 'Aku', isi: 'halo', w: 2, milikku: true });
+    buka();
+    const baris = [...meja.akar.querySelectorAll('.baris-obrolan')];
+    expect(baris).toHaveLength(2);
+    expect(baris[0]!.querySelector('.nama')!.textContent).toBe('<i>Budi</i>');
+    expect(baris[0]!.querySelector('.isi')!.textContent).toBe('<img src=x onerror=alert(1)>');
+    expect(meja.akar.querySelector('.lembar-obrolan img, .lembar-obrolan i')).toBeNull();
+    expect(baris[1]!.classList.contains('milikku')).toBe(true);
+    // Pesan yang masuk selagi terbuka langsung tampil.
+    obrolan.tambah({ nama: 'Cici', isi: 'GG', w: 3 });
+    expect(meja.akar.querySelectorAll('.baris-obrolan')).toHaveLength(3);
+  });
+
+  it('lencana pesan baru selama lembar tertutup; dibuka = hilang; pesanku tidak dihitung', () => {
+    const obrolan = new Obrolan();
+    meja = new MejaUji(permainanGiliranku(), {}, { obrolan });
+    const tombol = meja.akar.querySelector<HTMLElement>('[data-a=obrolan]')!;
+    const lencana = tombol.querySelector<HTMLElement>('.lencana-baru')!;
+    expect(lencana.classList.contains('tersembunyi')).toBe(true);
+    obrolan.tambah({ nama: 'Budi', isi: 'halo', w: 1, milikku: false });
+    obrolan.tambah({ nama: 'Aku', isi: 'iya', w: 2, milikku: true });
+    obrolan.tambah({ nama: 'Cici', isi: '😂', w: 3, milikku: false });
+    expect(lencana.classList.contains('tersembunyi')).toBe(false);
+    expect(lencana.textContent).toBe('2');
+    expect(tombol.getAttribute('aria-label')).toBe('Obrolan, 2 pesan baru');
+    buka();
+    expect(lencana.classList.contains('tersembunyi')).toBe(true);
+    expect(tombol.getAttribute('aria-label')).toBe('Obrolan');
+    obrolan.tambah({ nama: 'Budi', isi: 'lagi', w: 4, milikku: false });
+    expect(lencana.classList.contains('tersembunyi')).toBe(true);
+    buka(); // tutup
+    for (let i = 0; i < 12; i++) obrolan.tambah({ nama: 'Budi', isi: `p${i}`, w: 5 + i, milikku: false });
+    expect(lencana.textContent).toBe('9+');
+  });
+
+  it('penonton (#60): tombol obrolan tidak ada', () => {
+    meja = new MejaUji(permainanGiliranku(), {}, { penonton: true });
+    expect(meja.akar.querySelector('[data-a=obrolan]')).toBeNull();
   });
 
   it('pesan panjang tampil di gelembung bertanda panjang, teksnya apa adanya (bukan HTML)', () => {

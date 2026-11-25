@@ -141,7 +141,7 @@ html[data-efek='hemat'] .bar-atas button {
 .permintaan-lihat .deret {
   justify-content: flex-end;
 }
-html[data-penonton] .bar-atas [data-a='emote'],
+html[data-penonton] .bar-atas [data-a='obrolan'],
 html[data-penonton] #modal .wadah-ledek,
 html[data-penonton] #modal [data-lanjut-wadah],
 html[data-penonton] #modal [data-akhiri],
@@ -459,6 +459,59 @@ html[data-penonton] #modal .info-kaldu {
   flex: 1;
   min-width: 0;
   min-height: var(--sentuh);
+}
+/* Lembar obrolan (0.7.0): menggantikan palet emote, di lapisan yang sama (.palet-emote). */
+.lembar-obrolan {
+  gap: 6px;
+}
+.lembar-obrolan .kepala-obrolan {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ruang-2);
+}
+.lembar-obrolan h2 {
+  margin: 0;
+  font-size: var(--teks-md);
+}
+.lembar-obrolan .kepala-obrolan button {
+  min-height: 0;
+  width: var(--sentuh);
+  height: var(--sentuh);
+  padding: 0;
+}
+.lembar-obrolan .obrolan-tulis {
+  margin-top: 0;
+}
+.lembar-obrolan .obrolan-cepat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lembar-obrolan .palet-emoji button.emoji {
+  font-size: 1.5rem;
+  padding: var(--ruang-1) 0;
+}
+/* Tombol 💬 di bar atas + lencana jumlah pesan yang belum dibaca. */
+.bar-atas .tombol-obrolan {
+  position: relative;
+}
+.tombol-obrolan .lencana-baru {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 4px;
+  border-radius: var(--radius-pil);
+  background: var(--emas);
+  color: var(--teks-di-emas);
+  font-size: var(--teks-xs);
+  font-weight: 700;
+  line-height: 1.2rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 @media (max-width: 400px) {
   .palet-emoji {

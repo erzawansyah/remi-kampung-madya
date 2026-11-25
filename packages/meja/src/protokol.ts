@@ -135,6 +135,22 @@ export const EMOTE_LAMA: ReadonlyMap<string, Emote> = new Map<string, Emote>([
 export const MAKS_PESAN = 60;
 
 /**
+ * Obrolan (0.7.0): banyaknya emote/pesan terakhir yang diingat meja (hanya di memori, tidak di
+ * DataMeja). Dikirim ke pemain yang duduk atau tersambung kembali lewat pesan `obrolan`.
+ */
+export const MAKS_OBROLAN = 50;
+
+/**
+ * Satu baris obrolan. Pengirim dicatat dengan NAMA, bukan nomor kursi, karena urutan duduk bisa
+ * diacak saat permainan mulai (#62). `w` = jam meja (ms epoch) saat dikirim.
+ */
+export interface EntriObrolan {
+  nama: string;
+  isi: string;
+  w: number;
+}
+
+/**
  * Ledekan (keputusan pemilik, 24 Okt 2026): hanya selama hasil putaran tampil di meja online, dikirim
  * langsung ke satu pemain dan tampil besar di layarnya. Siapa pun boleh ngeledek siapa pun (yang
  * kepentung boleh membalas). Isinya daftar ini atau DAFTAR_EMOTE (EMOTE_LAMA dipetakan); tidak ada
@@ -436,6 +452,14 @@ export type PesanServer =
    */
   | { t: 'keluar'; alasan: string; kompetisi?: string }
   | { t: 'emote'; kursi: number; isi: string }
+  /**
+   * Obrolan (0.7.0): riwayat emote/pesan meja ini (paling lama dulu, paling banyak MAKS_OBROLAN),
+   * dikirim ke pemain yang baru duduk atau tersambung kembali, hanya kalau isinya ada. Menggantikan
+   * obrolan yang dipegang aplikasi untuk meja ini. Penonton tidak pernah menerimanya. Pesan baru
+   * sesudahnya tetap lewat `emote`. Aplikasi lama mengabaikan pesan ini (jenis yang tidak dikenal
+   * dilewati di `terimaPesan`).
+   */
+  | { t: 'obrolan'; pesan: EntriObrolan[] }
   /** Ledekan dari kursi `dari` ke kursi `ke`; dikirim ke semua manusia yang terhubung. */
   | { t: 'ledek'; dari: number; ke: number; isi: string }
   /**

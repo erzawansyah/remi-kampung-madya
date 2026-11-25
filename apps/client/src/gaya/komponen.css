@@ -1102,3 +1102,78 @@ details.akordion[open] > summary::after {
   border-left: 0;
   border-top: 0;
 }
+
+/* ---------- Obrolan (0.7.0) ----------
+   Dipakai panel "Obrolan" di lobi dan lembar obrolan di meja (.lembar-obrolan, meja.css). */
+.obrolan-daftar {
+  list-style: none;
+  margin: 0;
+  padding: var(--ruang-1) var(--ruang-2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 4.5rem;
+  max-height: 11rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--isian);
+  border: 1px solid var(--garis);
+  border-radius: var(--radius-sedang);
+  font-size: var(--teks-sm);
+  line-height: var(--baris-normal);
+}
+.baris-obrolan {
+  /* Pesan panjang tanpa spasi dilipat, tidak melebarkan panel. */
+  overflow-wrap: anywhere;
+}
+.baris-obrolan .nama {
+  color: var(--teks-emas);
+  margin-right: 0.4em;
+}
+.baris-obrolan .nama::after {
+  content: ':';
+}
+.baris-obrolan.milikku .nama {
+  color: var(--teks-redup);
+}
+.baris-obrolan.emoji .isi {
+  font-size: 1.25em;
+}
+.obrolan-kosong {
+  margin: auto 0;
+  text-align: center;
+}
+.obrolan-tulis {
+  display: flex;
+  gap: 6px;
+  margin-top: var(--ruang-2);
+}
+.obrolan-tulis input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--sentuh);
+}
+.obrolan-cepat button {
+  min-width: 0;
+  min-height: var(--sentuh);
+  padding: var(--ruang-1) var(--ruang-2);
+  font-size: var(--teks-sm);
+}
+/* Lobi: pesan cepat satu deret yang bisa digeser. */
+.obrolan-cepat.deret-geser {
+  display: flex;
+  gap: 6px;
+  margin-top: var(--ruang-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.obrolan-cepat.deret-geser button {
+  flex: none;
+  white-space: nowrap;
+}
+.obrolan-cepat.deret-geser button.emoji {
+  font-size: 1.25rem;
+  padding-inline: var(--ruang-1);
+}
