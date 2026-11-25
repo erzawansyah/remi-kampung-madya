@@ -1059,6 +1059,10 @@ Pilihan yang waktu itu ditawarkan dan **tidak dipilih**:
 
 **Akibat yang disetujui:** pemain baru tidak lagi diberi tahu alasan Turunkan ditolak; penjelasan aturannya tetap di Bantuan.
 
+**Hasil audit (25 Nov 2026) dan sisa celah yang sengaja dibiarkan pemilik** ("dibiarkan dulu", kasusnya dianggap jarang; tidak mengubah aturan, hanya kapan hasilnya terlihat):
+- **Rancangan mulung:** sesudah menekan Mulung, tombol Jadikan langsung memeriksa kombinasi (diterima dengan label "→angka" kalau ada joker, ditolak kalau tidak), lalu rancangan dan mulungnya bisa dibatalkan tanpa ada yang berubah di meja. Cara menutupnya: Jadikan hanya mengelompokkan kartu (tanpa pemeriksaan dan label), pemeriksaan baru saat Konfirmasi (sah = mulung langsung terjadi; tidak sah = satu pesan umum, kecuali pesan yang tidak bergantung joker seperti kartu paling bawah dan jumlah modal).
+- **Dua kartu terakhir sesudah mulung:** memilih keduanya mengubah label tombol jadi "Mentung pakai 2 kartu!" hanya kalau keduanya joker hidup (juga lewat seret dan tombol B). Cara menutupnya: label selalu "Buang 2 kartu", selalu bisa ditekan; joker = langsung mentung, bukan = satu pesan umum.
+
 <a id="k64"></a>
 
 ## 64. Pengingat sebelum Selesai di susun akhir

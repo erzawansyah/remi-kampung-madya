@@ -321,9 +321,9 @@ Ini perilaku aplikasi, bukan aturan main. Semuanya bisa diubah kalau perlu.
   - Kartu di kartu jadi lawan yang berasal dari buanganmu diberi tanda **kamu**.
   - Saat giliranmu membuang, tumpukan menampilkan "berikutnya: X".
   - Bar waktu giliran berubah warna di 10 detik terakhir (dan diumumkan ke pembaca layar).
-- **Emote:**
-  - Tombol 😀 di bar atas membuka emoji, celetukan (misalnya "Awas!", "Gedein!", "CEKI!", "Give me!", "Kartu itu bundar, kak."), dan isian untuk menulis pesan sendiri (maksimal 60 huruf, keputusan #48).
-  - Emote dan pesan muncul sebagai gelembung di dekat pemainnya, dibatasi 1 per 1,2 detik.
+- **Obrolan dan emote:**
+  - Tombol 💬 di bar atas membuka Obrolan: riwayat pesan meja (50 terakhir), emoji, celetukan (misalnya "Awas!", "Gedein!", "CEKI!", "Give me!", "Kartu itu bundar, kak."), dan isian untuk menulis pesan sendiri (maksimal 60 huruf, keputusan #48). Angka di tombol = pesan yang belum dibaca. Di lobi ada panel Obrolan yang sama selama menunggu pemain. Penonton tidak ikut obrolan.
+  - Emote dan pesan juga muncul sebagai gelembung di dekat pemainnya, dibatasi 1 per 1,2 detik.
   - Warga kedai sesekali nyeletuk menanggapi kejadian yang terlihat semua orang, misalnya "Suwun, Bos!" saat mungut kartu orang, "Nutup, rek!" saat mentung, atau "Kartu itu bundar, kak." saat kepentung.
 
 ## Ringkasan aturan
