@@ -1,0 +1,263 @@
+// @vitest-environment happy-dom
+// Sprint (keputusan pemilik 25 Nov 2026) di Aplikasi (main.ts), dijalankan utuh seperti
+// aplikasiKompetisi.test.ts: WebSocket tiruan, Phaser dan KontrolMeja tiruan. Yang dijaga:
+// - ubin Sprint di beranda (nama dipastikan dulu, butuh internet) membuka layar Sprint dan papannya;
+// - Main sprint mengirim {t:'sprint', nama} lewat jalur online yang sama dengan Buat meja, dan meja
+//   sprint dari server langsung tampil (tanpa lobi);
+// - sprintHasil sampai ke KontrolMeja, juga kalau datang sebelum meja selesai dimuat;
+// - Sprint lagi: kursi lama dilepas (keluar), lalu percobaan baru dikirim; Ke beranda: keluar saja;
+// - Back/Escape dari layar Sprint kembali ke beranda.
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buatPermainan, terapkanAksi, viewUntuk, type GameState } from '@remi/engine';
+import { PENGATURAN_SPRINT, type InfoMeja } from '@remi/meja';
+import type { AppUntukMeja, PesanHasilSprint } from '../src/kontrolMeja';
+import { TEKS_SPRINT } from '../src/konten/sprint';
+import { WsPalsu } from './bantu';
+
+vi.mock('virtual:pwa-register', () => ({ registerSW: vi.fn(() => vi.fn(async () => {})) }));
+vi.mock('../src/efek/suara', async (asli) => ({
+  ...(await asli<typeof import('../src/efek/suara')>()),
+  siapkanAudio: vi.fn(),
+  suasanaMusik: vi.fn(),
+  bunyi: vi.fn(),
+  getar: vi.fn(),
+}));
+vi.mock('../src/ui/jendelaMalas', () => ({ bukaBantuan: vi.fn(), bukaTentang: vi.fn(), siapkanJendelaMalas: vi.fn() }));
+vi.mock('../src/ui/dom', async (asli) => ({ ...(await asli<typeof import('../src/ui/dom')>()), umumkan: vi.fn() }));
+vi.mock('../src/game/game', () => ({
+  buatGame: vi.fn(() => ({ game: { asli: null, tidur: false, siap: false }, scene: Promise.resolve({}) })),
+  bangunkanGame: vi.fn(),
+  tidurkanGame: vi.fn(),
+  pramuatGame: vi.fn(),
+}));
+
+const kontrol = vi.hoisted(() => ({ panggilan: [] as { nama: string; arg: unknown[] }[], app: null as unknown }));
+vi.mock('../src/kontrolMeja', async (asli) => {
+  const m = await asli<typeof import('../src/kontrolMeja')>();
+  const catat =
+    (nama: string) =>
+    (...arg: unknown[]) => {
+      kontrol.panggilan.push({ nama, arg });
+    };
+  class KontrolPalsu {
+    constructor(app: unknown) {
+      kontrol.app = app;
+    }
+    perbarui = catat('perbarui');
+    aksiDiterima = catat('aksiDiterima');
+    saatError = catat('saatError');
+    teksPenolakan = (pesan: string) => pesan;
+    koneksiBerubah = catat('koneksiBerubah');
+    terimaEmote = catat('terimaEmote');
+    terimaLedek = catat('terimaLedek');
+    terimaHasilKompetisi = catat('terimaHasilKompetisi');
+    terimaHasilSprint = catat('terimaHasilSprint');
+    hancurkan = catat('hancurkan');
+    keadaanTampil = () => ({ status: null, sibuk: false, klasemen: false });
+  }
+  return { ...m, KontrolMeja: KontrolPalsu };
+});
+
+Object.assign(globalThis, { __VERSI_APP__: '0.0.0', __BUILD_SHA__: 'dev', __BUILD_WAKTU__: '2026-11-25T00:00:00.000Z' });
+
+const pendengar: [EventTarget, string, EventListenerOrEventListenerObject, unknown][] = [];
+
+async function nyalakan(): Promise<void> {
+  vi.resetModules();
+  await import('../src/main');
+  await vi.advanceTimersByTimeAsync(0);
+}
+
+const dipanggil = (n: string) => kontrol.panggilan.filter((p) => p.nama === n).map((p) => p.arg);
+const toastTeks = () => [...document.querySelectorAll<HTMLElement>('#toast .toast')].map((el) => el.dataset.pesan ?? '');
+const ui = (s: string) => document.querySelector<HTMLElement>(`#ui ${s}`);
+
+function permainan(): GameState {
+  const g0 = buatPermainan({ pemain: ['Kipas Dua', 'Aku', 'Cak Kopag', 'Mbak Teras'], seed: 11 });
+  const h = terapkanAksi(g0, { jenis: 'mulaiPutaran', pengocok: 0 });
+  if (!h.ok) throw new Error(h.error.pesan);
+  return h.state;
+}
+
+/** Info meja sprint dari server: aku di kursi 1 sesudah urutan duduk diacak. */
+function infoSprint(g: GameState): InfoMeja {
+  return {
+    kode: 'SPRNT',
+    status: 'main',
+    pengaturan: { ...PENGATURAN_SPRINT },
+    kursi: g.pemain.map((p, i) => ({ jenis: i === 1 ? 'manusia' : 'bot', nama: p.nama, terhubung: i === 1, level: 'suhu' })),
+    host: 1,
+    kursiSaya: 1,
+    setujuAkhiri: [],
+    batasWaktu: null,
+    diambilAlihBot: false,
+    menungguJoker: [],
+    botMikir: null,
+    sprint: true,
+  };
+}
+
+const PAPAN = {
+  periode: 'minggu',
+  mulai: Date.UTC(2026, 10, 22, 17),
+  baris: [
+    { nama: 'Budi', menang: 2, mentung: 3, kepentung: 1, skor: 420, piala: 1 },
+    { nama: 'aku', menang: 1, mentung: 1, kepentung: 0, skor: 150, piala: 0 },
+  ],
+};
+
+/** fetch: papan sprint dijawab, permintaan lain (healthz, sw) dibiarkan menggantung. */
+function pasangFetch(): string[] {
+  const url: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((u: string) => {
+      url.push(u);
+      if (u.startsWith('/api/sprint')) return Promise.resolve({ ok: true, status: 200, json: async () => PAPAN } as Response);
+      return new Promise(() => {});
+    }),
+  );
+  return url;
+}
+
+/** Beranda → ubin Sprint → layar Sprint. */
+async function bukaSprint() {
+  const url = pasangFetch();
+  await nyalakan();
+  ui('#sprint')!.click();
+  await vi.advanceTimersByTimeAsync(0);
+  return url;
+}
+
+/** Layar Sprint → Main sprint → server membuat meja sprint dan langsung mengirim permainannya. */
+async function diMejaSprint(sebelumSiap?: (ws: WsPalsu) => void) {
+  await bukaSprint();
+  ui('#main-sprint')!.click();
+  await vi.advanceTimersByTimeAsync(0);
+  const ws = WsPalsu.terakhir();
+  ws.buka();
+  await vi.advanceTimersByTimeAsync(0);
+  const g = permainan();
+  ws.kirimDariServer({ t: 'masuk', kode: 'SPRNT', token: 'tok', kursi: 1 });
+  ws.kirimDariServer({ t: 'meja', info: infoSprint(g) });
+  sebelumSiap?.(ws);
+  await vi.advanceTimersByTimeAsync(0);
+  ws.kirimDariServer({ t: 'view', view: viewUntuk(g, 1) });
+  await vi.advanceTimersByTimeAsync(0);
+  return { ws, g };
+}
+
+const hasil: PesanHasilSprint = { t: 'sprintHasil', menang: true, skor: 300, mentung: 2, kepentung: 1, peringkatMinggu: 1 };
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  localStorage.clear();
+  sessionStorage.clear();
+  kontrol.panggilan.length = 0;
+  kontrol.app = null;
+  WsPalsu.semua = [];
+  vi.stubGlobal('WebSocket', WsPalsu);
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => true });
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+  document.body.innerHTML = '<div id="game"></div><div id="ui"></div><div id="modal"></div><div id="lapisan-dialog"></div><div id="toast"></div>';
+  localStorage.setItem('remi.nama', JSON.stringify('Aku'));
+  for (const target of [window, document] as EventTarget[]) {
+    const tambah = target.addEventListener.bind(target);
+    vi.spyOn(target, 'addEventListener').mockImplementation((jenis, f, o) => {
+      if (f) pendengar.push([target, jenis, f, o]);
+      tambah(jenis, f, o);
+    });
+  }
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  for (const [target, jenis, f, o] of pendengar.splice(0)) target.removeEventListener(jenis, f, o as EventListenerOptions);
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  document.body.innerHTML = '';
+});
+
+describe('Aplikasi: Sprint', () => {
+  it('ubin Sprint membuka layar Sprint dan papan minggu ini; baris milikku disorot', async () => {
+    const url = await bukaSprint();
+    expect(ui('.layar-sprint')).not.toBeNull();
+    expect(ui('.layar.beranda')).toBeNull();
+    expect(url).toContain('/api/sprint?periode=minggu');
+    expect(ui('#papan-sprint tbody tr.saya')!.textContent).toContain('aku');
+    // Belum ada sambungan meja: layar Sprint cuma membaca papan.
+    expect(WsPalsu.semua).toHaveLength(0);
+  });
+
+  it('ubin Sprint tanpa internet: toast, layar Sprint tidak dibuka', async () => {
+    await nyalakan();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
+    ui('#sprint')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(toastTeks()).toContain(TEKS_SPRINT.butuhInternet);
+    expect(ui('.layar-sprint')).toBeNull();
+  });
+
+  it('Main sprint: kirim {t:"sprint", nama}, meja sprint langsung tampil (tanpa lobi)', async () => {
+    const { ws } = await diMejaSprint();
+    expect(ws.terkirim.find((p) => p.t === 'sprint')).toEqual({ t: 'sprint', nama: 'Aku' });
+    expect(ui('.layar-lobi')).toBeNull();
+    expect(dipanggil('perbarui').length).toBeGreaterThan(0);
+  });
+
+  it('sprintHasil diteruskan ke meja, juga kalau datang sebelum meja selesai dimuat', async () => {
+    await diMejaSprint((ws) => {
+      expect(kontrol.app).toBeNull();
+      ws.kirimDariServer(hasil);
+    });
+    expect(dipanggil('terimaHasilSprint')).toEqual([[hasil]]);
+  });
+
+  it('Sprint lagi: keluar dari meja lama, sesi dilupakan, percobaan baru dikirim dari layar Sprint', async () => {
+    const { ws } = await diMejaSprint();
+    pasangFetch();
+    (kontrol.app as AppUntukMeja).tinggalkanSprint!(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ws.jenisTerkirim()).toContain('keluar');
+    expect(localStorage.getItem('remi.sesiOnline')).toBeNull();
+    expect(ui('.layar-sprint')).not.toBeNull();
+    expect(ui('#main-sprint')!.getAttribute('aria-busy')).toBe('true');
+    const baru = WsPalsu.terakhir();
+    expect(baru).not.toBe(ws);
+    baru.buka();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(baru.jenisTerkirim()).toEqual(['sprint']);
+  });
+
+  it('Ke beranda dari klasemen akhir sprint: keluar, lalu beranda', async () => {
+    const { ws } = await diMejaSprint();
+    (kontrol.app as AppUntukMeja).tinggalkanSprint!(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ws.jenisTerkirim()).toContain('keluar');
+    expect(ui('.layar.beranda')).not.toBeNull();
+    expect(WsPalsu.semua.at(-1)).toBe(ws);
+  });
+
+  it('server menolak sprint: tombol Main sprint bisa ditekan lagi, pesannya jadi toast', async () => {
+    await bukaSprint();
+    ui('#main-sprint')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    const ws = WsPalsu.terakhir();
+    ws.buka();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ui('#main-sprint')!.getAttribute('aria-busy')).toBe('true');
+    ws.kirimDariServer({ t: 'error', pesan: 'Sprint belum bisa dimainkan di server ini.' });
+    expect(ui('#main-sprint')!.hasAttribute('aria-busy')).toBe(false);
+    expect(toastTeks()).toContain('Sprint belum bisa dimainkan di server ini.');
+  });
+
+  it('Escape di layar Sprint: kembali ke beranda, fokus di tombol Sprint', async () => {
+    await bukaSprint();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(ui('.layar.beranda')).not.toBeNull();
+    expect(document.activeElement?.id).toBe('sprint');
+  });
+});

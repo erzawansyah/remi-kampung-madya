@@ -405,17 +405,23 @@ describe('Kompetisi segera hadir (0.7.0, KOMPETISI_DIBUKA = false)', () => {
     saklar.dibuka = false;
   });
 
-  it('tombol Kompetisi di beranda: redup, berlabel Segera hadir, diketuk = toast (tanpa layar kompetisi)', async () => {
+  it('beranda tanpa tombol Kompetisi (sejak 0.8.0 ubinnya diganti Sprint); tidak ada yang membuka API kompetisi', async () => {
     const url = pasangFetch();
     await nyalakan();
-    const b = document.querySelector<HTMLButtonElement>('#ui #kompetisi')!;
-    expect(b.getAttribute('aria-disabled')).toBe('true');
-    expect(b.textContent).toContain(TEKS_KOMPETISI.segeraHadir);
-    b.click();
+    expect(document.querySelector('#ui #kompetisi')).toBeNull();
+    expect(document.querySelector('#ui .tombol-segera')).toBeNull();
+    expect(document.querySelector('#ui #sprint')).not.toBeNull();
     await vi.advanceTimersByTimeAsync(0);
-    expect(toastTeks()).toContain(TEKS_KOMPETISI.dirombak);
     expect(document.querySelector('#ui .layar-kompetisi')).toBeNull();
     expect(url.some((u) => u.startsWith('/api/kompetisi'))).toBe(false);
+  });
+
+  it('saklar kompetisi dinyalakan lagi: tombol Kompetisi kembali di samping Sprint', async () => {
+    saklar.dibuka = true;
+    pasangFetch();
+    await nyalakan();
+    expect(document.querySelector('#ui #kompetisi')).not.toBeNull();
+    expect(document.querySelector('#ui #sprint')).not.toBeNull();
   });
 
   it('Kembali ke kompetisi dari meja kompetisi: keluar, lalu beranda + toast (bukan detail kompetisi)', async () => {

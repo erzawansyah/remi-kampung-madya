@@ -70,9 +70,13 @@ export interface HasilSprint {
  * Hasil sprint kursi `kursi` (kursi pemain sesudah urutan duduk diacak) dari state permainan. Hanya
  * putaran yang sudah selesai yang dihitung. Percobaan yang ditinggal (permainan belum selesai) tidak
  * pernah menang (tafsiran pengembang: supaya percobaan yang jelek tidak bisa ditinggal demi
- * menjaga jumlah menang).
+ * menjaga jumlah menang). Menerima GameState maupun ViewPemain (aplikasi menghitung hasil sementara
+ * dari view sebelum pesan sprintHasil datang).
  */
-export function hasilSprint(game: GameState, kursi: number): HasilSprint {
+export function hasilSprint(
+  game: Pick<GameState, 'riwayat' | 'status'> & { readonly pemain: readonly unknown[] },
+  kursi: number,
+): HasilSprint {
   const riwayat = game.riwayat;
   const skorAkhir = riwayat.at(-1)?.skorAkumulasi ?? game.pemain.map(() => 0);
   const skor = skorAkhir[kursi] ?? 0;
