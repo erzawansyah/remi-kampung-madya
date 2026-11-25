@@ -22,6 +22,7 @@ import { TEKS_LANJUT, TEKS_LEDEK } from './ledek';
 import { DAFTAR_LEVEL_WARGA } from './levelWarga';
 import { TEKS_USULAN } from './usulan';
 import { TEKS_SPRINT } from './sprint';
+import { TEKS_SUARA } from './suara';
 
 /** Masa tenggang sambung ulang dalam detik (sama dengan yang dipakai meja). */
 const DETIK_TENGGANG = Math.round(TENGGANG_SAMBUNG_MS / 1000);
@@ -775,7 +776,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
     id: 'online',
     judul: 'Main online',
     ikon: '📶',
-    ringkas: 'Buat atau gabung meja, sinyal putus, hasil putaran, dan Riwayat.',
+    ringkas: 'Buat atau gabung meja, suara, sinyal putus, hasil putaran, dan Riwayat.',
     isi: [
       {
         t: 'paragraf',
@@ -807,6 +808,20 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Host pergi: tugas host pindah ke pemain lain yang masih terhubung.',
           `Di hasil putaran, tombol host baru aktif ${DETIK_JEDA_LANJUT} detik kemudian supaya semua sempat lihat kartu. Sudah selesai lihat? Tekan ${TEKS_LANJUT.siap}.`,
           `Mau ngeledek? Di hasil putaran, buka bagian ${TEKS_LEDEK.judul}, pilih orangnya, lalu ketuk ledekannya. Paling banyak ${MAKS_LEDEK_PER_PUTARAN} per putaran.`,
+        ],
+      },
+      {
+        t: 'paragraf',
+        teks: `**${TEKS_SUARA.judul}:** di meja online (lobi dan selama main) kamu bisa ngobrol pakai suara bareng teman di meja itu. Warga kedai nggak ikut ngomong, dan penonton nggak dengar apa-apa.`,
+      },
+      {
+        t: 'daftar',
+        butir: [
+          'Mic selalu mati tiap masuk meja. Ketuk tombol mic di bar atas buat menyalakan; pertama kali, browser minta izin mic dulu.',
+          `${TEKS_SUARA.dengar} nyala dari awal. Matikan kalau mau main tanpa suara: semua suara teman dibisukan, cuma di HP-mu. Sakelarnya ada di tombol speaker (lobi, dan bar atas di layar lebar) dan di lembar ${TEKS_SUARA.judul}.`,
+          `Tekan lama tombol mic, atau ketuk ▾ di sebelahnya, buat buka lembar ${TEKS_SUARA.judul}. Di situ ada daftar teman dengan tombol ${TEKS_SUARA.bisukan} per orang (cuma di HP-mu).`,
+          'Ikon mic di samping nama: hijau berpendar berarti orangnya lagi ngomong, abu-abu dicoret berarti mic-nya mati.',
+          'Sinyal lemah? Suaranya dijeda sendiri (ikon mic kuning) supaya permainan tetap lancar, lalu nyala lagi sendiri kalau sinyal membaik.',
         ],
       },
       {

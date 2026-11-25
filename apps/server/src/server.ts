@@ -41,6 +41,7 @@ import { jalankanPengirimUsulan, type PengirimUsulan } from './usulan.js';
 import { alamatKlien, HEADER_KEAMANAN, kunciIp, originDiizinkan } from './keamanan.js';
 import { buatPembatasLog } from './pembatasLog.js';
 import { rapikanPeriodeSprint } from './sprint.js';
+import { jawabanIce, type KonfigurasiTurn } from './suara.js';
 
 /**
  * Batas bawaan per jaringan (keputusan pemilik, 13 Okt 2026). Semua HP yang memakai Wi-Fi kedai
@@ -194,6 +195,11 @@ export interface OpsiServer {
   maksUsulanPerHari?: number;
   /** Jeda sebelum pemain yang sambungannya tertutup dianggap terputus (ms). Bawaan {@link JEDA_PUTUS_MS}. */
   jedaPutusMs?: number;
+  /**
+   * Suara (0.9.0): server TURN untuk obrolan suara (env TURN_URLS dan TURN_SECRET, lihat main.ts dan
+   * docs/deploy.md). Kosong = /api/suara/ice hanya memberi STUN.
+   */
+  turn?: KonfigurasiTurn | null;
   log?: (...x: unknown[]) => void;
 }
 
@@ -826,6 +832,15 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         log('galat membaca papan sprint', e);
         return jawabJson(res, 500, { error: 'Gagal membaca papan sprint.' });
       }
+    }
+    if (url.pathname === '/api/suara/ice') {
+      // Suara (0.9.0): STUN untuk semua; kredensial TURN hanya untuk yang sedang duduk di meja online
+      // (header x-token-meja = token kursinya), supaya relay tidak dipakai orang luar.
+      if (req.method !== 'GET') return jawabJson(res, 405, { error: 'Hanya GET.' });
+      const token = req.headers['x-token-meja'];
+      const duduk =
+        typeof token === 'string' && token.length > 0 && token.length <= 100 && [...daftarMeja.values()].some((m) => !m.sprint && m.punyaPemain(token));
+      return jawabJson(res, 200, jawabanIce(opsi.turn ?? null, jam(), duduk));
     }
     if (url.pathname === '/api/kompetisi' || url.pathname.startsWith('/api/kompetisi/')) {
       void layaniKompetisi(req, res, url);

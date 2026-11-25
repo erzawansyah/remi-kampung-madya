@@ -726,6 +726,33 @@ describe('KoneksiOnline: socket setengah mati ketahuan cepat (langkah 1)', () =>
     expect(baru.terkirim[0]).toMatchObject({ t: 'gabung', kode: 'MADYA', token: 'rahasia' });
   });
 
+  it('suara (0.9.0): sinyal tanpa jawaban tidak memutus socket, tidak diantrikan, tanpa kabar "putus"; RTT terukur', async () => {
+    const ws = await masukMeja();
+    ws.jawabPing = false;
+    const data = { sdp: { type: 'offer' as const, sdp: 'v=0' } };
+    k.kirim({ t: 'suaraSinyal', ke: 2, data });
+    k.kirim({ t: 'suara', aksi: 'mic', nyala: true });
+    // Tidak ada ping cek cepat sesudahnya: sinyal suara memang tidak dijawab ke pengirimnya.
+    expect(ws.terkirim.slice(-2).map((p) => p.t)).toEqual(['suaraSinyal', 'suara']);
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(ws.onmessage).not.toBeNull();
+    // Saat putus: dibuang diam-diam (tidak diantrikan, tidak memunculkan PESAN_TERTAHAN).
+    ws.putus();
+    k.kirim({ t: 'suaraSinyal', ke: 2, data });
+    await microtask();
+    expect(pesan.some((p) => p.t === 'error')).toBe(false);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const baru = WsPalsu.terakhir();
+    baru.buka();
+    expect(baru.terkirim.some((p) => p.t === 'suaraSinyal')).toBe(false);
+    // RTT ping/pong untuk penilai kualitas suara.
+    baru.jawabPing = true;
+    k.ukurRtt();
+    expect(baru.terkirim.at(-1)).toEqual({ t: 'ping' });
+    await microtask();
+    expect(k.rtt()).not.toBeNull();
+  });
+
   it('socket sehat yang menjawab: aksi beruntun tidak pernah memutus sambungan', async () => {
     const ws = await masukMeja();
     for (let i = 0; i < 6; i++) {

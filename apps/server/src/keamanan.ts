@@ -33,7 +33,8 @@ export const HEADER_KEAMANAN: Readonly<Record<string, string>> = {
   'referrer-policy': 'strict-origin-when-cross-origin',
   'content-security-policy': CSP,
   'x-frame-options': 'DENY',
-  'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+  // Mic hanya untuk halaman sendiri (obrolan suara di meja online, 0.9.0).
+  'permissions-policy': 'camera=(), microphone=(self), geolocation=()',
 };
 
 /** Alamat loopback / privat (RFC 1918, ULA IPv6, link-local). */

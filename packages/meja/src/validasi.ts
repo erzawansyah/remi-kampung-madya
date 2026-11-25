@@ -8,9 +8,12 @@ import {
   EMOTE_LAMA,
   MAKS_OBROLAN,
   MAKS_PESAN,
+  MAKS_KANDIDAT,
+  MAKS_SDP,
   MAKS_TIKET,
   PENGATURAN_BAWAAN,
   type AksiKlien,
+  type DataSinyalSuara,
   type Emote,
   type EntriObrolan,
   type PengaturanMeja,
@@ -221,6 +224,30 @@ export function isiLedek(x: unknown): string | null {
   return EMOTE_LAMA.get(x) ?? null;
 }
 
+/**
+ * Isi sinyal suara (0.9.0) yang sah, atau null: tepat satu dari `sdp` (offer/answer, teks ≤ MAKS_SDP) atau
+ * `kandidat` (baris kandidat ICE ≤ MAKS_KANDIDAT). Field lain dibuang; meja meneruskan hasil salinan ini,
+ * bukan data mentahnya.
+ */
+export function validasiSinyalSuara(x: unknown): DataSinyalSuara | null {
+  if (!isObj(x)) return null;
+  const adaSdp = x.sdp !== undefined;
+  const adaKandidat = x.kandidat !== undefined;
+  if (adaSdp === adaKandidat) return null;
+  if (adaSdp) {
+    const d = x.sdp;
+    if (!isObj(d) || (d.type !== 'offer' && d.type !== 'answer') || !isStr(d.sdp, MAKS_SDP) || !d.sdp) return null;
+    return { sdp: { type: d.type, sdp: d.sdp } };
+  }
+  const k = x.kandidat;
+  if (!isObj(k) || !isStr(k.candidate, MAKS_KANDIDAT)) return null;
+  const mid = k.sdpMid ?? null;
+  const baris = k.sdpMLineIndex ?? null;
+  if (mid !== null && !isStr(mid, 64)) return null;
+  if (baris !== null && !(isInt(baris) && baris >= 0 && baris <= 16)) return null;
+  return { kandidat: { candidate: k.candidate, sdpMid: mid, sdpMLineIndex: baris } };
+}
+
 /** Ubah data mentah (hasil JSON.parse) menjadi PesanKlien yang sah, atau null. */
 export function validasiPesan(x: unknown): PesanKlien | null {
   if (!isObj(x) || typeof x.t !== 'string') return null;
@@ -305,6 +332,22 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       if (x.isi.length > BATAS_PESAN_MENTAH) return null;
       const isi = rapikanPesan(x.isi);
       return isi ? { t: 'emote', isi } : null;
+    }
+    case 'suara': {
+      // Suara (0.9.0): `nyala` wajib boolean untuk mic/jeda, opsional untuk gabung, tidak ada untuk keluar.
+      if (x.aksi === 'keluar') return { t: 'suara', aksi: 'keluar' };
+      if (x.aksi === 'gabung') {
+        if (x.nyala === undefined) return { t: 'suara', aksi: 'gabung' };
+        return typeof x.nyala === 'boolean' ? { t: 'suara', aksi: 'gabung', nyala: x.nyala } : null;
+      }
+      if ((x.aksi === 'mic' || x.aksi === 'jeda') && typeof x.nyala === 'boolean') return { t: 'suara', aksi: x.aksi, nyala: x.nyala };
+      return null;
+    }
+    case 'suaraSinyal': {
+      // `ke` = id anggota suara (bukan kursi); sah tidaknya diputuskan meja.
+      if (!isInt(x.ke) || x.ke < 1 || x.ke > 1_000_000_000) return null;
+      const data = validasiSinyalSuara(x.data);
+      return data ? { t: 'suaraSinyal', ke: x.ke, data } : null;
     }
     case 'ledek': {
       // Kursi 0..5 (meja paling banyak 6 pemain); sah tidaknya sasaran diputuskan meja.

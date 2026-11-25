@@ -102,6 +102,13 @@ export interface Koneksi {
   aturLanjutSesi(aktif: boolean): void;
   /** Mode lanjut sesi sedang aktif. */
   readonly melanjutkanSesi: boolean;
+  /**
+   * Suara (0.9.0): RTT ping/pong terakhir ke server (ms); null kalau belum ada atau offline. Dipakai untuk
+   * menilai kualitas sinyal, tidak untuk apa pun di meja.
+   */
+  rtt?(): number | null;
+  /** Suara: kirim satu ping sekarang (mengukur RTT lebih sering selama suara dijeda karena sinyal lemah). */
+  ukurRtt?(): void;
   tutup(): void;
 }
 
@@ -146,6 +153,12 @@ const PING_DIINGAT_MAKS = 32;
  * dibuang), jadi aplikasi mengecek siapKirim() dulu dan memberi tahu pemain kalau tidak sampai.
  */
 const BOLEH_ANTRI = new Set<PesanKeMeja['t']>(['buat', 'gabung', 'daftar', 'tonton', 'sprint']);
+/**
+ * Suara (0.9.0): pesan yang tidak berbuah jawaban ke pengirimnya (sinyal diteruskan ke pemain lain) dan
+ * tidak penting kalau hilang saat putus: tidak dicek cepat, tidak diantrikan, dan tidak memunculkan pesan
+ * "sinyal putus". Suara tidak boleh mengganggu jalannya meja.
+ */
+const PESAN_SUARA = new Set<PesanKeMeja['t']>(['suara', 'suaraSinyal']);
 /** Pesan yang membawa pemain ke meja (baru): buat, gabung, tonton, dan sprint (meja sprint baru). */
 const MASUK_MEJA = new Set<PesanKeMeja['t']>(['buat', 'gabung', 'tonton', 'sprint']);
 /** Jenis yang cukup diwakili satu pesan terbaru di antrian. Semua pesan MASUK_MEJA sama-sama "masuk meja". */
@@ -253,6 +266,8 @@ export class KoneksiOnline implements Koneksi {
   private pingSejak: number | null = null;
   /** Waktu kirim tiap ping di socket ini yang belum dijawab (urut; pong datang berurutan). */
   private pingTerkirim: number[] = [];
+  /** RTT ping/pong terakhir (ms), untuk penilai kualitas suara. */
+  private rttTerakhir: number | null = null;
   /** Sampel jam ber-RTT terkecil di sambungan ini. */
   private sampelJam: { rtt: number; selisih: number } | null = null;
   private selisihPakai = 0;
@@ -442,6 +457,7 @@ export class KoneksiOnline implements Koneksi {
    */
   private catatPong(w: unknown) {
     const t0 = this.pingTerkirim.shift();
+    if (t0 !== undefined) this.rttTerakhir = Math.max(0, Date.now() - t0);
     if (t0 === undefined || typeof w !== 'number' || !Number.isFinite(w)) return;
     const t1 = Date.now();
     const rtt = Math.max(0, t1 - t0);
@@ -562,10 +578,10 @@ export class KoneksiOnline implements Koneksi {
       ws.send(JSON.stringify(p));
       // Setiap pesan yang dikirim berbuah jawaban (view, info, pong, emote, error). Kalau 5 dtk diam,
       // socket-nya mati diam-diam: sambung ulang sekarang, jangan tunggu watchdog.
-      if (p.t !== 'ping') this.cekCepat(ws);
+      if (p.t !== 'ping' && !PESAN_SUARA.has(p.t)) this.cekCepat(ws);
       return;
     }
-    if (p.t === 'ping') return;
+    if (p.t === 'ping' || PESAN_SUARA.has(p.t)) return;
     if (BOLEH_ANTRI.has(p.t)) return this.antrikan(p);
     // Aksi saat putus tidak diantrikan (bisa basi), tapi pemain perlu tahu kenapa tidak terjadi apa-apa.
     if (this.sudahDiberitahu) return;
@@ -579,6 +595,15 @@ export class KoneksiOnline implements Koneksi {
 
   selisihJam(): number {
     return this.selisihPakai;
+  }
+
+  rtt(): number | null {
+    return this.ws?.readyState === WebSocket.OPEN ? this.rttTerakhir : null;
+  }
+
+  ukurRtt() {
+    const ws = this.ws;
+    if (!this.ditutup && ws?.readyState === WebSocket.OPEN) this.kirimPing(ws);
   }
 
   sesiAktif(): SesiOnline | null {

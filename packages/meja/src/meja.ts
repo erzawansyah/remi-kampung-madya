@@ -25,11 +25,17 @@ import {
 import {
   BATAS_JAWAB_LIHAT_MS,
   JEDA_BOT,
+  JENDELA_SINYAL_SUARA_MS,
   JEDA_TOLAK_LIHAT_MS,
+  MAKS_ANGGOTA_SUARA,
   MAKS_LEDEK_PER_PUTARAN,
+  MAKS_SINYAL_SUARA,
   MAKS_OBROLAN,
   MAKS_PENONTON,
   PENGATURAN_BAWAAN,
+  type AksiSuara,
+  type AnggotaSuara,
+  type DataSinyalSuara,
   type Emote,
   type EntriObrolan,
   type InfoMeja,
@@ -53,7 +59,7 @@ import {
   ubahanTerkunci,
   type PengaturanKompetisi,
 } from './kompetisi.js';
-import { isiLedek, kunciNama, rapikanLevel, rapikanNama } from './validasi.js';
+import { isiLedek, kunciNama, rapikanLevel, rapikanNama, validasiSinyalSuara } from './validasi.js';
 import { hasilSprint, JUMLAH_PUTARAN_SPRINT, LEVEL_SPRINT, NAMA_LAWAN_SPRINT, PENGATURAN_SPRINT, type HasilSprint } from './sprint.js';
 
 export interface Penjadwal {
@@ -396,6 +402,17 @@ export class Meja {
   private tolakLihat = new Map<string, Map<number, number>>();
   /** Batas jawab permintaan lihat yang paling dekat (bukan bagian jadwalkan(): tidak diulang tiap perubahan). */
   private timerPenonton: unknown = null;
+  /**
+   * Suara (0.9.0): anggota obrolan suara per pemainId (bukan kursi, supaya acak urutan duduk #62 tidak
+   * mengacaukannya). Hanya di memori, tidak di DataMeja (golden dan simpanan tetap); pemain yang terputus
+   * atau keluar ikut dibuang (lihat `anggotaSuara`), aplikasinya gabung lagi sesudah tersambung kembali.
+   */
+  private suara = new Map<string, { id: number; mic: boolean; jeda: boolean }>();
+  private nomorSuara = 0;
+  /** Banyaknya sinyal suara tiap pemain di jendela sekarang (batas MAKS_SINYAL_SUARA). */
+  private sinyalSuara = new Map<string, { mulai: number; jumlah: number }>();
+  /** Daftar anggota suara yang terakhir disiarkan (JSON); disiarkan lagi hanya kalau berubah. */
+  private tandaSuara = '[]';
 
   constructor(
     private readonly opsi: OpsiMeja,
@@ -829,6 +846,10 @@ export class Meja {
         return this.putaranTerakhir(kursi, pesan.setuju);
       case 'mainLagi':
         return this.mainLagi(kursi);
+      case 'suara':
+        return this.aksiSuara(pemainId, pesan.aksi, pesan.nyala);
+      case 'suaraSinyal':
+        return this.teruskanSinyalSuara(pemainId, pesan.ke, pesan.data);
       case 'jawabLihat':
         return this.jawabLihat(kursi, pesan.penonton, pesan.terima);
       case 'hentikanLihat':
@@ -2026,6 +2047,99 @@ export class Meja {
       }
     });
     this.siarkanPenonton(batasLog);
+    this.siarkanSuara();
+  }
+
+  // ---------- suara (0.9.0) ----------
+
+  /**
+   * Anggota suara sekarang, urut kursi. Hanya kursi manusia yang terhubung; anggota yang kursinya sudah
+   * bukan miliknya (keluar, diganti host, terputus, pindah meja) dibuang di sini, satu tempat untuk semua
+   * jalan keluar.
+   */
+  private anggotaSuara(): AnggotaSuara[] {
+    if (!this.suara.size) return [];
+    const ada = new Set<string>();
+    const hasil: AnggotaSuara[] = [];
+    this.d.kursi.forEach((k, i) => {
+      const a = k.jenis === 'manusia' && k.terhubung && k.pemainId ? this.suara.get(k.pemainId) : undefined;
+      if (!a) return;
+      ada.add(k.pemainId!);
+      hasil.push({ id: a.id, kursi: i, mic: a.mic, ...(a.jeda ? { jeda: true as const } : {}) });
+    });
+    for (const id of [...this.suara.keys()]) {
+      if (!ada.has(id)) {
+        this.suara.delete(id);
+        this.sinyalSuara.delete(id);
+      }
+    }
+    return hasil;
+  }
+
+  /**
+   * Kirim daftar anggota suara ke semua kursi manusia yang terhubung, hanya kalau berubah sejak terakhir
+   * (atau `paksaKe`: pemain itu dikirimi walau tidak berubah). Tidak pernah ke penonton.
+   */
+  private siarkanSuara(paksaKe?: string): void {
+    const anggota = this.anggotaSuara();
+    const tanda = JSON.stringify(anggota);
+    const berubah = tanda !== this.tandaSuara;
+    this.tandaSuara = tanda;
+    for (const k of this.d.kursi) {
+      if (k.jenis !== 'manusia' || !k.pemainId || !k.terhubung) continue;
+      if (!berubah && k.pemainId !== paksaKe) continue;
+      this.kirimKe(k.pemainId, { t: 'suara', saya: this.suara.get(k.pemainId)?.id ?? null, anggota: anggota.map((a) => ({ ...a })) });
+    }
+  }
+
+  /** Gabung/keluar suara, atau ubah mic/jeda. Meja sprint (satu pemain) tidak punya suara. */
+  private aksiSuara(pemainId: string, aksi: AksiSuara, nyala?: boolean): void {
+    if (aksi === 'keluar') {
+      if (!this.suara.delete(pemainId)) return;
+      this.sinyalSuara.delete(pemainId);
+      return this.siarkanSuara();
+    }
+    if (this.d.sprint) galat('Meja sprint nggak pakai suara, Bos.');
+    let a = this.suara.get(pemainId);
+    if (aksi === 'gabung') {
+      if (!a) {
+        if (this.anggotaSuara().length >= MAKS_ANGGOTA_SUARA) galat('Suaranya sudah penuh, Bos.');
+        a = { id: ++this.nomorSuara, mic: false, jeda: false };
+        this.suara.set(pemainId, a);
+      }
+      if (nyala !== undefined) a.mic = nyala;
+      a.jeda = false;
+      return this.siarkanSuara(pemainId);
+    }
+    // mic/jeda tanpa gabung dulu (pesan lama sesudah dikeluarkan): diabaikan diam-diam.
+    if (!a || nyala === undefined) return;
+    if (aksi === 'mic') a.mic = nyala;
+    else a.jeda = nyala;
+    this.siarkanSuara();
+  }
+
+  /**
+   * Teruskan sinyal WebRTC ke anggota suara `ke` di meja ini. Pengirim dan penerima wajib anggota suara di
+   * kursi manusia yang terhubung (jadi tidak pernah ke penonton atau meja lain). Isinya disalin ulang lewat
+   * validasi (meja juga dipanggil langsung, tanpa server). Kelebihan batas per pemain dibuang diam-diam.
+   */
+  private teruskanSinyalSuara(pemainId: string, ke: number, data: DataSinyalSuara): void {
+    const anggota = this.anggotaSuara();
+    const dari = this.suara.get(pemainId);
+    if (!dari) return;
+    const tujuan = anggota.find((a) => a.id === ke);
+    if (!tujuan || tujuan.id === dari.id) return;
+    const bersih = validasiSinyalSuara(data);
+    if (!bersih) return;
+    const sekarang = this.penjadwal.sekarang();
+    let jatah = this.sinyalSuara.get(pemainId);
+    if (!jatah || sekarang - jatah.mulai >= JENDELA_SINYAL_SUARA_MS) {
+      jatah = { mulai: sekarang, jumlah: 0 };
+      this.sinyalSuara.set(pemainId, jatah);
+    }
+    if (++jatah.jumlah > MAKS_SINYAL_SUARA) return;
+    const k = this.d.kursi[tujuan.kursi];
+    if (k?.pemainId) this.kirimKe(k.pemainId, { t: 'suaraSinyal', dari: dari.id, data: bersih });
   }
 
   info(kursiSaya: number | null): InfoMeja {

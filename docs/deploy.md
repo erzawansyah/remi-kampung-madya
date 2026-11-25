@@ -126,6 +126,61 @@ docker compose restart remi
 
 **Batas:** paling banyak 5 usulan per jaringan per jam (semua HP di Wi-Fi kedai dihitung satu jaringan) dan 200 usulan per 24 jam untuk seluruh server. Judul 3–80 huruf, isi 10–1000 huruf.
 
+## Suara dan TURN
+
+Obrolan suara (0.9.0) di meja online memakai WebRTC: suaranya langsung antar-HP, server Remi hanya meneruskan sinyal lewat WebSocket yang sudah ada. Supaya dua HP bisa saling menemukan, aplikasi meminta daftar server ICE ke `GET /api/suara/ice`:
+
+- **Tanpa pengaturan apa pun:** hanya STUN publik (`stun:stun.l.google.com:19302`). Sering cukup di Wi-Fi rumah dan Wi-Fi kedai, tapi **di data seluler (CGNAT operator) sering gagal**: tombol mic tetap jalan, hanya saja suara teman di jaringan itu tidak nyambung ("suaranya belum nyambung" di lembar Suara). Game tidak terpengaruh.
+- **Dengan TURN:** suara yang tidak bisa langsung dilewatkan lewat relay di VPS. Kredensialnya dibuat server Remi per permintaan dengan skema REST coturn (username `kedaluwarsa:acak`, password HMAC-SHA1 dari rahasia bersama, berumur 4 jam; atur dengan `TURN_TTL` dalam detik), dan hanya diberikan ke HP yang sedang duduk di meja online. Rahasianya tidak pernah ditulis ke log maupun dikirim ke HP.
+
+Pemakaian bandwidth relay kira-kira 24 kbps per arah per pasangan pemain yang lewat TURN (mis. meja 4 orang yang semuanya lewat relay ±0,6 Mbps). Kalau sinyal HP lemah, aplikasi menurunkan bitrate sendiri (12 kbps) atau menjeda suaranya.
+
+**Langkah pemilik (sekali saja, di VPS):**
+
+1. Buka port di firewall VPS (dan di panel penyedia VPS kalau ada firewall di sana):
+
+   ```bash
+   sudo ufw allow 3478/udp
+   sudo ufw allow 3478/tcp
+   sudo ufw allow 49160:49200/udp
+   ```
+
+   Rentang `49160-49200` harus sama dengan `min-port`/`max-port` di `coturn/turnserver.conf`. Port 3478 TIDAK lewat Caddy/reverse proxy: coturn menerimanya langsung.
+2. Buat rahasia acak dan tambahkan ke file `.env` di sebelah `docker-compose.yml` (sama seperti `NOTION_TOKEN`; `chmod 600 .env`):
+
+   ```bash
+   openssl rand -hex 32   # salin hasilnya ke TURN_SECRET
+   ```
+
+   ```bash
+   TURN_SECRET=isi_hasil_openssl_tadi
+   TURN_URLS=turn:remi-madya.likrea.biz.id:3478?transport=udp,turn:remi-madya.likrea.biz.id:3478?transport=tcp
+   ```
+
+   Nama host di `TURN_URLS` harus mengarah ke IP VPS (domain yang sama dengan situs sudah benar kalau DNS-nya langsung ke VPS, bukan lewat proxy seperti Cloudflare oranye; kalau lewat proxy, pakai alamat IP VPS: `turn:203.0.113.10:3478?transport=udp,...`).
+3. Kalau VPS di balik NAT (alamat publiknya tidak terlihat di `ip addr`), buka `coturn/turnserver.conf` dan isi baris `external-ip=` dengan alamat publik VPS. VPS biasa tidak perlu.
+4. Nyalakan coturn dan buat ulang container Remi supaya env baru terbaca:
+
+   ```bash
+   docker compose --profile suara up -d
+   docker compose logs remi | grep 'suara:'
+   # suara: TURN aktif (2 alamat, kredensial berumur 14400 detik)
+   docker compose logs coturn --tail 20
+   ```
+
+   Deploy otomatis dari webhook (`docker compose up -d --build`) tidak mematikan coturn yang sudah jalan. Kalau skrip webhook pernah menjalankan `docker compose down`, tambahkan `--profile suara` di perintah `up`-nya, atau isi `COMPOSE_PROFILES=suara` di `.env` supaya profil itu selalu ikut.
+5. Cek dari luar: `curl -s https://remi-madya.likrea.biz.id/api/suara/ice` menjawab STUN saja (tanpa token kursi memang tidak diberi TURN; itu benar). Uji sungguhannya: dua HP, satu di Wi-Fi dan satu di data seluler, masuk meja online yang sama, salah satu menyalakan mic. Di lembar Suara (▾ di samping mic) nama temannya harus berstatus "mic nyala"/"lagi ngomong", bukan "suaranya belum nyambung".
+
+**Mematikan:** `docker compose --profile suara stop coturn`, lalu kosongkan `TURN_URLS`/`TURN_SECRET` di `.env` dan `docker compose up -d`. Suara kembali memakai STUN saja.
+
+**Kalau gagal:**
+
+| Gejala | Artinya |
+|---|---|
+| Log Remi `suara: TURN_URLS atau TURN_SECRET kosong/tidak sah` | Salah satu env kosong, atau alamat di `TURN_URLS` tidak diawali `turn:`/`turns:`. |
+| Log coturn tidak menerima kredensial apa pun / semua `401` sejak awal | `TURN_SECRET` belum ada di `.env` waktu coturn dinyalakan. Isi, lalu `docker compose --profile suara up -d --force-recreate coturn`. |
+| Data seluler tetap "suaranya belum nyambung" | Port UDP 3478 atau 49160-49200 belum dibuka (cek juga firewall di panel penyedia VPS), atau `TURN_SECRET` di Remi dan coturn beda (keduanya membaca `.env` yang sama, jadi buat ulang keduanya sesudah mengubahnya). Log coturn menulis `401` untuk kredensial yang ditolak. |
+
 ## Cek sesudah deploy
 
 Ganti `B` dengan `http://127.0.0.1:2567` (di VPS) atau `https://remi.domainkamu.com` (lewat proxy).
