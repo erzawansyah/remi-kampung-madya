@@ -143,9 +143,10 @@ describe('konten: status keputusan pemilik dan isi menu', () => {
 describe('konten: Bantuan dipangkas (tinjauan pemilik 25 Nov 2026)', () => {
   const semua = () => JSON.stringify([BAB_BANTUAN, FAQ, GLOSARIUM]);
 
-  it('bab online dipecah: Main online, Kompetisi, Nonton (B1)', () => {
+  it('bab online dipecah: Main online, Nonton (B1); bab Kompetisi dicabut selama kompetisi ditutup (0.7.0)', () => {
     const id = BAB_BANTUAN.map((b) => b.id);
-    for (const x of ['online', 'kompetisi', 'nonton']) expect(id).toContain(x);
+    for (const x of ['online', 'nonton']) expect(id).toContain(x);
+    expect(id).not.toContain('kompetisi');
     expect(BAB_BANTUAN.find((b) => b.id === 'online')!.judul).toBe('Main online');
   });
 

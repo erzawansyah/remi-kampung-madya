@@ -17,7 +17,7 @@ import { gambarKartuKeKanvas, type KartuGambar } from '../game/kartuGrafisGambar
 import { htmlTautanKedai, KEDAI } from '../konten/kedai';
 import { TEKS_TAWARAN } from '../konten/pasang';
 import { TEKS_KALDU } from '../konten/kaldu';
-import { TEKS_KOMPETISI } from '../konten/kompetisi';
+import { KOMPETISI_DIBUKA, TEKS_KOMPETISI } from '../konten/kompetisi';
 import { TEKS_KONEKSI } from '../konten/koneksi';
 import { TEKS_NAMA } from '../konten/nama';
 import { TEKS_USULAN } from '../konten/usulan';
@@ -289,7 +289,12 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
             <button type="button" id="gabung">Gabung</button>
           </div>
           <button type="button" class="hantu penuh" id="publik">Cari meja publik</button>
-          <button type="button" class="hantu penuh" id="kompetisi"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.tombolBeranda)}</button>
+          ${
+            KOMPETISI_DIBUKA
+              ? `<button type="button" class="hantu penuh" id="kompetisi"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.tombolBeranda)}</button>`
+              : // Ditutup sementara: tetap terlihat (redup, "Segera hadir"); diketuk = toast.
+                `<button type="button" class="hantu penuh mati tombol-segera" id="kompetisi" aria-disabled="true"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.tombolBeranda)} <small class="label-segera">${esc(TEKS_KOMPETISI.segeraHadir)}</small></button>`
+          }
         </section>
       </div>
 
@@ -521,6 +526,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   });
   // Ikut serta dan meja kompetisi memakai nama ini, jadi nama dipastikan dulu (#49).
   el('kompetisi')!.addEventListener('click', async () => {
+    if (!KOMPETISI_DIBUKA) return toast(TEKS_KOMPETISI.dirombak);
     if (!(await pastikanNama())) return;
     aksi.lihatKompetisi();
   });

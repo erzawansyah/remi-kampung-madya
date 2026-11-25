@@ -53,6 +53,12 @@ export const MIN_BERTAHAN_KOMPETISI = 2;
  */
 export const TEKS_TANPA_VOTING_KOMPETISI = 'Di meja kompetisi permainan jalan sampai batas putaran, Bos.';
 
+/**
+ * Kompetisi ditutup sementara ("segera hadir", rilis 0.7.0): pengajuan baru ditolak server dengan
+ * teks ini, dan aplikasi menampilkannya sebagai toast di semua jalan masuk layar Kompetisi.
+ */
+export const TEKS_KOMPETISI_DIROMBAK = 'Kompetisi lagi dirombak. Tunggu kabarnya, ya.';
+
 /** Jumlah pemain meja kompetisi: ditetapkan saat pengajuan (2–6, bawaan 4). */
 export const MIN_PEMAIN_KOMPETISI = 2;
 export const MAKS_PEMAIN_KOMPETISI = 6;

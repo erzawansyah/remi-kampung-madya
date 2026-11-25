@@ -19,6 +19,7 @@ import {
   permainanKompetisiDihitung,
   rapikanPengaturanKompetisi,
   ringkasanDitinggal,
+  TEKS_KOMPETISI_DIROMBAK,
   TEKS_KURSI_KOMPETISI_LEPAS,
   TEKS_LOBI_KOMPETISI_BUBAR,
   validasiPesan,
@@ -173,6 +174,12 @@ export interface OpsiServer {
   maksPengajuan?: number;
   /** Permintaan tulis ke /api/kompetisi per menit per jaringan (bawaan 30). */
   batasTulisKompetisiPerMenit?: number;
+  /**
+   * Terima pengajuan kompetisi baru (POST /api/kompetisi). Bawaan false: kompetisi sedang dirombak
+   * (rilis 0.7.0), jadi pengajuan baru ditolak dengan TEKS_KOMPETISI_DIROMBAK. Ikut serta, voting
+   * tutup, detail, daftar, dan meja kompetisi yang sudah ada tetap jalan.
+   */
+  terimaPengajuanKompetisi?: boolean;
   /**
    * Usul fitur diteruskan ke database Notion pemilik (env NOTION_TOKEN dan NOTION_USULAN_DB, lihat
    * main.ts). Kosong = usulan hanya disimpan di database, lalu terkirim begitu Notion diatur dan server
@@ -795,6 +802,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       if (kali > (opsi.batasTulisKompetisiPerMenit ?? 30)) return json(429, { error: 'Pelan-pelan, Bos. Coba lagi semenit lagi.' });
       const isi = await bacaJson(req);
       if (!kode) {
+        if (opsi.terimaPengajuanKompetisi !== true) return json(503, { error: TEKS_KOMPETISI_DIROMBAK });
         // Pengajuan yang tercatat di sini tapi sudah jalan/batal tidak dihitung lagi.
         for (const [k] of pengajuKompetisi) if (penyimpan.status(k, sekarang) !== 'pengajuan') pengajuKompetisi.delete(k);
         const dariSini = [...pengajuKompetisi.values()].filter((j) => j === jaringan).length;

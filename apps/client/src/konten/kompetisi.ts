@@ -6,16 +6,28 @@ import {
   MIN_MAIN_KOMPETISI,
   MIN_PESERTA,
   NILAI_MAKS,
+  TEKS_KOMPETISI_DIROMBAK,
   teksNilai,
   type HasilKompetisiKursi,
   type MasaKompetisi,
   type StatusKompetisi,
 } from '@remi/meja';
 
+/**
+ * Kompetisi ditutup sementara (rilis 0.7.0): tombol beranda redup berlabel "Segera hadir", dan semua
+ * jalan masuk layar Kompetisi hanya memunculkan toast `dirombak`. Server juga menolak pengajuan baru.
+ * Kode, data, dan meja kompetisi yang sudah ada tetap utuh; buka lagi dengan mengubah ini ke true.
+ */
+export const KOMPETISI_DIBUKA = false;
+
 export const TEKS_KOMPETISI = {
   judul: 'Kompetisi',
   /** Tombol di panel Main online beranda. */
   tombolBeranda: 'Kompetisi',
+  /** Label kecil di tombol beranda selama kompetisi ditutup. */
+  segeraHadir: 'Segera hadir',
+  /** Toast selama kompetisi ditutup (teks yang sama dengan penolakan pengajuan di server). */
+  dirombak: TEKS_KOMPETISI_DIROMBAK,
   ajak: `Ajukan kompetisi, lalu ajak teman menekan Ikut serta. Begitu ${MIN_PESERTA} orang ikut, kompetisinya jalan.`,
   tombolAjukan: 'Ajukan kompetisi',
   judulAjukan: 'Ajukan kompetisi',

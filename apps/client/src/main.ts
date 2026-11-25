@@ -20,7 +20,7 @@ import {
   type StatusKoneksi,
 } from './koneksi';
 import { TEKS_KONEKSI, teksDijalankanWarga } from './konten/koneksi';
-import { TEKS_KOMPETISI } from './konten/kompetisi';
+import { KOMPETISI_DIBUKA, TEKS_KOMPETISI } from './konten/kompetisi';
 import { catatanDariView, kunciPermainan, simpan } from './penyimpanan';
 import { bangunkanGame, buatGame, tidurkanGame, type PenampungGame } from './game/game';
 import { KontrolMeja, masihGiliranku, type AppUntukMeja, type PesanHasilKompetisi } from './kontrolMeja';
@@ -963,6 +963,13 @@ class Aplikasi implements AppUntukMeja {
    * langsung ke detail kompetisi itu (Kembali ke kompetisi dari klasemen akhir, lobi yang dibubarkan).
    */
   private tampilkanKompetisi(kode?: string) {
+    // Kompetisi ditutup sementara (0.7.0): semua jalan masuk (beranda, kembali dari meja/lobi
+    // kompetisi, lobi yang dibubarkan) berakhir di beranda dengan kabar yang sama.
+    if (!KOMPETISI_DIBUKA) {
+      this.tampilkanBeranda();
+      toast(TEKS_KOMPETISI.dirombak);
+      return;
+    }
     this.layar = 'kompetisi';
     this.niatOnline = null;
     this.sembunyikanGame();

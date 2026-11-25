@@ -14,8 +14,6 @@ import {
   JEDA_TOLAK_LIHAT_MS,
   MAKS_LEDEK_PER_PUTARAN,
   MAKS_PESAN,
-  MIN_MAIN_KOMPETISI,
-  MIN_PESERTA,
   TENGGANG_SAMBUNG_MS,
 } from '@remi/meja';
 import { TEKS_KALDU } from './kaldu';
@@ -831,27 +829,8 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
     ],
   },
-  {
-    id: 'kompetisi',
-    judul: 'Kompetisi',
-    ikon: '🏅',
-    ringkas: 'Ikut kompetisi, nilai tiap permainan, dan juara.',
-    isi: [
-      {
-        t: 'paragraf',
-        teks: `Tekan **Kompetisi** di beranda untuk mengajukan kompetisi atau ikut serta. Kompetisi jalan begitu ${MIN_PESERTA} orang ikut; kalau 24 jam belum cukup, pengajuannya batal. Yang telat boleh ikut selama kompetisi masih jalan.`,
-      },
-      {
-        t: 'daftar',
-        butir: [
-          `Duduk dari daftar meja di layar kompetisi, atau buka meja baru. Meja mulai sendiri begitu semua kursi terisi peserta, tanpa warga kedai, aturannya ikut kompetisi, dan cuma sekali main. Di meja kompetisi tidak ada Akhiri permainan maupun ${TEKS_KALDU.tombol}: permainan selesai sendiri sesuai aturan kompetisinya.`,
-          'Nilai tiap permainan 0 sampai 10, dari banyaknya peserta di meja itu yang kalah skor darimu. Meja 4 orang: juara 10; kedua 6,7; ketiga 3,3; juru kunci 0. Skor sama tidak saling mengalahkan.',
-          'Keluar di tengah permainan = 0, dan yang keluar tidak dihitung sebagai lawan. Meja 4 orang dengan 1 yang keluar: juara 10; kedua 5; ketiga 0. Kalau cuma satu yang bertahan, permainan itu tidak dihitung untuknya, tapi yang keluar tetap dapat 0.',
-          `Klasemen diurutkan dari rata-rata nilai, mulai sesudah ${MIN_MAIN_KOMPETISI} kali main. Juaranya diumumkan sesudah meja terakhir selesai dan dapat 🏆 di samping namanya. Main dari HP yang dipakai waktu ikut serta, karena tiketmu tersimpan di situ.`,
-        ],
-      },
-    ],
-  },
+  // Bab "Kompetisi" dicabut selama kompetisi ditutup sementara (0.7.0, KOMPETISI_DIBUKA di
+  // konten/kompetisi.ts). Isinya ada di riwayat git kalau kompetisi dibuka lagi.
   {
     id: 'nonton',
     judul: 'Nonton',

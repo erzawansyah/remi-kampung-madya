@@ -433,6 +433,8 @@ describe('API dan meja kompetisi', () => {
       riwayat,
       log: () => undefined,
       maksPengajuanPerIp: 2,
+      // Uji endpoint pengajuan: dinyalakan khusus (bawaannya ditolak selama kompetisi dirombak).
+      terimaPengajuanKompetisi: true,
       jedaMulaiKompetisiMs: 30,
       jedaLanjutMs: 0,
       jedaBotMs: 5,

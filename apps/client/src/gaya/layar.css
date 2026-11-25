@@ -383,6 +383,16 @@ html[data-efek='hemat'] .kipas canvas {
   font-weight: 500;
   opacity: 0.85;
 }
+/* Kompetisi ditutup sementara: tombol redup + label kecil "Segera hadir" (konten/kompetisi.ts) */
+.tombol-segera .label-segera {
+  margin-left: var(--ruang-1);
+  padding: 1px var(--ruang-2);
+  border-radius: var(--radius-pil);
+  border: 1px solid var(--garis);
+  font-size: var(--teks-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
 .atur-meja > summary {
   font-weight: 650;
 }

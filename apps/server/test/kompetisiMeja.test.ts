@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { TEKS_KURSI_KOMPETISI_LEPAS, TENGGANG_SAMBUNG_MS, type InfoMeja, type Penjadwal } from '@remi/meja';
+import { TEKS_KOMPETISI_DIROMBAK, TEKS_KURSI_KOMPETISI_LEPAS, TENGGANG_SAMBUNG_MS, type InfoMeja, type Penjadwal } from '@remi/meja';
 import type { DetailKompetisi } from '../src/kompetisi.js';
 import { bukaRiwayat, type PenyimpanRiwayat } from '../src/riwayat.js';
 import { jalankanServer, type OpsiServer, type ServerRemi } from '../src/server.js';
@@ -107,9 +107,35 @@ async function duduk(port: number, meja: string, kompetisi: string, nama: string
   return { k, token: String(masuk.token), kursi: Number(masuk.kursi) };
 }
 
+describe('kompetisi dirombak (0.7.0): pengajuan baru ditolak, yang lain tetap jalan', () => {
+  it('bawaan: POST /api/kompetisi ditolak 503 dengan teksnya; daftar, detail, dan ikut serta tetap jalan', async () => {
+    const { alamat, riwayat } = await nyalakan();
+    const r = await fetch(`${alamat}/api/kompetisi`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ nama: 'Uji', masa: 'malam', pengaturan: {}, namaPengaju: 'Ani' }),
+    });
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: TEKS_KOMPETISI_DIROMBAK });
+    expect(riwayat.kompetisi.jumlahPengajuan(Date.now())).toBe(0);
+
+    // Pengajuan lama (dibuat sebelum ditutup) tetap bisa diikuti dan dilihat.
+    const a = riwayat.kompetisi.ajukan({ nama: 'Lama', masa: 'malam', pengaturan: {}, namaPengaju: 'Ani' }, Date.now());
+    const ikut = await fetch(`${alamat}/api/kompetisi/${a.kode}/ikut`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ nama: 'Budi' }),
+    });
+    expect(ikut.status).toBe(200);
+    expect((await fetch(`${alamat}/api/kompetisi/${a.kode}`)).status).toBe(200);
+    const daftar = (await (await fetch(`${alamat}/api/kompetisi`)).json()) as { kompetisi: unknown[] };
+    expect(daftar.kompetisi).toHaveLength(1);
+  });
+});
+
 describe('pengajuan lewat API', () => {
   it('batas putaran dan waktu per giliran hanya pilihan formulir; "tanpa batas" lewat angka besar atau 0 jatuh ke bawaan', async () => {
-    const { alamat } = await nyalakan({ maksPengajuanPerIp: 10 });
+    const { alamat } = await nyalakan({ maksPengajuanPerIp: 10, terimaPengajuanKompetisi: true });
     const ajukan = async (pengaturan: Record<string, unknown>) => {
       const r = await fetch(`${alamat}/api/kompetisi`, {
         method: 'POST',
