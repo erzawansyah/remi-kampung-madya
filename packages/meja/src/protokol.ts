@@ -358,8 +358,8 @@ export interface InfoMeja {
    */
   penonton?: { jumlah: number; minta?: PenontonKursi[]; melihat?: PenontonKursi[] };
   /**
-   * Meja sprint (keputusan pemilik 25 Nov 2026): satu pemain lawan tiga warga kedai, pengaturan
-   * dikunci (PENGATURAN_SPRINT). Hanya ada di meja sprint; aplikasi lama mengabaikannya.
+   * Meja sprint (keputusan pemilik 25 Nov 2026, diubah 26 Nov 2026): satu pemain lawan lima warga
+   * kedai tanpa batas putaran, pengaturan dikunci (PENGATURAN_SPRINT). Hanya ada di meja sprint; aplikasi lama mengabaikannya.
    */
   sprint?: true;
 }
@@ -485,7 +485,7 @@ export type PesanKlien =
   | { t: 'ledek'; ke: number; isi: string }
   | { t: 'mainLagi' }
   /**
-   * Sprint (keputusan pemilik 25 Nov 2026): buat meja sprint baru (satu percobaan) dan langsung main.
+   * Sprint (keputusan pemilik 25 Nov 2026): buat meja sprint baru dan langsung main.
    * Pengirim dapat `masuk` seperti biasa; aplikasi lama tidak mengirimnya.
    */
   | { t: 'sprint'; nama: string }
@@ -570,12 +570,6 @@ export type PesanServer =
       tidakDihitung?: 'keluar';
     }
   /**
-   * Sprint: hasil percobaan di meja ini sudah tercatat (dikirim server ke pemainnya, dan sekali lagi
-   * kalau ia tersambung kembali selama klasemen akhir masih tampil). `peringkatMinggu`: posisinya di
-   * papan sprint minggu ini sesudah percobaan ini (1 = teratas); null kalau tidak ketemu. Aplikasi lama
-   * mengabaikannya.
-   */
-  /**
    * Suara (0.9.0): siapa saja yang ikut obrolan suara meja ini (hanya nomor kursi, id anggota, dan
    * keadaan mic; tidak pernah alamat IP). `saya`: id anggota penerima, null kalau belum ikut. Dikirim ke
    * kursi manusia yang terhubung setiap anggota/kursi/mic berubah, tidak pernah ke penonton. Aplikasi
@@ -584,8 +578,15 @@ export type PesanServer =
   | { t: 'suara'; saya: number | null; anggota: AnggotaSuara[] }
   /** Suara: sinyal WebRTC dari anggota `dari` (id anggota), diteruskan meja apa adanya. */
   | { t: 'suaraSinyal'; dari: number; data: DataSinyalSuara }
+  /**
+   * Sprint (26 Nov 2026): putaran `putaran` meja ini sudah tercatat di papan (dikirim server ke pemainnya
+   * sesudah setiap putaran). Angkanya hasil putaran itu saja (mentung/kepentung 0 atau 1).
+   * `peringkatMinggu`: posisinya di papan sprint minggu ini sesudah putaran ini (1 = teratas); null kalau
+   * tidak ketemu. Aplikasi 0.8.0 (tanpa `putaran`) hanya memakainya di klasemen akhir, jadi mengabaikannya.
+   */
   | {
       t: 'sprintHasil';
+      putaran?: number;
       menang: boolean;
       skor: number;
       mentung: number;

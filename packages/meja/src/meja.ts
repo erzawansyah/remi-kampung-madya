@@ -60,7 +60,7 @@ import {
   type PengaturanKompetisi,
 } from './kompetisi.js';
 import { isiLedek, kunciNama, rapikanLevel, rapikanNama, validasiSinyalSuara } from './validasi.js';
-import { hasilSprint, JUMLAH_PUTARAN_SPRINT, LEVEL_SPRINT, NAMA_LAWAN_SPRINT, PENGATURAN_SPRINT, type HasilSprint } from './sprint.js';
+import { hasilPutaranSprint, LEVEL_SPRINT, NAMA_LAWAN_SPRINT, PENGATURAN_SPRINT, type HasilPutaranSprint } from './sprint.js';
 
 export interface Penjadwal {
   setel(ms: number, fn: () => void): unknown;
@@ -112,14 +112,29 @@ export interface KompetisiDataMeja extends KompetisiMeja {
   mulaiPada?: number;
 }
 
-/** Meja sprint (keputusan pemilik 25 Nov 2026): satu percobaan satu pemain lawan tiga warga kedai. */
+/**
+ * Meja sprint (keputusan pemilik 25 Nov 2026, diubah 26 Nov 2026): satu pemain lawan lima warga kedai,
+ * tanpa batas putaran; setiap putaran yang selesai dicatat server di papan.
+ */
 export interface SprintDataMeja {
-  /** Kapan percobaan dimulai (jam meja, ms epoch); bersama kode meja jadi penanda percobaannya. */
+  /** Kapan meja sprint dimulai (jam meja, ms epoch); bersama kode meja dan nomor putaran jadi penanda catatan. */
   mulaiPada: number;
   /** Kursi pemain sesudah urutan duduk diacak. */
   kursi: number;
-  /** Hasilnya sudah tercatat di server (tidak dicatat dua kali). Hanya ada kalau true. */
+  /**
+   * Hanya di simpanan meja sprint 0.8.0 (satu percobaan 5 putaran): percobaannya sudah tercatat sebagai
+   * satu baris lama, jadi putarannya tidak dicatat lagi. Meja sprint baru tidak pernah menulisnya.
+   */
   tercatat?: true;
+  /** Berapa putaran (dari awal) yang sudah dicatat server. Tidak ada = 0. */
+  putaranTercatat?: number;
+  /** Kapan tiap putaran selesai (jam meja, ms epoch), sejajar dengan riwayat; menentukan minggunya. */
+  waktuPutaran?: number[];
+  /**
+   * Pemain menekan Keluar: hanya putaran yang sudah selesai saat itu yang dihitung (putaran yang
+   * diteruskan warga kedai sesudahnya tidak). Tidak ada = belum keluar.
+   */
+  putaranSampai?: number;
 }
 
 /** Semua yang perlu disimpan supaya meja bisa dilanjutkan (JSON). */
@@ -247,6 +262,11 @@ export interface OpsiMeja {
   saatBerubah?: (data: DataMeja) => void;
   /** Dipanggil sekali saat permainan selesai, membawa klasemen akhir. */
   saatSelesai?: (ringkasan: RingkasanAkhir) => void;
+  /**
+   * Meja sprint: dipanggil setiap satu putaran selesai (sesudah saatBerubah), supaya server langsung
+   * mencatatnya di papan (catatanSprint).
+   */
+  saatPutaranSprint?: () => void;
   /**
    * Dipanggil setiap ada galat yang ditangkap meja di dalam timer (langkah warga kedai, batas waktu,
    * dll.). Meja tetap jalan; ini hanya untuk dicatat/dihitung. Kosong = console.error.
@@ -486,7 +506,7 @@ export class Meja {
   }
 
   /**
-   * Meja sprint baru (keputusan pemilik 25 Nov 2026): pemain + tiga warga kedai NAMA_LAWAN_SPRINT
+   * Meja sprint baru (keputusan pemilik 25 Nov 2026, 26 Nov 2026): pemain + lima warga kedai NAMA_LAWAN_SPRINT
    * level LEVEL_SPRINT (gaya mengikuti nama, #47), pengaturan PENGATURAN_SPRINT. Urutan duduk diacak
    * kalau meja diberi sumber acak (#62; yang dapat kursi pertama ngocok), pemain mendapat `masuk` di
    * kursi barunya, lalu permainan langsung dimulai.
@@ -540,12 +560,13 @@ export class Meja {
   }
 
   /**
-   * Sprint: hasil percobaan ini sudah dicatat server (supaya tidak dicatat dua kali, juga sesudah
-   * meja dipulihkan). Tidak menyiarkan apa pun.
+   * Sprint: `putaran` putaran pertama sudah dicatat server (supaya tidak dicatat lagi, juga sesudah meja
+   * dipulihkan; database juga menolak catatan kembar). Tidak menyiarkan apa pun.
    */
-  tandaiSprintTercatat(): void {
-    if (!this.d.sprint || this.d.sprint.tercatat) return;
-    this.d.sprint.tercatat = true;
+  tandaiSprintTercatat(putaran: number): void {
+    const s = this.d.sprint;
+    if (!s || (s.putaranTercatat ?? 0) >= putaran) return;
+    s.putaranTercatat = putaran;
     this.opsi.saatBerubah?.(this.d);
   }
 
@@ -760,6 +781,8 @@ export class Meja {
         this.d.kursi[i].keluar = true;
         // Di susun akhir yang mentung dan kepentung putaran ini sudah ketahuan, jadi ikut dihitung.
         this.d.kursi[i].keluarSesudahPutaran = g.riwayat.length + (g.status === 'susunAkhir' ? 1 : 0);
+        // Sprint: putaran yang belum selesai (juga susun akhir) tidak pernah dihitung.
+        if (this.d.sprint && this.d.sprint.kursi === i) this.d.sprint.putaranSampai = g.riwayat.length;
       }
     }
     this.putusSejak.delete(i);
@@ -1421,9 +1444,16 @@ export class Meja {
     }
     const idTerakhir = game.peristiwa.at(-1)?.id ?? 0;
     this.d.game = h.state;
+    // Sprint: catat kapan putaran selesai (minggu papannya), lalu server mencatatnya sesudah berubah().
+    const putaranSprint = !!this.d.sprint && h.state.riwayat.length > game.riwayat.length;
+    if (putaranSprint) {
+      const w = (this.d.sprint!.waktuPutaran ??= []);
+      while (w.length < h.state.riwayat.length) w.push(this.penjadwal.sekarang());
+    }
     if (h.state.status === 'putaranSelesai' && game.status !== 'putaranSelesai') this.mulaiJedaLanjut(h.state);
     else if (h.state.status !== 'putaranSelesai') this.jedaLanjut = null;
     this.berubah();
+    if (putaranSprint) this.opsi.saatPutaranSprint?.();
     if (game.status !== 'selesai' && h.state.status === 'selesai') {
       this.opsi.saatSelesai?.(
         buatRingkasanAkhir(this.d.kode, this.d.kursi, h.state, this.penjadwal.sekarang(), this.d.kompetisi?.kode, this.d.kompetisi?.mulaiPada),
@@ -2330,36 +2360,43 @@ export function ringkasanDitinggal(data: DataMeja, waktu: number): RingkasanAkhi
   return buatRingkasanAkhir(data.kode, data.kursi, migrasiState(data.game), waktu, k.kode, k.mulaiPada);
 }
 
-/** Satu percobaan sprint yang siap dicatat server. */
-export interface CatatanSprint extends HasilSprint {
-  /** Kode meja dan waktu mulainya: penanda percobaan (dicatat sekali). */
+/** Satu putaran sprint yang siap dicatat server. */
+export interface CatatanSprint extends HasilPutaranSprint {
+  /** Kode meja, waktu mulainya, dan nomor putaran: penanda catatan (dicatat sekali). */
   kode: string;
   mulaiPada: number;
   /** Nama pemain di kursinya. */
   nama: string;
-  /** Kapan dicatat (ms epoch). */
+  /** Kapan putarannya selesai (ms epoch): menentukan minggu papannya. */
   waktu: number;
 }
 
 /**
- * Catatan percobaan sprint dari data meja (selesai, atau ditinggal di tengah jalan: Keluar, meja dihapus,
- * atau simpanannya tidak dipulihkan). Null = bukan meja sprint, belum mulai, sudah tercatat, atau belum
- * ada putaran yang selesai: percobaan yang ditinggal sebelum putaran pertama selesai tidak dicatat sama
- * sekali (kalau dicatat skornya 0 dan mengalahkan setiap percobaan tuntas yang minus). `data` tidak diubah
- * (boleh data mentah dari simpanan).
+ * Putaran sprint yang sudah selesai tapi belum dicatat server (urut putaran), dari data meja. Kosong =
+ * bukan meja sprint, belum ada putaran yang selesai, atau semuanya sudah tercatat. Putaran yang belum
+ * selesai tidak pernah ikut; sesudah pemain Keluar, putaran yang diteruskan warga kedai juga tidak.
+ * `waktu` dipakai untuk putaran yang waktu selesainya tidak tercatat. `data` tidak diubah (boleh data
+ * mentah dari simpanan).
  */
-export function catatanSprint(data: DataMeja, waktu: number): CatatanSprint | null {
+export function catatanSprint(data: DataMeja, waktu: number): CatatanSprint[] {
   const s = data.sprint;
-  if (!s || s.tercatat || !data.game || !data.game.riwayat?.length) return null;
+  const riwayat = data.game?.riwayat;
+  // Simpanan meja sprint 0.8.0 yang percobaannya sudah tercatat sebagai satu baris lama.
+  if (!s || s.tercatat || !riwayat?.length) return [];
   const k = data.kursi[s.kursi];
-  if (!k) return null;
-  return { ...hasilSprint(migrasiState(data.game), s.kursi), kode: data.kode, mulaiPada: s.mulaiPada, nama: k.nama, waktu };
+  if (!k) return [];
+  const sampai = Math.min(riwayat.length, s.putaranSampai ?? Infinity);
+  const hasil: CatatanSprint[] = [];
+  for (let i = s.putaranTercatat ?? 0; i < sampai; i++) {
+    hasil.push({ ...hasilPutaranSprint(riwayat, i, s.kursi), kode: data.kode, mulaiPada: s.mulaiPada, nama: k.nama, waktu: s.waktuPutaran?.[i] ?? waktu });
+  }
+  return hasil;
 }
 
 /** Penolakan di meja sprint (aturannya dikunci). */
 export const TEKS_SPRINT_TERKUNCI = 'Aturan sprint udah dikunci, Bos. Yang bisa diganti cuma tempo warga kedai.';
-export const TEKS_SPRINT_TANPA_VOTING = `Sprint jalan terus sampai ${JUMLAH_PUTARAN_SPRINT} putaran, nggak pakai voting, Bos.`;
-export const TEKS_SPRINT_SEKALI_MAIN = 'Satu meja sprint cuma sekali main. Tekan "Sprint lagi" buat coba lagi, Bos.';
+export const TEKS_SPRINT_TANPA_VOTING = 'Sprint jalan terus sampai kamu Keluar, nggak pakai voting, Bos.';
+export const TEKS_SPRINT_SEKALI_MAIN = 'Meja sprint nggak pakai Main lagi. Buka Sprint di beranda buat meja baru, Bos.';
 
 /**
  * Cadangan terakhir kalau strategi warga kedai galat: aksi sah paling sederhana, dipilih dari view

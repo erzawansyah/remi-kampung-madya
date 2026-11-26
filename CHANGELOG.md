@@ -6,6 +6,16 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+### Untuk pemain
+
+#### Diubah
+
+- **Sprint** sekarang tanpa batas putaran, lawan lima warga kedai Suhu (Kipas Dua, Cak Kopag, Mbak Teras, Mas Sampul, Si Rak) pakai 2 deck, dan tiap putaran langsung masuk papan. Menang dihitung per putaran: skormu di putaran itu nggak kalah dari semua warga kedai (seri dihitung menang). Keluar kapan saja, putaran yang sudah selesai tetap tercatat.
+
+### Teknis
+
+- Sprint dicatat per putaran di tabel baru `sprint_putaran` (migrasi v8, unik per meja + nomor putaran, jadi restart dan sambung ulang tidak menggandakan); baris percobaan 0.8.0 di tabel `sprint` tetap dan ikut dijumlah. `GET /api/sprint` bentuknya sama; `sprintHasil` dikirim tiap putaran dengan field baru `putaran`. Keputusan dan tafsirannya di `docs/keputusan-pemilik.md` #65.
+
 ## [0.9.0] - 2026-11-25
 
 Ngobrol pakai suara di meja online. Aturan main tidak berubah.

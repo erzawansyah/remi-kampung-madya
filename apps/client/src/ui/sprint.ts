@@ -22,7 +22,7 @@ export interface PapanSprint {
 
 export interface AksiSprint {
   kembali(): void;
-  /** Mulai satu percobaan sprint (kirim {t:'sprint'} lewat jalur online yang sama dengan Buat meja). */
+  /** Mulai meja sprint baru (kirim {t:'sprint'} lewat jalur online yang sama dengan Buat meja). */
   main(): void;
 }
 

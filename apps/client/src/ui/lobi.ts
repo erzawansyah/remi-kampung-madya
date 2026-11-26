@@ -88,8 +88,8 @@ export interface KeadaanKeluar {
    */
   kompetisi?: boolean;
   /**
-   * Meja sprint (25 Nov 2026): keluar di tengah permainan = percobaannya berhenti, tetap dicatat dengan
-   * putaran yang sudah selesai (tidak dihitung menang); sebelum putaran pertama selesai tidak dicatat.
+   * Meja sprint (26 Nov 2026, tanpa batas putaran): keluar kapan saja; putaran yang sudah selesai sudah
+   * tercatat, putaran yang sedang jalan tidak dihitung.
    */
   sprint?: boolean;
 }
@@ -129,7 +129,7 @@ export function opsiKonfirmasiKeluar(k: KeadaanKeluar): OpsiKonfirmasi {
   if (k.sprint) {
     return k.selesai
       ? { judul: 'Keluar dari meja?', pesan: TEKS_SPRINT.keluarSelesai, ya: 'Keluar', tidak: 'Tetap di sini' }
-      : { judul: 'Keluar dari sprint?', pesan: TEKS_SPRINT.keluarMain, ya: 'Keluar', tidak: 'Lanjut main', bahaya: true };
+      : { judul: 'Udahan sprint-nya?', pesan: TEKS_SPRINT.keluarMain, ya: 'Keluar', tidak: 'Lanjut main' };
   }
   if (k.selesai) {
     return {
