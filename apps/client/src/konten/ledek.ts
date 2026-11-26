@@ -17,16 +17,27 @@ export const TEKS_LANJUT = {
 } as const;
 
 export const TEKS_LEDEK = {
+  /** Label baris kecil di kaki modal hasil, dan awal judul lembar: "Ledek Budi". */
   judul: 'Ledek',
-  petunjuk: 'Pilih orangnya, lalu ketuk ledekannya.',
-  /** aria-label deret pilihan sasaran. */
+  /** Ikon di depan nama pada baris Ledek. */
+  ikon: '😏',
+  /** Tombol "+N" kalau tidak semua nama muat dua baris; aria-label-nya "+3 yang lain". */
+  lainnya: 'yang lain',
+  /** aria-label deret pilihan sasaran di lembar. */
   pilihSasaran: 'Ledek siapa',
   /** aria-label deret isi ledekan. */
   pilihIsi: 'Pilih ledekan',
+  /** aria-label kisi emoji. */
+  emoji: 'Emoji',
+  tutup: 'Tutup',
+  /** Sesudah mengirim, di lembar: "Terkirim ke Budi." */
+  terkirim: 'Terkirim ke',
   /** Jatah ledekan putaran ini sudah habis (MAKS_LEDEK_PER_PUTARAN). */
   habis: 'Udah, cukup ngeledeknya. Lanjut main aja.',
   /** Judul kecil di atas ledekan besar: "<nama> ngeledek kamu". */
   ngeledekKamu: 'ngeledek kamu',
+  /** Tombol di ledekan besar: "Bales Budi". */
+  bales: 'Bales',
   /** Pembaca layar untuk ledekan ke orang lain: "<dari> ngeledek <ke>: <isi>". */
   ngeledek: 'ngeledek',
 } as const;

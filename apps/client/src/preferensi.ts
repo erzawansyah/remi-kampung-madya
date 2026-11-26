@@ -17,6 +17,8 @@ export interface Preferensi {
   musik: boolean;
   /** Volume musik latar, 0..1. */
   volumeMusik: number;
+  /** Volume suara teman di obrolan suara, 0..3 (linear, 1 = apa adanya, 2 = dua kali lipat). */
+  volumeSuara: number;
   /** Getar HP (Vibration API; tidak didukung di iPhone). */
   getar: boolean;
   /** Gerak: ikut setelan sistem (prefers-reduced-motion), penuh, atau dikurangi. */
@@ -38,6 +40,7 @@ export const PREFERENSI_BAWAAN: Readonly<Preferensi> = Object.freeze({
   volumeEfek: 0.8,
   musik: false,
   volumeMusik: 0.35,
+  volumeSuara: 2,
   getar: true,
   gerak: 'ikutSistem',
   kecepatan: 'normal',
@@ -63,6 +66,11 @@ const pilih = <T extends string>(nilai: unknown, daftar: readonly T[], bawaan: T
   typeof nilai === 'string' && (daftar as readonly string[]).includes(nilai) ? (nilai as T) : bawaan;
 const angka01 = (nilai: unknown, bawaan: number): number =>
   typeof nilai === 'number' && Number.isFinite(nilai) ? Math.min(1, Math.max(0, nilai)) : bawaan;
+/** Volume suara teman paling besar (300%). */
+export const MAKS_VOLUME_SUARA = 3;
+/** Angka 0..MAKS_VOLUME_SUARA, dibulatkan ke kelipatan 0,1 (langkah slider). */
+const angkaVolumeSuara = (nilai: unknown, bawaan: number): number =>
+  typeof nilai === 'number' && Number.isFinite(nilai) ? Math.round(Math.min(MAKS_VOLUME_SUARA, Math.max(0, nilai)) * 10) / 10 : bawaan;
 const bool = (nilai: unknown, bawaan: boolean): boolean => (typeof nilai === 'boolean' ? nilai : bawaan);
 
 /** Bersihkan data mentah dari penyimpanan supaya selalu jadi Preferensi yang sah. */
@@ -74,6 +82,7 @@ export function normalkan(mentah: unknown): Preferensi {
     volumeEfek: angka01(m.volumeEfek, b.volumeEfek),
     musik: bool(m.musik, b.musik),
     volumeMusik: angka01(m.volumeMusik, b.volumeMusik),
+    volumeSuara: angkaVolumeSuara(m.volumeSuara, b.volumeSuara),
     getar: bool(m.getar, b.getar),
     gerak: pilih(m.gerak, ['ikutSistem', 'penuh', 'kurang'] as const, b.gerak),
     kecepatan: pilih(m.kecepatan, ['santai', 'normal', 'cepat'] as const, b.kecepatan),

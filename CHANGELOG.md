@@ -6,6 +6,31 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.10.0] - 2026-11-26
+
+Ledek yang lebih ringkas, Sprint tanpa batas putaran, dan suara teman yang lebih keras. Aturan main biasa tidak berubah.
+
+### Untuk pemain
+
+#### Diubah
+
+- **Ledek** pindah ke baris kecil di bagian bawah hasil putaran; ketuk nama, pilih ledekannya. Ledekan yang kamu terima lebih gampang dibaca, dan bisa langsung dibales.
+- **Sprint** sekarang tanpa batas putaran: lawan lima warga kedai Suhu pakai 2 deck, tiap putaran langsung masuk papan, dan Menang dihitung per putaran (seri dihitung menang).
+- **Suara teman lebih keras**, juga waktu mic sendiri nyala. Di lembar Suara (tombol ▾ di samping mic) ada **Volume suara teman**, bawaannya 200% dan bisa sampai 300%, cuma berlaku di HP-mu. Selama ada yang ngomong, musik dan efek game ikut dikecilkan sebentar.
+
+#### Diperbaiki
+
+- Suara antara dua pemain yang sama-sama pakai data seluler tidak lagi ditolak server.
+
+### Teknis
+
+- Sprint dicatat per putaran di tabel baru `sprint_putaran` (migrasi v8, unik per meja + nomor putaran, jadi restart dan sambung ulang tidak menggandakan); baris percobaan 0.8.0 di tabel `sprint` tetap dan ikut dijumlah. `GET /api/sprint` bentuknya sama; `sprintHasil` dikirim tiap putaran dengan field baru `putaran`. Keputusan dan tafsirannya di `docs/keputusan-pemilik.md` #65.
+- coturn: alamat publik VPS sendiri sekarang diizinkan sebagai tujuan relay (`allowed-peer-ip` dari `TURN_PUBLIC_IP`), tidak lagi ditolak. Di 0.9.0 dua pemain yang sama-sama lewat relay ditolak coturn (`403 Forbidden IP`), jadi suaranya tidak pernah nyambung. Relay TCP tetap mati dan jaringan privat tetap ditolak. Nama lama `TURN_DENIED_IP` masih dibaca, jadi `.env` tidak perlu diubah; cukup buat ulang container coturn.
+- Suara teman lewat AudioContext bersama: sumber per orang → gain (0 = dibisukan) → `busSuara` (preferensi `volumeSuara` 0..3, bawaan 2) → kompresor suara (−24 dB, 4:1) → kompensasi makeup gain otomatis kompresor dan pembatas (×1/(3,038 × 1,217), jadi 100% = asli) → pembatas, tidak lewat master/bus efek. Elemen `<audio>` tetap diberi stream tapi dibisukan (syarat Chrome). Selama context belum jalan (tidur, iPhone di luar ketukan) `<audio>`-nya yang berbunyi, lalu pindah sendiri ke penguat saat `statechange` ke `running`; tanpa Web Audio tetap `<audio>` biasa dengan `volume` = `volumeSuara` (paling keras 1, 0% = diam). Musik diredam lewat node sendiri (`redamMusikNgomong`), jadi tidak membatalkan redaman efek besar; volume suara teman 0% tidak meredam apa pun. Pengukur mic memakai context yang sama (tidak ada AudioContext kedua). Saat teman ngomong musik diredam ke 0,15 dan seluruh bus efek ke 0,5 (node `redamEfek`, pemicunya hanya tingkat suara). iPhone: `navigator.audioSession.type` = `play-and-record` selama mic dibuka, `auto` sesudahnya. Pengirim (gain mic, bitrate) tidak berubah.
+- Ledek: baris sasaran di kaki modal hasil, lembar lewat `bukaDialog` (`ui/ledek.ts`, `konten/ledek.ts`).
+- Meja sprint tidak lagi membengkak selama main lama: tiap putaran baru, log dan peristiwa lama dibuang, dan kartu di riwayat hanya disimpan untuk 10 putaran terakhir (skor dan total tiap putaran tetap; `rampingkanGameSprint`). Tab Riwayat menampilkan nilai tanpa kartu untuk putaran yang lebih lama.
+- Sprint: simpanan meja ditulis langsung saat putaran selesai, sebelum putarannya masuk papan, supaya server yang mati mendadak tidak memainkan ulang putaran yang sudah tercatat. Kabar putaran terakhir disusun lagi dari data meja sesudah restart, jadi hasil putaran tidak tertahan di "Lagi dicatat di papan…". Meja sprint baru menulis `tercatat` supaya server versi sebelumnya (rollback) tidak mencatat ulang semua putarannya.
+
 ## [0.9.0] - 2026-11-25
 
 Ngobrol pakai suara di meja online. Aturan main tidak berubah.

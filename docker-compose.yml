@@ -40,8 +40,8 @@ services:
   # Server TURN untuk obrolan suara (opsional). Tidak ikut jalan kecuali dinyalakan dengan profil:
   #   docker compose --profile suara up -d
   # Wajib: TURN_SECRET di .env, port UDP/TCP 3478 dan UDP 49160-49200 dibuka di firewall VPS, dan
-  # TURN_DENIED_IP = alamat publik VPS (supaya relay tidak bisa menjangkau VPS sendiri). Opsional:
-  # TURN_REALM, TURN_EXTERNAL_IP (hanya VPS di balik NAT).
+  # TURN_PUBLIC_IP = alamat publik VPS (supaya relay antarpemain di VPS ini pasti diizinkan; nama lamanya
+  # TURN_DENIED_IP masih dibaca). Opsional: TURN_REALM, TURN_EXTERNAL_IP (hanya VPS di balik NAT).
   # Langkah lengkap: docs/deploy.md, "Suara dan TURN".
   coturn:
     image: coturn/coturn:4.6.3
@@ -61,6 +61,7 @@ services:
       # biasa tanpa TURN_SECRET tidak boleh gagal di sini (mulai.sh yang menolak jalan kalau kosong).
       - TURN_SECRET=${TURN_SECRET:-}
       - TURN_REALM=${TURN_REALM:-remi-madya}
+      - TURN_PUBLIC_IP=${TURN_PUBLIC_IP:-}
       - TURN_DENIED_IP=${TURN_DENIED_IP:-}
       - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
     logging:

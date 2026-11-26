@@ -133,7 +133,7 @@ Obrolan suara (0.9.0) di meja online memakai WebRTC: suaranya langsung antar-HP,
 - **Tanpa pengaturan apa pun:** hanya STUN publik (`stun:stun.l.google.com:19302`). Sering cukup di Wi-Fi rumah dan Wi-Fi kedai, tapi **di data seluler (CGNAT operator) sering gagal**: tombol mic tetap jalan, hanya saja suara teman di jaringan itu tidak nyambung ("suaranya belum nyambung" di lembar Suara). Game tidak terpengaruh.
 - **Dengan TURN:** suara yang tidak bisa langsung dilewatkan lewat relay di VPS. Kredensialnya dibuat server Remi per permintaan dengan skema REST coturn (username `kedaluwarsa:acak`, password HMAC-SHA1 dari rahasia bersama, berumur 4 jam; atur dengan `TURN_TTL` dalam detik), dan hanya diberikan ke HP yang ikut suara di meja online bersama paling sedikit satu pemain lain yang juga tersambung (membuat meja sendirian tidak cukup). Permintaan `/api/suara/ice` dibatasi 60 per jaringan per menit. Rahasianya tidak pernah ditulis ke log, dikirim ke HP, maupun dijadikan argumen perintah coturn (terlihat lewat `ps`): `coturn/mulai.sh` menulisnya ke berkas konfigurasi sementara yang hanya bisa dibaca coturn.
 
-Relay dibatasi untuk suara saja: relay TCP dimatikan (`no-tcp-relay`), jaringan privat/lokal ditolak, dan alamat publik VPS sendiri ditolak lewat `TURN_DENIED_IP`, supaya TURN tidak bisa dipakai untuk menjangkau SSH atau port lain di VPS.
+Relay dibatasi untuk suara saja: relay TCP dimatikan (`no-tcp-relay`, jadi SSH, web, dan port TCP lain di VPS tidak bisa dijangkau lewat relay) dan jaringan privat/lokal ditolak. Alamat publik VPS sendiri justru **diizinkan** (`allowed-peer-ip` dari `TURN_PUBLIC_IP`): kalau dua pemain sama-sama lewat relay (misalnya keduanya pakai data seluler), alamat relay lawannya adalah alamat VPS ini, dan kalau ditolak suaranya tidak pernah nyambung (`403 Forbidden IP`). Akibatnya port UDP di VPS bisa dijangkau lewat relay, jadi jangan menjalankan layanan UDP tanpa kata sandi di alamat publik VPS. Di 0.9.0 alamat ini masih ditolak (`TURN_DENIED_IP`); sejak 0.9.1 nama lama itu dibaca sebagai `TURN_PUBLIC_IP`, jadi `.env` lama tidak perlu diubah, cukup buat ulang container coturn (`docker compose --profile suara up -d --force-recreate --no-deps coturn`).
 
 Pemakaian bandwidth relay kira-kira 24 kbps per arah per pasangan pemain yang lewat TURN (mis. meja 4 orang yang semuanya lewat relay ±0,6 Mbps). Kalau sinyal HP lemah, aplikasi menurunkan bitrate sendiri (12 kbps) atau menjeda suaranya.
 
@@ -158,10 +158,10 @@ Pemakaian bandwidth relay kira-kira 24 kbps per arah per pasangan pemain yang le
    TURN_SECRET=isi_hasil_openssl_tadi
    TURN_URLS=turn:remi-madya.likrea.biz.id:3478?transport=udp,turn:remi-madya.likrea.biz.id:3478?transport=tcp
    # Alamat publik VPS (lihat `curl -4 ifconfig.me`; kalau punya IPv6 juga, tambahkan dipisah koma).
-   TURN_DENIED_IP=203.0.113.10
+   TURN_PUBLIC_IP=203.0.113.10
    ```
 
-   `TURN_DENIED_IP` mencegah relay dipakai untuk menjangkau VPS sendiri lewat alamat publiknya. Kalau kosong, coturn mencoba menebaknya sendiri saat mulai; kalau tebakan gagal, log coturn menulis `alamat publik VPS tidak diketahui`, dan sebaiknya diisi.
+   `TURN_PUBLIC_IP` memastikan relay antarpemain di VPS ini diizinkan (lihat di atas). Kalau kosong, coturn mencoba menebaknya sendiri saat mulai; kalau tebakan gagal, log coturn menulis `alamat publik VPS tidak diketahui`, dan sebaiknya diisi.
 
    Nama host di `TURN_URLS` harus mengarah ke IP VPS (domain yang sama dengan situs sudah benar kalau DNS-nya langsung ke VPS, bukan lewat proxy seperti Cloudflare oranye; kalau lewat proxy, pakai alamat IP VPS: `turn:203.0.113.10:3478?transport=udp,...`).
 3. Kalau VPS di balik NAT (alamat publiknya tidak terlihat di `ip addr`), tambahkan `TURN_EXTERNAL_IP=<alamat publik VPS>` di `.env`. VPS biasa tidak perlu.

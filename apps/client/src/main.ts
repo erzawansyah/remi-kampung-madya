@@ -7,7 +7,6 @@ import type { ViewPemain } from '@remi/engine';
 import { TEKS_KURSI_KOMPETISI_LEPAS, TEKS_LOBI_KOMPETISI_BUBAR, validasiObrolan, type InfoMeja, type InfoTontonan, type PengaturanMeja } from '@remi/meja';
 import { Obrolan } from './ui/obrolan';
 import { lingkunganBrowser, SuaraLangsung, type SambunganSuara } from './suaraLangsung';
-import { redamMusik } from './efek/musik';
 import { pasangPreferensi } from './preferensi';
 import {
   idAcak,
@@ -152,7 +151,7 @@ class Aplikasi implements AppUntukMeja {
    * saat keluar/pindah meja, ke beranda, mulai nonton, dan saat halaman ditutup.
    */
   readonly suara = new SuaraLangsung(
-    lingkunganBrowser({ toast: (pesan, salah) => toast(pesan, salah), umumkan: (pesan) => umumkan(pesan), redamMusik: () => redamMusik(0.35, 0.5) }),
+    lingkunganBrowser({ toast: (pesan, salah) => toast(pesan, salah), umumkan: (pesan) => umumkan(pesan) }),
     () => this.sambunganSuara(),
   );
   private game: PenampungGame | null = null;
@@ -182,7 +181,7 @@ class Aplikasi implements AppUntukMeja {
    * datang sebelum KontrolMeja siap (Phaser masih dimuat); dilupakan saat meninggalkan meja.
    */
   private hasilKompetisi: PesanHasilKompetisi | null = null;
-  /** Hasil sprint meja ini (pesan sprintHasil); sama seperti hasilKompetisi, bisa datang sebelum KontrolMeja siap. */
+  /** Kabar putaran sprint terakhir yang tercatat (pesan sprintHasil); bisa datang sebelum KontrolMeja siap. */
   private hasilSprint: PesanHasilSprint | null = null;
   /** Layar Sprint yang sedang terpasang (tombol Main sprint menunggu jawaban server). */
   private layarSprint: SprintTerpasang | null = null;
@@ -547,6 +546,8 @@ class Aplikasi implements AppUntukMeja {
     if (!ya || this.layar !== asal) return;
     // Keluar dari lobi kompetisi: kembali ke detail kompetisinya (daftar meja), bukan ke beranda.
     const kompetisi = asal === 'lobi' && !offline ? this.info?.kompetisi?.kode : undefined;
+    // Keluar dari meja sprint: ke papan sprint (putaran yang selesai sudah tercatat di sana).
+    if (!offline && this.info?.sprint === true) return this.tinggalkanSprint(true);
     if (!offline) this.kirim({ t: 'keluar' });
     this.keluarMeja(true, kompetisi);
   }
@@ -842,7 +843,7 @@ class Aplikasi implements AppUntukMeja {
         toast(p.alasan);
         return this.keluarTontonan();
       case 'sprintHasil':
-        // Hasil percobaan sprint yang sudah tercatat, tampil di klasemen akhir meja sprint.
+        // Satu putaran sprint sudah tercatat: tampil sebaris di hasil putaran meja sprint.
         if (this.tontonan) break;
         this.hasilSprint = p;
         this.kontrol?.terimaHasilSprint(p);
@@ -1149,9 +1150,8 @@ class Aplikasi implements AppUntukMeja {
   /**
    * Layar Sprint (25 Nov 2026): pembuka, Main sprint, dan papan sprint. Sprint hanya online; meja
    * sprintnya dibuat server lewat pesan {t:'sprint'} di jalur online yang sama dengan Buat meja.
-   * `langsungMain`: "Sprint lagi" dari klasemen akhir, percobaan baru langsung dikirim.
    */
-  private tampilkanSprint(langsungMain = false) {
+  private tampilkanSprint() {
     this.layar = 'sprint';
     this.niatOnline = null;
     this.sembunyikanGame();
@@ -1166,27 +1166,23 @@ class Aplikasi implements AppUntukMeja {
       main: () => this.mulaiSprint(),
     });
     this.pastikanJaga();
-    if (langsungMain) {
-      if (navigator.onLine === false) return toast(TEKS_SPRINT.butuhInternet, true);
-      this.layarSprint.aturSibuk(true);
-      this.mulaiSprint();
-    }
   }
 
-  /** Satu percobaan sprint baru: server membuat mejanya dan langsung memulai permainan. */
+  /** Meja sprint baru: server membuat mejanya dan langsung memulai permainan. */
   private mulaiSprint() {
     this.sesiDitendang = false;
     this.kirimOnline({ t: 'sprint', nama: simpan.nama() || 'Pemain' });
   }
 
   /**
-   * Klasemen akhir meja sprint: tinggalkan meja (hasilnya sudah tercatat; kursinya dilepas supaya meja
-   * yang sudah selesai langsung dibuang server), lalu "Sprint lagi" atau ke beranda. Kalau sinyal sedang
-   * putus, pesan keluar tidak dikirim: mejanya tetap dibuang server sesudah lama kosong.
+   * Tinggalkan meja sprint (Keluar dari menu atau Back, atau klasemen akhir meja sprint lama): putaran
+   * yang sudah selesai sudah tercatat; kursinya dilepas supaya server langsung membuang mejanya. Lalu ke
+   * papan sprint (`papan`) atau beranda. Kalau sinyal sedang putus, pesan keluar tidak dikirim: mejanya
+   * tetap dibuang server sesudah lama kosong, dan putaran yang sudah selesai tidak hilang.
    */
-  tinggalkanSprint(lagi: boolean) {
+  tinggalkanSprint(papan: boolean) {
     if (this.koneksi?.jenis === 'online' && this.koneksi.siapKirim()) this.koneksi.kirim({ t: 'keluar' });
-    this.keluarMeja(true, undefined, lagi);
+    this.keluarMeja(true, undefined, papan);
   }
 
   /** Klasemen akhir meja kompetisi: keluar dari meja, lalu buka detail kompetisinya. */
@@ -1228,9 +1224,9 @@ class Aplikasi implements AppUntukMeja {
 
   /**
    * Tinggalkan meja: ke beranda, ke detail kompetisi `kompetisi` (meja kompetisi, #51 versi 2), atau
-   * (`sprintLagi`) ke layar Sprint sambil langsung memulai percobaan baru.
+   * (`keSprint`) ke layar Sprint (papan sprint).
    */
-  keluarMeja(hapusSesi = true, kompetisi?: string, sprintLagi = false) {
+  keluarMeja(hapusSesi = true, kompetisi?: string, keSprint = false) {
     // Penonton (#60): "keluar" dari meja yang ditonton = kembali ke tontonan buangan.
     if (this.tontonan) return this.berhentiLihat();
     const takSampai = this.keluarTakSampai;
@@ -1248,7 +1244,7 @@ class Aplikasi implements AppUntukMeja {
     this.niatOnline = null;
     history.replaceState(history.state, '', location.pathname);
     if (kompetisi) this.tampilkanKompetisi(kompetisi);
-    else if (sprintLagi) this.tampilkanSprint(true);
+    else if (keSprint) this.tampilkanSprint();
     else this.tampilkanBeranda();
     if (takSampai) toast(PESAN_KELUAR_TAK_SAMPAI[takSampai], true, 9000);
   }

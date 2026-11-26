@@ -134,6 +134,7 @@ class PeerPalsu extends EventTarget {
 
 interface AudioPalsu {
   muted: boolean;
+  volume?: number;
   srcObject: unknown;
   dibuang: boolean;
   diputar: number;
@@ -270,7 +271,7 @@ function hp(meja: Meja, pemainId: string, antrian: [string, PesanServer][], ubah
 }
 
 /** Meja Ani (host), Budi, Cici + satu warga kedai; tiap HP menerima pesan suara lewat antrian. */
-function meja3() {
+function meja3(ubahAni: Partial<LingkunganSuara> = {}) {
   const antrian: [string, PesanServer][] = [];
   const meja = Meja.buat(
     { kode: 'ABCDE', kirim: (id, p) => (p.t === 'suara' || p.t === 'suaraSinyal') && antrian.push([id, p]), namaLawan: ['Warga A'] },
@@ -281,7 +282,7 @@ function meja3() {
   meja.masuk('budi', 'Budi');
   meja.masuk('cici', 'Cici');
   meja.terima('ani', { t: 'aturKursi', kursi: 3, jenis: 'bot' });
-  const ani = hp(meja, 'ani', antrian);
+  const ani = hp(meja, 'ani', antrian, ubahAni);
   const budi = hp(meja, 'budi', antrian);
   const cici = hp(meja, 'cici', antrian);
   const ke = { ani, budi, cici } as Record<string, ReturnType<typeof hp>>;
@@ -869,5 +870,203 @@ describe('SuaraLangsung: sinyal hilang dan sambung ulang', () => {
     await m.alirkan();
     expect(m.budi.peers.filter((p) => !p.ditutup)).toHaveLength(1);
     expect(m.budi.terkirim.some((p) => p.t === 'suaraSinyal')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Penguat suara teman (0.10.0): jalur Web Audio per orang, cadangan <audio>, sesi audio iOS
+
+describe('SuaraLangsung: penguat suara teman', () => {
+  /** Jalur palsu: mencatat gain terakhir dan apakah sudah ditutup; `jalan` = context sedang jalan. */
+  function pasangJalur(h: ReturnType<typeof hp>, bisa = true, jalan = true) {
+    const jalur: { stream: unknown; gain: number | null; tutup: number; jalan: boolean; berubah: () => void }[] = [];
+    h.env.sambungSuara = vi.fn((stream: MediaStream, saatBerubah: () => void) => {
+      if (!bisa) return null;
+      const j = { stream: stream as unknown, gain: null as number | null, tutup: 0, jalan, berubah: saatBerubah };
+      jalur.push(j);
+      return {
+        aturGain: (g: number) => {
+          j.gain = g;
+        },
+        aktif: () => j.jalan && j.tutup === 0,
+        tutup: () => {
+          j.tutup++;
+        },
+      };
+    });
+    return jalur;
+  }
+
+  async function siap(bisa = true, jalan = true) {
+    const m = meja3();
+    const jalur = pasangJalur(m.ani, bisa, jalan);
+    m.ani.masuk();
+    m.budi.masuk();
+    m.cici.masuk();
+    await m.alirkan();
+    await m.budi.suara.ketukMic();
+    await m.cici.suara.ketukMic();
+    await m.alirkan();
+    for (const p of PeerPalsu.semua) p.sambung();
+    await m.alirkan();
+    return { ...m, jalur };
+  }
+
+  it('Web Audio tersedia: suara tiap teman lewat gain, <audio> tetap diberi stream tapi dibisukan', async () => {
+    const { ani, jalur } = await siap();
+    expect(jalur).toHaveLength(2);
+    expect(ani.audio).toHaveLength(2);
+    // Stream yang sama masuk ke <audio> (syarat Chrome) dan ke jalur penguat.
+    expect(ani.audio.map((a) => a.srcObject)).toEqual(jalur.map((j) => j.stream));
+    expect(ani.audio.every((a) => a.muted)).toBe(true);
+    expect(jalur.map((j) => j.gain)).toEqual([1, 1]);
+  });
+
+  it('bisukan satu orang dan Dengar suara mati lewat gain 0 (bukan audio.muted), lalu kembali 1', async () => {
+    const { ani, jalur } = await siap();
+    ani.suara.aturBisu('budi', true);
+    expect(jalur.map((j) => j.gain).sort()).toEqual([0, 1]);
+    expect(ani.audio.every((a) => a.muted)).toBe(true);
+    ani.suara.aturBisu('Budi', false);
+    expect(jalur.map((j) => j.gain)).toEqual([1, 1]);
+    ani.suara.aturDengar(false);
+    expect(jalur.map((j) => j.gain)).toEqual([0, 0]);
+    ani.suara.aturDengar(true);
+    expect(jalur.map((j) => j.gain)).toEqual([1, 1]);
+  });
+
+  it('teman yang dibisukan tidak meredam musik/efek walau terdengar ngomong', async () => {
+    const { ani } = await siap();
+    ani.suara.aturDengar(false);
+    const rx = ani.peers[0]!.getReceivers()[0]!;
+    rx.level = 0.3;
+    rx.waktu = jam;
+    ani.suara.ukurLevel();
+    expect(ani.redamMusik).not.toHaveBeenCalled();
+    ani.suara.aturDengar(true);
+    jam += 100;
+    rx.waktu = jam;
+    ani.suara.ukurLevel();
+    expect(ani.redamMusik).toHaveBeenCalled();
+  });
+
+  it('tanpa Web Audio (sambungSuara null): cadangan <audio> biasa, tidak dibisukan, bisu lewat audio.muted', async () => {
+    const { ani, jalur } = await siap(false);
+    expect(jalur).toHaveLength(0);
+    expect(ani.env.sambungSuara).toHaveBeenCalledTimes(2);
+    expect(ani.audio.every((a) => !a.muted && a.srcObject)).toBe(true);
+    ani.suara.aturDengar(false);
+    expect(ani.audio.every((a) => a.muted)).toBe(true);
+  });
+
+  it('context masih tidur saat suara datang: <audio> yang berbunyi (gain 0), lalu pindah ke penguat begitu context jalan', async () => {
+    const { ani, jalur } = await siap(true, false);
+    expect(jalur).toHaveLength(2);
+    expect(ani.audio.every((a) => !a.muted)).toBe(true);
+    expect(jalur.map((j) => j.gain)).toEqual([0, 0]);
+    // Context jalan (statechange): <audio> dibisukan, suara lewat gain.
+    for (const j of jalur) j.jalan = true;
+    jalur[0]!.berubah();
+    expect(ani.audio.every((a) => a.muted)).toBe(true);
+    expect(jalur.map((j) => j.gain)).toEqual([1, 1]);
+    // Tidur lagi (iOS interrupted): kembali ke <audio>.
+    for (const j of jalur) j.jalan = false;
+    jalur[1]!.berubah();
+    expect(ani.audio.every((a) => !a.muted)).toBe(true);
+    expect(jalur.map((j) => j.gain)).toEqual([0, 0]);
+  });
+
+  it('cadangan <audio>: volume suara teman dipakai (paling keras 100%, 0% = diam) dan ikut berubah', async () => {
+    let vol = 2;
+    let ubahVol: (() => void) | null = null;
+    // Pendengar volume dipasang di konstruktor, jadi env-nya diisi sebelum pengelola dibuat.
+    const m = meja3({
+      sambungSuara: () => null,
+      volumeSuara: () => vol,
+      saatVolumeBerubah: (fn) => {
+        ubahVol = fn;
+        return () => undefined;
+      },
+    });
+    m.ani.masuk();
+    m.budi.masuk();
+    await m.alirkan();
+    await m.budi.suara.ketukMic();
+    await m.alirkan();
+    expect(m.ani.audio).toHaveLength(1);
+    expect(m.ani.audio[0]!.volume).toBe(1);
+    vol = 0.4;
+    ubahVol!();
+    expect(m.ani.audio[0]!.volume).toBe(0.4);
+    vol = 0;
+    ubahVol!();
+    expect(m.ani.audio[0]!.volume).toBe(0);
+  });
+
+  it('volume suara teman 0%: teman ngomong tidak meredam musik/efek', async () => {
+    const { ani } = await siap();
+    let vol = 0;
+    ani.env.volumeSuara = () => vol;
+    const rx = ani.peers[0]!.getReceivers()[0]!;
+    rx.level = 0.3;
+    rx.waktu = jam;
+    ani.suara.ukurLevel();
+    expect(ani.redamMusik).not.toHaveBeenCalled();
+    vol = 0.1;
+    jam += 100;
+    rx.waktu = jam;
+    ani.suara.ukurLevel();
+    expect(ani.redamMusik).toHaveBeenCalled();
+  });
+
+  it('sambungSuara melempar galat: tetap jatuh ke <audio> biasa', async () => {
+    const m = meja3();
+    m.ani.env.sambungSuara = () => {
+      throw new Error('createMediaStreamSource gagal');
+    };
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    m.ani.masuk();
+    m.budi.masuk();
+    await m.alirkan();
+    await m.budi.suara.ketukMic();
+    await m.alirkan();
+    expect(m.ani.audio).toHaveLength(1);
+    expect(m.ani.audio[0]!.muted).toBe(false);
+    expect(m.ani.audio[0]!.srcObject).toBeTruthy();
+    expect(err).toHaveBeenCalled();
+  });
+
+  it('peer ditutup, keluar meja, dan jeda sinyal: semua jalur ditutup', async () => {
+    const { ani, jalur } = await siap();
+    ani.suara.hentikan();
+    expect(jalur.every((j) => j.tutup >= 1)).toBe(true);
+    expect(ani.audio.every((a) => a.dibuang && a.srcObject === null)).toBe(true);
+  });
+
+  it('sesi audio iOS: play-and-record sebelum mic dibuka, kembali saat mic dimatikan, ditolak, atau keluar', async () => {
+    const m = meja3();
+    const sesi: boolean[] = [];
+    m.ani.env.aturSesiAudio = (mic) => sesi.push(mic);
+    const minta = m.ani.env.getUserMedia as ReturnType<typeof vi.fn>;
+    m.ani.masuk();
+    m.budi.masuk();
+    await m.alirkan();
+    // Urutan: sesi diatur dulu, baru getUserMedia.
+    minta.mockImplementationOnce(async () => {
+      expect(sesi).toEqual([true]);
+      return new StreamPalsu([new TrackPalsu()]) as unknown as MediaStream;
+    });
+    await m.ani.suara.ketukMic();
+    expect(sesi).toEqual([true]);
+    await m.ani.suara.ketukMic();
+    expect(sesi).toEqual([true, false]);
+    // Izin ditolak: sesi dikembalikan.
+    minta.mockRejectedValueOnce(Object.assign(new Error('x'), { name: 'NotAllowedError' }));
+    await m.ani.suara.ketukMic();
+    expect(sesi).toEqual([true, false, true, false]);
+    // Keluar meja dengan mic nyala.
+    await m.ani.suara.ketukMic();
+    m.ani.suara.hentikan();
+    expect(sesi).toEqual([true, false, true, false, true, false]);
   });
 });

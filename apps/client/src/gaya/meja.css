@@ -1142,45 +1142,138 @@ html[data-gerak='kurang'] .status-koneksi .titik {
   flex-wrap: wrap;
 }
 
-/* ---------- Hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 Okt 2026) ----------
-   .wadah-ledek > .bagian-ledek: bagian "Ledek" di modal hasil (ui/ledek.ts htmlLedek); kosong = disembunyikan.
-   Namanya sengaja bukan ".ledek": kelas itu dipakai gelembung ledekan (.gelembung.ledek), dan aturan
-   panel ini akan menimpa latar krem gelembungnya.
+/* ---------- Hasil putaran online: jeda lanjut dan ledekan (keputusan pemilik, 24 Okt 2026; tata baru 26 Nov 2026) ----------
+   .wadah-ledek > .baris-ledek: baris kecil "Ledek 😏 Nama" di kaki modal hasil, di atas Siap (ui/ledek.ts
+   htmlBarisLedek); kosong = disembunyikan. Nama turun ke baris berikut (tidak pernah digeser ke samping),
+   paling banyak dua baris (sisanya jadi "+N", rapikanBarisLedek).
+   .lembar-ledek: lembar dari bawah lewat bukaDialog (di atas modal hasil), isinya ledekan + emoji.
+   Nama kelas sengaja bukan ".ledek": kelas itu dipakai gelembung ledekan (.gelembung.ledek), dan aturan
+   panel di sini akan menimpa latar krem gelembungnya.
    #lapisan-ledek: lapisan tetap di atas modal hasil (di bawah dialog dan toast), di luar #ui/#modal
    yang dibuat inert selama ada jendela. Isinya .ledek-besar (ledekan untukku, ketuk untuk menutup)
-   dan .gelembung.ledek (ledekan ke orang lain, di kursi pengirimnya). */
+   dan .gelembung.ledek (ledekan ke orang lain, di kursi pengirimnya). Selama lembar Ledek terbuka,
+   ledekan besar untukku menunggu sampai lembarnya ditutup (kontrolMeja, LedekBesar `tahan`). */
 .wadah-ledek:empty {
   display: none;
 }
-.bagian-ledek {
+.kaki-dialog > .wadah-ledek {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding-bottom: var(--ruang-2);
+  border-bottom: 1px solid var(--garis);
+}
+.baris-ledek {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--ruang-2);
+  min-width: 0;
+}
+.label-ledek {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--teks-lg);
+  margin-right: 2px;
+}
+.baris-ledek .habis-ledek {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+button.chip-ledek {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(11rem, 100%);
+  min-height: var(--sentuh);
+  padding: 6px 14px 6px 10px;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: var(--teks-sm);
+}
+button.chip-ledek[hidden] {
+  display: none;
+}
+.chip-ledek .ikon-ledek {
+  flex: none;
+  font-size: 1.15em;
+}
+.chip-ledek .nama-ledek {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.chip-ledek.lebih-ledek {
+  padding-inline: 14px;
+}
+
+/* Lembar Ledek: menempel di bawah layar, paling tinggi ±65% layar. Judul, ✕, dan baris status tetap
+   terlihat; hanya isinya ([data-lembar-isi]) yang digulir. */
+.latar.latar-lembar {
+  align-items: flex-end;
+  padding: calc(var(--ruang-4) + var(--aman-atas)) var(--aman-kanan) 0 var(--aman-kiri);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: rgba(3, 12, 7, 0.6);
+}
+.dialog.lembar-ledek {
+  width: min(36rem, 100%);
+  max-height: min(65vh, 100%);
+  max-height: min(65dvh, 100%);
+  padding: var(--ruang-3) var(--ruang-4) calc(var(--ruang-4) + var(--aman-bawah));
+  gap: var(--ruang-2);
+  border-bottom: 0;
+  border-radius: var(--radius-besar) var(--radius-besar) 0 0;
+  overflow: hidden;
+  animation: lembar-naik var(--durasi-sedang) var(--ease-keluar);
+}
+.lembar-ledek .kepala-lembar-ledek h2 {
+  margin: 0;
+  font-size: var(--teks-xl);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lembar-ledek .status-ledek {
+  margin: 0;
+  min-height: 1.3em;
+  font-size: var(--teks-sm);
+  font-weight: 650;
+  color: var(--positif);
+}
+.dialog.lembar-ledek > .isi-lembar-ledek {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Ruang untuk cincin fokus tombol di tepi wadah gulir. */
+  margin-inline: -4px;
+  padding: 2px 4px;
+}
+.isi-lembar-ledek {
   display: flex;
   flex-direction: column;
   gap: var(--ruang-2);
-  padding: var(--ruang-3);
-  border: 1px solid var(--garis);
-  border-radius: var(--radius-besar);
-  background: rgba(0, 0, 0, 0.18);
 }
-.bagian-ledek .judul-ledek {
-  margin: 0;
-  font-size: var(--teks-lg);
-}
+/* Pilihan sasaran: segmen (track gelap, nama terpilih emas), beda dari tombol ledekan di bawahnya. */
 .ledek-sasaran.segmen {
-  display: flex;
   flex-wrap: wrap;
-  align-self: stretch;
+  margin-bottom: var(--ruang-1);
 }
 .ledek-sasaran.segmen > button {
   flex: 1 1 auto;
-  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ledek-kata {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 .ledek-kata button {
-  flex: 1 1 auto;
+  min-width: 0;
   min-height: var(--sentuh);
   padding-inline: var(--ruang-2);
   font-size: var(--teks-sm);
@@ -1189,7 +1282,7 @@ html[data-gerak='kurang'] .status-koneksi .titik {
 .ledek-emoji {
   display: grid;
   /* minmax(0, 1fr): kolom tidak melebar mengikuti isi (meluber di HP sempit). */
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
 }
 .ledek-emoji button {
@@ -1198,10 +1291,15 @@ html[data-gerak='kurang'] .status-koneksi .titik {
   padding: var(--ruang-1) 0;
   font-size: 1.375rem;
 }
-@media (max-width: 480px) {
-  .ledek-emoji {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
+/* Baru terkirim: tanda ✓ kecil di pojok tombolnya, selama tombol dikunci. */
+.isi-lembar-ledek button.terkirim::after {
+  content: '✓';
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--positif);
 }
 
 #lapisan-ledek {
@@ -1210,6 +1308,7 @@ html[data-gerak='kurang'] .status-koneksi .titik {
   z-index: var(--z-ledek);
   pointer-events: none;
 }
+/* Ledekan besar untukku: tirai gelap rata (tanpa blur, ringan di HP lemah), pil nama, teks kuning bergaris. */
 .ledek-besar {
   position: absolute;
   inset: 0;
@@ -1220,39 +1319,73 @@ html[data-gerak='kurang'] .status-koneksi .titik {
     calc(var(--ruang-4) + var(--aman-bawah)) calc(var(--ruang-4) + var(--aman-kiri));
   pointer-events: auto;
   cursor: pointer;
-  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.45) 50%, rgba(0, 0, 0, 0.12) 85%);
+  background: rgba(2, 8, 5, 0.74);
 }
 .ledek-kotak {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ruang-3);
   max-width: min(92vw, 36rem);
   text-align: center;
   animation: ledek-masuk var(--durasi, 2500ms) var(--ease-pegas) forwards;
 }
 .ledek-dari {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ruang-2);
+  max-width: 100%;
   margin: 0;
-  font-weight: 800;
-  font-size: clamp(1rem, 4.6vw, 1.5rem);
+  padding: 5px 16px 5px 5px;
+  font-size: clamp(0.95rem, 4.2vw, 1.2rem);
   color: var(--krem);
-  text-shadow: 0 2px 4px #000;
+  background: rgba(10, 30, 18, 0.94);
+  border: 1px solid var(--garis-kuat);
+  border-radius: 999px;
+  box-shadow: var(--bayangan-2, 0 4px 12px rgba(0, 0, 0, 0.5));
   overflow-wrap: anywhere;
 }
+.ledek-dari-teks {
+  min-width: 0;
+  text-align: left;
+}
+.ledek-dari b {
+  font-weight: 800;
+}
+.ledek-inisial {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2em;
+  height: 2em;
+  border-radius: 50%;
+  font-weight: 800;
+  color: #241600;
+  background: var(--emas);
+}
 .ledek-isi {
-  margin: var(--ruang-2) 0 0;
+  margin: 0;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: clamp(2.25rem, 11vw, 4.5rem);
   line-height: 1.05;
   color: var(--sorak-emas);
-  -webkit-text-stroke: 2px rgba(0, 0, 0, 0.55);
+  -webkit-text-stroke: 7px #241600;
   paint-order: stroke fill;
-  text-shadow:
-    0 4px 0 rgba(0, 0, 0, 0.45),
-    0 0 28px rgba(255, 196, 0, 0.75);
+  text-shadow: 0 5px 0 rgba(0, 0, 0, 0.5);
   overflow-wrap: anywhere;
 }
 .ledek-isi.emoji {
   font-size: clamp(4.5rem, 26vw, 8rem);
   -webkit-text-stroke: 0;
   text-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+}
+button.bales-ledek {
+  margin-top: var(--ruang-2);
+  padding-inline: var(--ruang-5);
+  border-radius: 999px;
+  background: rgba(10, 30, 18, 0.94);
+  border-color: var(--garis-kuat);
 }
 /* Gelembung ledekan ke orang lain: sama dengan gelembung emote, di lapisan ledekan (di atas modal). */
 .gelembung.ledek {

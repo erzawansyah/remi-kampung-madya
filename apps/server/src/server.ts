@@ -8,6 +8,7 @@ import sirv from 'sirv';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   catatanSprint,
+  catatanSprintTerakhir,
   dataMejaDipulihkan,
   GalatMeja,
   hasilKompetisiMeja,
@@ -686,49 +687,78 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     tetapkanJuara();
   };
 
+  /** Pesan sprintHasil untuk satu putaran yang sudah tercatat, plus peringkat minggu ini pemainnya. */
+  const pesanHasilSprint = (kode: string, c: CatatanSprint): PesanServer => {
+    let peringkatMinggu: number | null = null;
+    try {
+      peringkatMinggu = opsi.riwayat?.sprint.peringkatMinggu(c.nama, jam()) ?? null;
+    } catch (e) {
+      log(`galat membaca papan sprint untuk meja ${kode}`, e);
+    }
+    return {
+      t: 'sprintHasil',
+      putaran: c.putaran,
+      menang: c.menang,
+      skor: c.skor,
+      mentung: c.mentung,
+      kepentung: c.kepentung,
+      peringkatMinggu,
+    };
+  };
+
   /**
-   * Sprint (25 Nov 2026): catat percobaan di meja sprint `kode` (selesai, atau ditinggal: Keluar, meja
-   * dihapus, simpanannya tidak dipulihkan). Percobaan yang sama tidak pernah tercatat dua kali (kode meja
-   * + waktu mulai). `meja` (kalau masih hidup) ditandai tercatat, dan pemainnya yang masih terhubung
-   * dikabari lewat `sprintHasil`. True = beres (tidak ada yang perlu dicatat, atau sudah tercatat);
-   * false = galat database, coba lagi nanti (mejanya jangan dibuang).
+   * Sprint (26 Nov 2026, tanpa batas putaran): catat putaran meja sprint `kode` yang sudah selesai tapi
+   * belum tercatat (sesudah setiap putaran, saat Keluar, meja dihapus, meja dipulihkan, atau simpanannya
+   * tidak dipulihkan). Putaran yang sama tidak pernah tercatat dua kali (kode meja + waktu mulai + nomor
+   * putaran). `meja` (kalau masih hidup) ditandai tercatat, dan pemainnya yang masih terhubung dikabari
+   * putaran terakhirnya lewat `sprintHasil`. `waktu` hanya untuk putaran yang waktu selesainya tidak ada
+   * di data (simpanan 0.8.0). True = beres (tidak ada yang perlu dicatat, atau sudah tercatat); false =
+   * galat database, coba lagi nanti (mejanya jangan dibuang).
    */
   const catatSprint = (kode: string, data: DataMeja, waktu = jam(), meja?: Meja): boolean => {
     const penyimpan = opsi.riwayat?.sprint;
     if (!penyimpan) return true;
-    let c: CatatanSprint | null;
+    let cs: CatatanSprint[];
     try {
-      c = catatanSprint(data, waktu);
+      cs = catatanSprint(data, waktu);
     } catch (e) {
       log(`galat meringkas sprint meja ${kode}`, e);
       return true;
     }
-    if (!c) return true;
+    const c = cs.at(-1);
+    if (!c) {
+      // Tidak ada yang baru (misalnya semua sudah tercatat sebelum restart): kabar putaran terakhir yang
+      // tercatat disusun lagi dari data meja, supaya pemain yang tersambung kembali tidak tertahan di
+      // "Lagi dicatat di papan…" (kabarnya hanya di memori).
+      if (meja && !hasilKompetisiTerakhir.has(kode)) {
+        try {
+          const terakhir = catatanSprintTerakhir(data);
+          if (terakhir) hasilKompetisiTerakhir.set(kode, pesanHasilSprint(kode, terakhir));
+        } catch (e) {
+          log(`galat menyusun kabar sprint meja ${kode}`, e);
+        }
+      }
+      return true;
+    }
+    let baru = 0;
     try {
-      const baru = penyimpan.catat(c);
-      log(
-        !baru
-          ? `sprint meja ${kode} sudah tercatat sebelumnya`
-          : c.selesai
-            ? `sprint meja ${kode} dicatat (${c.menang ? 'menang' : 'kalah'})`
-            : `sprint meja ${kode} dicatat (ditinggal sesudah ${c.putaran} putaran)`,
-      );
+      for (const x of cs) if (penyimpan.catat(x)) baru++;
     } catch (e) {
       log(`galat mencatat sprint meja ${kode} (dicoba lagi nanti)`, e);
       return false;
     }
+    const nomor = cs.length > 1 ? `${cs[0].putaran}–${c.putaran}` : `${c.putaran}`;
+    log(
+      baru === cs.length
+        ? `sprint meja ${kode} putaran ${nomor} dicatat`
+        : `sprint meja ${kode} putaran ${nomor} dicatat (${cs.length - baru} sudah tercatat sebelumnya)`,
+    );
     if (!meja) return true;
     try {
-      meja.tandaiSprintTercatat();
-      let peringkatMinggu: number | null = null;
-      try {
-        peringkatMinggu = penyimpan.peringkatMinggu(c.nama, waktu);
-      } catch (e) {
-        log(`galat membaca papan sprint untuk meja ${kode}`, e);
-      }
-      const pesan: PesanServer = { t: 'sprintHasil', menang: c.menang, skor: c.skor, mentung: c.mentung, kepentung: c.kepentung, peringkatMinggu };
-      // Dikirim lagi ke pemain yang tersambung kembali selama klasemen akhir masih tampil (lihat gabung).
-      if (c.selesai) hasilKompetisiTerakhir.set(kode, pesan);
+      meja.tandaiSprintTercatat(c.putaran);
+      const pesan = pesanHasilSprint(kode, c);
+      // Dikirim lagi ke pemain yang tersambung kembali (lihat gabung).
+      hasilKompetisiTerakhir.set(kode, pesan);
       meja.kabariManusia(pesan);
     } catch (e) {
       log(`galat mengabarkan hasil sprint meja ${kode}`, e);
@@ -737,8 +767,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   };
 
   /**
-   * Meja sprint tanpa kursi manusia lagi (pemainnya menekan Keluar): percobaannya dicatat (ditinggal,
-   * kalau belum selesai), lalu mejanya dihapus. Gagal mencatat = mejanya dibiarkan dan pembersih mencoba
+   * Meja sprint tanpa kursi manusia lagi (pemainnya menekan Keluar): putaran yang sudah selesai dan
+   * belum tercatat dicatat, lalu mejanya dihapus. Gagal mencatat = mejanya dibiarkan dan pembersih mencoba
    * lagi tiap 30 detik.
    */
   const tutupSprintDitinggal = (kode: string) => {
@@ -1106,8 +1136,23 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     namaLawan: namaLawanAcak(),
     // Disimpan ke database (tertunda sebentar) supaya meja selamat dari restart/deploy.
     saatBerubah: (data: DataMeja) => simpanNanti(kode, data),
+    // Meja sprint: setiap putaran yang selesai langsung dicatat di papan.
+    saatPutaranSprint: () => {
+      const meja = daftarMeja.get(kode);
+      if (!meja?.sprint) return;
+      const data = meja.data;
+      // Simpanan meja ditulis sekarang (tanpa jeda simpan) sebelum putarannya masuk papan: server yang mati
+      // mendadak di antara keduanya paling buruk punya putaran yang tersimpan tapi belum di papan (dicatat
+      // saat dipulihkan), tidak pernah putaran di papan yang dimainkan ulang dengan hasil lain.
+      if (simpananMeja && !menutup) {
+        batalSimpan(kode);
+        tulisMeja(kode, data);
+      }
+      catatSprint(kode, data, jam(), meja);
+    },
     saatSelesai: (r: RingkasanAkhir) => {
-      // Meja sprint: hanya dicatat di papan sprint (tidak di klasemen umum dan Riwayat).
+      // Meja sprint (hanya simpanan 0.8.0 yang punya batas putaran): hanya dicatat di papan sprint (tidak
+      // di klasemen umum dan Riwayat).
       const meja = daftarMeja.get(kode);
       if (meja?.sprint) {
         catatSprint(kode, meja.data, r.selesaiPada, meja);
@@ -1300,7 +1345,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         return;
       }
       case 'sprint': {
-        // Sprint (25 Nov 2026): satu percobaan = satu meja baru, langsung main. Hanya kalau papannya bisa dicatat.
+        // Sprint (25 Nov 2026): satu meja baru, langsung main. Hanya kalau papannya bisa dicatat.
         if (!opsi.riwayat) return kirimKe(s, { t: 'error', pesan: 'Sprint belum bisa dimainkan di server ini.' });
         if (daftarMeja.size >= (opsi.maksMeja ?? 500)) {
           return kirimKe(s, { t: 'error', pesan: 'Server lagi penuh, coba lagi nanti.' });
@@ -1366,7 +1411,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
           throw e;
         }
         // Tersambung kembali saat klasemen akhir meja kompetisi masih tampil: hasil kompetisinya dikirim lagi.
-        const hasil = lama && meja.status === 'selesai' ? hasilKompetisiTerakhir.get(kode) : undefined;
+        // Meja sprint: kabar putaran terakhir yang tercatat dikirim lagi (hasil putaran mungkin masih tampil).
+        const hasil = lama && (meja.status === 'selesai' || meja.sprint) ? hasilKompetisiTerakhir.get(kode) : undefined;
         if (hasil) kirim(pemainId, hasil);
         return;
       }
@@ -1585,7 +1631,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
           // Permainan meja kompetisi yang ditinggal (yang bertahan tidak kembali): yang keluar dicatat 0
           // dulu. Gagal = mejanya dibiarkan (tetap menahan juara) dan dicoba lagi di detak berikutnya.
           if (meja.kompetisi && meja.status === 'main' && !catatPermainanDitinggal(kode, meja.data)) continue;
-          // Sprint yang pemainnya tidak kembali: dicatat ditinggal dulu (gagal = dicoba lagi nanti).
+          // Sprint yang pemainnya tidak kembali: putaran yang belum tercatat dicatat dulu (gagal = dicoba lagi nanti).
           if (meja.sprint && !catatSprint(kode, meja.data)) continue;
           hapusMeja(kode);
           log(`meja ${kode} dihapus (kosong)`);
@@ -1640,6 +1686,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       return 'rusak (meja tidak bisa dibaca)';
     }
     daftarMeja.set(kode, meja);
+    // Sprint: putaran yang selesai sesudah pencatatan terakhir sebelum server mati dicatat sekarang
+    // (database menolak yang sudah tercatat; gagal = dicoba lagi saat putaran berikutnya atau Keluar).
+    if (meja.sprint) catatSprint(kode, meja.data, b.diperbaruiPada, meja);
     if (b.pembuatJaringan) pembuatMeja.set(kode, b.pembuatJaringan);
     if (b.kodeTonton) kodeTontonPulih.push([kode, b.kodeTonton]);
     // Batas hapus meja kosong dihitung sejak server jalan lagi.
@@ -1682,7 +1731,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         if (d.kompetisi) ditinggalTertunda.set(b.kode, { kompetisi: d.kompetisi.kode, data: d, waktu: b.diperbaruiPada });
         continue;
       }
-      // Percobaan sprint yang tidak dipulihkan: dicatat (ditinggal, kalau belum selesai). Gagal = simpanannya
+      // Meja sprint yang tidak dipulihkan: putaran yang belum tercatat dicatat. Gagal = simpanannya
       // dibiarkan, dicoba lagi saat server mulai berikutnya.
       if (typeof d !== 'string' && d.sprint && !catatSprint(b.kode, d, b.diperbaruiPada)) continue;
       try {
@@ -1750,8 +1799,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         // Tanpa simpanan meja (SIMPAN_MEJA=0) tidak ada yang dipulihkan: permainan meja kompetisi yang
         // sedang main ditinggal sekarang, jadi yang keluar dicatat 0 dulu (yang bertahan tidak, #45).
         if (!simpananMeja) for (const [kode, m] of daftarMeja) if (m.kompetisi && m.status === 'main') catatPermainanDitinggal(kode, m.data);
-        // Sama untuk sprint: tanpa simpanan meja percobaan yang belum selesai tidak bisa dilanjutkan, jadi
-        // dicatat ditinggal sekarang (dengan simpanan, mejanya dipulihkan dan dimainkan sampai selesai).
+        // Sprint: tanpa simpanan meja tidak bisa dilanjutkan, jadi putaran yang belum tercatat dicatat
+        // sekarang (biasanya sudah semua, karena tiap putaran dicatat saat selesai).
         if (!simpananMeja) for (const [kode, m] of daftarMeja) if (m.sprint) catatSprint(kode, m.data);
         // Perubahan yang belum tersimpan ditulis sekarang; simpanan meja di database tidak dibuang,
         // supaya meja dipulihkan saat server jalan lagi (restart/deploy). Jangan taruh `await` apa pun

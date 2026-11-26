@@ -4,8 +4,9 @@
 // - ubin Sprint di beranda (nama dipastikan dulu, butuh internet) membuka layar Sprint dan papannya;
 // - Main sprint mengirim {t:'sprint', nama} lewat jalur online yang sama dengan Buat meja, dan meja
 //   sprint dari server langsung tampil (tanpa lobi);
-// - sprintHasil sampai ke KontrolMeja, juga kalau datang sebelum meja selesai dimuat;
-// - Sprint lagi: kursi lama dilepas (keluar), lalu percobaan baru dikirim; Ke beranda: keluar saja;
+// - sprintHasil (satu putaran tercatat) sampai ke KontrolMeja, juga kalau datang sebelum meja selesai dimuat;
+// - keluar dari meja sprint (menu, Back): kursi dilepas (keluar), lalu papan sprint, tanpa meja baru;
+//   Ke beranda (klasemen akhir meja sprint lama): keluar saja;
 // - Back/Escape dari layar Sprint kembali ke beranda.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,6 +55,8 @@ vi.mock('../src/kontrolMeja', async (asli) => {
     terimaHasilKompetisi = catat('terimaHasilKompetisi');
     terimaHasilSprint = catat('terimaHasilSprint');
     hancurkan = catat('hancurkan');
+    tutupObrolanTerbuka = () => false;
+    menahanKeluar = () => false;
     keadaanTampil = () => ({ status: null, sibuk: false, klasemen: false });
   }
   return { ...m, KontrolMeja: KontrolPalsu };
@@ -148,7 +151,7 @@ async function diMejaSprint(sebelumSiap?: (ws: WsPalsu) => void) {
   return { ws, g };
 }
 
-const hasil: PesanHasilSprint = { t: 'sprintHasil', menang: true, skor: 300, mentung: 2, kepentung: 1, peringkatMinggu: 1 };
+const hasil: PesanHasilSprint = { t: 'sprintHasil', putaran: 1, menang: true, skor: 120, mentung: 1, kepentung: 0, peringkatMinggu: 1 };
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -216,23 +219,34 @@ describe('Aplikasi: Sprint', () => {
     expect(dipanggil('terimaHasilSprint')).toEqual([[hasil]]);
   });
 
-  it('Sprint lagi: keluar dari meja lama, sesi dilupakan, percobaan baru dikirim dari layar Sprint', async () => {
+  it('keluar dari meja sprint: kursi dilepas, sesi dilupakan, papan sprint tampil, tanpa meja baru', async () => {
     const { ws } = await diMejaSprint();
-    pasangFetch();
+    const url = pasangFetch();
     (kontrol.app as AppUntukMeja).tinggalkanSprint!(true);
     await vi.advanceTimersByTimeAsync(0);
     expect(ws.jenisTerkirim()).toContain('keluar');
     expect(localStorage.getItem('remi.sesiOnline')).toBeNull();
     expect(ui('.layar-sprint')).not.toBeNull();
-    expect(ui('#main-sprint')!.getAttribute('aria-busy')).toBe('true');
-    const baru = WsPalsu.terakhir();
-    expect(baru).not.toBe(ws);
-    baru.buka();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(baru.jenisTerkirim()).toEqual(['sprint']);
+    expect(url).toContain('/api/sprint?periode=minggu');
+    // Tidak langsung main lagi: tombol Main sprint siap ditekan, tidak ada sambungan baru.
+    expect(ui('#main-sprint')!.hasAttribute('aria-busy')).toBe(false);
+    expect(WsPalsu.semua.at(-1)).toBe(ws);
   });
 
-  it('Ke beranda dari klasemen akhir sprint: keluar, lalu beranda', async () => {
+  it('Back di meja sprint: konfirmasi keluar sprint, lalu papan sprint', async () => {
+    const { ws } = await diMejaSprint();
+    pasangFetch();
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await vi.advanceTimersByTimeAsync(0);
+    const d = document.querySelector<HTMLElement>('#lapisan-dialog .dialog')!;
+    expect(d.textContent).toContain(TEKS_SPRINT.keluarMain);
+    d.querySelector<HTMLElement>('[data-ya]')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ws.jenisTerkirim()).toContain('keluar');
+    expect(ui('.layar-sprint')).not.toBeNull();
+  });
+
+  it('Ke beranda dari klasemen akhir meja sprint lama: keluar, lalu beranda', async () => {
     const { ws } = await diMejaSprint();
     (kontrol.app as AppUntukMeja).tinggalkanSprint!(false);
     await vi.advanceTimersByTimeAsync(0);

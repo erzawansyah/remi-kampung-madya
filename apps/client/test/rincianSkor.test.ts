@@ -252,6 +252,21 @@ describe('htmlRiwayat', () => {
     expect(punyaSaya.querySelectorAll(':scope > details > summary > .total')).toHaveLength(riwayat.length);
   });
 
+  it('putaran lama meja sprint (kartunya tidak disimpan): tanpa "belum ada kartu jadi"/"tangan kosong" palsu dan tanpa rumus salah', () => {
+    const h = riwayat.find((x) => x.rincian.some((r) => r.nilaiKartuJadi !== 0 && r.nilaiTangan !== 0))!;
+    const ramping: HasilPutaran = { ...h, rincian: h.rincian.map((r) => ({ ...r, kartuJadi: [], tangan: [], nilaiKartuTangan: [] })) };
+    const i = ramping.rincian.findIndex((r) => r.nilaiKartuJadi !== 0 && r.nilaiTangan !== 0);
+    const el = parse(htmlRiwayat(namaBiasa, [ramping], null));
+    const pemain = el.querySelector(`details.akordion[data-pemain="${i}"]`)!;
+    expect(pemain.textContent).not.toContain('belum ada kartu jadi');
+    expect(pemain.textContent).not.toContain('tangan kosong');
+    expect(pemain.querySelector('.hitung')).toBeNull();
+    // Nilai dan total tetap tampil.
+    expect(pemain.querySelector('.total-komp b')!.textContent).toBe(tanda(ramping.rincian[i].total));
+    // Putaran utuh tetap dengan rumusnya.
+    expect(parse(htmlRiwayat(namaBiasa, [h], null)).querySelector(`details.akordion[data-pemain="${i}"] .hitung`)).not.toBeNull();
+  });
+
   it('nama pementung dan pemain di-escape di semua tempat', () => {
     const el = parse(htmlRiwayat(() => NAMA_JAHIL, riwayat, 0));
     expect(el.querySelector('img')).toBeNull();

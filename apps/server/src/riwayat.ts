@@ -31,7 +31,7 @@ import {
 } from './kompetisi.js';
 import { buatPenyimpanUsulan, SKEMA_USULAN, type PenyimpanUsulan } from './usulan.js';
 import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, SKEMA_MEJA_AKTIF_TONTON, type PenyimpanMejaAktif } from './mejaAktif.js';
-import { buatPenyimpanSprint, SKEMA_SPRINT, type PenyimpanSprint } from './sprint.js';
+import { buatPenyimpanSprint, SKEMA_SPRINT, SKEMA_SPRINT_PUTARAN, type PenyimpanSprint } from './sprint.js';
 
 export interface PermainanTersimpan {
   id: number;
@@ -115,7 +115,7 @@ export interface PenyimpanRiwayat {
   usulan: PenyimpanUsulan;
   /** Meja online yang masih ada (selamat dari restart/deploy), di database yang sama. Diatur server.ts. */
   mejaAktif: PenyimpanMejaAktif;
-  /** Sprint (25 Nov 2026): satu baris per percobaan, di database yang sama. Diatur server.ts. */
+  /** Sprint: satu baris per putaran (sejak 26 Nov 2026), di database yang sama. Diatur server.ts. */
   sprint: PenyimpanSprint;
   tutup(): void;
 }
@@ -184,6 +184,9 @@ export const MIGRASI: readonly string[] = [
   // v7 (25 Nov 2026, keputusan pemilik): sprint, satu baris per percobaan. Tabel sendiri: permainan,
   // klasemen, Riwayat, dan leaderboard umum tidak berubah.
   SKEMA_SPRINT,
+  // v8 (26 Nov 2026, keputusan pemilik: sprint tanpa batas putaran): satu baris per putaran sprint. Tabel
+  // baru, karena UNIQUE tabel v7 (satu baris per meja) tidak bisa memuat beberapa putaran; baris v7 tetap.
+  SKEMA_SPRINT_PUTARAN,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */

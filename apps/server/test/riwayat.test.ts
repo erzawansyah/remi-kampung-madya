@@ -369,7 +369,7 @@ describe('endpoint peringkat v2', () => {
   });
 });
 
-describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil kompetisi yang ditinggal), v6 (kode tonton), dan v7 (sprint)', () => {
+describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil kompetisi yang ditinggal), v6 (kode tonton), v7 (sprint), dan v8 (sprint per putaran)', () => {
   const kolom = (db: DatabaseSync, tabel: string) =>
     (db.prepare(`PRAGMA table_info(${tabel})`).all() as { name: string; notnull: number; pk: number }[]).map((k) => [k.name, k.notnull, k.pk]);
   const indeks = (db: DatabaseSync, tabel: string) =>
@@ -387,9 +387,9 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
     return db;
   }
 
-  it('v3 persis migrasi usul fitur (fitur/usul-fitur), v4 tabel meja_aktif, v5 tabel hasil_kompetisi_ditinggal, v6 kolom kode_tonton, v7 tabel sprint', () => {
-    expect(MIGRASI).toHaveLength(7);
-    const db = sampaiVersi(7);
+  it('v3 persis migrasi usul fitur (fitur/usul-fitur), v4 tabel meja_aktif, v5 tabel hasil_kompetisi_ditinggal, v6 kolom kode_tonton, v7 tabel sprint, v8 tabel sprint_putaran', () => {
+    expect(MIGRASI).toHaveLength(8);
+    const db = sampaiVersi(8);
     expect(kolom(db, 'usulan')).toEqual([
       ['id', 0, 1],
       ['dibuat_pada', 1, 0],
@@ -442,11 +442,26 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
       ['selesai', 1, 0],
     ]);
     expect(indeks(db, 'sprint')).toEqual(['sprint_waktu']);
+    // v8 (sprint tanpa batas putaran, 26 Nov 2026): satu baris per putaran; tabel baru, ditulis server ini saja.
+    expect(kolom(db, 'sprint_putaran')).toEqual([
+      ['id', 0, 1],
+      ['kode_meja', 1, 0],
+      ['mulai_pada', 1, 0],
+      ['putaran', 1, 0],
+      ['nama', 1, 0],
+      ['kunci_nama', 1, 0],
+      ['waktu', 1, 0],
+      ['skor', 1, 0],
+      ['menang', 1, 0],
+      ['mentung', 1, 0],
+      ['kepentung', 1, 0],
+    ]);
+    expect(indeks(db, 'sprint_putaran')).toEqual(['sprint_putaran_waktu']);
     db.close();
   });
 
-  it('database v1, v2, v3, v4 (server dev), v5 (produksi 0.5.0), dan v6 (produksi 0.6.0/0.7.x) dimigrasi ke v7 tanpa menyentuh isi lama', () => {
-    for (const v of [1, 2, 3, 4, 5, 6]) {
+  it('database v1, v2, v3, v4 (server dev), v5 (produksi 0.5.0), v6 (produksi 0.6.0/0.7.x), dan v7 (produksi 0.8.0/0.9.x) dimigrasi ke v8 tanpa menyentuh isi lama', () => {
+    for (const v of [1, 2, 3, 4, 5, 6, 7]) {
       const db = sampaiVersi(v);
       tulisV0(db, 'LAMAA', '2026-10-20T10:00:00.000Z', [['Budi', 10], ['Siti', 0]]);
       tulisV0(db, 'LAMAB', '2026-10-21T10:00:00.000Z', [['Budi', -5], ['Siti', 20], ['Kipas Dua', 0, true]]);
@@ -460,14 +475,15 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
       const sebelum = isiLama();
       const log: string[] = [];
       const r = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
-      expect(versiSkema(db)).toBe(7);
-      expect(log).toEqual([`skema riwayat dimigrasi v${v} → v7`]);
+      expect(versiSkema(db)).toBe(8);
+      expect(log).toEqual([`skema riwayat dimigrasi v${v} → v8`]);
       const sesudah = isiLama();
       expect(sesudah).toEqual(sebelum);
       expect(r.daftar(10).map((g) => g.kodeMeja)).toEqual(['LAMAB', 'LAMAA']);
       expect(r.mejaAktif.semua()).toEqual([]);
       expect(db.prepare('SELECT COUNT(*) AS n FROM hasil_kompetisi_ditinggal').get()).toMatchObject({ n: 0 });
       expect(db.prepare('SELECT COUNT(*) AS n FROM sprint').get()).toMatchObject({ n: 0 });
+      expect(db.prepare('SELECT COUNT(*) AS n FROM sprint_putaran').get()).toMatchObject({ n: 0 });
       const daftar = r.daftar(10);
       const papan = r.papan();
       r.tutup();
@@ -483,7 +499,7 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
     }
   });
 
-  it('database v2 pra-rilis (skema kompetisi versi 1) dimigrasi ke v7: perbaikan pra-rilis tetap jalan, tabel v5 ada dan kosong', () => {
+  it('database v2 pra-rilis (skema kompetisi versi 1) dimigrasi ke v8: perbaikan pra-rilis tetap jalan, tabel v5 ada dan kosong', () => {
     const db = sampaiVersi(1);
     // Seperti server dev yang sempat menjalankan kompetisi versi 1 (v2 waktu itu): skema kompetisi lama.
     db.exec(`CREATE TABLE kompetisi (kode TEXT PRIMARY KEY, nama TEXT NOT NULL, masa TEXT NOT NULL, pengaturan TEXT NOT NULL,
@@ -500,8 +516,8 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
     tulisV0(db, 'LAMAA', '2026-10-20T10:00:00.000Z', [['Budi', 10], ['Siti', 0]]);
     const log: string[] = [];
     const r = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
-    expect(versiSkema(db)).toBe(7);
-    expect(log).toContain('skema riwayat dimigrasi v2 → v7');
+    expect(versiSkema(db)).toBe(8);
+    expect(log).toContain('skema riwayat dimigrasi v2 → v8');
     expect(log.some((l) => l.includes('skema kompetisi pra-rilis'))).toBe(true);
     expect(db.prepare('SELECT COUNT(*) AS n FROM hasil_kompetisi_ditinggal').get()).toMatchObject({ n: 0 });
     expect(r.kompetisi.status('LAMAA', 2)).toBeNull();

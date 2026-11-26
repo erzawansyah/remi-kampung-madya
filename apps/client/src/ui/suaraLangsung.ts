@@ -7,7 +7,9 @@
 import { TEKS_SUARA } from '../konten/suara';
 import { bunyi } from '../efek/suara';
 import type { KeadaanMic, SuaraLangsung } from '../suaraLangsung';
+import { aturPreferensi, MAKS_VOLUME_SUARA, preferensi, saatPreferensiBerubah } from '../preferensi';
 import { bukaDialog, esc, toast } from './dom';
+import { htmlInfo } from './info';
 
 const garisCoret = '<path class="coret" d="M4 4 20 20" />';
 
@@ -135,14 +137,43 @@ export function pasangIkonKursi(akar: HTMLElement, suara: SuaraLangsung): () => 
   return lepas;
 }
 
-/** Lembar "Suara": sakelar Mic dan Dengar suara, lalu teman yang ikut suara dengan Bisukan/Bunyikan. */
+/** Penggeser "Volume suara teman" (persen; preferensi volumeSuara 0..3). Tidak ikut digambar ulang. */
+function htmlVolumeSuara(): string {
+  const maks = Math.round(MAKS_VOLUME_SUARA * 100);
+  return `<div class="volume-suara">
+    <div class="kepala-volume-suara">
+      <span class="label-info"><label for="volume-suara">${esc(TEKS_SUARA.volume)}</label>${htmlInfo(TEKS_SUARA.infoVolume, TEKS_SUARA.volume, 'info-volume-suara')}</span>
+      <output for="volume-suara" class="angka" data-keluaran-suara></output>
+    </div>
+    <input type="range" id="volume-suara" min="0" max="${maks}" step="10" data-volume-suara aria-describedby="info-volume-suara" />
+  </div>`;
+}
+
+/** Lembar "Suara": sakelar Mic dan Dengar suara, volume suara teman, lalu teman yang ikut suara dengan Bisukan/Bunyikan. */
 export function bukaLembarSuara(suara: SuaraLangsung, alasanTolak: () => string = () => ''): void {
   let lepas: () => void = () => undefined;
+  let lepasPref: () => void = () => undefined;
   bukaDialog(
     `<div class="kepala-dialog"><h2>${esc(TEKS_SUARA.judul)}</h2><button type="button" class="tombol-ikon hantu tutup-dialog" data-tutup aria-label="Tutup"><span aria-hidden="true">✕</span></button></div>
-     <div class="isi-lembar-suara"></div>`,
+     <div class="isi-lembar-suara"></div>
+     ${htmlVolumeSuara()}
+     <div class="orang-lembar-suara"></div>`,
     (dlg) => {
       const isi = dlg.querySelector<HTMLElement>('.isi-lembar-suara')!;
+      const isiOrang = dlg.querySelector<HTMLElement>('.orang-lembar-suara')!;
+      const geser = dlg.querySelector<HTMLInputElement>('[data-volume-suara]')!;
+      const keluaran = dlg.querySelector<HTMLOutputElement>('[data-keluaran-suara]')!;
+      const segarkanVolume = () => {
+        const persen = Math.round(preferensi().volumeSuara * 100);
+        // Jangan ganggu penggeser yang sedang digeser.
+        if (document.activeElement !== geser) geser.value = String(persen);
+        geser.style.setProperty('--isi', `${(persen / (MAKS_VOLUME_SUARA * 100)) * 100}%`);
+        geser.setAttribute('aria-valuetext', `${persen} persen`);
+        keluaran.textContent = `${persen}%`;
+      };
+      geser.addEventListener('input', () => aturPreferensi({ volumeSuara: Number(geser.value) / 100 }));
+      segarkanVolume();
+      lepasPref = saatPreferensiBerubah(() => (dlg.isConnected ? segarkanVolume() : lepasPref()));
       const gambar = () => {
         const fokus = (document.activeElement as HTMLElement | null)?.dataset?.fokusSuara ?? null;
         const t = suara.tombolMic;
@@ -159,7 +190,8 @@ export function bukaLembarSuara(suara: SuaraLangsung, alasanTolak: () => string 
           <div class="deret-sakelar">
             ${sakelar('mic', TEKS_SUARA.mic, TEKS_SUARA.ketMic, t === 'nyala', svgMic(t !== 'nyala'), t === 'minta')}
             ${sakelar('dengar', TEKS_SUARA.dengar, TEKS_SUARA.ketDengar, suara.dengarNyala, svgSpeaker(!suara.dengarNyala))}
-          </div>
+          </div>`;
+        isiOrang.innerHTML = `
           <h3>${esc(TEKS_SUARA.orang)}</h3>
           ${
             orang.length
@@ -178,9 +210,9 @@ export function bukaLembarSuara(suara: SuaraLangsung, alasanTolak: () => string 
                   .join('')}</ul>`
               : `<p class="redup rapat">${esc(TEKS_SUARA.kosong)}</p>`
           }`;
-        if (fokus && /^[\w-]+$/.test(fokus)) isi.querySelector<HTMLElement>(`[data-fokus-suara="${fokus}"]`)?.focus({ preventScroll: true });
+        if (fokus && /^[\w-]+$/.test(fokus)) dlg.querySelector<HTMLElement>(`[data-fokus-suara="${fokus}"]`)?.focus({ preventScroll: true });
       };
-      isi.addEventListener('click', (e) => {
+      const klik = (e: MouseEvent) => {
         const b = (e.target as HTMLElement).closest<HTMLElement>('[data-lembar], [data-bisu]');
         if (!b) return;
         bunyi('klik');
@@ -190,10 +222,18 @@ export function bukaLembarSuara(suara: SuaraLangsung, alasanTolak: () => string 
         const alasan = alasanTolak();
         if (alasan) return toast(alasan, true);
         void suara.ketukMic();
-      });
+      };
+      isi.addEventListener('click', klik);
+      isiOrang.addEventListener('click', klik);
       gambar();
       lepas = suara.dengarkan(() => (dlg.isConnected ? gambar() : lepas()));
     },
-    { kelas: 'lembar-suara', saatTutup: () => lepas() },
+    {
+      kelas: 'lembar-suara',
+      saatTutup: () => {
+        lepas();
+        lepasPref();
+      },
+    },
   );
 }

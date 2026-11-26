@@ -1,34 +1,34 @@
-// Sprint (keputusan pemilik 25 Nov 2026): satu pemain lawan tiga warga kedai level Suhu, 5 putaran,
-// hanya online (dijalankan server, supaya rekornya tidak bisa diakali dari HP). Satu percobaan = satu
-// meja. Semua aturan hitung sprint (pengaturan, hasil satu percobaan, papan, juara mingguan) hanya di
-// sini, dipakai server dan aplikasi. Jangan dihitung ulang di tempat lain.
+// Sprint (keputusan pemilik 25 Nov 2026, diubah 26 Nov 2026): satu pemain lawan lima warga kedai level
+// Suhu, 6 pemain (2 deck), tanpa batas putaran: main sepuasnya sampai pemainnya Keluar, dan setiap putaran
+// yang selesai langsung dicatat di papan. Hanya online (dijalankan server, supaya rekornya tidak bisa
+// diakali dari HP). Semua aturan hitung sprint (pengaturan, hasil per putaran, papan, juara mingguan) hanya
+// di sini, dipakai server dan aplikasi. Jangan dihitung ulang di tempat lain.
 
-import type { GameState, LevelBot } from '@remi/engine';
+import { BATAS_PERISTIWA_VIEW, type GameState, type HasilPutaran, type LevelBot } from '@remi/engine';
 import { WIB_MS } from './peringkat.js';
 import type { PengaturanMeja } from './protokol.js';
 import { kunciNama } from './validasi.js';
-
-/** Banyaknya putaran satu percobaan sprint. */
-export const JUMLAH_PUTARAN_SPRINT = 5;
 
 /** Level warga kedai di semua putaran sprint. */
 export const LEVEL_SPRINT: LevelBot = 'suhu';
 
 /**
- * Tiga lawan sprint, masing-masing main dengan gaya personanya (#47). Kalau nama pemain sama dengan
- * salah satunya, warga kedai itu diganti nama berikutnya di NAMA_LAWAN_BAWAAN (tafsiran pengembang).
+ * Lima lawan sprint (lima nama terdepan NAMA_LAWAN_BAWAAN), masing-masing main dengan gaya personanya
+ * (#47). Kalau nama pemain sama dengan salah satunya, warga kedai itu diganti nama berikutnya di
+ * NAMA_LAWAN_BAWAAN (tafsiran pengembang).
  */
-export const NAMA_LAWAN_SPRINT: readonly string[] = ['Kipas Dua', 'Cak Kopag', 'Mbak Teras'];
+export const NAMA_LAWAN_SPRINT: readonly string[] = ['Kipas Dua', 'Cak Kopag', 'Mbak Teras', 'Mas Sampul', 'Si Rak'];
 
 /**
- * Pengaturan meja sprint (dikunci): 4 pemain, 1 deck, 5 putaran, tanpa batas skor, tanpa batas waktu
- * giliran, tempo warga kedai cepat (pemain tetap boleh mengganti tempo selama main). Mode kaldu mati
- * (tidak ditulis = mati), urutan duduk selalu diacak (#62), meja privat tapi boleh ditonton.
+ * Pengaturan meja sprint (dikunci): 6 pemain (jadi 2 deck, 9 kartu per orang), tanpa batas putaran,
+ * tanpa batas skor, tanpa batas waktu giliran, tempo warga kedai cepat (pemain tetap boleh mengganti
+ * tempo selama main). Mode kaldu mati (tidak ditulis = mati), jadi permainannya tidak pernah selesai
+ * sendiri. Urutan duduk selalu diacak (#62), meja privat tapi boleh ditonton.
  */
 export const PENGATURAN_SPRINT: Readonly<PengaturanMeja> = Object.freeze({
-  jumlahPemain: 4,
+  jumlahPemain: 6,
   duaDeckUntukEmpat: false,
-  batasPutaran: JUMLAH_PUTARAN_SPRINT,
+  batasPutaran: null,
   batasSkorAtas: null,
   batasSkorBawah: null,
   publik: false,
@@ -50,48 +50,77 @@ export function awalMingguWib(ms: number): number {
   return (hari - keSenin) * HARI_MS - WIB_MS;
 }
 
-/** Hasil satu percobaan sprint untuk kursi pemain. */
-export interface HasilSprint {
-  /** Selesai 5 putaran dan skor akhirnya ≥ skor setiap warga kedai (seri = menang). */
-  menang: boolean;
-  /** Skor akumulasi pemain sesudah putaran terakhir yang selesai. */
-  skor: number;
-  /** Putaran yang ditutup pemain dengan mentung. */
-  mentung: number;
-  /** Berapa kali pemain kepentung. */
-  kepentung: number;
-  /** Putaran yang sudah selesai dimainkan. */
+/** Hasil satu putaran sprint untuk kursi pemain (satu baris papan). */
+export interface HasilPutaranSprint {
+  /** Nomor putaran (1, 2, ...). */
   putaran: number;
-  /** Permainannya selesai (semua putaran); false = ditinggal di tengah jalan. */
-  selesai: boolean;
+  /** Skor putaran ini ≥ skor putaran ini setiap warga kedai (seri = menang). */
+  menang: boolean;
+  /** Skor pemain di putaran ini saja. */
+  skor: number;
+  /** 1 kalau pemain menutup putaran ini dengan mentung, selain itu 0. */
+  mentung: number;
+  /** 1 kalau pemain kepentung di putaran ini, selain itu 0. */
+  kepentung: number;
 }
 
+type RiwayatSprint = readonly Pick<HasilPutaran, 'pementung' | 'kepentung' | 'skorAkumulasi'>[];
+
 /**
- * Hasil sprint kursi `kursi` (kursi pemain sesudah urutan duduk diacak) dari state permainan. Hanya
- * putaran yang sudah selesai yang dihitung. Percobaan yang ditinggal (permainan belum selesai) tidak
- * pernah menang (tafsiran pengembang: supaya percobaan yang jelek tidak bisa ditinggal demi
- * menjaga jumlah menang). Menerima GameState maupun ViewPemain (aplikasi menghitung hasil sementara
- * dari view sebelum pesan sprintHasil datang).
+ * Hasil putaran ke-`indeks` (0 = putaran pertama) untuk kursi `kursi` (kursi pemain sesudah urutan duduk
+ * diacak). Skor putaran = selisih skor akumulasi dengan putaran sebelumnya, untuk semua kursi.
  */
-export function hasilSprint(
-  game: Pick<GameState, 'riwayat' | 'status'> & { readonly pemain: readonly unknown[] },
-  kursi: number,
-): HasilSprint {
-  const riwayat = game.riwayat;
-  const skorAkhir = riwayat.at(-1)?.skorAkumulasi ?? game.pemain.map(() => 0);
-  const skor = skorAkhir[kursi] ?? 0;
-  const selesai = game.status === 'selesai';
+export function hasilPutaranSprint(riwayat: RiwayatSprint, indeks: number, kursi: number): HasilPutaranSprint {
+  const h = riwayat[indeks];
+  const sebelum = indeks > 0 ? riwayat[indeks - 1].skorAkumulasi : [];
+  const skorPutaran = h.skorAkumulasi.map((s, i) => s - (sebelum[i] ?? 0));
+  const skor = skorPutaran[kursi] ?? 0;
   return {
-    menang: selesai && skorAkhir.every((s, i) => i === kursi || skor >= s),
+    putaran: indeks + 1,
+    menang: skorPutaran.every((s, i) => i === kursi || skor >= s),
     skor,
-    mentung: riwayat.filter((h) => h.pementung === kursi).length,
-    kepentung: riwayat.filter((h) => h.kepentung.includes(kursi)).length,
-    putaran: riwayat.length,
-    selesai,
+    mentung: h.pementung === kursi ? 1 : 0,
+    kepentung: h.kepentung.includes(kursi) ? 1 : 0,
   };
 }
 
-/** Satu percobaan yang tercatat (bahan papan dan juara mingguan). */
+/** Semua putaran sprint yang sudah selesai untuk kursi pemain. Menerima GameState maupun ViewPemain. */
+export function hasilSprint(game: Pick<GameState, 'riwayat'>, kursi: number): HasilPutaranSprint[] {
+  return game.riwayat.map((_, i) => hasilPutaranSprint(game.riwayat, i, kursi));
+}
+
+/** Berapa putaran terakhir yang rinciannya (kartu jadi dan kartu tangan tiap pemain) tetap utuh di meja sprint. */
+export const PUTARAN_RINCI_SPRINT = 10;
+
+/**
+ * Meja sprint tidak pernah selesai sendiri, jadi state permainannya (dan view yang dikirim tiap aksi,
+ * simpanan meja, dan setiap salinannya) jangan tumbuh tanpa batas. Dipanggil meja sprint setiap putaran
+ * baru dimulai; mengembalikan state baru, `g` tidak diubah (entri riwayat diganti salinan, tidak diubah).
+ * - `log`: hanya putaran yang sedang jalan dan putaran sebelumnya.
+ * - `peristiwa`: hanya BATAS_PERISTIWA_VIEW terakhir (yang memang dikirim di view; id berikutnya tetap
+ *   meneruskan id terakhir).
+ * - `riwayat`: semua putaran tetap ada (nomor, cara, pementung, kepentung, skor, total tiap pemain:
+ *   bahan papan sprint, tab Riwayat dan Peringkat), tapi kartu jadi dan kartu tangan di rincian hanya untuk
+ *   PUTARAN_RINCI_SPRINT putaran terakhir.
+ * Meja biasa tidak pernah memakai ini (golden tetap).
+ */
+export function rampingkanGameSprint(g: GameState): GameState {
+  const nomor = g.putaran?.nomor ?? g.riwayat.length + 1;
+  const batasRinci = g.riwayat.length - PUTARAN_RINCI_SPRINT;
+  const ramping = (h: HasilPutaran): HasilPutaran =>
+    h.rincian.every((r) => !r.kartuJadi.length && !r.tangan.length && !r.nilaiKartuTangan.length)
+      ? h
+      : { ...h, rincian: h.rincian.map((r) => ({ ...r, kartuJadi: [], tangan: [], nilaiKartuTangan: [] })) };
+  const riwayat = g.riwayat.map((h, i) => (i < batasRinci ? ramping(h) : h));
+  const log = g.log.filter((e) => e.putaran >= nomor - 1);
+  const peristiwa = g.peristiwa.length > BATAS_PERISTIWA_VIEW ? g.peristiwa.slice(-BATAS_PERISTIWA_VIEW) : g.peristiwa;
+  return { ...g, riwayat, log, peristiwa };
+}
+
+/**
+ * Satu catatan papan (bahan papan dan juara mingguan): sejak 26 Nov 2026 satu putaran (menang, mentung,
+ * kepentung 0/1); baris lama 0.8.0 satu percobaan 5 putaran (mentung/kepentung bisa lebih dari 1).
+ */
 export interface PercobaanSprint {
   nama: string;
   /** kunciNama(nama); kosong = dihitung dari nama. */
@@ -104,7 +133,7 @@ export interface PercobaanSprint {
   kepentung: number;
 }
 
-/** Satu baris papan sprint (jumlah semua percobaan di periodenya). */
+/** Satu baris papan sprint (jumlah semua catatan di periodenya). */
 export interface BarisSprint {
   nama: string;
   menang: number;
@@ -121,16 +150,16 @@ export type KolomSprint = (typeof KOLOM_SPRINT)[number];
 const kunciDari = (p: PercobaanSprint) => p.kunci || kunciNama(p.nama);
 
 /**
- * Jumlahkan percobaan per orang (nama tanpa beda huruf besar/kecil, kunciNama). Ejaan yang tampil:
- * `ejaan` kalau ada, selain itu ejaan percobaan paling akhir. Urutan hasil: urutan bawaan.
+ * Jumlahkan catatan (putaran, atau percobaan 0.8.0) per orang (nama tanpa beda huruf besar/kecil, kunciNama). Ejaan yang tampil:
+ * `ejaan` kalau ada, selain itu ejaan catatan paling akhir. Urutan hasil: urutan bawaan.
  */
 export function rekapSprint(
-  percobaan: readonly PercobaanSprint[],
+  catatan: readonly PercobaanSprint[],
   ejaan?: ReadonlyMap<string, string>,
   piala?: ReadonlyMap<string, number>,
 ): BarisSprint[] {
   const per = new Map<string, BarisSprint & { w: number }>();
-  for (const p of percobaan) {
+  for (const p of catatan) {
     const kunci = kunciDari(p);
     let b = per.get(kunci);
     if (!b) {
@@ -180,13 +209,13 @@ export interface JuaraMingguan {
 
 /**
  * Juara mingguan: untuk setiap minggu WIB yang sudah lewat (sebelum minggu `sekarang`) yang punya
- * paling sedikit satu percobaan, baris pertama papan minggu itu menurut urutan bawaan. Urut dari minggu
+ * paling sedikit satu catatan, baris pertama papan minggu itu menurut urutan bawaan. Urut dari minggu
  * paling lama.
  */
-export function juaraMingguan(percobaan: readonly PercobaanSprint[], sekarang: number): JuaraMingguan[] {
+export function juaraMingguan(catatan: readonly PercobaanSprint[], sekarang: number): JuaraMingguan[] {
   const mingguIni = awalMingguWib(sekarang);
   const per = new Map<number, PercobaanSprint[]>();
-  for (const p of percobaan) {
+  for (const p of catatan) {
     const m = awalMingguWib(p.waktu);
     if (m >= mingguIni) continue;
     let xs = per.get(m);
