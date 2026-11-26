@@ -7,7 +7,6 @@ import type { ViewPemain } from '@remi/engine';
 import { TEKS_KURSI_KOMPETISI_LEPAS, TEKS_LOBI_KOMPETISI_BUBAR, validasiObrolan, type InfoMeja, type InfoTontonan, type PengaturanMeja } from '@remi/meja';
 import { Obrolan } from './ui/obrolan';
 import { lingkunganBrowser, SuaraLangsung, type SambunganSuara } from './suaraLangsung';
-import { redamMusik } from './efek/musik';
 import { pasangPreferensi } from './preferensi';
 import {
   idAcak,
@@ -152,7 +151,7 @@ class Aplikasi implements AppUntukMeja {
    * saat keluar/pindah meja, ke beranda, mulai nonton, dan saat halaman ditutup.
    */
   readonly suara = new SuaraLangsung(
-    lingkunganBrowser({ toast: (pesan, salah) => toast(pesan, salah), umumkan: (pesan) => umumkan(pesan), redamMusik: () => redamMusik(0.35, 0.5) }),
+    lingkunganBrowser({ toast: (pesan, salah) => toast(pesan, salah), umumkan: (pesan) => umumkan(pesan) }),
     () => this.sambunganSuara(),
   );
   private game: PenampungGame | null = null;

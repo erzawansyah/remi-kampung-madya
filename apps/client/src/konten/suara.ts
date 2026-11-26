@@ -17,6 +17,9 @@ export const TEKS_SUARA = {
   mic: 'Mic',
   ketMic: 'Mati tiap kali masuk meja. Nyalakan kalau mau ngobrol.',
   ketDengar: 'Matikan kalau cuma mau main tanpa suara. Cuma di HP ini.',
+  /** Penggeser volume suara teman (0–300%, cuma di HP ini). */
+  volume: 'Volume suara teman',
+  infoVolume: 'Masih kecil? Naikkan volume HP waktu ada yang ngomong (di Android itu volume panggilan).',
   orang: 'Yang di meja',
   kosong: 'Belum ada teman yang ikut suara.',
   bisukan: 'Bisukan',

@@ -1,8 +1,12 @@
 // Mesin audio: SATU AudioContext untuk seluruh aplikasi, dengan rangkaian bus
-//   bus efek ─┐
-//             ├─► master ─► pembatas (limiter) ─► speaker
-//   bus musik ┘
-// Volume bus mengikuti preferensi (suara/volumeEfek, musik/volumeMusik) dan berubah halus tanpa klik.
+//   bus efek ─► redam efek ─┐
+//                           ├─► master ─► pembatas (limiter) ─► speaker
+//   bus musik ──────────────┘                ▲
+//   bus suara (suara teman) ─► kompresor ────┘
+// Volume bus mengikuti preferensi (suara/volumeEfek, musik/volumeMusik, volumeSuara) dan berubah halus
+// tanpa klik. Bus suara (obrolan suara 0.10.0) tidak lewat master supaya suara teman bisa dikuatkan lebih
+// dari efek; kompresornya meratakan yang pelan dan yang keras, pembatas tetap mencegah pecah. "Redam efek"
+// meredam SELURUH bus efek secara seragam selama ada teman yang ngomong (pemicunya tingkat suara saja).
 // Context baru DIPAKAI setelah pemain pernah menyentuh layar (aturan autoplay browser),
 // ditidurkan saat tab tersembunyi atau saat suara & musik sama-sama mati (hemat baterai),
 // dan dibangunkan lagi oleh sentuhan berikutnya (penting untuk iOS yang suka "interrupted").
@@ -14,13 +18,17 @@
 // tersembunyi, suara & musik mati, atau pemain sudah keburu menyentuh) perilakunya tetap seperti dulu.
 
 import { perangkatApel } from '../pasangAplikasi';
-import { preferensi, saatPreferensiBerubah, type Preferensi } from '../preferensi';
+import { preferensi, PREFERENSI_BAWAAN, saatPreferensiBerubah, type Preferensi } from '../preferensi';
 import { bufferDerau, buatGema, type Keluaran } from './sintesis';
 
 export interface Rantai<A extends BaseAudioContext = BaseAudioContext> {
   readonly a: A;
   readonly busEfek: GainNode;
   readonly busMusik: GainNode;
+  /** Suara teman (obrolan suara): langsung ke kompresor suara lalu pembatas, tidak lewat master. */
+  readonly busSuara: GainNode;
+  /** Redaman seluruh bus efek selama teman ngomong (1 = tidak diredam). */
+  readonly redamEfek: GainNode;
   /** Gema ruangan kedai untuk efek bernada; keluarnya ke bus efek. */
   readonly gemaEfek: AudioNode;
   readonly derau: AudioBuffer;
@@ -40,10 +48,21 @@ export function bangunRantai<A extends BaseAudioContext>(a: A): Rantai<A> {
   master.connect(pembatas).connect(a.destination);
   const busEfek = a.createGain();
   const busMusik = a.createGain();
-  busEfek.connect(master);
+  const redamEfek = a.createGain();
+  busEfek.connect(redamEfek).connect(master);
   busMusik.connect(master);
+  // Suara teman: kompresor sendiri (yang pelan naik, yang teriak tidak menusuk), lalu pembatas yang sama.
+  const kompSuara = a.createDynamicsCompressor();
+  kompSuara.threshold.value = -24;
+  kompSuara.knee.value = 6;
+  kompSuara.ratio.value = 4;
+  kompSuara.attack.value = 0.005;
+  kompSuara.release.value = 0.15;
+  const busSuara = a.createGain();
+  busSuara.gain.value = PREFERENSI_BAWAAN.volumeSuara;
+  busSuara.connect(kompSuara).connect(pembatas);
   const gemaEfek = buatGema(a, busEfek, { tunda: 0.12, umpan: 0.25, basah: 0.2, lowpass: 2400 });
-  return { a, busEfek, busMusik, gemaEfek, derau: bufferDerau(a) };
+  return { a, busEfek, busMusik, busSuara, redamEfek, gemaEfek, derau: bufferDerau(a) };
 }
 
 /** Slider volume (linear 0..1) ke gain. Dikuadratkan supaya perubahan slider terasa rata di telinga. */
@@ -61,16 +80,21 @@ const BATAS_BANGUN_MS = 300;
 let timerTidur: ReturnType<typeof setTimeout> | undefined;
 let terpasang = false;
 let sumberAktif = 0;
+/** Jumlah pemakai obrolan suara (suara teman, pengukur mic) yang sedang memegang context. */
+let pemakaiSuara = 0;
 const pendengarSiap = new Set<() => void>();
 
 const terlihat = (): boolean => typeof document === 'undefined' || document.visibilityState === 'visible';
-const perluJalan = (p: Preferensi = preferensi()): boolean => terlihat() && (p.suara || p.musik);
+/** Context perlu jalan: ada yang mau berbunyi, atau obrolan suara sedang dipakai (juga saat tab di latar). */
+const perluJalan = (p: Preferensi = preferensi()): boolean => (terlihat() && (p.suara || p.musik)) || pemakaiSuara > 0;
+/** Pemain sudah pernah menyentuh halaman (syarat browser untuk audio). */
+const pernahDisentuh = (): boolean => sudahDisentuh || (navigator.userActivation?.hasBeenActive ?? false);
 
 /** Browser hanya mengizinkan audio setelah ada interaksi pemain. */
 function bolehDibuat(): boolean {
   const p = preferensi();
   if (!p.suara && !p.musik) return false;
-  return sudahDisentuh || (navigator.userActivation?.hasBeenActive ?? false);
+  return pernahDisentuh();
 }
 
 function aturGain(param: AudioParam, nilai: number, sekarang: number, langsung: boolean): void {
@@ -88,6 +112,8 @@ function terapkanPreferensi(p: Preferensi, langsung = false): void {
   const t = rantai.a.currentTime;
   aturGain(rantai.busEfek.gain, p.suara ? kurvaVolume(p.volumeEfek) : 0, t, langsung);
   aturGain(rantai.busMusik.gain, p.musik ? kurvaVolume(p.volumeMusik) : 0, t, langsung);
+  // Volume suara teman linear (0..3): 2 = dua kali lipat. Tidak ikut sakelar efek/musik.
+  aturGain(rantai.busSuara.gain, p.volumeSuara, t, langsung);
   if (perluJalan(p)) bangunkan();
   else tidurkan(400);
 }
@@ -166,20 +192,69 @@ const JEDA_PANAS_MS = 600;
  */
 export function mesinAudio(): Rantai<AudioContext> | null {
   if (!rantai) {
-    if (!bolehDibuat()) return null;
-    // Pakai hasil pemanasan kalau ada (murah); kalau tidak, buat sekarang (mahal, tapi tetap di dalam gestur).
-    const panas = rantaiPanas && rantaiPanas.a.state !== 'closed' ? rantaiPanas : null;
-    rantaiPanas = null;
-    try {
-      rantai = panas ?? bangunRantai(new AudioContext({ latencyHint: 'interactive' }));
-    } catch {
-      return null;
-    }
-    terapkanPreferensi(preferensi(), true);
-    for (const cb of pendengarSiap) cb();
+    if (!bolehDibuat() || !buatRantai()) return null;
   }
   bangunkan();
   return rantai;
+}
+
+/** Buat rantai utama (pakai hasil pemanasan kalau ada). False kalau browser tanpa Web Audio. */
+function buatRantai(): boolean {
+  // Pakai hasil pemanasan kalau ada (murah); kalau tidak, buat sekarang (mahal, tapi tetap di dalam gestur).
+  const panas = rantaiPanas && rantaiPanas.a.state !== 'closed' ? rantaiPanas : null;
+  rantaiPanas = null;
+  try {
+    rantai = panas ?? bangunRantai(new AudioContext({ latencyHint: 'interactive' }));
+  } catch {
+    return false;
+  }
+  terapkanPreferensi(preferensi(), true);
+  for (const cb of pendengarSiap) cb();
+  return true;
+}
+
+/** Pegangan obrolan suara atas context bersama: selama dipegang, context tetap jalan (juga di latar). */
+export interface PeganganAudio {
+  readonly r: Rantai<AudioContext>;
+  /** Lepas pegangan (aman dipanggil berkali-kali). */
+  lepas(): void;
+}
+
+/**
+ * Pakai context bersama untuk obrolan suara (suara teman lewat busSuara, pengukur mic). Tidak bergantung
+ * pada sakelar efek/musik, tapi tetap butuh sentuhan pertama (aturan autoplay). Null kalau belum boleh
+ * atau browser tanpa Web Audio. Pemakai wajib memanggil `lepas()`.
+ */
+export function pakaiAudioSuara(): PeganganAudio | null {
+  if (typeof AudioContext === 'undefined') return null;
+  if (!rantai && (!pernahDisentuh() || !buatRantai())) return null;
+  const r = rantai!;
+  pemakaiSuara++;
+  bangunkan();
+  let dilepas = false;
+  return {
+    r,
+    lepas: () => {
+      if (dilepas) return;
+      dilepas = true;
+      pemakaiSuara = Math.max(0, pemakaiSuara - 1);
+      if (!perluJalan()) tidurkan(400);
+    },
+  };
+}
+
+/**
+ * Redam seluruh bus efek sebentar (ada teman yang ngomong): turun cepat ke `tingkat`, ditahan `lama`
+ * detik, lalu pulih pelan. Seragam untuk semua bunyi, jadi tidak membedakan bunyi apa pun.
+ */
+export function redamEfek(tingkat: number, lama: number): void {
+  if (!rantai) return;
+  const g = rantai.redamEfek.gain;
+  const kini = rantai.a.currentTime;
+  g.cancelScheduledValues(kini);
+  g.setValueAtTime(g.value, kini);
+  g.setTargetAtTime(tingkat, kini, 0.03);
+  g.setTargetAtTime(1, kini + lama, 0.4);
 }
 
 /** True kalau bunyi yang dijadwalkan sekarang akan benar-benar terdengar (bukan menumpuk di context tidur). */
@@ -204,8 +279,13 @@ export function saatMesinSiap(cb: () => void): () => void {
 }
 
 /** Keadaan mesin untuk uji/diagnostik. */
-export function diagnostikAudio(): { state: string; sumberAktif: number; waktu: number } {
-  return { state: rantai?.a.state ?? 'belum', sumberAktif, waktu: rantai?.a.currentTime ?? 0 };
+export function diagnostikAudio(): { state: string; sumberAktif: number; waktu: number; pemakaiSuara: number } {
+  return { state: rantai?.a.state ?? 'belum', sumberAktif, waktu: rantai?.a.currentTime ?? 0, pemakaiSuara };
+}
+
+/** Rantai yang sedang dipakai (atau null). Hanya untuk uji/diagnostik; jangan dipakai untuk berbunyi. */
+export function rantaiAktif(): Rantai<AudioContext> | null {
+  return rantai;
 }
 
 /** Pasang pembuka audio (sentuh/klik/tombol), penidur saat tab tersembunyi, dan pendengar preferensi. Aman dipanggil berkali-kali. */

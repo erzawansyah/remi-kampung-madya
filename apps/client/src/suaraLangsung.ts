@@ -14,10 +14,18 @@
 //
 // Penanda "lagi ngomong" hanya dari tingkat suara (audioLevel RTP dari teman, analyser untuk mic sendiri),
 // tidak pernah dari keadaan permainan.
+//
+// Kerasnya suara teman (0.10.0): suara tiap teman diputar lewat AudioContext bersama (efek/mesinAudio.ts):
+// sumber → gain per orang (0 = dibisukan) → busSuara (volume "Volume suara teman", bawaan 200%) →
+// kompresor → pembatas. Elemen <audio> tetap dipasang (Chrome tidak mengalirkan suara WebRTC ke Web Audio
+// tanpa elemen media) tapi dibisukan. Tanpa Web Audio / context belum jalan: <audio> biasa seperti 0.9.0.
+// Selama ada yang ngomong, musik dan seluruh bus efek diredam (pemicunya hanya tingkat suara).
 
 import { kunciNama, type AnggotaSuara, type DataSinyalSuara, type InfoMeja, type PesanServer } from '@remi/meja';
 import type { InfoRtt, PesanKeMeja } from './koneksi';
 import { TEKS_SUARA } from './konten/suara';
+import { pakaiAudioSuara, redamEfek } from './efek/mesinAudio';
+import { redamMusik } from './efek/musik';
 
 /** Keadaan ikon mic di kursi seseorang. */
 export type KeadaanMic = 'bicara' | 'nyala' | 'mati' | 'lemah';
@@ -45,6 +53,16 @@ export const MAKS_GAGAL_PEER = 3;
 export const BATAS_JAWAB_MS = 10_000;
 /** Jawaban server ICE tanpa TURN hanya diingat sebentar (siapa tahu TURN baru boleh sesudah teman masuk). */
 export const INGAT_ICE_TANPA_TURN_MS = 60_000;
+/** Selama teman ngomong: musik turun ke 0,15, seluruh bus efek ke 0,5, ditahan 0,5 detik lalu pulih. */
+export const REDAM_MUSIK_NGOMONG = 0.15;
+export const REDAM_EFEK_NGOMONG = 0.5;
+export const LAMA_REDAM_NGOMONG = 0.5;
+
+/** Redam musik dan seluruh bus efek (dipanggil berulang selama ada teman yang terdengar ngomong). */
+export function redamSaatNgomong(): void {
+  redamMusik(REDAM_MUSIK_NGOMONG, LAMA_REDAM_NGOMONG);
+  redamEfek(REDAM_EFEK_NGOMONG, LAMA_REDAM_NGOMONG);
+}
 
 // ---------------------------------------------------------------------------------------------
 // Kualitas sinyal (murni)
@@ -188,6 +206,14 @@ export interface PengukurLevel {
   tutup(): void;
 }
 
+/** Jalur Web Audio suara satu teman (gain per orang). */
+export interface JalurSuara {
+  /** Gain orang ini: 1 = biasa, 0 = dibisukan. */
+  aturGain(g: number): void;
+  /** Putus dan buang semua node (aman dipanggil berkali-kali). */
+  tutup(): void;
+}
+
 export interface LingkunganSuara {
   getUserMedia(c: MediaStreamConstraints): Promise<MediaStream>;
   buatPeer(c: RTCConfiguration): RTCPeerConnection;
@@ -204,8 +230,15 @@ export interface LingkunganSuara {
   clearTimeout(h: unknown): void;
   toast(pesan: string, salah?: boolean): void;
   umumkan(pesan: string): void;
-  /** Kecilkan musik sebentar (ada yang ngomong). */
+  /** Kecilkan musik dan efek sebentar (ada yang ngomong). */
   redamMusik(): void;
+  /**
+   * Sambungkan suara teman ke mesin audio (penguat). Null = tidak bisa (tanpa Web Audio, context belum
+   * jalan, browser menolak): suara diputar lewat <audio> biasa.
+   */
+  sambungSuara?(stream: MediaStream): JalurSuara | null;
+  /** Mic dibuka (true) atau dilepas (false): sesi audio iOS (navigator.audioSession). */
+  aturSesiAudio?(mic: boolean): void;
   /** Pasang pendengar ketukan sekali (memutar suara yang ditahan browser). Mengembalikan pelepas. */
   saatKetuk(fn: () => void): () => void;
 }
@@ -219,10 +252,104 @@ export interface SambunganSuara {
 
 const STUN_CADANGAN: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 
+/** Pengukur tingkat suara mic sendiri lewat analyser di context bersama. */
+function ukurLevelDiKonteks(stream: MediaStream): PengukurLevel | null {
+  const pegang = pakaiAudioSuara();
+  if (!pegang) return null;
+  try {
+    const a = pegang.r.a;
+    const sumber = a.createMediaStreamSource(stream);
+    const analis = a.createAnalyser();
+    analis.fftSize = 512;
+    sumber.connect(analis);
+    const data = new Float32Array(analis.fftSize);
+    let tertutup = false;
+    return {
+      level: () => {
+        analis.getFloatTimeDomainData(data);
+        let jumlah = 0;
+        for (const x of data) jumlah += x * x;
+        // RMS dikalikan supaya setara kira-kira dengan audioLevel RTP (bicara biasa ±0,05–0,3).
+        return Math.min(1, Math.sqrt(jumlah / data.length) * 2);
+      },
+      tutup: () => {
+        if (tertutup) return;
+        tertutup = true;
+        sumber.disconnect();
+        analis.disconnect();
+        pegang.lepas();
+      },
+    };
+  } catch {
+    pegang.lepas();
+    return null;
+  }
+}
+
+/**
+ * Suara satu teman lewat context bersama: sumber → gain per orang → busSuara. Hanya kalau context sudah
+ * jalan (kalau masih tidur, misalnya iPhone di luar ketukan, suaranya bisa hilang sementara <audio>-nya
+ * dibisukan), jadi selain itu null dan pemanggil memakai <audio> biasa.
+ */
+export function sambungSuaraDiKonteks(stream: MediaStream): JalurSuara | null {
+  const pegang = pakaiAudioSuara();
+  if (!pegang) return null;
+  const a = pegang.r.a;
+  if (a.state !== 'running') {
+    pegang.lepas();
+    return null;
+  }
+  let sumber: MediaStreamAudioSourceNode;
+  let gain: GainNode;
+  try {
+    sumber = a.createMediaStreamSource(stream);
+    gain = a.createGain();
+    sumber.connect(gain);
+    gain.connect(pegang.r.busSuara);
+  } catch {
+    pegang.lepas();
+    return null;
+  }
+  let tertutup = false;
+  return {
+    aturGain: (g) => {
+      if (tertutup) return;
+      const p = gain.gain;
+      const t = a.currentTime;
+      p.cancelScheduledValues(t);
+      p.setValueAtTime(p.value, t);
+      p.setTargetAtTime(g, t, 0.03);
+    },
+    tutup: () => {
+      if (tertutup) return;
+      tertutup = true;
+      try {
+        sumber.disconnect();
+        gain.disconnect();
+      } catch {
+        // sudah terputus
+      }
+      pegang.lepas();
+    },
+  };
+}
+
+/**
+ * iPhone/iPad (Safari 17+): sesi audio 'play-and-record' tepat sebelum mic dibuka, kembali 'auto' sesudah
+ * mic dilepas, supaya suara tidak pindah ke speaker kuping. Browser lain tidak punya navigator.audioSession.
+ */
+export function aturSesiAudioIos(mic: boolean): void {
+  try {
+    const sesi = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+    if (sesi) sesi.type = mic ? 'play-and-record' : 'auto';
+  } catch {
+    // Browser menolak: biarkan sesi bawaan.
+  }
+}
+
 /** Lingkungan browser sungguhan. */
-export function lingkunganBrowser(opsi: { toast: LingkunganSuara['toast']; umumkan: LingkunganSuara['umumkan']; redamMusik: () => void }): LingkunganSuara {
+export function lingkunganBrowser(opsi: { toast: LingkunganSuara['toast']; umumkan: LingkunganSuara['umumkan'] }): LingkunganSuara {
   let wadah: HTMLElement | null = null;
-  let konteks: AudioContext | null = null;
   return {
     getUserMedia: (c) => navigator.mediaDevices.getUserMedia(c),
     buatPeer: (c) => new RTCPeerConnection(c),
@@ -245,34 +372,11 @@ export function lingkunganBrowser(opsi: { toast: LingkunganSuara['toast']; umumk
       const isi = (await r.json()) as { iceServers?: RTCIceServer[]; ttl?: number };
       return { iceServers: Array.isArray(isi.iceServers) && isi.iceServers.length ? isi.iceServers : STUN_CADANGAN, ttl: Number(isi.ttl) || 3600 };
     },
-    ukurLevelLokal: (stream) => {
-      try {
-        const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (!AC) return null;
-        konteks ??= new AC();
-        if (konteks.state === 'suspended') void konteks.resume().catch(() => undefined);
-        const sumber = konteks.createMediaStreamSource(stream);
-        const analis = konteks.createAnalyser();
-        analis.fftSize = 512;
-        sumber.connect(analis);
-        const data = new Float32Array(analis.fftSize);
-        return {
-          level: () => {
-            analis.getFloatTimeDomainData(data);
-            let jumlah = 0;
-            for (const x of data) jumlah += x * x;
-            // RMS dikalikan supaya setara kira-kira dengan audioLevel RTP (bicara biasa ±0,05–0,3).
-            return Math.min(1, Math.sqrt(jumlah / data.length) * 2);
-          },
-          tutup: () => {
-            sumber.disconnect();
-            analis.disconnect();
-          },
-        };
-      } catch {
-        return null;
-      }
-    },
+    // Pengukur mic memakai context bersama (satu AudioContext untuk seluruh aplikasi; di iOS beberapa
+    // context sekaligus rawan bermasalah). Pegangannya menjaga context tetap jalan selama mic nyala.
+    ukurLevelLokal: (stream) => ukurLevelDiKonteks(stream),
+    sambungSuara: (stream) => sambungSuaraDiKonteks(stream),
+    aturSesiAudio: (mic) => aturSesiAudioIos(mic),
     sekarang: () => performance.now(),
     setInterval: (fn, ms) => setInterval(fn, ms),
     clearInterval: (h) => clearInterval(h as ReturnType<typeof setInterval>),
@@ -280,7 +384,7 @@ export function lingkunganBrowser(opsi: { toast: LingkunganSuara['toast']; umumk
     clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
     toast: opsi.toast,
     umumkan: opsi.umumkan,
-    redamMusik: opsi.redamMusik,
+    redamMusik: redamSaatNgomong,
     saatKetuk: (fn) => {
       const f = () => fn();
       document.addEventListener('pointerdown', f, true);
@@ -324,6 +428,10 @@ interface Peer {
   paket: { hilang: number; terima: number } | null;
   /** Penawar: timer batas menunggu jawaban (BATAS_JAWAB_MS). */
   timerJawab: unknown;
+  /** Jalur Web Audio (penguat); null = diputar lewat <audio> biasa. */
+  jalur: JalurSuara | null;
+  /** Dibisukan di HP ini (Dengar suara mati, atau Bisukan orang ini). */
+  bisu: boolean;
 }
 
 export interface OrangSuara {
@@ -571,9 +679,11 @@ export class SuaraLangsung {
     this.memintaIzin = true;
     this.kabari();
     let stream: MediaStream;
+    this.env.aturSesiAudio?.(true);
     try {
       stream = await this.env.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }, video: false });
     } catch (e) {
+      if (!this.stream) this.env.aturSesiAudio?.(false);
       if (gen !== this.generasi) return;
       this.memintaIzin = false;
       const nama = (e as { name?: string })?.name;
@@ -583,6 +693,7 @@ export class SuaraLangsung {
     }
     if (gen !== this.generasi || !this.boleh) {
       stream.getTracks().forEach((t) => t.stop());
+      if (!this.stream) this.env.aturSesiAudio?.(false);
       return;
     }
     this.memintaIzin = false;
@@ -608,9 +719,11 @@ export class SuaraLangsung {
   private matikanStream(): void {
     this.pengukur?.tutup();
     this.pengukur = null;
+    const ada = !!this.stream;
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     this.bicaraSaya = false;
+    if (ada) this.env.aturSesiAudio?.(false);
   }
 
   /** "Dengar suara": mati = semua suara teman dibisukan di HP ini saja. */
@@ -704,11 +817,21 @@ export class SuaraLangsung {
     this.tutupPeer(id);
     const pc = this.env.buatPeer({ iceServers: servers, bundlePolicy: 'max-bundle' });
     const audio = this.env.buatAudio();
-    const peer: Peer = { id, pc, audio, penawar, status: 'menyambung', keras: -Infinity, paket: null, timerJawab: null };
+    const peer: Peer = { id, pc, audio, penawar, status: 'menyambung', keras: -Infinity, paket: null, timerJawab: null, jalur: null, bisu: false };
     this.peers.set(id, peer);
     pc.addEventListener('track', (e) => {
       const ev = e as RTCTrackEvent;
-      audio.srcObject = ev.streams[0] ?? new MediaStream([ev.track]);
+      if (this.peers.get(id) !== peer) return;
+      const stream = ev.streams[0] ?? new MediaStream([ev.track]);
+      // <audio> tetap diberi stream (tanpa itu Chrome tidak mengalirkan suara WebRTC ke Web Audio).
+      audio.srcObject = stream;
+      peer.jalur?.tutup();
+      peer.jalur = null;
+      try {
+        peer.jalur = this.env.sambungSuara?.(stream) ?? null;
+      } catch (err) {
+        console.error('galat jalur suara', err);
+      }
       this.terapkanBisu();
       this.putar(peer);
     });
@@ -823,6 +946,8 @@ export class SuaraLangsung {
     } catch {
       // sudah tertutup
     }
+    p.jalur?.tutup();
+    p.jalur = null;
     p.audio.pause?.();
     p.audio.srcObject = null;
     p.audio.remove();
@@ -862,7 +987,14 @@ export class SuaraLangsung {
 
   private terapkanBisu(): void {
     const nama = new Map(this.anggota.map((a) => [a.id, kunciNama(this.namaKursi[a.kursi] ?? '')]));
-    for (const p of this.peers.values()) p.audio.muted = !this.dengar || this.bisu.has(nama.get(p.id) ?? '');
+    for (const p of this.peers.values()) {
+      p.bisu = !this.dengar || this.bisu.has(nama.get(p.id) ?? '');
+      if (p.jalur) {
+        // Jalur penguat: <audio> selalu bisu (supaya tidak terdengar dobel), bisukan lewat gain.
+        p.audio.muted = true;
+        p.jalur.aturGain(p.bisu ? 0 : 1);
+      } else p.audio.muted = p.bisu;
+    }
   }
 
   private putar(p: Peer): void {
@@ -906,7 +1038,7 @@ export class SuaraLangsung {
           if (ngomong) this.bicara.add(p.id);
           else this.bicara.delete(p.id);
         }
-        if (ngomong && !p.audio.muted) adaYangNgomong = true;
+        if (ngomong && !p.bisu) adaYangNgomong = true;
       }
       const levelSaya = this.trackKirim() && this.pengukur ? this.pengukur.level() : 0;
       if (levelSaya >= AMBANG_BICARA) this.kerasSaya = kini;

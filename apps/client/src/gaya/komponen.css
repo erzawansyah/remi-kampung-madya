@@ -1464,6 +1464,23 @@ details.akordion[open] > summary::after {
 .lembar-suara h3 {
   margin: var(--ruang-3) 0 var(--ruang-2);
 }
+/* Volume suara teman (0–300%), di antara sakelar dan daftar orang */
+.lembar-suara .volume-suara {
+  margin-top: var(--ruang-3);
+}
+.lembar-suara .kepala-volume-suara {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ruang-2);
+}
+.lembar-suara .kepala-volume-suara label {
+  font-weight: 700;
+}
+.lembar-suara .kepala-volume-suara output {
+  font-size: var(--teks-sm);
+  color: var(--teks-redup);
+}
 .lembar-suara .daftar-suara {
   display: grid;
   gap: var(--ruang-2);

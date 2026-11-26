@@ -1106,6 +1106,8 @@ Pilihan yang waktu itu ditawarkan dan **tidak dipilih**:
 
 **Penerapan (26 Nov 2026):** `packages/meja/src/sprint.ts` (`PENGATURAN_SPRINT` 6 pemain dan `batasPutaran: null`, `NAMA_LAWAN_SPRINT` lima nama, `hasilPutaranSprint`, `hasilSprint` per putaran; `JUMLAH_PUTARAN_SPRINT` dihapus), `catatanSprint()` di `meja.ts` (putaran yang belum tercatat; `SprintDataMeja.putaranTercatat`, `waktuPutaran`, `putaranSampai`), kait `OpsiMeja.saatPutaranSprint`; server tabel `sprint_putaran` (MIGRASI v8, tabel `sprint` v7 hanya dibaca), `GET /api/sprint` bentuk jawabannya sama, `sprintHasil` per putaran (field baru `putaran`); aplikasi: bar atas "Sprint · Putaran N", baris sprint di hasil putaran, keluar ke papan sprint.
 
+**Riwayat di HP (keputusan pemilik 26 Nov 2026): putaran sprint tidak masuk Riwayat/Statistik HP, hanya papan sprint.** Karena meja sprint tidak pernah selesai sendiri, tidak ada klasemen akhir yang dicatat ke Riwayat HP (`main.ts` hanya mencatat permainan yang selesai). Pengembang bertanya apakah putaran sprint perlu ikut Riwayat/Statistik; pemilik memilih "a, biarkan": tetap seperti sekarang. Tab Riwayat di dalam meja sprint (rincian putaran meja itu) tidak terpengaruh. Bantuan bab Sprint hanya menyebut papan sprint, jadi tidak ada teks yang perlu diubah.
+
 ---
 
 ## Catatan lain (belum masuk tabel)
