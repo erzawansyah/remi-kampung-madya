@@ -807,7 +807,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Keluar meja di tengah permainan: kursimu diteruskan warga kedai sampai permainan selesai, dan nggak bisa diambil lagi. Kalau mejanya minimal 2 orang, di peringkat online kamu dihitung juru kunci. Sinyal putus atau aplikasi ketutup nggak dihitung keluar.',
           'Host pergi: tugas host pindah ke pemain lain yang masih terhubung.',
           `Di hasil putaran, tombol host baru aktif ${DETIK_JEDA_LANJUT} detik kemudian supaya semua sempat lihat kartu. Sudah selesai lihat? Tekan ${TEKS_LANJUT.siap}.`,
-          `Mau ngeledek? Di hasil putaran, buka bagian ${TEKS_LEDEK.judul}, pilih orangnya, lalu ketuk ledekannya. Paling banyak ${MAKS_LEDEK_PER_PUTARAN} per putaran.`,
+          `Mau ngeledek? Di bagian bawah hasil putaran, ketuk nama orangnya di baris ${TEKS_LEDEK.judul}, lalu pilih ledekannya. Paling banyak ${MAKS_LEDEK_PER_PUTARAN} per putaran.`,
         ],
       },
       {

@@ -4,6 +4,9 @@
 // (antri, ketuk untuk menutup, tutup sendiri, menunggu animasi meja, textContent saja, pembaca layar).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DAFTAR_EMOTE, DAFTAR_LEDEKAN } from '@remi/meja';
 
 vi.mock('../src/efek/suara', () => ({ bunyi: vi.fn(), getar: vi.fn() }));
@@ -14,11 +17,14 @@ import { umumkan } from '../src/ui/dom';
 import {
   apaEmoji,
   hapusLapisanLedek,
-  htmlLedek,
+  htmlBarisLedek,
+  htmlIsiLembarLedek,
+  htmlLembarLedek,
   ISI_LEDEK,
   LAMA_LEDEK_MS,
   LedekBesar,
   MAKS_ANTRIAN_LEDEK,
+  rapikanBarisLedek,
   sasaranLedekBawaan,
 } from '../src/ui/ledek';
 import { TEKS_LEDEK } from '../src/konten/ledek';
@@ -53,20 +59,120 @@ describe('sasaranLedekBawaan', () => {
   });
 });
 
-describe('htmlLedek', () => {
-  const wadah = (html: string) => {
-    const el = document.createElement('div');
-    el.innerHTML = html;
-    return el;
-  };
+const wadah = (html: string) => {
+  const el = document.createElement('div');
+  el.innerHTML = html;
+  return el;
+};
 
+describe('htmlBarisLedek (baris kecil di kaki modal hasil)', () => {
   it('kosong kalau tidak ada manusia lain', () => {
-    expect(htmlLedek({ calon: [], sasaran: null, habis: false, jeda: false })).toBe('');
+    expect(htmlBarisLedek({ calon: [], habis: false })).toBe('');
+    expect(htmlBarisLedek({ calon: [], habis: true })).toBe('');
   });
 
-  it('sasaran terpilih aria-pressed; ledekan dulu lalu emoji; tidak ada teks bebas', () => {
-    const el = wadah(htmlLedek({ calon: [{ kursi: 1, nama: 'Budi' }, { kursi: 2, nama: 'Citra' }], sasaran: 2, habis: false, jeda: false }));
+  it('label "Ledek" lalu satu chip per orang; chip turun baris (bukan digeser ke samping)', () => {
+    const el = wadah(htmlBarisLedek({ calon: [{ kursi: 1, nama: 'Budi' }, { kursi: 3, nama: 'Ning Kukis' }], habis: false }));
+    const baris = el.querySelector<HTMLElement>('.baris-ledek')!;
+    expect(baris.querySelector('.label-ledek')!.textContent).toBe(TEKS_LEDEK.judul);
+    const chip = [...baris.querySelectorAll<HTMLButtonElement>('[data-ledek-buka]')];
+    expect(chip.map((b) => [b.dataset.ledekBuka, b.querySelector('.nama-ledek')!.textContent, b.getAttribute('aria-label')])).toEqual([
+      ['1', 'Budi', 'Ledek Budi'],
+      ['3', 'Ning Kukis', 'Ledek Ning Kukis'],
+    ]);
+    expect(chip.every((b) => b.classList.contains('chip-ledek') && b.querySelector('.ikon-ledek')!.textContent === TEKS_LEDEK.ikon)).toBe(true);
+    // "+N" hanya muncul kalau nama tidak muat dua baris (rapikanBarisLedek).
+    expect(baris.querySelector<HTMLElement>('[data-ledek-lebih]')!.hidden).toBe(true);
+    // Tidak ada isi ledekan di baris ini: dipilih di lembar.
+    expect(baris.querySelector('[data-ledek-isi]')).toBeNull();
+  });
+
+  it('CSS baris: flex-wrap, tanpa gulir ke samping; nama panjang dipotong elipsis', () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../src/gaya/meja.css'), 'utf8');
+    const aturan = (sel: string) => css.match(new RegExp(`\\n${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
+    expect(aturan('.baris-ledek')).toContain('flex-wrap: wrap');
+    expect(aturan('.baris-ledek')).not.toMatch(/overflow-x/);
+    expect(aturan('.chip-ledek .nama-ledek')).toContain('text-overflow: ellipsis');
+  });
+
+  it('jatah habis: catatan, tanpa chip', () => {
+    const el = wadah(htmlBarisLedek({ calon: [{ kursi: 1, nama: 'Budi' }], habis: true }));
+    expect(el.querySelector('[data-ledek-buka]')).toBeNull();
+    expect(el.textContent).toContain(TEKS_LEDEK.habis);
+  });
+
+  it('nama di-escape (bukan HTML)', () => {
+    const jahat = '<img src=x onerror=alert(1)>';
+    const el = wadah(htmlBarisLedek({ calon: [{ kursi: 1, nama: jahat }], habis: false }));
+    expect(el.querySelector('img')).toBeNull();
+    expect(el.querySelector('.nama-ledek')!.textContent).toBe(jahat);
+  });
+
+  it('rapikanBarisLedek: nama yang tidak muat dua baris diganti "+N"', () => {
+    const el = wadah(
+      htmlBarisLedek({ calon: [1, 2, 3, 4, 5].map((k) => ({ kursi: k, nama: `Pemain ${k}` })), habis: false }),
+    );
+    document.body.appendChild(el);
+    // Tata letak palsu: dua butir (label, chip, "+N") per baris.
+    const anak = () => [...el.querySelector('.baris-ledek')!.children].filter((c) => !(c as HTMLElement).hidden) as HTMLElement[];
+    // Label lebih pendek dan di tengah baris (align-items: center): top-nya beda dari chip sebaris.
+    const asliTop = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetTop')!;
+    const asliTinggi = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!;
+    const label = (x: HTMLElement) => x.classList.contains('label-ledek');
+    Object.defineProperty(HTMLElement.prototype, 'offsetTop', {
+      configurable: true,
+      get(this: HTMLElement) {
+        const i = anak().indexOf(this);
+        return i < 0 ? 0 : Math.floor(i / 2) * 50 + (label(this) ? 12 : 0);
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return label(this) ? 20 : 44;
+      },
+    });
+    try {
+      rapikanBarisLedek(el);
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, 'offsetTop', asliTop);
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', asliTinggi);
+      el.remove();
+    }
+    const tampil = [...el.querySelectorAll<HTMLElement>('[data-ledek-buka]')].filter((c) => !c.hidden).map((c) => c.dataset.ledekBuka);
+    const lebih = el.querySelector<HTMLElement>('[data-ledek-lebih]')!;
+    expect(lebih.hidden).toBe(false);
+    expect(tampil.length + Number(lebih.textContent!.slice(1))).toBe(5);
+    // Label + 2 nama + "+3" = dua baris.
+    expect(tampil).toEqual(['1', '2']);
+    expect(lebih.textContent).toBe('+3');
+    // Nama yang terbaca memuat teks yang terlihat (WCAG 2.5.3).
+    expect(lebih.getAttribute('aria-label')).toBe(`+3 ${TEKS_LEDEK.lainnya}`);
+  });
+});
+
+describe('lembar Ledek', () => {
+  const calon = [
+    { kursi: 1, nama: 'Budi' },
+    { kursi: 2, nama: 'Citra' },
+  ];
+
+  it('judul "Ledek <nama>", tombol tutup, baris status hanya visual (kiriman diumumkan lewat umumkan)', () => {
+    const el = wadah(htmlLembarLedek('<b>Budi</b>', ''));
+    expect(el.querySelector('[data-judul-ledek]')!.textContent).toBe('Ledek <b>Budi</b>');
+    expect(el.querySelector('b')).toBeNull();
+    expect(el.querySelector('[data-tutup]')!.getAttribute('aria-label')).toBe(TEKS_LEDEK.tutup);
+    expect(el.querySelector('[data-status-ledek]')!.getAttribute('aria-hidden')).toBe('true');
+    expect(el.querySelector('[data-status-ledek]')!.hasAttribute('aria-live')).toBe(false);
+    // Judul dan status di luar wadah isi yang digulir, jadi tetap terlihat.
+    expect(el.querySelector('[data-lembar-isi] [data-status-ledek], [data-lembar-isi] [data-judul-ledek]')).toBeNull();
+  });
+
+  it('2+ orang: pilihan sasaran aria-pressed; ledekan dulu lalu semua emoji; tidak ada teks bebas', () => {
+    const el = wadah(htmlIsiLembarLedek({ calon, sasaran: 2, habis: false, jeda: false, baruDikirim: null }));
     const ke = [...el.querySelectorAll<HTMLButtonElement>('[data-ledek-ke]')];
+    // Pilihan sasaran berbentuk segmen, beda dari tombol ledekan.
+    expect(el.querySelector('.ledek-sasaran')!.classList.contains('segmen')).toBe(true);
     expect(ke.map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([
       ['Budi', 'false'],
       ['Citra', 'true'],
@@ -74,23 +180,33 @@ describe('htmlLedek', () => {
     const isi = [...el.querySelectorAll<HTMLButtonElement>('[data-ledek-isi]')].map((b) => b.dataset.ledekIsi!);
     expect(isi).toEqual([...ISI_LEDEK]);
     expect(isi.slice(0, DAFTAR_LEDEKAN.length)).toEqual([...DAFTAR_LEDEKAN]);
-    expect(isi.slice(DAFTAR_LEDEKAN.length).every(apaEmoji)).toBe(true);
-    for (const x of isi) expect([...DAFTAR_LEDEKAN, ...DAFTAR_EMOTE] as string[]).toContain(x);
+    expect(isi.slice(DAFTAR_LEDEKAN.length)).toEqual(DAFTAR_EMOTE.filter(apaEmoji));
+    expect(el.querySelectorAll('.ledek-kata button')).toHaveLength(DAFTAR_LEDEKAN.length);
     expect(el.querySelector('input, textarea')).toBeNull();
     expect(el.querySelector('[aria-disabled]')).toBeNull();
   });
 
-  it('nama di-escape (bukan HTML); jeda mengunci tombol isi; habis menyembunyikannya', () => {
-    const jahat = '<img src=x onerror=alert(1)>';
-    const el = wadah(htmlLedek({ calon: [{ kursi: 1, nama: jahat }], sasaran: 1, habis: false, jeda: true }));
-    expect(el.querySelector('img')).toBeNull();
-    expect(el.querySelector('[data-ledek-ke="1"]')!.textContent).toBe(jahat);
+  it('satu orang: tanpa pilihan sasaran', () => {
+    const el = wadah(htmlIsiLembarLedek({ calon: [calon[0]], sasaran: 1, habis: false, jeda: false, baruDikirim: null }));
+    expect(el.querySelector('[data-ledek-ke]')).toBeNull();
+    expect(el.querySelector('[data-ledek-isi]')).not.toBeNull();
+  });
+
+  it('jeda: semua tombol isi dikunci, yang baru terkirim diberi tanda; habis: catatan tanpa tombol isi', () => {
+    const el = wadah(htmlIsiLembarLedek({ calon, sasaran: 1, habis: false, jeda: true, baruDikirim: 'Rasain!' }));
     const isi = [...el.querySelectorAll('[data-ledek-isi]')];
-    expect(isi.length).toBeGreaterThan(0);
     expect(isi.every((b) => b.getAttribute('aria-disabled') === 'true')).toBe(true);
-    const habis = wadah(htmlLedek({ calon: [{ kursi: 1, nama: 'Budi' }], sasaran: 1, habis: true, jeda: false }));
+    expect([...el.querySelectorAll('.terkirim')].map((b) => b.getAttribute('data-ledek-isi'))).toEqual(['Rasain!']);
+    const habis = wadah(htmlIsiLembarLedek({ calon, sasaran: 1, habis: true, jeda: false, baruDikirim: null }));
     expect(habis.querySelector('[data-ledek-isi]')).toBeNull();
     expect(habis.textContent).toContain(TEKS_LEDEK.habis);
+  });
+
+  it('nama sasaran di-escape', () => {
+    const jahat = '<img src=x onerror=alert(1)>';
+    const el = wadah(htmlIsiLembarLedek({ calon: [{ kursi: 1, nama: jahat }, calon[1]], sasaran: 1, habis: false, jeda: false, baruDikirim: null }));
+    expect(el.querySelector('img')).toBeNull();
+    expect(el.querySelector('[data-ledek-ke="1"]')!.textContent).toBe(jahat);
   });
 });
 
@@ -105,9 +221,12 @@ describe('LedekBesar (ledekan untukku)', () => {
     const el = tampil()!;
     expect(el).not.toBeNull();
     expect(el.getAttribute('aria-hidden')).toBe('true');
-    expect(el.querySelector('.ledek-dari')!.textContent).toBe(`Ani ${TEKS_LEDEK.ngeledekKamu}`);
+    expect(el.querySelector('.ledek-dari')!.textContent).toBe(`AAni ${TEKS_LEDEK.ngeledekKamu}`);
+    expect(el.querySelector('.ledek-dari b')!.textContent).toBe('Ani');
+    // Tanpa petunjuk "ketuk di mana saja", dan tanpa Bales kalau tidak diminta.
+    expect(el.querySelector('.bales-ledek')).toBeNull();
     expect(el.querySelector('.ledek-isi')!.textContent).toBe('<b>Rasain!</b>');
-    expect(el.querySelector('b')).toBeNull();
+    expect(el.querySelector('.ledek-isi b')).toBeNull();
     expect(bunyi).toHaveBeenCalledWith('notifikasi');
     expect(umumkan).toHaveBeenCalledWith('Ani ngeledek kamu: Rasain!');
     // Lapisannya anak <body>, bukan #ui/#modal (yang dibuat inert selama ada jendela).
@@ -237,5 +356,38 @@ describe('LedekBesar (ledekan untukku)', () => {
     vi.advanceTimersByTime(10_000);
     l.tambah('Ani', 'c', 'c');
     expect(tampil()).toBeNull();
+  });
+
+  it('Bales: hanya kalau pengirimnya masih bisa diledek; ketuk = buka lembar dulu lalu tutup, tidak ikut menutup berikutnya', () => {
+    vi.useFakeTimers();
+    let bisa = true;
+    let lembarTerbuka = false;
+    const buka = vi.fn(() => (lembarTerbuka = true));
+    const l = new LedekBesar(undefined, () => lembarTerbuka, { bisa: () => bisa, buka });
+    l.tambah('<i>Budi</i>', 'Rasain!', 'x', 1);
+    l.tambah('Budi', 'Makan tuh!', 'y', 1);
+    const b = tampil()!.querySelector<HTMLButtonElement>('.bales-ledek')!;
+    expect(b.textContent).toBe(`${TEKS_LEDEK.bales} <i>Budi</i>`);
+    expect(b.querySelector('i')).toBeNull();
+    b.click();
+    expect(buka).toHaveBeenCalledWith(1);
+    // Lembar balasan terbuka: ledekan berikutnya menunggu, tidak muncul menutupi lembar.
+    expect(tampil()).toBeNull();
+    expect(l.jumlahAntri).toBe(1);
+    // Lembar ditutup: ledekan berikutnya tampil (dan TIDAK ikut tertutup oleh ketukan tadi).
+    lembarTerbuka = false;
+    vi.advanceTimersByTime(500);
+    expect(tampil()!.querySelector('.ledek-isi')!.textContent).toBe('Makan tuh!');
+    l.tutup();
+    // Pengirim sudah tidak bisa diledek (putus, modal hasil tertutup): tanpa Bales.
+    bisa = false;
+    l.tambah('Budi', 'Rasain!', 'z', 1);
+    expect(tampil()!.querySelector('.bales-ledek')).toBeNull();
+    l.tutup();
+    // Tanpa kursi pengirim: tanpa Bales.
+    bisa = true;
+    l.tambah('Budi', 'Rasain!', 'z');
+    expect(tampil()!.querySelector('.bales-ledek')).toBeNull();
+    l.hancurkan();
   });
 });

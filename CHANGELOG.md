@@ -6,6 +6,12 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+### Untuk pemain
+
+#### Diubah
+
+- **Ledek** pindah ke baris kecil di bagian bawah hasil putaran; ketuk nama, pilih ledekannya. Ledekan yang kamu terima lebih gampang dibaca, dan bisa langsung dibales.
+
 ## [0.9.1] - 2026-11-25
 
 ### Untuk pemain

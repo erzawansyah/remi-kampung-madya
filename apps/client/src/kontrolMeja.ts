@@ -63,7 +63,17 @@ import { TEKS_KALDU } from './konten/kaldu';
 import { KOMPETISI_DIBUKA, TEKS_KOMPETISI, teksHasilKompetisi } from './konten/kompetisi';
 import { TEKS_SPRINT, teksPeringkatMinggu } from './konten/sprint';
 import { TEKS_LANJUT, TEKS_LEDEK } from './konten/ledek';
-import { apaEmoji, hapusLapisanLedek, htmlLedek, lapisanLedek, LedekBesar, sasaranLedekBawaan } from './ui/ledek';
+import {
+  apaEmoji,
+  hapusLapisanLedek,
+  htmlBarisLedek,
+  htmlIsiLembarLedek,
+  htmlLembarLedek,
+  lapisanLedek,
+  LedekBesar,
+  rapikanBarisLedek,
+  sasaranLedekBawaan,
+} from './ui/ledek';
 import { TEKS_KONEKSI, teksMentungTerlewat } from './konten/koneksi';
 import { TEKS_TONTONAN } from './konten/tontonan';
 import { TEKS_TURUNKAN } from './konten/turunkan';
@@ -696,13 +706,30 @@ export class KontrolMeja implements AksiAdegan {
   private ledekTerkirim = { putaran: -1, jumlah: 0 };
   /** Tombol ledekan terkunci sampai waktu ini (Date.now()). */
   private jedaLedekSampai = 0;
+  /** Isi ledekan terakhir yang kukirim (tanda ✓ di lembar selama jeda) dan ke siapa. */
+  private ledekBaru: { putaran: number; ke: number; isi: string } | null = null;
+  /** Lembar Ledek yang sedang terbuka (lewat bukaDialog, di atas modal hasil). */
+  private lembarLedek: { putaran: number; dialog: HTMLElement; tutup: () => void; htmlIsi: string } | null = null;
   /**
    * Ledekan untukku: tampil besar, antri. Menunggu animasi meja selesai, dan baru tampil sesudah hasil
    * putaran terpasang di layar ini tanpa jendela yang menunggu pemain (panel mentung, popup joker).
    */
   private readonly ledekBesar = new LedekBesar(
     () => this.sedangMemutar || this.animasi,
-    () => this.view?.status !== 'putaranSelesai' || !!document.querySelector('#modal [data-mentung], #modal [data-joker]'),
+    // Selama lembar Ledek terbuka, ledekan untukku menunggu: lapisan penuh layarnya akan menutupi lembar,
+    // dan Escape/Back menutup lembar di bawahnya, bukan ledekan yang terlihat.
+    () =>
+      this.view?.status !== 'putaranSelesai' ||
+      !!this.lembarLedek ||
+      !!document.querySelector('#modal [data-mentung], #modal [data-joker]'),
+    {
+      // "Bales": hanya kalau pengirimnya masih bisa diledek dan modal hasil masih terbuka.
+      bisa: (kursi) => !this.penonton && this.calonLedek().includes(kursi) && !!this.hasilTerbuka(),
+      buka: (kursi) => {
+        const h = this.hasilTerbuka();
+        if (h) this.bukaLembarLedek(h, kursi);
+      },
+    },
   );
   /** Sorotan keyboard: id kartu (tangan/pungutan), 'deck', 'buangan', atau null. */
   private fokus: string | null = null;
@@ -866,6 +893,7 @@ export class KontrolMeja implements AksiAdegan {
     this.pemutar.hentikan();
     bersihkanSorak();
     this.ledekBesar.hancurkan();
+    this.tutupLembarLedek();
     hapusLapisanLedek();
     this.timerAksi.forEach((t) => clearTimeout(t));
     this.timerTertunda.forEach((t) => clearTimeout(t));
@@ -3020,7 +3048,7 @@ export class KontrolMeja implements AksiAdegan {
     if ((this.antrian.at(-1)?.v ?? this.viewTertunda ?? this.view).status !== 'putaranSelesai') return;
     if (ke === this.saya && dari !== this.saya) {
       const nama = this.view.pemain[dari]?.nama ?? 'Pemain';
-      this.ledekBesar.tambah(nama, isi, `${this.namaUntukPembaca(dari)} ${TEKS_LEDEK.ngeledekKamu}: ${isi}`);
+      this.ledekBesar.tambah(nama, isi, `${this.namaUntukPembaca(dari)} ${TEKS_LEDEK.ngeledekKamu}: ${isi}`, dari);
       return;
     }
     this.gelembung(dari, isi, ke);
@@ -3029,6 +3057,7 @@ export class KontrolMeja implements AksiAdegan {
   /** Buang ledekan yang antri/tampil dan gelembung ledekan yang masih melayang (hasil putaran ditinggalkan). */
   private bersihkanLedek() {
     this.ledekBesar.kosongkan();
+    this.tutupLembarLedek();
     document.querySelectorAll('#lapisan-ledek .gelembung').forEach((el) => el.remove());
   }
 
@@ -3229,16 +3258,32 @@ export class KontrolMeja implements AksiAdegan {
 
   /** Perbarui modal hasil putaran kalau sedang terbuka (tanpa membukanya kalau sudah ditutup). */
   private segarkanHasil() {
+    this.segarkanLembarLedek();
     const v = this.view;
     if (this.hancur || v?.status !== 'putaranSelesai' || !document.querySelector('#modal [data-hasil]')) return;
     this.modalHasil(v.riwayat[v.riwayat.length - 1]);
   }
 
-  /** Manusia lain yang terhubung di meja online: calon sasaran ledekan. Offline/latihan: tidak ada. */
+  /**
+   * Manusia lain yang terhubung di meja online: calon sasaran ledekan. Offline, latihan, dan penonton:
+   * tidak ada. Warga kedai tidak pernah jadi sasaran.
+   */
   private calonLedek(): number[] {
     const info = this.info;
-    if (!info || this.app.jenis !== 'online' || this.app.tutorial) return [];
+    if (!info || this.app.jenis !== 'online' || this.app.tutorial || this.penonton) return [];
     return info.kursi.flatMap((k, i) => (k.jenis === 'manusia' && k.terhubung && i !== this.saya ? [i] : []));
+  }
+
+  /** Hasil putaran yang modalnya sedang terbuka (dan masih hasil terbaru), selain itu null. */
+  private hasilTerbuka(): HasilPutaran | null {
+    const v = this.view;
+    if (this.hancur || v?.status !== 'putaranSelesai') return null;
+    const h = v.riwayat[v.riwayat.length - 1];
+    return h && document.querySelector(`#modal [data-hasil="${h.nomor}"]`) ? h : null;
+  }
+
+  private jatahLedekHabis(h: HasilPutaran): boolean {
+    return this.ledekTerkirim.putaran === h.nomor && this.ledekTerkirim.jumlah >= MAKS_LEDEK_PER_PUTARAN;
   }
 
   /** Sasaran ledekan sekarang: pilihanku di putaran ini kalau masih ada, selain itu bawaan. */
@@ -3248,27 +3293,132 @@ export class KontrolMeja implements AksiAdegan {
     return sasaranLedekBawaan(h, this.saya, calon);
   }
 
-  /** Bagian "Ledek" di modal hasil putaran ('' kalau offline atau tidak ada manusia lain). */
+  private namaLedek(kursi: number): string {
+    return this.view?.pemain[kursi]?.nama ?? 'Pemain';
+  }
+
+  /** Baris "Ledek 😏 Nama" di kaki modal hasil putaran ('' kalau offline atau tidak ada manusia lain). */
   private htmlLedekHasil(h: HasilPutaran): string {
-    const calon = this.calonLedek();
-    const v = this.view!;
-    return htmlLedek({
-      calon: calon.map((kursi) => ({ kursi, nama: v.pemain[kursi]?.nama ?? 'Pemain' })),
-      sasaran: this.sasaranLedekKini(h, calon),
-      habis: this.ledekTerkirim.putaran === h.nomor && this.ledekTerkirim.jumlah >= MAKS_LEDEK_PER_PUTARAN,
-      jeda: Date.now() < this.jedaLedekSampai,
+    return htmlBarisLedek({
+      calon: this.calonLedek().map((kursi) => ({ kursi, nama: this.namaLedek(kursi) })),
+      habis: this.jatahLedekHabis(h),
     });
   }
 
-  /** Kirim ledekan ke sasaran yang terpilih. */
-  private kirimLedek(h: HasilPutaran, isi: string) {
-    const ke = this.sasaranLedekKini(h, this.calonLedek());
-    if (ke === null || Date.now() < this.jedaLedekSampai) return;
+  /**
+   * Lembar Ledek dari bawah, di atas modal hasil (lewat bukaDialog, AGENTS.md: jendela di atas modal
+   * utama). Sekali ketuk langsung terkirim dan lembarnya tetap terbuka. Kalau sudah terbuka, hanya
+   * sasarannya yang diganti.
+   */
+  private bukaLembarLedek(h: HasilPutaran, kursi: number) {
+    const calon = this.calonLedek();
+    if (this.penonton || !calon.includes(kursi) || !this.hasilTerbuka()) return;
+    this.sasaranLedek = { putaran: h.nomor, kursi };
+    if (this.lembarLedek) {
+      this.segarkanLembarLedek();
+      return;
+    }
+    const isi = this.htmlIsiLembar(h, calon, kursi);
+    const p = bukaDialog(
+      htmlLembarLedek(this.namaLedek(kursi), isi),
+      (dlg) => {
+        // Lembar menempel di bawah layar; tirainya tanpa blur (ringan di HP lemah).
+        dlg.parentElement?.classList.add('latar-lembar');
+        dlg.addEventListener('click', (ev) => {
+          const b = (ev.target as HTMLElement).closest<HTMLButtonElement>('button');
+          if (!b || this.hancur || this.penonton) return;
+          const hasil = this.hasilTerbuka();
+          if (!hasil || hasil.nomor !== this.lembarLedek?.putaran) return this.tutupLembarLedek();
+          if (b.dataset.ledekKe !== undefined) {
+            bunyi('klik');
+            this.sasaranLedek = { putaran: hasil.nomor, kursi: Number(b.dataset.ledekKe) };
+            this.segarkanLembarLedek();
+          } else if (b.dataset.ledekIsi !== undefined) {
+            if (b.getAttribute('aria-disabled') === 'true' || this.tolakJendela()) return;
+            // Sasarannya yang sedang tertulis di lembar: kalau orang itu baru saja putus, tidak dikirim ke
+            // orang lain diam-diam; lembarnya disegarkan dulu (pindah sasaran atau tertutup).
+            const ke = Number(dlg.dataset.ke);
+            if (!this.calonLedek().includes(ke)) return this.segarkanLembarLedek();
+            this.kirimLedek(hasil, ke, b.dataset.ledekIsi);
+          }
+        });
+      },
+      {
+        kelas: 'lembar-ledek',
+        saatTutup: () => {
+          this.lembarLedek = null;
+          this.ledekBesar.berikut();
+        },
+      },
+    );
+    p.dialog.dataset.ke = String(kursi);
+    this.lembarLedek = { putaran: h.nomor, dialog: p.dialog, tutup: p.tutup, htmlIsi: isi };
+  }
+
+  private htmlIsiLembar(h: HasilPutaran, calon: number[], sasaran: number): string {
+    const baru = this.ledekBaru;
+    const jeda = Date.now() < this.jedaLedekSampai;
+    return htmlIsiLembarLedek({
+      calon: calon.map((k) => ({ kursi: k, nama: this.namaLedek(k) })),
+      sasaran,
+      habis: this.jatahLedekHabis(h),
+      jeda,
+      baruDikirim: baru && baru.putaran === h.nomor && baru.ke === sasaran ? baru.isi : null,
+    });
+  }
+
+  tutupLembarLedek() {
+    const l = this.lembarLedek;
+    this.lembarLedek = null;
+    l?.tutup();
+  }
+
+  /**
+   * Lembar Ledek yang terbuka disamakan dengan keadaan sekarang: tertutup kalau modal hasilnya sudah tidak
+   * ada atau tidak ada lagi yang bisa diledek; sasaran yang putus diganti yang lain. Isinya dipasang ulang
+   * hanya kalau berubah, dan fokus keyboard dipertahankan.
+   */
+  private segarkanLembarLedek() {
+    const l = this.lembarLedek;
+    if (!l) return;
+    const h = this.hasilTerbuka();
+    const calon = this.calonLedek();
+    if (!h || h.nomor !== l.putaran || !calon.length || !l.dialog.isConnected) return this.tutupLembarLedek();
+    const sasaran = this.sasaranLedekKini(h, calon)!;
+    const lama = Number(l.dialog.dataset.ke);
+    l.dialog.dataset.ke = String(sasaran);
+    const judul = l.dialog.querySelector<HTMLElement>('[data-judul-ledek]');
+    if (judul) judul.textContent = `${TEKS_LEDEK.judul} ${this.namaLedek(sasaran)}`;
+    const status = l.dialog.querySelector<HTMLElement>('[data-status-ledek]');
+    const baru = this.ledekBaru;
+    const teksStatus = baru && baru.putaran === h.nomor && baru.ke === sasaran ? `${TEKS_LEDEK.terkirim} ${this.namaLedek(sasaran)}.` : '';
+    if (status && (status.textContent !== teksStatus || lama !== sasaran)) status.textContent = teksStatus;
+    const html = this.htmlIsiLembar(h, calon, sasaran);
+    if (html === l.htmlIsi) return;
+    l.htmlIsi = html;
+    const wadah = l.dialog.querySelector<HTMLElement>('[data-lembar-isi]');
+    if (!wadah) return;
+    const aktif = document.activeElement;
+    const fokus = aktif instanceof HTMLElement && wadah.contains(aktif) ? { ke: aktif.dataset.ledekKe, isi: aktif.dataset.ledekIsi } : null;
+    wadah.innerHTML = html;
+    if (!fokus) return;
+    const sama = [...wadah.querySelectorAll<HTMLElement>('button')].find(
+      (b) => (fokus.ke !== undefined && b.dataset.ledekKe === fokus.ke) || (fokus.isi !== undefined && b.dataset.ledekIsi === fokus.isi),
+    );
+    (sama ?? wadah.querySelector<HTMLElement>('button') ?? l.dialog.querySelector<HTMLElement>('[data-tutup]'))?.focus({ preventScroll: true });
+  }
+
+  /** Kirim ledekan ke `ke` (harus masih calon). */
+  private kirimLedek(h: HasilPutaran, ke: number, isi: string) {
+    if (!this.calonLedek().includes(ke) || Date.now() < this.jedaLedekSampai) return;
     if (this.ledekTerkirim.putaran !== h.nomor) this.ledekTerkirim = { putaran: h.nomor, jumlah: 0 };
     if (this.ledekTerkirim.jumlah >= MAKS_LEDEK_PER_PUTARAN) return;
     this.ledekTerkirim.jumlah++;
     this.jedaLedekSampai = Date.now() + JEDA_LEDEK_MS;
+    this.ledekBaru = { putaran: h.nomor, ke, isi };
     this.app.kirim({ t: 'ledek', ke, isi });
+    // Tiap kiriman diumumkan (baris status di lembar tidak berubah kalau orangnya sama).
+    if (this.lembarLedek) umumkan(`${TEKS_LEDEK.terkirim} ${this.namaLedek(ke)}.`);
     this.timerTertunda.push(setTimeout(() => this.segarkanHasil(), JEDA_LEDEK_MS + 20));
     this.segarkanHasil();
   }
@@ -3367,6 +3517,7 @@ export class KontrolMeja implements AksiAdegan {
       this.perbaruiModalHasil(ada, lanjut, akhiri, kaldu, infoKaldu);
       this.perbaruiLedekHasil(ada, ledek);
       this.perbaruiHitungLanjut();
+      this.segarkanLembarLedek();
       return;
     }
 
@@ -3380,6 +3531,9 @@ export class KontrolMeja implements AksiAdegan {
     const arah = `Arah berikutnya: ${h.arahBerikutnya === 1 ? 'searah' : 'berbalik'}${h.cara === 'mentung' ? (h.dibalik ? ' (dibalik)' : ' (lompat, tetap)') : ''}.`;
     this.htmlLanjutTerpasang = lanjut;
     this.htmlLedekTerpasang = ledek;
+    // Modal hasil baru (mis. view susulan yang lompat ke hasil putaran berikutnya): bukaModal mengganti
+    // modal lama tanpa saatTutup-nya, jadi lembar Ledek putaran lama ditutup di sini.
+    this.tutupLembarLedek();
     bukaModal(
       `<div data-hasil="${h.nomor}"></div>
        <h2>Hasil putaran ${h.nomor}</h2>
@@ -3387,8 +3541,8 @@ export class KontrolMeja implements AksiAdegan {
        <p class="rapat">${cara}</p>
        ${baris}
        <p class="redup rapat">${arah}</p>
-       <div class="wadah-ledek" data-ledek-wadah>${ledek}</div>
        <div class="kaki-dialog aksi-hasil">
+         <div class="wadah-ledek" data-ledek-wadah>${ledek}</div>
          <p class="info-kaldu${infoKaldu ? '' : ' tersembunyi'}" data-info-kaldu>${esc(infoKaldu)}</p>
          <div class="aksi-hasil-lanjut" data-lanjut-wadah>${lanjut}</div>
          <div class="deret" data-deret-voting>
@@ -3402,6 +3556,12 @@ export class KontrolMeja implements AksiAdegan {
           dlg.querySelector('[data-hasil-rincian] .rincian')?.classList.add('muncul-bertahap');
           hitungNaik(dlg.querySelector('[data-hasil-rincian]')!, durasi(700));
         }
+        // Nama di baris Ledek paling banyak dua baris; disusun ulang saat lebarnya berubah.
+        const wadahLedek = dlg.querySelector<HTMLElement>('[data-ledek-wadah]');
+        if (wadahLedek) {
+          rapikanBarisLedek(wadahLedek);
+          if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => rapikanBarisLedek(wadahLedek)).observe(wadahLedek);
+        }
         // Satu pendengar untuk semua tombol: isi tombol boleh diganti tanpa memasang ulang.
         dlg.addEventListener('click', (ev) => {
           const b = (ev.target as HTMLElement).closest<HTMLButtonElement>('button');
@@ -3414,13 +3574,12 @@ export class KontrolMeja implements AksiAdegan {
             return;
           }
           if (b.disabled || b.getAttribute('aria-disabled') === 'true') return;
-          if (b.dataset.ledekKe !== undefined) {
+          if (b.dataset.ledekBuka !== undefined || b.hasAttribute('data-ledek-lebih')) {
+            // Baris Ledek: buka lembar untuk nama itu ("+N": sasaran bawaan, nama lain dipilih di lembar).
             bunyi('klik');
-            this.sasaranLedek = { putaran: h.nomor, kursi: Number(b.dataset.ledekKe) };
-            this.segarkanHasil();
-          } else if (b.dataset.ledekIsi !== undefined) {
-            if (this.tolakJendela()) return;
-            this.kirimLedek(h, b.dataset.ledekIsi);
+            const calon = this.calonLedek();
+            const ke = b.dataset.ledekBuka !== undefined ? Number(b.dataset.ledekBuka) : this.sasaranLedekKini(h, calon);
+            if (ke !== null) this.bukaLembarLedek(h, ke);
           } else if (b.hasAttribute('data-siap-lanjut')) {
             if (this.tolakJendela()) return;
             bunyi('klik');
@@ -3458,6 +3617,7 @@ export class KontrolMeja implements AksiAdegan {
       },
       {
         saatTutup: () => {
+          this.tutupLembarLedek();
           this.tutorial?.tandai('skor');
           this.fokusKeTombolHasil();
         },
@@ -3466,19 +3626,20 @@ export class KontrolMeja implements AksiAdegan {
     this.perbaruiHitungLanjut();
   }
 
-  /** Bagian Ledek di modal hasil yang sudah terbuka: dipasang ulang hanya kalau isinya berubah; fokus dipertahankan. */
+  /** Baris Ledek di modal hasil yang sudah terbuka: dipasang ulang hanya kalau isinya berubah; fokus dipertahankan. */
   private perbaruiLedekHasil(dlg: HTMLElement, html: string) {
     const wadah = dlg.querySelector<HTMLElement>('[data-ledek-wadah]');
     if (!wadah || html === this.htmlLedekTerpasang) return;
     this.htmlLedekTerpasang = html;
     const aktif = document.activeElement;
-    const fokus = aktif instanceof HTMLElement && wadah.contains(aktif) ? { ke: aktif.dataset.ledekKe, isi: aktif.dataset.ledekIsi } : null;
+    const fokus = aktif instanceof HTMLElement && wadah.contains(aktif) ? { buka: aktif.dataset.ledekBuka, lebih: aktif.hasAttribute('data-ledek-lebih') } : null;
     wadah.innerHTML = html;
+    rapikanBarisLedek(wadah);
     if (!fokus) return;
     const sama = [...wadah.querySelectorAll<HTMLElement>('button')].find(
-      (b) => (fokus.ke !== undefined && b.dataset.ledekKe === fokus.ke) || (fokus.isi !== undefined && b.dataset.ledekIsi === fokus.isi),
+      (b) => (fokus.buka !== undefined && b.dataset.ledekBuka === fokus.buka) || (fokus.lebih && b.hasAttribute('data-ledek-lebih') && !b.hidden),
     );
-    (sama ?? wadah.querySelector<HTMLElement>('button') ?? dlg.querySelector<HTMLElement>('[data-tutup]'))?.focus({ preventScroll: true });
+    (sama ?? wadah.querySelector<HTMLElement>('button:not([hidden])') ?? dlg.querySelector<HTMLElement>('[data-tutup]'))?.focus({ preventScroll: true });
   }
 
   /**

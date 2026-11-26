@@ -237,6 +237,13 @@
     transform: rotateY(90deg) scale(0.8);
   }
 }
+/* Lembar Ledek naik dari bawah (gerak dikurangi: pudar saja, lihat aturan .dialog di bawah). */
+@keyframes lembar-naik {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+}
 /* Ledekan besar (hasil putaran online): melompat masuk, diam selama --durasi, lalu pudar. */
 @keyframes ledek-masuk {
   0% {
