@@ -10,7 +10,7 @@
 import type { Bunga, Rank } from '@remi/engine';
 import {
   BATAS_JAWAB_LIHAT_MS,
-  JUMLAH_PUTARAN_SPRINT,
+  NAMA_LAWAN_SPRINT,
   JEDA_LANJUT_MS,
   JEDA_TOLAK_LIHAT_MS,
   MAKS_LEDEK_PER_PUTARAN,
@@ -853,24 +853,24 @@ export const BAB_BANTUAN: BabBantuan[] = [
     id: 'sprint',
     judul: 'Sprint',
     ikon: '⏱️',
-    ringkas: `${JUMLAH_PUTARAN_SPRINT} putaran lawan 3 warga kedai level Suhu, dan papan sprint.`,
+    ringkas: 'Lawan 5 warga kedai level Suhu tanpa batas putaran, dan papan sprint.',
     isi: [
       {
         t: 'paragraf',
-        teks: `**${TEKS_SPRINT.judul}:** main sendiri lawan 3 warga kedai level Suhu (Kipas Dua, Cak Kopag, Mbak Teras) selama ${JUMLAH_PUTARAN_SPRINT} putaran, lalu hasilnya masuk papan sprint. Tombolnya ada di panel Main online di beranda. Sprint butuh internet, karena permainannya jalan di server supaya rekornya nggak bisa diakali.`,
+        teks: `**${TEKS_SPRINT.judul}:** main sendiri lawan ${NAMA_LAWAN_SPRINT.length} warga kedai level Suhu (${NAMA_LAWAN_SPRINT.slice(0, -1).join(', ')}, dan ${NAMA_LAWAN_SPRINT.at(-1)}) sepuasnya, tanpa batas putaran. Tiap putaran yang selesai langsung masuk papan sprint. Tombolnya ada di panel Main online di beranda. Sprint butuh internet, karena permainannya jalan di server supaya rekornya nggak bisa diakali.`,
       },
       {
         t: 'daftar',
         butir: [
-          'Aturan mejanya dikunci: 4 pemain, 1 deck, tanpa batas skor, tanpa batas waktu giliran, dan urutan duduk diacak. Kartunya dikocok baru setiap main. Yang bisa diganti cuma tempo warga kedai (menu ☰, Pengaturan).',
-          `Nggak ada voting akhiri dan nggak ada Main lagi. Di klasemen akhir, tekan ${TEKS_SPRINT.sprintLagi} buat percobaan baru. Boleh coba sesering apa pun.`,
-          `Menang kalau sesudah ${JUMLAH_PUTARAN_SPRINT} putaran skor totalmu nggak kalah dari ketiga warga kedai. Skor sama dihitung menang.`,
-          'Keluar di tengah jalan: putaran yang sudah selesai tetap dicatat, tapi nggak dihitung menang. Keluar sebelum putaran pertama selesai nggak dicatat sama sekali.',
+          'Aturan mejanya dikunci: 6 pemain, 2 deck, tanpa batas putaran, tanpa batas skor, tanpa batas waktu giliran, tanpa mode kaldu, dan urutan duduk diacak. Yang bisa diganti cuma tempo warga kedai (menu ☰, Pengaturan).',
+          'Nggak ada voting akhiri dan nggak ada Main lagi. Permainannya jalan terus sampai kamu Keluar.',
+          'Menang putaran: skormu di putaran itu nggak kalah dari kelima warga kedai. Skor sama dihitung menang.',
+          'Keluar kapan saja: putaran yang sudah selesai sudah masuk papan, putaran yang lagi jalan nggak dihitung.',
         ],
       },
       {
         t: 'paragraf',
-        teks: `**Papan sprint** punya dua tab: ${TEKS_SPRINT.tabMinggu} (mulai Senin pukul 00.00 WIB) dan ${TEKS_SPRINT.tabSemua}. Kolom Menang, Mentung, Kepentung, dan Skor dijumlah dari semua percobaan. Urutan bawaannya: menang terbanyak, lalu skor tertinggi, mentung terbanyak, dan kepentung paling sedikit. Ketuk judul kolom buat mengurutkan pakai kolom itu.`,
+        teks: `**Papan sprint** punya dua tab: ${TEKS_SPRINT.tabMinggu} (mulai Senin pukul 00.00 WIB) dan ${TEKS_SPRINT.tabSemua}. Kolom Menang, Mentung, Kepentung, dan Skor dijumlah dari semua putaran sprint di periode itu. Urutan bawaannya: menang terbanyak, lalu skor tertinggi, mentung terbanyak, dan kepentung paling sedikit. Ketuk judul kolom buat mengurutkan pakai kolom itu.`,
       },
       {
         t: 'paragraf',

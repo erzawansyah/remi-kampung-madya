@@ -81,12 +81,11 @@ import {
   teksBarAtas,
   teksInfoKaldu,
   htmlHasilKompetisi,
-  htmlHasilSprint,
   type AppUntukMeja,
   type PesanHasilKompetisi,
   type PesanHasilSprint,
 } from '../src/kontrolMeja';
-import { TEKS_SPRINT, teksPeringkatMinggu } from '../src/konten/sprint';
+import { TEKS_SPRINT, teksPeringkatMinggu, teksSprintPutaran } from '../src/konten/sprint';
 import { TEKS_KALDU } from '../src/konten/kaldu';
 import { TEKS_TURUNKAN } from '../src/konten/turunkan';
 import { TEKS_PENGINGAT_SUSUN } from '../src/konten/susunAkhir';
@@ -2645,123 +2644,137 @@ describe('konfirmasi keluar meja', () => {
   });
 });
 
-describe('meja sprint (25 Nov 2026)', () => {
-  /** Meja sprint: aku satu-satunya manusia (kursi 0), tiga warga kedai Suhu; aku tinggal mentung. */
-  const mejaSprint = (app: Partial<AppUntukMeja> = {}) =>
-    mejaKompetisiSiapMentung(app, {
-      kompetisi: undefined,
-      sprint: true,
-      kursi: ['Aku', 'Kipas Dua', 'Cak Kopag', 'Mbak Teras'].map((nama, i) => ({
-        jenis: i === 0 ? ('manusia' as const) : ('bot' as const),
-        nama,
-        terhubung: i === 0,
-        level: 'suhu' as const,
-      })),
+describe('meja sprint (25 Nov 2026, tanpa batas putaran sejak 26 Nov 2026)', () => {
+  /**
+   * Meja sprint: aku satu-satunya manusia (kursi 0), warga kedai Suhu; aku tinggal mentung. `batas`:
+   * tanpa batas putaran (meja sprint sekarang) atau 1 (meja sprint 0.8.0 lama: langsung klasemen akhir).
+   */
+  async function mejaSprint(app: Partial<AppUntukMeja> = {}, batas: number | null = null): Promise<MejaUji> {
+    const g = skenario({
+      konfigurasi: { batasPutaran: batas },
+      rankJoker: 2,
+      tangan: [['5 love', '6 love', '9 waru'], ['3 waru', '4 waru', '5 waru'], ['3 love', '4 love', '8 waru'], ['J love', 'Q love', '10 waru']],
+      buangan: [['7 love', 1]],
+      giliran: 0,
     });
-  const hasilServer: PesanHasilSprint = { t: 'sprintHasil', menang: true, skor: 250, mentung: 1, kepentung: 0, peringkatMinggu: 3 };
+    const m = new MejaUji(
+      g,
+      {
+        sprint: true,
+        kursi: ['Aku', 'Kipas Dua', 'Cak Kopag', 'Mbak Teras'].map((nama, i) => ({
+          jenis: i === 0 ? ('manusia' as const) : ('bot' as const),
+          nama,
+          terhubung: i === 0,
+          level: 'suhu' as const,
+        })),
+      },
+      { jenis: 'online', statusKoneksi: () => 'tersambung', nomorSambungan: () => 1, siapKirim: () => true, ...app },
+    );
+    m.app.kirim({ t: 'aksi', aksi: { jenis: 'mulung', jumlah: 1, kartuJadi: [spek('5 love', '6 love', '7 love')] } });
+    await sampai(() => m.g.putaran!.tahap === 'main' && !!m.tombol('buang'));
+    return m;
+  }
+  const kabar: PesanHasilSprint = { t: 'sprintHasil', putaran: 1, menang: true, skor: 250, mentung: 1, kepentung: 0, peringkatMinggu: 3 };
 
-  it('bar atas "Sprint · Putaran N/batas" tanpa kode meja; menu ☰ menjelaskan sprint, bukan kode meja', async () => {
+  it('bar atas "Sprint · Putaran N" tanpa batas dan tanpa kode meja; menu ☰ menjelaskan sprint, bukan kode meja', async () => {
     meja = await mejaSprint();
     expect(meja.akar.querySelector('.bar-atas .info-jenis')!.textContent).toBe(TEKS_SPRINT.labelAtas);
-    expect(meja.akar.querySelector('.bar-atas')!.textContent).toContain('Putaran 1/1');
+    expect(meja.akar.querySelector('.bar-atas')!.textContent).toContain('Putaran 1');
+    expect(meja.akar.querySelector('.bar-atas')!.textContent).not.toMatch(/Putaran 1\//);
     expect(meja.akar.querySelector('.bar-atas')!.textContent).not.toContain('UJI01');
     meja.akar.querySelector<HTMLButtonElement>('.bar-atas [data-a="menu"]')!.click();
     const menu = document.querySelector('#modal .dialog')!;
     expect(menu.textContent).toContain(TEKS_SPRINT.menuMeja);
     expect(menu.textContent).not.toMatch(/kode meja/i);
+    expect(TEKS_SPRINT.menuMeja).not.toMatch(/5 putaran/);
   });
 
-  it('Keluar dari menu: konfirmasi sprint (tetap dicatat), satu sumber dengan jalur Back', async () => {
-    meja = await mejaSprint();
+  it('Keluar dari menu: konfirmasi sprint (putaran yang selesai sudah masuk papan), lalu ke papan sprint', async () => {
+    const tinggalkanSprint = vi.fn();
+    meja = await mejaSprint({ tinggalkanSprint });
     meja.akar.querySelector<HTMLElement>('[data-a="menu"]')!.click();
     document.querySelector<HTMLElement>('#modal [data-m="keluar"]')!.click();
     const d = document.querySelector<HTMLElement>('.dialog.konfirmasi')!;
     const harap = opsiKonfirmasiKeluar({ asal: 'meja', offline: false, sprint: true });
     expect(d.querySelector('h2')!.textContent).toBe(harap.judul);
     expect(d.querySelector('p')!.textContent).toBe(TEKS_SPRINT.keluarMain);
-    expect(d.querySelector('p')!.textContent).toMatch(/tetap dicatat/i);
+    expect(d.querySelector('p')!.textContent).toMatch(/udah masuk papan/i);
     d.querySelector<HTMLElement>('[data-ya]')!.click();
     await tunggu();
-    expect(meja.terkirim.some((p) => p.t === 'keluar')).toBe(true);
+    expect(tinggalkanSprint).toHaveBeenCalledWith(true);
     expect(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, selesai: true, sprint: true }).pesan).toBe(TEKS_SPRINT.keluarSelesai);
   });
 
-  it('klasemen akhir: hasil sprint (sementara dari view), Sprint lagi dan Ke beranda, tanpa Main lagi', async () => {
+  it('Keluar dari menu tanpa tinggalkanSprint: pesan keluar tetap dikirim', async () => {
+    meja = await mejaSprint();
+    meja.akar.querySelector<HTMLElement>('[data-a="menu"]')!.click();
+    document.querySelector<HTMLElement>('#modal [data-m="keluar"]')!.click();
+    document.querySelector<HTMLElement>('.dialog.konfirmasi [data-ya]')!.click();
+    await tunggu();
+    expect(meja.terkirim.some((p) => p.t === 'keluar')).toBe(true);
+  });
+
+  it('hasil putaran: tanpa Akhiri dan Putaran terakhir; baris sprint "lagi dicatat" lalu hasil putarannya dari server', async () => {
+    const m = (meja = await mejaSprint());
+    const dlg = await sampaiHasil(m);
+    // Tanpa batas putaran: hasil putaran biasa, bukan klasemen akhir.
+    expect(dlg.querySelector('[data-selesai]')).toBeNull();
+    expect(dlg.querySelector('[data-akhiri]')).toBeNull();
+    expect(dlg.querySelector('[data-kaldu]')).toBeNull();
+    expect(dlg.textContent).not.toMatch(/Akhiri permainan|Putaran terakhir/);
+    const baris = dlg.querySelector<HTMLElement>('[data-sprint-putaran]')!;
+    expect(baris.textContent).toBe(TEKS_SPRINT.mencatat);
+    vi.mocked(umumkan).mockClear();
+    // Kabar untuk putaran lain tidak dipakai di hasil putaran ini.
+    m.kontrol.terimaHasilSprint({ ...kabar, putaran: 2 });
+    expect(baris.textContent).toBe(TEKS_SPRINT.mencatat);
+    m.kontrol.terimaHasilSprint(kabar);
+    expect(baris.textContent).toBe(`${TEKS_SPRINT.menangPutaran} ${teksPeringkatMinggu(3)}.`);
+    expect(vi.mocked(umumkan).mock.calls.some(([t]) => t.includes(teksPeringkatMinggu(3)))).toBe(true);
+  });
+
+  it('kabar sprint sebelum hasil putaran tampil: langsung dipakai', async () => {
+    const m = (meja = await mejaSprint());
+    m.kontrol.terimaHasilSprint({ ...kabar, menang: false, peringkatMinggu: null });
+    const dlg = await sampaiHasil(m);
+    expect(dlg.querySelector('[data-sprint-putaran]')!.textContent).toBe(TEKS_SPRINT.kalahPutaran);
+  });
+
+  it('teksSprintPutaran: putaran lain = lagi dicatat; peringkat null tidak ditulis', () => {
+    expect(teksSprintPutaran(1, null)).toBe(TEKS_SPRINT.mencatat);
+    expect(teksSprintPutaran(2, kabar)).toBe(TEKS_SPRINT.mencatat);
+    expect(teksSprintPutaran(1, { ...kabar, putaran: undefined })).toBe(TEKS_SPRINT.mencatat);
+    expect(teksSprintPutaran(1, kabar)).toBe(`${TEKS_SPRINT.menangPutaran} Peringkat 3 minggu ini.`);
+    expect(teksSprintPutaran(1, { ...kabar, menang: false, peringkatMinggu: null })).toBe(TEKS_SPRINT.kalahPutaran);
+  });
+
+  it('meja biasa: tanpa baris sprint di hasil putaran', async () => {
+    const m = (meja = await mejaKompetisiSiapMentung({}, { kompetisi: undefined }));
+    m.g.konfigurasi.batasPutaran = null;
+    const dlg = await sampaiHasil(m);
+    expect(dlg.querySelector('[data-sprint-putaran]')).toBeNull();
+  });
+
+  it('klasemen akhir meja sprint lama (batas putaran 0.8.0): Papan sprint dan Ke beranda, tanpa Main lagi', async () => {
     const tinggalkanSprint = vi.fn();
-    meja = await mejaSprint({ tinggalkanSprint });
+    meja = await mejaSprint({ tinggalkanSprint }, 1);
     const dlg = await sampaiHasil(meja, '[data-selesai]');
     expect(dlg.querySelector('[data-a="lagi"]')).toBeNull();
     expect(dlg.textContent).not.toContain('Main lagi');
-    const bagian = dlg.querySelector('[data-hasil-sprint]')!;
-    expect(bagian.querySelector('.judul-hasil-sprint')!.textContent).toContain(TEKS_SPRINT.judulHasil);
-    // Aku mentung di satu-satunya putaran: angka sementara dihitung dari view, peringkat menunggu server.
-    expect(bagian.textContent).toContain(`${TEKS_SPRINT.labelMentung} 1`);
-    expect(bagian.querySelector('[data-peringkat-sprint]')!.textContent).toBe(TEKS_SPRINT.mencatat);
-    expect(bagian.compareDocumentPosition(dlg.querySelector('table.klasemen')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const lagi = dlg.querySelector<HTMLButtonElement>('[data-a="sprint-lagi"]')!;
-    expect(lagi.textContent).toBe(TEKS_SPRINT.sprintLagi);
-    expect(lagi.classList.contains('utama')).toBe(true);
-    lagi.click();
+    const papan = dlg.querySelector<HTMLButtonElement>('[data-a="papan-sprint"]')!;
+    expect(papan.textContent).toBe(TEKS_SPRINT.papanSprint);
+    expect(papan.classList.contains('utama')).toBe(true);
+    papan.click();
     expect(tinggalkanSprint).toHaveBeenCalledWith(true);
     expect(meja.terkirim.some((p) => p.t === 'mainLagi')).toBe(false);
   });
 
-  it('Ke beranda di klasemen akhir sprint: tinggalkanSprint(false)', async () => {
+  it('Ke beranda di klasemen akhir meja sprint lama: tinggalkanSprint(false)', async () => {
     const tinggalkanSprint = vi.fn();
-    meja = await mejaSprint({ tinggalkanSprint });
+    meja = await mejaSprint({ tinggalkanSprint }, 1);
     const dlg = await sampaiHasil(meja, '[data-selesai]');
     dlg.querySelector<HTMLButtonElement>('[data-a="keluar"]')!.click();
     expect(tinggalkanSprint).toHaveBeenCalledWith(false);
-  });
-
-  it('sprintHasil sesudah klasemen tampil: angka server + peringkat minggu ini, diumumkan', async () => {
-    meja = await mejaSprint();
-    const dlg = await sampaiHasil(meja, '[data-selesai]');
-    vi.mocked(umumkan).mockClear();
-    meja.kontrol.terimaHasilSprint({ ...hasilServer, menang: false, skor: -40 });
-    const bagian = dlg.querySelector('[data-hasil-sprint]')!;
-    expect(bagian.querySelector('[data-status-sprint]')!.textContent).toContain(TEKS_SPRINT.kalah);
-    expect(bagian.textContent).toContain('−40');
-    expect(bagian.querySelector('[data-peringkat-sprint]')!.textContent).toBe(teksPeringkatMinggu(3));
-    expect(vi.mocked(umumkan).mock.calls.some(([t]) => t.includes(teksPeringkatMinggu(3)))).toBe(true);
-  });
-
-  it('sprintHasil sebelum klasemen tampil: langsung dipakai', async () => {
-    meja = await mejaSprint();
-    meja.kontrol.terimaHasilSprint(hasilServer);
-    const dlg = await sampaiHasil(meja, '[data-selesai]');
-    const bagian = dlg.querySelector('[data-hasil-sprint]')!;
-    expect(bagian.querySelector('[data-status-sprint]')!.textContent).toContain(TEKS_SPRINT.menang);
-    expect(bagian.querySelector('[data-status-sprint]')!.classList.contains('menang')).toBe(true);
-    expect(bagian.textContent).toContain('250');
-  });
-
-  it('htmlHasilSprint: tanpa kursi (penonton) kosong; peringkat null tidak ditulis', async () => {
-    meja = await mejaSprint();
-    const v = meja.view();
-    expect(htmlHasilSprint({ ...v, saya: null }, null)).toBe('');
-    expect(htmlHasilSprint(v, { ...hasilServer, peringkatMinggu: null })).not.toContain('Peringkat');
-  });
-
-  it('hasil putaran meja sprint: tanpa Akhiri permainan dan Putaran terakhir', async () => {
-    const g = skenario({
-      konfigurasi: { batasPutaran: 3 },
-      rankJoker: 2,
-      tangan: [['5 love', '6 love', '9 waru'], ['3 waru', '4 waru', '5 waru'], ['3 love', '4 love', '8 waru'], ['J love', 'Q love', '10 waru']],
-      buangan: [['7 love', 1]],
-      giliran: 0,
-    });
-    const m = (meja = new MejaUji(
-      g,
-      { sprint: true, kursi: g.pemain.map((p, i) => ({ jenis: i === 0 ? 'manusia' : 'bot', nama: p.nama, terhubung: i === 0, level: 'suhu' })) },
-      { jenis: 'online', statusKoneksi: () => 'tersambung', nomorSambungan: () => 1, siapKirim: () => true },
-    ));
-    m.app.kirim({ t: 'aksi', aksi: { jenis: 'mulung', jumlah: 1, kartuJadi: [spek('5 love', '6 love', '7 love')] } });
-    await sampai(() => m.g.putaran!.tahap === 'main' && !!m.tombol('buang'));
-    const dlg = await sampaiHasil(m);
-    expect(dlg.querySelector('[data-akhiri]')).toBeNull();
-    expect(dlg.querySelector('[data-kaldu]')).toBeNull();
-    expect(dlg.textContent).not.toMatch(/Akhiri permainan|Putaran terakhir/);
   });
 });
 

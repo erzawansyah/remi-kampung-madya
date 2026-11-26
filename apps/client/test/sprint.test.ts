@@ -9,7 +9,7 @@ vi.hoisted(() => {
   Object.assign(globalThis, { __VERSI_APP__: '0.0.0', __BUILD_SHA__: 'dev', __BUILD_WAKTU__: '2026-11-25T00:00:00.000Z' });
 });
 
-import { JUMLAH_PUTARAN_SPRINT, NAMA_LAWAN_SPRINT, type BarisSprint } from '@remi/meja';
+import { NAMA_LAWAN_SPRINT, type BarisSprint } from '@remi/meja';
 import { BAB_BANTUAN } from '../src/konten/bantuan';
 import { TEKS_SPRINT, teksPiala } from '../src/konten/sprint';
 import { _setelUlangCache } from '../src/preferensi';
@@ -120,7 +120,9 @@ describe('layar Sprint (renderSprint)', () => {
     const main = vi.fn();
     renderSprint(akar, { kembali: vi.fn(), main });
     expect(akar.querySelector('.judul p')!.textContent).toBe(TEKS_SPRINT.intro);
-    expect(TEKS_SPRINT.intro).toContain(`${JUMLAH_PUTARAN_SPRINT} putaran lawan 3 warga kedai level Suhu`);
+    expect(TEKS_SPRINT.intro).toContain('Lawan 5 warga kedai level Suhu pakai 2 deck');
+    expect(TEKS_SPRINT.intro).toContain('tiap putaran langsung masuk papan');
+    expect(TEKS_SPRINT.intro).not.toMatch(/\d putaran/);
     expect(akar.querySelector('#tab-sprint-minggu')!.getAttribute('aria-selected')).toBe('true');
     await tunggu();
     expect(url).toEqual(['/api/sprint?periode=minggu']);
@@ -264,13 +266,26 @@ describe('ubin Sprint di beranda', () => {
 
 describe('Bantuan: bab Sprint', () => {
   const bab = () => BAB_BANTUAN.find((b) => b.id === 'sprint')!;
-  it('ada, sesudah Main online, dan memuat lawan, jumlah putaran, menang, keluar, papan, dan piala', () => {
+  it('ada, sesudah Main online, dan memuat lawan, tanpa batas putaran, menang per putaran, keluar, papan, dan piala', () => {
     const id = BAB_BANTUAN.map((b) => b.id);
     expect(id.indexOf('sprint')).toBe(id.indexOf('online') + 1);
     const t = JSON.stringify(bab());
     for (const nama of NAMA_LAWAN_SPRINT) expect(t).toContain(nama);
-    for (const x of [`${JUMLAH_PUTARAN_SPRINT} putaran`, 'level Suhu', 'Skor sama dihitung menang', 'nggak dihitung menang', TEKS_SPRINT.tabMinggu, TEKS_SPRINT.tabSemua, 'Senin pukul 00.00 WIB', '🏆', TEKS_SPRINT.sprintLagi])
+    expect(NAMA_LAWAN_SPRINT).toHaveLength(5);
+    for (const x of [
+      'tanpa batas putaran',
+      '6 pemain, 2 deck',
+      'level Suhu',
+      'Menang putaran',
+      'Skor sama dihitung menang',
+      'putaran yang lagi jalan nggak dihitung',
+      TEKS_SPRINT.tabMinggu,
+      TEKS_SPRINT.tabSemua,
+      'Senin pukul 00.00 WIB',
+      '🏆',
+    ])
       expect(t, x).toContain(x);
+    expect(t).not.toMatch(/\d putaran|percobaan|Sprint lagi/);
     expect(t).not.toMatch(/\bbot\b/i);
   });
 

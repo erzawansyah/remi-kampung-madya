@@ -6,15 +6,16 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.10.0] - 2026-11-26
+
+Ledek yang lebih ringkas dan Sprint tanpa batas putaran. Aturan main biasa tidak berubah.
+
 ### Untuk pemain
 
 #### Diubah
 
 - **Ledek** pindah ke baris kecil di bagian bawah hasil putaran; ketuk nama, pilih ledekannya. Ledekan yang kamu terima lebih gampang dibaca, dan bisa langsung dibales.
-
-## [0.9.1] - 2026-11-25
-
-### Untuk pemain
+- **Sprint** sekarang tanpa batas putaran: lawan lima warga kedai Suhu pakai 2 deck, tiap putaran langsung masuk papan, dan Menang dihitung per putaran (seri dihitung menang).
 
 #### Diperbaiki
 
@@ -22,7 +23,9 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ### Teknis
 
-- coturn: alamat publik VPS sendiri sekarang diizinkan sebagai tujuan relay (`allowed-peer-ip` dari `TURN_PUBLIC_IP`), tidak lagi ditolak. Di 0.9.0 dua pemain yang sama-sama lewat relay (misalnya keduanya pakai data seluler) ditolak coturn (`403 Forbidden IP`), jadi suaranya tidak pernah nyambung. Relay TCP tetap mati dan jaringan privat tetap ditolak. Nama lama `TURN_DENIED_IP` masih dibaca, jadi `.env` tidak perlu diubah; cukup buat ulang container coturn.
+- Sprint dicatat per putaran di tabel baru `sprint_putaran` (migrasi v8, unik per meja + nomor putaran, jadi restart dan sambung ulang tidak menggandakan); baris percobaan 0.8.0 di tabel `sprint` tetap dan ikut dijumlah. `GET /api/sprint` bentuknya sama; `sprintHasil` dikirim tiap putaran dengan field baru `putaran`. Keputusan dan tafsirannya di `docs/keputusan-pemilik.md` #65.
+- coturn: alamat publik VPS sendiri sekarang diizinkan sebagai tujuan relay (`allowed-peer-ip` dari `TURN_PUBLIC_IP`), tidak lagi ditolak. Di 0.9.0 dua pemain yang sama-sama lewat relay ditolak coturn (`403 Forbidden IP`), jadi suaranya tidak pernah nyambung. Relay TCP tetap mati dan jaringan privat tetap ditolak. Nama lama `TURN_DENIED_IP` masih dibaca, jadi `.env` tidak perlu diubah; cukup buat ulang container coturn.
+- Ledek: baris sasaran di kaki modal hasil, lembar lewat `bukaDialog` (`ui/ledek.ts`, `konten/ledek.ts`).
 
 ## [0.9.0] - 2026-11-25
 

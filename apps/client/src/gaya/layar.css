@@ -1001,8 +1001,8 @@ table.skor tr.redup td {
 
 /* ---------- Sprint (25 Nov 2026) ----------
    .layar-sprint: layar Sprint (pembuka, Main sprint, papan) · table.papan-sprint: papan dengan judul kolom
-   yang bisa diketuk (button.judul-kolom, .aktif = urutan yang dipakai) · .hasil-sprint: hasil percobaan
-   di klasemen akhir meja sprint */
+   yang bisa diketuk (button.judul-kolom, .aktif = urutan yang dipakai). Baris sprint di hasil putaran
+   ([data-sprint-putaran]) memakai .redup .rapat biasa. */
 .layar-sprint .ket-sprint {
   font-size: var(--teks-sm);
 }
@@ -1060,31 +1060,4 @@ table.papan-sprint .judul-kolom.aktif::after {
 }
 table.papan-sprint .judul-kolom.aktif[data-kolom='kepentung']::after {
   content: ' ▴';
-}
-.hasil-sprint {
-  margin: var(--ruang-2) 0;
-  padding: var(--ruang-3);
-  border: 1px solid var(--garis-emas);
-  border-radius: var(--radius-kecil);
-  background: rgba(var(--emas-rgb), 0.08);
-}
-.hasil-sprint .judul-hasil-sprint {
-  margin: 0 0 var(--ruang-1);
-  font-size: var(--teks-md);
-}
-.hasil-sprint .status-sprint {
-  margin: 0;
-  font-weight: 800;
-}
-.hasil-sprint .status-sprint.menang {
-  color: var(--emas);
-}
-.hasil-sprint .angka-sprint {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--ruang-1) var(--ruang-3);
-  margin: var(--ruang-2) 0 0;
-  padding: 0;
-  list-style: none;
-  font-variant-numeric: tabular-nums;
 }

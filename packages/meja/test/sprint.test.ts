@@ -1,16 +1,18 @@
-// Sprint (keputusan pemilik 25 Nov 2026): satu pemain lawan Kipas Dua, Cak Kopag, dan Mbak Teras (Suhu,
-// dengan gaya personanya), 5 putaran, pengaturan dikunci. Aturan hitung (minggu WIB, hasil satu
-// percobaan, papan, juara mingguan) di sprint.ts; meja sprint di meja.ts.
+// Sprint (keputusan pemilik 25 Nov 2026, diubah 26 Nov 2026): satu pemain lawan lima warga kedai Suhu
+// (gaya personanya), 6 pemain 2 deck, tanpa batas putaran, pengaturan dikunci; setiap putaran yang selesai
+// dicatat. Aturan hitung (minggu WIB, hasil per putaran, papan, juara mingguan) di sprint.ts; meja sprint
+// di meja.ts.
 
 import { describe, expect, it } from 'vitest';
-import { buatPermainan, Rng, type GameState, type HasilPutaran } from '@remi/engine';
+import { Rng, type HasilPutaran } from '@remi/engine';
 import {
   awalMingguWib,
   catatanSprint,
+  dataMejaDipulihkan,
   gayaKursi,
+  hasilPutaranSprint,
   hasilSprint,
   juaraMingguan,
-  JUMLAH_PUTARAN_SPRINT,
   Meja,
   NAMA_LAWAN_SPRINT,
   PENGATURAN_SPRINT,
@@ -21,7 +23,7 @@ import {
   TEKS_SPRINT_TERKUNCI,
   urutkanSprint,
   validasiPesan,
-  type CatatanSprint,
+  type DataMeja,
   type OpsiMeja,
   type PercobaanSprint,
 } from '../src/index.js';
@@ -57,46 +59,45 @@ describe('awalMingguWib', () => {
   });
 });
 
-/** State permainan 4 pemain dengan riwayat putaran buatan (cukup untuk hasilSprint). */
-function stateDengan(putaran: { pementung: number | null; kepentung: number[]; skor: number[] }[], selesai: boolean): GameState {
-  const g = buatPermainan({ pemain: ['A', 'B', 'C', 'D'], seed: 1, konfigurasi: { duaDeckUntukEmpat: false, batasPutaran: 5, batasSkorAtas: null, batasSkorBawah: null } });
-  g.riwayat = putaran.map(
-    (p, i) => ({ nomor: i + 1, pementung: p.pementung, kepentung: p.kepentung, skorAkumulasi: p.skor }) as unknown as HasilPutaran,
-  );
-  g.skor = putaran.at(-1)?.skor ?? [0, 0, 0, 0];
-  g.status = selesai ? 'selesai' : 'putaranSelesai';
-  return g;
+/** Riwayat putaran buatan (cukup untuk hasilPutaranSprint): skor = skor akumulasi sesudah putaran itu. */
+function riwayatDengan(putaran: { pementung: number | null; kepentung: number[]; skor: number[] }[]): HasilPutaran[] {
+  return putaran.map((p, i) => ({ nomor: i + 1, pementung: p.pementung, kepentung: p.kepentung, skorAkumulasi: p.skor }) as unknown as HasilPutaran);
 }
 
-describe('hasilSprint', () => {
-  const lima = [
+describe('hasil per putaran sprint', () => {
+  const tiga = riwayatDengan([
     { pementung: 2, kepentung: [0, 1], skor: [-50, -20, 120, 0] },
     { pementung: null, kepentung: [], skor: [-30, 10, 100, 40] },
     { pementung: 0, kepentung: [2], skor: [150, 10, -50, 40] },
-    { pementung: 0, kepentung: [1, 3], skor: [300, -100, -50, -10] },
-    { pementung: 3, kepentung: [0], skor: [120, -100, -50, 200] },
-  ];
+  ]);
 
-  it('menghitung untuk kursi pemain (kursi bisa di mana saja sesudah diacak)', () => {
-    const g = stateDengan(lima, true);
-    expect(hasilSprint(g, 0)).toEqual({ menang: false, skor: 120, mentung: 2, kepentung: 2, putaran: 5, selesai: true });
-    expect(hasilSprint(g, 3)).toEqual({ menang: true, skor: 200, mentung: 1, kepentung: 1, putaran: 5, selesai: true });
-    expect(hasilSprint(g, 1)).toEqual({ menang: false, skor: -100, mentung: 0, kepentung: 2, putaran: 5, selesai: true });
-    expect(hasilSprint(g, 2)).toEqual({ menang: false, skor: -50, mentung: 1, kepentung: 1, putaran: 5, selesai: true });
+  it('skor putaran = selisih skor akumulasi; menang kalau skor putarannya ≥ semua warga kedai', () => {
+    // Putaran 1: skor putaran [-50, -20, 120, 0].
+    expect(hasilPutaranSprint(tiga, 0, 0)).toEqual({ putaran: 1, menang: false, skor: -50, mentung: 0, kepentung: 1 });
+    expect(hasilPutaranSprint(tiga, 0, 2)).toEqual({ putaran: 1, menang: true, skor: 120, mentung: 1, kepentung: 0 });
+    // Putaran 2: skor putaran [20, 30, -20, 40]: kursi 3 menang walau skor totalnya bukan yang teratas.
+    expect(hasilPutaranSprint(tiga, 1, 3)).toEqual({ putaran: 2, menang: true, skor: 40, mentung: 0, kepentung: 0 });
+    expect(hasilPutaranSprint(tiga, 1, 2)).toEqual({ putaran: 2, menang: false, skor: -20, mentung: 0, kepentung: 0 });
+    // Putaran 3: skor putaran [180, 0, -150, 0].
+    expect(hasilPutaranSprint(tiga, 2, 0)).toEqual({ putaran: 3, menang: true, skor: 180, mentung: 1, kepentung: 0 });
+    expect(hasilPutaranSprint(tiga, 2, 2)).toMatchObject({ menang: false, skor: -150, kepentung: 1 });
   });
 
-  it('skor sama dengan warga kedai teratas = menang', () => {
-    const g = stateDengan([...lima.slice(0, 4), { pementung: null, kepentung: [], skor: [200, -100, 200, 10] }], true);
-    expect(hasilSprint(g, 0).menang).toBe(true);
-    expect(hasilSprint(g, 2).menang).toBe(true);
-    expect(hasilSprint(g, 3).menang).toBe(false);
+  it('skor putaran sama dengan warga kedai teratas = menang (seri dihitung menang)', () => {
+    const r = riwayatDengan([{ pementung: null, kepentung: [], skor: [30, 30, -10, 30, 0, 5] }]);
+    expect(hasilPutaranSprint(r, 0, 0).menang).toBe(true);
+    expect(hasilPutaranSprint(r, 0, 1).menang).toBe(true);
+    expect(hasilPutaranSprint(r, 0, 3).menang).toBe(true);
+    expect(hasilPutaranSprint(r, 0, 5).menang).toBe(false);
   });
 
-  it('ditinggal di tengah jalan: putaran yang sudah selesai saja, tidak pernah menang', () => {
-    const g = stateDengan(lima.slice(0, 4), false);
-    expect(hasilSprint(g, 0)).toEqual({ menang: false, skor: 300, mentung: 2, kepentung: 1, putaran: 4, selesai: false });
-    const kosong = stateDengan([], false);
-    expect(hasilSprint(kosong, 1)).toEqual({ menang: false, skor: 0, mentung: 0, kepentung: 0, putaran: 0, selesai: false });
+  it('hasilSprint: semua putaran yang sudah selesai', () => {
+    expect(hasilSprint({ riwayat: tiga }, 0).map((h) => [h.putaran, h.skor])).toEqual([
+      [1, -50],
+      [2, 20],
+      [3, 180],
+    ]);
+    expect(hasilSprint({ riwayat: [] }, 0)).toEqual([]);
   });
 });
 
@@ -169,8 +170,21 @@ function mejaSprint(extra: Partial<OpsiMeja> = {}, nama = 'Budi') {
   return { ...ctx, meja };
 }
 
+type Ctx = ReturnType<typeof mejaSprint>;
+
+/** Mainkan satu putaran sampai hasil putaran (pemain pakai strategi normal, warga kedai lewat jam). */
+function mainkanPutaran({ meja, surat, jam }: Pick<Ctx, 'meja' | 'surat' | 'jam'>, rng: Rng, pemainId = 'p1'): void {
+  for (let i = 0; i < 20_000; i++) {
+    const st = meja.data.game?.status;
+    if (st !== 'putaranBerjalan' && st !== 'susunAkhir') return;
+    if (aksiManusia(meja, surat, pemainId, rng)) continue;
+    if (!jam.langkah()) throw new Error('macet');
+  }
+  throw new Error('putaran tidak selesai');
+}
+
 describe('meja sprint', () => {
-  it('pemain + Kipas Dua, Cak Kopag, Mbak Teras (Suhu, gaya persona), langsung main', () => {
+  it('pemain + lima warga kedai (Suhu, gaya persona), 6 pemain 2 deck 9 kartu, tanpa batas putaran, langsung main', () => {
     const { meja, surat } = mejaSprint();
     const d = meja.data;
     expect(d.kursi.map((k) => [k.jenis, k.nama, k.level])).toEqual([
@@ -178,16 +192,24 @@ describe('meja sprint', () => {
       ['bot', 'Kipas Dua', 'suhu'],
       ['bot', 'Cak Kopag', 'suhu'],
       ['bot', 'Mbak Teras', 'suhu'],
+      ['bot', 'Mas Sampul', 'suhu'],
+      ['bot', 'Si Rak', 'suhu'],
     ]);
-    expect(d.kursi.slice(1).map((k) => gayaKursi(k))).toEqual(['kilat', 'sabarLondo', expect.any(String)]);
+    expect(NAMA_LAWAN_SPRINT).toEqual(['Kipas Dua', 'Cak Kopag', 'Mbak Teras', 'Mas Sampul', 'Si Rak']);
+    expect(d.kursi.slice(1).map((k) => gayaKursi(k))).toEqual(['kilat', 'sabarLondo', expect.any(String), expect.any(String), expect.any(String)]);
     expect(d.kursi.slice(1).every((k) => gayaKursi(k) !== 'standar')).toBe(true);
     expect(d.pengaturan).toEqual(PENGATURAN_SPRINT);
+    expect(d.pengaturan).toMatchObject({ jumlahPemain: 6, batasPutaran: null, batasSkorAtas: null, batasSkorBawah: null });
     expect(d.pengaturan.modeKaldu).toBeUndefined();
     expect(d.sprint).toEqual({ mulaiPada: 1_000_000, kursi: 0 });
     expect(meja.sprint).toBe(true);
     expect(meja.status).toBe('main');
-    expect(d.game!.konfigurasi).toMatchObject({ duaDeckUntukEmpat: false, batasPutaran: 5, batasSkorAtas: null, batasSkorBawah: null });
-    expect(d.game!.konfigurasi.modeKaldu).toBeUndefined();
+    const g = d.game!;
+    expect(g.konfigurasi).toMatchObject({ jumlahPemain: 6, batasPutaran: null, batasSkorAtas: null, batasSkorBawah: null });
+    expect(g.konfigurasi.modeKaldu).toBeUndefined();
+    // 6 pemain = 2 deck, 9 kartu per orang.
+    expect(g.putaran!.tangan.map((t) => t.length)).toEqual([9, 9, 9, 9, 9, 9]);
+    expect(g.putaran!.deck.length + g.putaran!.tangan.flat().length + g.putaran!.buangan.length + 1).toBeGreaterThan(52);
     // 'masuk' dulu, baru info meja dan view.
     const jenis = surat.semua('p1').map((x) => x.t);
     expect(jenis[0]).toBe('masuk');
@@ -203,21 +225,20 @@ describe('meja sprint', () => {
   it('urutan duduk diacak (#62): pemain di kursi barunya, kursi pertama ngocok', () => {
     const { meja, surat } = mejaSprint({ acakDuduk: nol });
     const d = meja.data;
-    // [0,1,2,3] dengan acak 0 → [1,2,3,0].
-    expect(d.kursi.map((k) => k.nama)).toEqual(['Kipas Dua', 'Cak Kopag', 'Mbak Teras', 'Budi']);
-    expect(d.sprint!.kursi).toBe(3);
-    expect(d.host).toBe(3);
-    expect(surat.terakhir('p1', 'masuk')).toEqual({ t: 'masuk', kode: 'ABCDE', token: 'p1', kursi: 3 });
+    // [0..5] dengan acak 0 → [1,2,3,4,5,0].
+    expect(d.kursi.map((k) => k.nama)).toEqual(['Kipas Dua', 'Cak Kopag', 'Mbak Teras', 'Mas Sampul', 'Si Rak', 'Budi']);
+    expect(d.sprint!.kursi).toBe(5);
+    expect(d.host).toBe(5);
+    expect(surat.terakhir('p1', 'masuk')).toEqual({ t: 'masuk', kode: 'ABCDE', token: 'p1', kursi: 5 });
     expect(surat.semua('p1')[0].t).toBe('masuk');
-    expect(surat.info('p1').kursiSaya).toBe(3);
+    expect(surat.info('p1').kursiSaya).toBe(5);
     expect(d.game!.putaran!.pengocok).toBe(0);
     expect(d.game!.pemain.map((p) => p.nama)).toEqual(d.kursi.map((k) => k.nama));
   });
 
   it('nama pemain sama dengan lawan sprint: warga kedai itu diganti nama berikutnya', () => {
     const { meja } = mejaSprint({}, 'cak kopag');
-    expect(meja.data.kursi.map((k) => k.nama)).toEqual(['cak kopag', 'Kipas Dua', 'Mbak Teras', 'Mas Sampul']);
-    expect(NAMA_LAWAN_SPRINT).toEqual(['Kipas Dua', 'Cak Kopag', 'Mbak Teras']);
+    expect(meja.data.kursi.map((k) => k.nama)).toEqual(['cak kopag', 'Kipas Dua', 'Mbak Teras', 'Mas Sampul', 'Si Rak', 'Pak Seng']);
   });
 
   it('pengaturan dikunci kecuali tempo; tanpa aturKursi, voting, Mulai, maupun Main lagi', () => {
@@ -257,74 +278,127 @@ describe('meja sprint', () => {
     expect(surat.terakhir('penonton', 'tontonan')).toBeDefined();
   });
 
-  it('main sampai 5 putaran selesai: tercatat sekali sebagai selesai', () => {
+  it('tanpa batas putaran: lewat 5 putaran tetap jalan, tanpa kaldu; tiap putaran dikabarkan dan dicatat sekali', () => {
     const galat: unknown[] = [];
-    const { meja, surat, jam } = mejaSprint({ acakDuduk: nol, saatGalat: (_k, e) => galat.push(e) });
+    let kabar = 0;
+    const ctx = mejaSprint({ acakDuduk: nol, saatGalat: (_k, e) => galat.push(e), saatPutaranSprint: () => kabar++ });
+    const { meja, surat, jam } = ctx;
     siapSemua(meja);
     const rng = new Rng(7);
-    for (let putaran = 0; putaran < 10 && meja.status === 'main'; putaran++) {
-      for (let i = 0; i < 5000; i++) {
-        const st = meja.data.game?.status;
-        if (st !== 'putaranBerjalan' && st !== 'susunAkhir') break;
-        if (aksiManusia(meja, surat, 'p1', rng)) continue;
-        if (!jam.langkah()) throw new Error('macet');
-      }
-      if (meja.status === 'main') {
-        // Antar putaran: tanpa voting akhiri, pemain sendiri yang memulai putaran berikutnya.
-        meja.terima('p1', { t: 'putaranBerikut' });
-        siapSemua(meja);
-      }
+    const waktuSelesai: number[] = [];
+    for (let putaran = 1; putaran <= 7; putaran++) {
+      mainkanPutaran(ctx, rng);
+      expect(meja.data.game!.status).toBe('putaranSelesai');
+      expect(meja.data.game!.riwayat).toHaveLength(putaran);
+      expect(kabar).toBe(putaran);
+      waktuSelesai.push(jam.sekarang());
+      // Kabar putaran: satu catatan baru, waktunya saat putaran itu selesai.
+      const c = catatanSprint(meja.data, 9_999_999_999);
+      expect(c).toHaveLength(1);
+      expect(c[0]).toEqual({
+        ...hasilPutaranSprint(meja.data.game!.riwayat, putaran - 1, 5),
+        kode: 'ABCDE',
+        mulaiPada: 1_000_000,
+        nama: 'Budi',
+        waktu: waktuSelesai.at(-1),
+      });
+      meja.tandaiSprintTercatat(putaran);
+      expect(catatanSprint(meja.data, 0)).toEqual([]);
+      jam.maju(10_000);
+      // Antar putaran: tanpa voting akhiri, pemain sendiri yang memulai putaran berikutnya.
+      meja.terima('p1', { t: 'putaranBerikut' });
+      siapSemua(meja);
+      expect(meja.status).toBe('main');
     }
     expect(galat).toEqual([]);
     expect(surat.errors('p1')).toEqual([]);
-    expect(meja.status).toBe('selesai');
     const g = meja.data.game!;
-    expect(g.riwayat.length).toBe(JUMLAH_PUTARAN_SPRINT);
-    expect(g.alasanSelesai).toBe('batasPutaran');
-    const c = catatanSprint(meja.data, 5_000_000) as CatatanSprint;
-    const skorAkhir = g.riwayat.at(-1)!.skorAkumulasi;
-    expect(c).toEqual({
-      ...hasilSprint(g, 3),
-      kode: 'ABCDE',
-      mulaiPada: 1_000_000,
-      nama: 'Budi',
-      waktu: 5_000_000,
-    });
-    expect(c.selesai).toBe(true);
-    expect(c.putaran).toBe(5);
-    expect(c.skor).toBe(skorAkhir[3]);
-    expect(c.menang).toBe(skorAkhir.every((s) => skorAkhir[3] >= s));
-    meja.tandaiSprintTercatat();
-    expect(meja.data.sprint!.tercatat).toBe(true);
-    expect(catatanSprint(meja.data, 6_000_000)).toBeNull();
+    expect(g.riwayat.some((h) => h.kaldu)).toBe(false);
+    expect(g.putaran!.kaldu).toBeUndefined();
+    expect(g.alasanSelesai).toBeNull();
+    expect(meja.data.sprint!.waktuPutaran).toEqual(waktuSelesai);
+    expect(meja.data.sprint!.putaranTercatat).toBe(7);
+    // Tanda tercatat tidak pernah mundur.
+    meja.tandaiSprintTercatat(3);
+    expect(meja.data.sprint!.putaranTercatat).toBe(7);
+    // Semua putaran dari awal (tanpa tanda tercatat) = hasilSprint.
+    const { putaranTercatat: _, ...tanpaTanda } = meja.data.sprint!;
+    const semua = catatanSprint({ ...meja.data, sprint: tanpaTanda }, 0);
+    expect(semua.map(({ putaran, menang, skor, mentung, kepentung }) => ({ putaran, menang, skor, mentung, kepentung }))).toEqual(hasilSprint(g, 5));
+  }, 60_000);
+
+  it('meja yang dipulihkan (restart) melanjutkan dari putaran yang belum tercatat, tanpa catatan kembar', () => {
+    const ctx = mejaSprint();
+    siapSemua(ctx.meja);
+    const rng = new Rng(11);
+    mainkanPutaran(ctx, rng);
+    ctx.meja.tandaiSprintTercatat(1);
+    ctx.meja.terima('p1', { t: 'putaranBerikut' });
+    siapSemua(ctx.meja);
+    mainkanPutaran(ctx, rng);
+    // Server mati sebelum putaran 2 sempat dicatat: dipulihkan dari simpanan.
+    const simpanan = JSON.parse(JSON.stringify(ctx.meja.data)) as DataMeja;
+    ctx.meja.hentikan();
+    let kabar = 0;
+    const baru = siapkan({ saatPutaranSprint: () => kabar++ });
+    baru.jam.waktu = ctx.jam.waktu;
+    const meja = new Meja(baru.opsi, dataMejaDipulihkan(simpanan));
+    expect(catatanSprint(meja.data, 0).map((c) => c.putaran)).toEqual([2]);
+    meja.tandaiSprintTercatat(2);
+    expect(catatanSprint(meja.data, 0)).toEqual([]);
+    // Pemain kembali dan main lagi: putaran 3 dicatat seperti biasa.
+    meja.terhubung('p1');
+    meja.terima('p1', { t: 'putaranBerikut' });
+    siapSemua(meja);
+    mainkanPutaran({ meja, surat: baru.surat, jam: baru.jam }, rng);
+    expect(kabar).toBe(1);
+    expect(catatanSprint(meja.data, 0).map((c) => c.putaran)).toEqual([3]);
+    expect(meja.data.sprint!.waktuPutaran).toHaveLength(3);
+    meja.hentikan();
   });
 
-  it('Keluar di tengah jalan: catatan ditinggal (tidak menang), putaran yang selesai saja', () => {
-    const { meja, surat, jam } = mejaSprint();
+  it('Keluar di tengah putaran: hanya putaran yang sudah selesai; putaran yang diteruskan warga kedai tidak', () => {
+    const ctx = mejaSprint();
+    const { meja } = ctx;
     siapSemua(meja);
     const rng = new Rng(3);
-    // Mainkan satu putaran penuh.
-    for (let i = 0; i < 5000 && meja.data.game!.status !== 'putaranSelesai'; i++) {
-      if (aksiManusia(meja, surat, 'p1', rng)) continue;
-      if (!jam.langkah()) throw new Error('macet');
-    }
+    mainkanPutaran(ctx, rng);
     meja.terima('p1', { t: 'putaranBerikut' });
     siapSemua(meja);
     meja.terima('p1', { t: 'keluar' });
     expect(meja.adaKursiManusia).toBe(false);
-    const c = catatanSprint(meja.data, 2_000_000)!;
-    expect(c).toMatchObject({ menang: false, selesai: false, putaran: 1, nama: 'Budi', kode: 'ABCDE' });
-    expect(c.skor).toBe(meja.data.game!.riwayat[0].skorAkumulasi[0]);
+    expect(meja.data.sprint!.putaranSampai).toBe(1);
+    const c = catatanSprint(meja.data, 2_000_000);
+    expect(c.map((x) => x.putaran)).toEqual([1]);
+    expect(c[0]).toMatchObject({ nama: 'Budi', kode: 'ABCDE' });
+    // Kalau warga kedai sempat menyelesaikan putaran 2 untuknya: tetap tidak dihitung.
+    const d = meja.data;
+    d.game!.riwayat.push(d.game!.riwayat[0]);
+    expect(catatanSprint(d, 3_000_000).map((x) => x.putaran)).toEqual([1]);
   });
 
-  it('Keluar sebelum putaran pertama selesai: tidak ada catatan (bukan skor 0 yang mengalahkan percobaan minus)', () => {
+  it('Keluar di susun akhir: putaran itu belum selesai, jadi tidak dihitung', () => {
     const { meja, surat, jam } = mejaSprint();
-    // Keluar di popup joker.
-    expect(meja.data.game).not.toBeNull();
-    expect(catatanSprint(meja.data, 1_500_000)).toBeNull();
+    siapSemua(meja);
+    const rng = new Rng(9);
+    for (let i = 0; i < 20_000 && meja.data.game!.status === 'putaranBerjalan'; i++) {
+      if (aksiManusia(meja, surat, 'p1', rng)) continue;
+      if (!jam.langkah()) break;
+    }
+    expect(meja.data.game!.status).toBe('susunAkhir');
+    meja.terima('p1', { t: 'keluar' });
+    expect(meja.data.kursi[0].keluarSesudahPutaran).toBe(1);
+    expect(meja.data.sprint!.putaranSampai).toBe(0);
+    const d = meja.data;
+    d.game!.riwayat.push({ nomor: 1, pementung: null, kepentung: [], skorAkumulasi: [9, 0, 0, 0, 0, 0] } as unknown as HasilPutaran);
+    expect(catatanSprint(d, 0)).toEqual([]);
+  });
+
+  it('Keluar sebelum putaran pertama selesai: tidak ada catatan', () => {
+    const { meja, surat, jam } = mejaSprint();
+    expect(catatanSprint(meja.data, 1_500_000)).toEqual([]);
     siapSemua(meja);
     const rng = new Rng(5);
-    // Main beberapa langkah di putaran pertama, lalu keluar.
     for (let i = 0; i < 6 && meja.data.game!.status === 'putaranBerjalan'; i++) {
       if (aksiManusia(meja, surat, 'p1', rng)) continue;
       if (!jam.langkah()) break;
@@ -332,13 +406,24 @@ describe('meja sprint', () => {
     meja.terima('p1', { t: 'keluar' });
     expect(meja.adaKursiManusia).toBe(false);
     expect(meja.data.game!.riwayat).toHaveLength(0);
-    expect(catatanSprint(meja.data, 2_000_000)).toBeNull();
+    expect(catatanSprint(meja.data, 2_000_000)).toEqual([]);
+  });
+
+  it('simpanan meja sprint 0.8.0 yang sudah tercatat sebagai percobaan: putarannya tidak dicatat lagi', () => {
+    const ctx = mejaSprint();
+    siapSemua(ctx.meja);
+    mainkanPutaran(ctx, new Rng(2));
+    const d = ctx.meja.data;
+    expect(catatanSprint(d, 0)).toHaveLength(1);
+    expect(catatanSprint({ ...d, sprint: { mulaiPada: d.sprint!.mulaiPada, kursi: d.sprint!.kursi, tercatat: true } }, 0)).toEqual([]);
+    // Tanpa waktu putaran (simpanan 0.8.0 yang belum tercatat): pakai waktu cadangan.
+    expect(catatanSprint({ ...d, sprint: { mulaiPada: d.sprint!.mulaiPada, kursi: d.sprint!.kursi } }, 42)[0].waktu).toBe(42);
   });
 
   it('bukan meja sprint atau belum ada permainan: tidak ada catatan; info meja biasa tanpa `sprint`', () => {
     const { opsi, surat } = siapkan();
     const biasa = Meja.buat(opsi, 'h', 'Ani');
-    expect(catatanSprint(biasa.data, 1)).toBeNull();
+    expect(catatanSprint(biasa.data, 1)).toEqual([]);
     expect(biasa.sprint).toBe(false);
     expect('sprint' in surat.info('h')).toBe(false);
     expect('sprint' in biasa.data).toBe(false);
