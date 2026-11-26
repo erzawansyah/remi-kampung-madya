@@ -177,13 +177,17 @@ interface Jalur {
   readonly fader: GainNode;
   /** Peredam sesaat (ducking) saat efek besar berbunyi; terpisah dari fader supaya tidak saling timpa. */
   readonly redam: GainNode;
+  /** Peredam selama teman ngomong (obrolan suara); node sendiri supaya tidak menimpa redaman efek besar. */
+  readonly redamNgomong: GainNode;
   readonly k: Keluaran;
 }
 
 function bangunJalur(r: Rantai, lacak?: (d: number) => void): Jalur {
   const { a } = r;
+  const redamNgomong = a.createGain();
+  redamNgomong.connect(r.busMusik);
   const redam = a.createGain();
-  redam.connect(r.busMusik);
+  redam.connect(redamNgomong);
   const fader = a.createGain();
   fader.gain.value = 0;
   fader.connect(redam);
@@ -194,7 +198,7 @@ function bangunJalur(r: Rantai, lacak?: (d: number) => void): Jalur {
   hangat.connect(fader);
   // Gema masuk sebelum fader supaya ikut memudar saat musik dihentikan.
   const gema = buatGema(a, fader, { tunda: 0.34, umpan: 0.3, basah: 0.25, lowpass: 1800 });
-  return { a, fader, redam, k: { a, ke: hangat, gema, derau: r.derau, lacak } };
+  return { a, fader, redam, redamNgomong, k: { a, ke: hangat, gema, derau: r.derau, lacak } };
 }
 
 const LOOKAHEAD = 1.2;
@@ -282,8 +286,20 @@ export function suasanaMusik(baru: AdeganMusik): void {
  */
 export function redamMusik(tingkat: number, lama: number): void {
   if (!jalur) return;
-  const g = jalur.redam.gain;
-  const kini = jalur.a.currentTime;
+  redamParam(jalur.redam.gain, jalur.a, tingkat, lama);
+}
+
+/**
+ * Redam musik selama teman ngomong (obrolan suara). Node-nya terpisah dari redamMusik(), jadi redaman efek
+ * besar (tegang, mentung) dan redaman suara teman tidak saling membatalkan; keduanya dikalikan.
+ */
+export function redamMusikNgomong(tingkat: number, lama: number): void {
+  if (!jalur) return;
+  redamParam(jalur.redamNgomong.gain, jalur.a, tingkat, lama);
+}
+
+function redamParam(g: AudioParam, a: BaseAudioContext, tingkat: number, lama: number): void {
+  const kini = a.currentTime;
   g.cancelScheduledValues(kini);
   g.setValueAtTime(g.value, kini);
   g.setTargetAtTime(tingkat, kini, 0.03);

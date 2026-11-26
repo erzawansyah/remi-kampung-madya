@@ -134,6 +134,7 @@ class PeerPalsu extends EventTarget {
 
 interface AudioPalsu {
   muted: boolean;
+  volume?: number;
   srcObject: unknown;
   dibuang: boolean;
   diputar: number;
@@ -270,7 +271,7 @@ function hp(meja: Meja, pemainId: string, antrian: [string, PesanServer][], ubah
 }
 
 /** Meja Ani (host), Budi, Cici + satu warga kedai; tiap HP menerima pesan suara lewat antrian. */
-function meja3() {
+function meja3(ubahAni: Partial<LingkunganSuara> = {}) {
   const antrian: [string, PesanServer][] = [];
   const meja = Meja.buat(
     { kode: 'ABCDE', kirim: (id, p) => (p.t === 'suara' || p.t === 'suaraSinyal') && antrian.push([id, p]), namaLawan: ['Warga A'] },
@@ -281,7 +282,7 @@ function meja3() {
   meja.masuk('budi', 'Budi');
   meja.masuk('cici', 'Cici');
   meja.terima('ani', { t: 'aturKursi', kursi: 3, jenis: 'bot' });
-  const ani = hp(meja, 'ani', antrian);
+  const ani = hp(meja, 'ani', antrian, ubahAni);
   const budi = hp(meja, 'budi', antrian);
   const cici = hp(meja, 'cici', antrian);
   const ke = { ani, budi, cici } as Record<string, ReturnType<typeof hp>>;
@@ -876,17 +877,18 @@ describe('SuaraLangsung: sinyal hilang dan sambung ulang', () => {
 // Penguat suara teman (0.10.0): jalur Web Audio per orang, cadangan <audio>, sesi audio iOS
 
 describe('SuaraLangsung: penguat suara teman', () => {
-  /** Jalur palsu: mencatat gain terakhir dan apakah sudah ditutup. */
-  function pasangJalur(h: ReturnType<typeof hp>, bisa = true) {
-    const jalur: { stream: unknown; gain: number | null; tutup: number }[] = [];
-    h.env.sambungSuara = vi.fn((stream: MediaStream) => {
+  /** Jalur palsu: mencatat gain terakhir dan apakah sudah ditutup; `jalan` = context sedang jalan. */
+  function pasangJalur(h: ReturnType<typeof hp>, bisa = true, jalan = true) {
+    const jalur: { stream: unknown; gain: number | null; tutup: number; jalan: boolean; berubah: () => void }[] = [];
+    h.env.sambungSuara = vi.fn((stream: MediaStream, saatBerubah: () => void) => {
       if (!bisa) return null;
-      const j = { stream: stream as unknown, gain: null as number | null, tutup: 0 };
+      const j = { stream: stream as unknown, gain: null as number | null, tutup: 0, jalan, berubah: saatBerubah };
       jalur.push(j);
       return {
         aturGain: (g: number) => {
           j.gain = g;
         },
+        aktif: () => j.jalan && j.tutup === 0,
         tutup: () => {
           j.tutup++;
         },
@@ -895,9 +897,9 @@ describe('SuaraLangsung: penguat suara teman', () => {
     return jalur;
   }
 
-  async function siap(bisa = true) {
+  async function siap(bisa = true, jalan = true) {
     const m = meja3();
-    const jalur = pasangJalur(m.ani, bisa);
+    const jalur = pasangJalur(m.ani, bisa, jalan);
     m.ani.masuk();
     m.budi.masuk();
     m.cici.masuk();
@@ -955,6 +957,66 @@ describe('SuaraLangsung: penguat suara teman', () => {
     expect(ani.audio.every((a) => !a.muted && a.srcObject)).toBe(true);
     ani.suara.aturDengar(false);
     expect(ani.audio.every((a) => a.muted)).toBe(true);
+  });
+
+  it('context masih tidur saat suara datang: <audio> yang berbunyi (gain 0), lalu pindah ke penguat begitu context jalan', async () => {
+    const { ani, jalur } = await siap(true, false);
+    expect(jalur).toHaveLength(2);
+    expect(ani.audio.every((a) => !a.muted)).toBe(true);
+    expect(jalur.map((j) => j.gain)).toEqual([0, 0]);
+    // Context jalan (statechange): <audio> dibisukan, suara lewat gain.
+    for (const j of jalur) j.jalan = true;
+    jalur[0]!.berubah();
+    expect(ani.audio.every((a) => a.muted)).toBe(true);
+    expect(jalur.map((j) => j.gain)).toEqual([1, 1]);
+    // Tidur lagi (iOS interrupted): kembali ke <audio>.
+    for (const j of jalur) j.jalan = false;
+    jalur[1]!.berubah();
+    expect(ani.audio.every((a) => !a.muted)).toBe(true);
+    expect(jalur.map((j) => j.gain)).toEqual([0, 0]);
+  });
+
+  it('cadangan <audio>: volume suara teman dipakai (paling keras 100%, 0% = diam) dan ikut berubah', async () => {
+    let vol = 2;
+    let ubahVol: (() => void) | null = null;
+    // Pendengar volume dipasang di konstruktor, jadi env-nya diisi sebelum pengelola dibuat.
+    const m = meja3({
+      sambungSuara: () => null,
+      volumeSuara: () => vol,
+      saatVolumeBerubah: (fn) => {
+        ubahVol = fn;
+        return () => undefined;
+      },
+    });
+    m.ani.masuk();
+    m.budi.masuk();
+    await m.alirkan();
+    await m.budi.suara.ketukMic();
+    await m.alirkan();
+    expect(m.ani.audio).toHaveLength(1);
+    expect(m.ani.audio[0]!.volume).toBe(1);
+    vol = 0.4;
+    ubahVol!();
+    expect(m.ani.audio[0]!.volume).toBe(0.4);
+    vol = 0;
+    ubahVol!();
+    expect(m.ani.audio[0]!.volume).toBe(0);
+  });
+
+  it('volume suara teman 0%: teman ngomong tidak meredam musik/efek', async () => {
+    const { ani } = await siap();
+    let vol = 0;
+    ani.env.volumeSuara = () => vol;
+    const rx = ani.peers[0]!.getReceivers()[0]!;
+    rx.level = 0.3;
+    rx.waktu = jam;
+    ani.suara.ukurLevel();
+    expect(ani.redamMusik).not.toHaveBeenCalled();
+    vol = 0.1;
+    jam += 100;
+    rx.waktu = jam;
+    ani.suara.ukurLevel();
+    expect(ani.redamMusik).toHaveBeenCalled();
   });
 
   it('sambungSuara melempar galat: tetap jatuh ke <audio> biasa', async () => {

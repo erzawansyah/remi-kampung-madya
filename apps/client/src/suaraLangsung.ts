@@ -18,14 +18,18 @@
 // Kerasnya suara teman (0.10.0): suara tiap teman diputar lewat AudioContext bersama (efek/mesinAudio.ts):
 // sumber → gain per orang (0 = dibisukan) → busSuara (volume "Volume suara teman", bawaan 200%) →
 // kompresor → pembatas. Elemen <audio> tetap dipasang (Chrome tidak mengalirkan suara WebRTC ke Web Audio
-// tanpa elemen media) tapi dibisukan. Tanpa Web Audio / context belum jalan: <audio> biasa seperti 0.9.0.
-// Selama ada yang ngomong, musik dan seluruh bus efek diredam (pemicunya hanya tingkat suara).
+// tanpa elemen media) tapi dibisukan selama context jalan. Selama context belum/tidak jalan (tidur, iPhone
+// di luar ketukan) <audio>-nya yang berbunyi, lalu pindah sendiri ke penguat begitu context jalan. Tanpa
+// Web Audio: <audio> biasa seperti 0.9.0 (volumenya paling keras 100%, 0% = diam).
+// Selama ada yang ngomong (dan volume suara teman tidak 0), musik dan seluruh bus efek diredam (pemicunya
+// hanya tingkat suara).
 
 import { kunciNama, type AnggotaSuara, type DataSinyalSuara, type InfoMeja, type PesanServer } from '@remi/meja';
 import type { InfoRtt, PesanKeMeja } from './koneksi';
 import { TEKS_SUARA } from './konten/suara';
 import { pakaiAudioSuara, redamEfek } from './efek/mesinAudio';
-import { redamMusik } from './efek/musik';
+import { redamMusikNgomong } from './efek/musik';
+import { preferensi, saatPreferensiBerubah } from './preferensi';
 
 /** Keadaan ikon mic di kursi seseorang. */
 export type KeadaanMic = 'bicara' | 'nyala' | 'mati' | 'lemah';
@@ -60,7 +64,7 @@ export const LAMA_REDAM_NGOMONG = 0.5;
 
 /** Redam musik dan seluruh bus efek (dipanggil berulang selama ada teman yang terdengar ngomong). */
 export function redamSaatNgomong(): void {
-  redamMusik(REDAM_MUSIK_NGOMONG, LAMA_REDAM_NGOMONG);
+  redamMusikNgomong(REDAM_MUSIK_NGOMONG, LAMA_REDAM_NGOMONG);
   redamEfek(REDAM_EFEK_NGOMONG, LAMA_REDAM_NGOMONG);
 }
 
@@ -210,6 +214,8 @@ export interface PengukurLevel {
 export interface JalurSuara {
   /** Gain orang ini: 1 = biasa, 0 = dibisukan. */
   aturGain(g: number): void;
+  /** Context sedang jalan: suara benar-benar keluar lewat penguat (kalau tidak, pakai <audio>). */
+  aktif(): boolean;
   /** Putus dan buang semua node (aman dipanggil berkali-kali). */
   tutup(): void;
 }
@@ -233,10 +239,15 @@ export interface LingkunganSuara {
   /** Kecilkan musik dan efek sebentar (ada yang ngomong). */
   redamMusik(): void;
   /**
-   * Sambungkan suara teman ke mesin audio (penguat). Null = tidak bisa (tanpa Web Audio, context belum
-   * jalan, browser menolak): suara diputar lewat <audio> biasa.
+   * Sambungkan suara teman ke mesin audio (penguat). Null = tidak bisa (tanpa Web Audio, belum pernah
+   * disentuh, browser menolak): suara diputar lewat <audio> biasa. `saatBerubah` dipanggil tiap keadaan
+   * context berubah (mis. tidur → jalan), supaya pemanggil memindah suara antara <audio> dan penguat.
    */
-  sambungSuara?(stream: MediaStream): JalurSuara | null;
+  sambungSuara?(stream: MediaStream, saatBerubah: () => void): JalurSuara | null;
+  /** Volume suara teman (preferensi volumeSuara, 0..3). Tanpa ini dianggap 1. */
+  volumeSuara?(): number;
+  /** Pendengar perubahan volume suara teman. Mengembalikan pelepas. */
+  saatVolumeBerubah?(fn: () => void): () => void;
   /** Mic dibuka (true) atau dilepas (false): sesi audio iOS (navigator.audioSession). */
   aturSesiAudio?(mic: boolean): void;
   /** Pasang pendengar ketukan sekali (memutar suara yang ditahan browser). Mengembalikan pelepas. */
@@ -287,15 +298,16 @@ function ukurLevelDiKonteks(stream: MediaStream): PengukurLevel | null {
 }
 
 /**
- * Suara satu teman lewat context bersama: sumber → gain per orang → busSuara. Hanya kalau context sudah
- * jalan (kalau masih tidur, misalnya iPhone di luar ketukan, suaranya bisa hilang sementara <audio>-nya
- * dibisukan), jadi selain itu null dan pemanggil memakai <audio> biasa.
+ * Suara satu teman lewat context bersama: sumber → gain per orang → busSuara. Node dipasang walau context
+ * masih tidur (pegangannya membangunkan context); selama belum jalan `aktif()` false dan pemanggil memakai
+ * <audio> (kalau <audio> dibisukan saat context tidur, misalnya iPhone di luar ketukan, suaranya hilang).
+ * `saatBerubah` dipanggil tiap `statechange`, jadi suara pindah ke penguat begitu context jalan.
  */
-export function sambungSuaraDiKonteks(stream: MediaStream): JalurSuara | null {
+export function sambungSuaraDiKonteks(stream: MediaStream, saatBerubah?: () => void): JalurSuara | null {
   const pegang = pakaiAudioSuara();
   if (!pegang) return null;
   const a = pegang.r.a;
-  if (a.state !== 'running') {
+  if (a.state === 'closed') {
     pegang.lepas();
     return null;
   }
@@ -304,6 +316,8 @@ export function sambungSuaraDiKonteks(stream: MediaStream): JalurSuara | null {
   try {
     sumber = a.createMediaStreamSource(stream);
     gain = a.createGain();
+    // Mulai dari 0: pemanggil yang membuka gain sesudah memutuskan jalur mana yang berbunyi (tanpa dobel).
+    gain.gain.value = 0;
     sumber.connect(gain);
     gain.connect(pegang.r.busSuara);
   } catch {
@@ -311,7 +325,12 @@ export function sambungSuaraDiKonteks(stream: MediaStream): JalurSuara | null {
     return null;
   }
   let tertutup = false;
+  const berubah = () => {
+    if (!tertutup) saatBerubah?.();
+  };
+  if (saatBerubah) a.addEventListener?.('statechange', berubah);
   return {
+    aktif: () => !tertutup && a.state === 'running',
     aturGain: (g) => {
       if (tertutup) return;
       const p = gain.gain;
@@ -323,6 +342,7 @@ export function sambungSuaraDiKonteks(stream: MediaStream): JalurSuara | null {
     tutup: () => {
       if (tertutup) return;
       tertutup = true;
+      if (saatBerubah) a.removeEventListener?.('statechange', berubah);
       try {
         sumber.disconnect();
         gain.disconnect();
@@ -375,7 +395,16 @@ export function lingkunganBrowser(opsi: { toast: LingkunganSuara['toast']; umumk
     // Pengukur mic memakai context bersama (satu AudioContext untuk seluruh aplikasi; di iOS beberapa
     // context sekaligus rawan bermasalah). Pegangannya menjaga context tetap jalan selama mic nyala.
     ukurLevelLokal: (stream) => ukurLevelDiKonteks(stream),
-    sambungSuara: (stream) => sambungSuaraDiKonteks(stream),
+    sambungSuara: (stream, saatBerubah) => sambungSuaraDiKonteks(stream, saatBerubah),
+    volumeSuara: () => preferensi().volumeSuara,
+    saatVolumeBerubah: (fn) => {
+      let terakhir = preferensi().volumeSuara;
+      return saatPreferensiBerubah((p) => {
+        if (p.volumeSuara === terakhir) return;
+        terakhir = p.volumeSuara;
+        fn();
+      });
+    },
     aturSesiAudio: (mic) => aturSesiAudioIos(mic),
     sekarang: () => performance.now(),
     setInterval: (fn, ms) => setInterval(fn, ms),
@@ -485,7 +514,10 @@ export class SuaraLangsung {
   constructor(
     private readonly env: LingkunganSuara,
     private readonly sambungan: () => SambunganSuara | null,
-  ) {}
+  ) {
+    // Satu pengelola untuk seluruh aplikasi: pendengar volume tidak pernah perlu dilepas.
+    env.saatVolumeBerubah?.(() => this.terapkanBisu());
+  }
 
   // ---------- keadaan untuk UI ----------
 
@@ -828,7 +860,7 @@ export class SuaraLangsung {
       peer.jalur?.tutup();
       peer.jalur = null;
       try {
-        peer.jalur = this.env.sambungSuara?.(stream) ?? null;
+        peer.jalur = this.env.sambungSuara?.(stream, () => this.terapkanBisu()) ?? null;
       } catch (err) {
         console.error('galat jalur suara', err);
       }
@@ -987,13 +1019,19 @@ export class SuaraLangsung {
 
   private terapkanBisu(): void {
     const nama = new Map(this.anggota.map((a) => [a.id, kunciNama(this.namaKursi[a.kursi] ?? '')]));
+    const volume = this.env.volumeSuara?.() ?? 1;
     for (const p of this.peers.values()) {
       p.bisu = !this.dengar || this.bisu.has(nama.get(p.id) ?? '');
-      if (p.jalur) {
+      if (p.jalur?.aktif()) {
         // Jalur penguat: <audio> selalu bisu (supaya tidak terdengar dobel), bisukan lewat gain.
         p.audio.muted = true;
         p.jalur.aturGain(p.bisu ? 0 : 1);
-      } else p.audio.muted = p.bisu;
+      } else {
+        // <audio> biasa (tanpa penguat, atau context belum jalan): volume elemen paling keras 1.
+        p.jalur?.aturGain(0);
+        p.audio.muted = p.bisu;
+        p.audio.volume = Math.max(0, Math.min(1, volume));
+      }
     }
   }
 
@@ -1047,7 +1085,8 @@ export class SuaraLangsung {
         this.bicaraSaya = sayaNgomong;
         berubah = true;
       }
-      if (adaYangNgomong) this.env.redamMusik();
+      // Volume suara teman 0% = tidak terdengar, jadi musik dan efek juga tidak perlu diredam.
+      if (adaYangNgomong && (this.env.volumeSuara?.() ?? 1) > 0) this.env.redamMusik();
       if (berubah) this.kabari();
     } catch (e) {
       console.error('galat ukur suara', e);

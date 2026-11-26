@@ -91,8 +91,20 @@ class KonteksPalsu {
   currentTime = 1;
   sampleRate = 48000;
   destination = new NodePalsu('destination', this);
+  pendengar = new Set<() => void>();
   constructor() {
     KonteksPalsu.semua.push(this);
+  }
+  addEventListener(_j: string, fn: () => void) {
+    this.pendengar.add(fn);
+  }
+  removeEventListener(_j: string, fn: () => void) {
+    this.pendengar.delete(fn);
+  }
+  /** Ganti keadaan dan picu statechange (seperti browser). */
+  ganti(state: string) {
+    this.state = state;
+    for (const fn of [...this.pendengar]) fn();
   }
   resume() {
     this.state = 'running';
@@ -148,9 +160,14 @@ type ModPref = typeof import('../src/preferensi');
 
 let musikDiredam: [number, number][] = [];
 
-async function muat(): Promise<{ audio: ModAudio; suara: ModSuara; pref: ModPref }> {
+async function muat(musikAsli = false): Promise<{ audio: ModAudio; suara: ModSuara; pref: ModPref }> {
   vi.resetModules();
-  vi.doMock('../src/efek/musik', () => ({ redamMusik: (t: number, l: number) => musikDiredam.push([t, l]) }));
+  if (!musikAsli) {
+    vi.doMock('../src/efek/musik', () => ({
+      redamMusik: () => undefined,
+      redamMusikNgomong: (t: number, l: number) => musikDiredam.push([t, l]),
+    }));
+  }
   const pref = await import('../src/preferensi');
   const audio = await import('../src/efek/mesinAudio');
   const suara = await import('../src/suaraLangsung');
@@ -179,7 +196,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------------------------
 
 describe('rantai audio: bus suara dan redam efek', () => {
-  it('busSuara → kompresor suara (−24 dB, 4:1, knee 6, 5 ms/150 ms) → pembatas, tidak lewat master/bus efek', async () => {
+  it('busSuara → kompresor suara (−24 dB, 4:1, knee 6, 5 ms/150 ms) → kompensasi makeup gain → pembatas, tidak lewat master/bus efek', async () => {
     const { audio } = await muat();
     const a = new KonteksPalsu();
     const r = audio.bangunRantai(a as unknown as BaseAudioContext) as unknown as Record<string, NodePalsu>;
@@ -187,7 +204,13 @@ describe('rantai audio: bus suara dan redam efek', () => {
     const komp = [...busSuara.keluar][0]!;
     expect(komp.jenis).toBe('kompresor');
     expect([komp.threshold.value, komp.ratio.value, komp.knee.value, komp.attack.value, komp.release.value]).toEqual([-24, 4, 6, 0.005, 0.15]);
-    const pembatas = [...komp.keluar][0]!;
+    // Makeup gain otomatis kompresor (×3,038) dan pembatas (×1,217), diukur di Chromium, dibatalkan
+    // supaya 100% = asli.
+    const kompensasi = [...komp.keluar][0]!;
+    expect(kompensasi.jenis).toBe('gain');
+    expect(kompensasi.gain.value).toBeCloseTo(1 / (3.038 * 1.217), 6);
+    expect(audio.KOMPENSASI_KOMP_SUARA).toBeCloseTo(0.2705, 4);
+    const pembatas = [...kompensasi.keluar][0]!;
     expect(pembatas.jenis).toBe('kompresor');
     expect(pembatas.threshold.value).toBe(-3);
     expect([...pembatas.keluar]).toEqual([a.destination]);
@@ -306,10 +329,37 @@ describe('jalur suara teman di context bersama', () => {
     expect(audio.diagnostikAudio().pemakaiSuara).toBe(0);
   });
 
-  it('context belum jalan atau createMediaStreamSource gagal: null (pakai <audio> biasa), pegangan dilepas', async () => {
+  it('context masih tidur: jalur tetap dipasang (gain 0, tidak aktif), memegang context, dan aktif begitu context jalan', async () => {
     const { audio, suara } = await muat();
     const a = sentuh(audio);
     a.state = 'suspended';
+    let dibangunkan = 0;
+    a.resume = () => {
+      dibangunkan++;
+      return Promise.resolve();
+    };
+    const berubah = vi.fn();
+    const j = suara.sambungSuaraDiKonteks({} as MediaStream, berubah)!;
+    expect(j).toBeTruthy();
+    expect(j.aktif()).toBe(false);
+    expect(dibangunkan).toBeGreaterThan(0);
+    expect(audio.diagnostikAudio().pemakaiSuara).toBe(1);
+    const g = [...NodePalsu.semua.find((n) => n.jenis === 'stream')!.keluar][0]!;
+    expect(g.gain.value).toBe(0);
+    a.ganti('running');
+    expect(berubah).toHaveBeenCalledTimes(1);
+    expect(j.aktif()).toBe(true);
+    j.tutup();
+    expect(j.aktif()).toBe(false);
+    expect(a.pendengar.size).toBe(0);
+    a.ganti('suspended');
+    expect(berubah).toHaveBeenCalledTimes(1);
+  });
+
+  it('context sudah ditutup atau createMediaStreamSource gagal: null (pakai <audio> biasa), pegangan dilepas', async () => {
+    const { audio, suara } = await muat();
+    const a = sentuh(audio);
+    a.state = 'closed';
     a.resume = () => Promise.resolve();
     expect(suara.sambungSuaraDiKonteks({} as MediaStream)).toBeNull();
     a.state = 'running';
@@ -358,6 +408,31 @@ describe('jalur suara teman di context bersama', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('redaman musik', () => {
+  it('redaman suara teman di node sendiri: tidak membatalkan redaman efek besar (dan sebaliknya)', async () => {
+    const { audio, pref } = await muat(true);
+    const musik = await import('../src/efek/musik');
+    pref.aturPreferensi({ musik: true });
+    sentuh(audio);
+    const r = audio.rantaiAktif() as unknown as Record<string, NodePalsu>;
+    // Bangun jalur musik tanpa memutar nada (jalurnya dibuat sebelum Pemusik menjadwalkan apa pun).
+    try {
+      musik.suasanaMusik('meja');
+    } catch {
+      // Pemusik butuh node yang tidak ada di context palsu; jalurnya sudah terpasang.
+    }
+    const redamNgomong = [...NodePalsu.semua].find((n) => n.jenis === 'gain' && n.keluar.has(r.busMusik!))!;
+    const redam = [...NodePalsu.semua].find((n) => n.jenis === 'gain' && n.keluar.has(redamNgomong))!;
+    expect(redamNgomong).toBeTruthy();
+    expect(redam).toBeTruthy();
+    musik.redamMusik(0.25, 2.4);
+    musik.redamMusikNgomong(0.15, 0.5);
+    expect(redam.gain.jadwal.filter((x) => x[0] === 'target').map((x) => x[1])).toEqual([0.25, 1]);
+    expect(redamNgomong.gain.jadwal.filter((x) => x[0] === 'target').map((x) => x[1])).toEqual([0.15, 1]);
+    musik.suasanaMusik('diam');
   });
 });
 

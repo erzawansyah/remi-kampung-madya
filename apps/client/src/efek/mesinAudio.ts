@@ -2,7 +2,7 @@
 //   bus efek ─► redam efek ─┐
 //                           ├─► master ─► pembatas (limiter) ─► speaker
 //   bus musik ──────────────┘                ▲
-//   bus suara (suara teman) ─► kompresor ────┘
+//   bus suara (suara teman) ─► kompresor ─► kompensasi ─┘
 // Volume bus mengikuti preferensi (suara/volumeEfek, musik/volumeMusik, volumeSuara) dan berubah halus
 // tanpa klik. Bus suara (obrolan suara 0.10.0) tidak lewat master supaya suara teman bisa dikuatkan lebih
 // dari efek; kompresornya meratakan yang pelan dan yang keras, pembatas tetap mencegah pecah. "Redam efek"
@@ -34,6 +34,14 @@ export interface Rantai<A extends BaseAudioContext = BaseAudioContext> {
   readonly derau: AudioBuffer;
 }
 
+/**
+ * Pembatal makeup gain otomatis (spek Web Audio) di jalur suara teman, diukur di Chromium dengan
+ * OfflineAudioContext (sinus 300 Hz di bawah ambang): kompresor suara (−24 dB, 4:1, knee 6) ×3,038 dan
+ * pembatas (−3 dB, 20:1) ×1,217. Dengan ini busSuara 1 = sama keras dengan aslinya (seperti <audio> 0.9.0).
+ * Ubah bersama pengaturan kompresor/pembatasnya.
+ */
+export const KOMPENSASI_KOMP_SUARA = 1 / (3.038 * 1.217);
+
 /** Bangun bus + pembatas di context mana pun (juga OfflineAudioContext untuk uji level). */
 export function bangunRantai<A extends BaseAudioContext>(a: A): Rantai<A> {
   // Pembatas hanya jaring pengaman saat banyak bunyi bertumpuk; level tiap bunyi sudah diatur di bawahnya.
@@ -58,9 +66,14 @@ export function bangunRantai<A extends BaseAudioContext>(a: A): Rantai<A> {
   kompSuara.ratio.value = 4;
   kompSuara.attack.value = 0.005;
   kompSuara.release.value = 0.15;
+  // DynamicsCompressor selalu menambah "makeup gain" otomatis (spek Web Audio: (1/fullRangeGain)^0,6), di
+  // kompresor ini dan di pembatas. Dibatalkan di sini supaya gain busSuara benar-benar pengali yang tertulis
+  // di penggeser (100% = sama dengan aslinya, 200% = dua kali) untuk suara pelan dan biasa.
+  const kompensasi = a.createGain();
+  kompensasi.gain.value = KOMPENSASI_KOMP_SUARA;
   const busSuara = a.createGain();
   busSuara.gain.value = PREFERENSI_BAWAAN.volumeSuara;
-  busSuara.connect(kompSuara).connect(pembatas);
+  busSuara.connect(kompSuara).connect(kompensasi).connect(pembatas);
   const gemaEfek = buatGema(a, busEfek, { tunda: 0.12, umpan: 0.25, basah: 0.2, lowpass: 2400 });
   return { a, busEfek, busMusik, busSuara, redamEfek, gemaEfek, derau: bufferDerau(a) };
 }
