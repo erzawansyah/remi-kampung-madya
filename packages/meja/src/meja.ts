@@ -60,7 +60,7 @@ import {
   type PengaturanKompetisi,
 } from './kompetisi.js';
 import { isiLedek, kunciNama, rapikanLevel, rapikanNama, validasiSinyalSuara } from './validasi.js';
-import { hasilPutaranSprint, LEVEL_SPRINT, NAMA_LAWAN_SPRINT, PENGATURAN_SPRINT, type HasilPutaranSprint } from './sprint.js';
+import { hasilPutaranSprint, LEVEL_SPRINT, NAMA_LAWAN_SPRINT, PENGATURAN_SPRINT, rampingkanGameSprint, type HasilPutaranSprint } from './sprint.js';
 
 export interface Penjadwal {
   setel(ms: number, fn: () => void): unknown;
@@ -122,11 +122,14 @@ export interface SprintDataMeja {
   /** Kursi pemain sesudah urutan duduk diacak. */
   kursi: number;
   /**
-   * Hanya di simpanan meja sprint 0.8.0 (satu percobaan 5 putaran): percobaannya sudah tercatat sebagai
-   * satu baris lama, jadi putarannya tidak dicatat lagi. Meja sprint baru tidak pernah menulisnya.
+   * Tanpa `putaranTercatat` (simpanan meja sprint 0.8.0, satu percobaan 5 putaran): percobaannya sudah
+   * tercatat sebagai satu baris lama, jadi putarannya tidak dicatat lagi. Meja sprint baru selalu menulisnya
+   * bersama `putaranTercatat` (dibaca hanya `putaranTercatat`), supaya server versi sebelumnya (rollback)
+   * yang memulihkan meja ini menganggapnya sudah tercatat dan tidak mencatat semua putarannya sekali lagi
+   * sebagai satu baris lama (dijumlah dua kali dengan sprint_putaran sesudah deploy ulang).
    */
   tercatat?: true;
-  /** Berapa putaran (dari awal) yang sudah dicatat server. Tidak ada = 0. */
+  /** Berapa putaran (dari awal) yang sudah dicatat server. Tidak ada = 0 (kecuali simpanan 0.8.0 yang `tercatat`). */
   putaranTercatat?: number;
   /** Kapan tiap putaran selesai (jam meja, ms epoch), sejajar dengan riwayat; menentukan minggunya. */
   waktuPutaran?: number[];
@@ -533,7 +536,7 @@ export class Meja {
       giliranKe: 0,
       menungguJoker: [],
       sudahLihatJoker: [],
-      sprint: { mulaiPada: sekarang, kursi: 0 },
+      sprint: { mulaiPada: sekarang, kursi: 0, tercatat: true, putaranTercatat: 0 },
     };
     const meja = new Meja(opsi, data);
     meja.mulaiSprint(pemainId);
@@ -567,6 +570,8 @@ export class Meja {
     const s = this.d.sprint;
     if (!s || (s.putaranTercatat ?? 0) >= putaran) return;
     s.putaranTercatat = putaran;
+    // Server versi sebelumnya (rollback) menganggap meja ini sudah tercatat (lihat SprintDataMeja.tercatat).
+    s.tercatat = true;
     this.opsi.saatBerubah?.(this.d);
   }
 
@@ -1443,7 +1448,10 @@ export class Meja {
       this.jokerHabisWaktu.clear();
     }
     const idTerakhir = game.peristiwa.at(-1)?.id ?? 0;
-    this.d.game = h.state;
+    // Sprint (tanpa batas putaran): state dirampingkan tiap putaran baru supaya view dan simpanan tidak
+    // tumbuh tanpa batas (rampingkanGameSprint). Meja biasa tidak berubah.
+    const putaranBaru = h.state.status === 'putaranBerjalan' && h.state.putaran?.nomor !== sebelum?.nomor;
+    this.d.game = this.d.sprint && putaranBaru ? rampingkanGameSprint(h.state) : h.state;
     // Sprint: catat kapan putaran selesai (minggu papannya), lalu server mencatatnya sesudah berubah().
     const putaranSprint = !!this.d.sprint && h.state.riwayat.length > game.riwayat.length;
     if (putaranSprint) {
@@ -2381,8 +2389,8 @@ export interface CatatanSprint extends HasilPutaranSprint {
 export function catatanSprint(data: DataMeja, waktu: number): CatatanSprint[] {
   const s = data.sprint;
   const riwayat = data.game?.riwayat;
-  // Simpanan meja sprint 0.8.0 yang percobaannya sudah tercatat sebagai satu baris lama.
-  if (!s || s.tercatat || !riwayat?.length) return [];
+  // Simpanan meja sprint 0.8.0 yang percobaannya sudah tercatat sebagai satu baris lama (tanpa putaranTercatat).
+  if (!s || (s.tercatat && s.putaranTercatat === undefined) || !riwayat?.length) return [];
   const k = data.kursi[s.kursi];
   if (!k) return [];
   const sampai = Math.min(riwayat.length, s.putaranSampai ?? Infinity);
@@ -2391,6 +2399,21 @@ export function catatanSprint(data: DataMeja, waktu: number): CatatanSprint[] {
     hasil.push({ ...hasilPutaranSprint(riwayat, i, s.kursi), kode: data.kode, mulaiPada: s.mulaiPada, nama: k.nama, waktu: s.waktuPutaran?.[i] ?? waktu });
   }
   return hasil;
+}
+
+/**
+ * Putaran sprint terakhir yang sudah dicatat server (putaranTercatat), untuk menyusun lagi kabar
+ * sprintHasil sesudah restart (kabarnya hanya di memori). Null = belum ada yang tercatat, bukan meja
+ * sprint, atau simpanan 0.8.0.
+ */
+export function catatanSprintTerakhir(data: DataMeja): CatatanSprint | null {
+  const s = data.sprint;
+  const riwayat = data.game?.riwayat;
+  if (!s || s.putaranTercatat === undefined || !riwayat) return null;
+  const n = Math.min(s.putaranTercatat, riwayat.length);
+  const k = data.kursi[s.kursi];
+  if (n < 1 || !k) return null;
+  return { ...hasilPutaranSprint(riwayat, n - 1, s.kursi), kode: data.kode, mulaiPada: s.mulaiPada, nama: k.nama, waktu: s.waktuPutaran?.[n - 1] ?? 0 };
 }
 
 /** Penolakan di meja sprint (aturannya dikunci). */

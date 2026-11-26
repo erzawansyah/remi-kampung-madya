@@ -4,7 +4,7 @@
 // diakali dari HP). Semua aturan hitung sprint (pengaturan, hasil per putaran, papan, juara mingguan) hanya
 // di sini, dipakai server dan aplikasi. Jangan dihitung ulang di tempat lain.
 
-import type { GameState, HasilPutaran, LevelBot } from '@remi/engine';
+import { BATAS_PERISTIWA_VIEW, type GameState, type HasilPutaran, type LevelBot } from '@remi/engine';
 import { WIB_MS } from './peringkat.js';
 import type { PengaturanMeja } from './protokol.js';
 import { kunciNama } from './validasi.js';
@@ -87,6 +87,34 @@ export function hasilPutaranSprint(riwayat: RiwayatSprint, indeks: number, kursi
 /** Semua putaran sprint yang sudah selesai untuk kursi pemain. Menerima GameState maupun ViewPemain. */
 export function hasilSprint(game: Pick<GameState, 'riwayat'>, kursi: number): HasilPutaranSprint[] {
   return game.riwayat.map((_, i) => hasilPutaranSprint(game.riwayat, i, kursi));
+}
+
+/** Berapa putaran terakhir yang rinciannya (kartu jadi dan kartu tangan tiap pemain) tetap utuh di meja sprint. */
+export const PUTARAN_RINCI_SPRINT = 10;
+
+/**
+ * Meja sprint tidak pernah selesai sendiri, jadi state permainannya (dan view yang dikirim tiap aksi,
+ * simpanan meja, dan setiap salinannya) jangan tumbuh tanpa batas. Dipanggil meja sprint setiap putaran
+ * baru dimulai; mengembalikan state baru, `g` tidak diubah (entri riwayat diganti salinan, tidak diubah).
+ * - `log`: hanya putaran yang sedang jalan dan putaran sebelumnya.
+ * - `peristiwa`: hanya BATAS_PERISTIWA_VIEW terakhir (yang memang dikirim di view; id berikutnya tetap
+ *   meneruskan id terakhir).
+ * - `riwayat`: semua putaran tetap ada (nomor, cara, pementung, kepentung, skor, total tiap pemain:
+ *   bahan papan sprint, tab Riwayat dan Peringkat), tapi kartu jadi dan kartu tangan di rincian hanya untuk
+ *   PUTARAN_RINCI_SPRINT putaran terakhir.
+ * Meja biasa tidak pernah memakai ini (golden tetap).
+ */
+export function rampingkanGameSprint(g: GameState): GameState {
+  const nomor = g.putaran?.nomor ?? g.riwayat.length + 1;
+  const batasRinci = g.riwayat.length - PUTARAN_RINCI_SPRINT;
+  const ramping = (h: HasilPutaran): HasilPutaran =>
+    h.rincian.every((r) => !r.kartuJadi.length && !r.tangan.length && !r.nilaiKartuTangan.length)
+      ? h
+      : { ...h, rincian: h.rincian.map((r) => ({ ...r, kartuJadi: [], tangan: [], nilaiKartuTangan: [] })) };
+  const riwayat = g.riwayat.map((h, i) => (i < batasRinci ? ramping(h) : h));
+  const log = g.log.filter((e) => e.putaran >= nomor - 1);
+  const peristiwa = g.peristiwa.length > BATAS_PERISTIWA_VIEW ? g.peristiwa.slice(-BATAS_PERISTIWA_VIEW) : g.peristiwa;
+  return { ...g, riwayat, log, peristiwa };
 }
 
 /**

@@ -8,6 +8,7 @@ import sirv from 'sirv';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   catatanSprint,
+  catatanSprintTerakhir,
   dataMejaDipulihkan,
   GalatMeja,
   hasilKompetisiMeja,
@@ -686,6 +687,25 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     tetapkanJuara();
   };
 
+  /** Pesan sprintHasil untuk satu putaran yang sudah tercatat, plus peringkat minggu ini pemainnya. */
+  const pesanHasilSprint = (kode: string, c: CatatanSprint): PesanServer => {
+    let peringkatMinggu: number | null = null;
+    try {
+      peringkatMinggu = opsi.riwayat?.sprint.peringkatMinggu(c.nama, jam()) ?? null;
+    } catch (e) {
+      log(`galat membaca papan sprint untuk meja ${kode}`, e);
+    }
+    return {
+      t: 'sprintHasil',
+      putaran: c.putaran,
+      menang: c.menang,
+      skor: c.skor,
+      mentung: c.mentung,
+      kepentung: c.kepentung,
+      peringkatMinggu,
+    };
+  };
+
   /**
    * Sprint (26 Nov 2026, tanpa batas putaran): catat putaran meja sprint `kode` yang sudah selesai tapi
    * belum tercatat (sesudah setiap putaran, saat Keluar, meja dihapus, meja dipulihkan, atau simpanannya
@@ -706,7 +726,20 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       return true;
     }
     const c = cs.at(-1);
-    if (!c) return true;
+    if (!c) {
+      // Tidak ada yang baru (misalnya semua sudah tercatat sebelum restart): kabar putaran terakhir yang
+      // tercatat disusun lagi dari data meja, supaya pemain yang tersambung kembali tidak tertahan di
+      // "Lagi dicatat di papan…" (kabarnya hanya di memori).
+      if (meja && !hasilKompetisiTerakhir.has(kode)) {
+        try {
+          const terakhir = catatanSprintTerakhir(data);
+          if (terakhir) hasilKompetisiTerakhir.set(kode, pesanHasilSprint(kode, terakhir));
+        } catch (e) {
+          log(`galat menyusun kabar sprint meja ${kode}`, e);
+        }
+      }
+      return true;
+    }
     let baru = 0;
     try {
       for (const x of cs) if (penyimpan.catat(x)) baru++;
@@ -723,21 +756,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     if (!meja) return true;
     try {
       meja.tandaiSprintTercatat(c.putaran);
-      let peringkatMinggu: number | null = null;
-      try {
-        peringkatMinggu = penyimpan.peringkatMinggu(c.nama, jam());
-      } catch (e) {
-        log(`galat membaca papan sprint untuk meja ${kode}`, e);
-      }
-      const pesan: PesanServer = {
-        t: 'sprintHasil',
-        putaran: c.putaran,
-        menang: c.menang,
-        skor: c.skor,
-        mentung: c.mentung,
-        kepentung: c.kepentung,
-        peringkatMinggu,
-      };
+      const pesan = pesanHasilSprint(kode, c);
       // Dikirim lagi ke pemain yang tersambung kembali (lihat gabung).
       hasilKompetisiTerakhir.set(kode, pesan);
       meja.kabariManusia(pesan);
@@ -1120,7 +1139,16 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     // Meja sprint: setiap putaran yang selesai langsung dicatat di papan.
     saatPutaranSprint: () => {
       const meja = daftarMeja.get(kode);
-      if (meja?.sprint) catatSprint(kode, meja.data, jam(), meja);
+      if (!meja?.sprint) return;
+      const data = meja.data;
+      // Simpanan meja ditulis sekarang (tanpa jeda simpan) sebelum putarannya masuk papan: server yang mati
+      // mendadak di antara keduanya paling buruk punya putaran yang tersimpan tapi belum di papan (dicatat
+      // saat dipulihkan), tidak pernah putaran di papan yang dimainkan ulang dengan hasil lain.
+      if (simpananMeja && !menutup) {
+        batalSimpan(kode);
+        tulisMeja(kode, data);
+      }
+      catatSprint(kode, data, jam(), meja);
     },
     saatSelesai: (r: RingkasanAkhir) => {
       // Meja sprint (hanya simpanan 0.8.0 yang punya batas putaran): hanya dicatat di papan sprint (tidak

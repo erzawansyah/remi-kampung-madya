@@ -26,6 +26,8 @@ Ledek yang lebih ringkas dan Sprint tanpa batas putaran. Aturan main biasa tidak
 - Sprint dicatat per putaran di tabel baru `sprint_putaran` (migrasi v8, unik per meja + nomor putaran, jadi restart dan sambung ulang tidak menggandakan); baris percobaan 0.8.0 di tabel `sprint` tetap dan ikut dijumlah. `GET /api/sprint` bentuknya sama; `sprintHasil` dikirim tiap putaran dengan field baru `putaran`. Keputusan dan tafsirannya di `docs/keputusan-pemilik.md` #65.
 - coturn: alamat publik VPS sendiri sekarang diizinkan sebagai tujuan relay (`allowed-peer-ip` dari `TURN_PUBLIC_IP`), tidak lagi ditolak. Di 0.9.0 dua pemain yang sama-sama lewat relay ditolak coturn (`403 Forbidden IP`), jadi suaranya tidak pernah nyambung. Relay TCP tetap mati dan jaringan privat tetap ditolak. Nama lama `TURN_DENIED_IP` masih dibaca, jadi `.env` tidak perlu diubah; cukup buat ulang container coturn.
 - Ledek: baris sasaran di kaki modal hasil, lembar lewat `bukaDialog` (`ui/ledek.ts`, `konten/ledek.ts`).
+- Meja sprint tidak lagi membengkak selama main lama: tiap putaran baru, log dan peristiwa lama dibuang, dan kartu di riwayat hanya disimpan untuk 10 putaran terakhir (skor dan total tiap putaran tetap; `rampingkanGameSprint`). Tab Riwayat menampilkan nilai tanpa kartu untuk putaran yang lebih lama.
+- Sprint: simpanan meja ditulis langsung saat putaran selesai, sebelum putarannya masuk papan, supaya server yang mati mendadak tidak memainkan ulang putaran yang sudah tercatat. Kabar putaran terakhir disusun lagi dari data meja sesudah restart, jadi hasil putaran tidak tertahan di "Lagi dicatat di papan…". Meja sprint baru menulis `tercatat` supaya server versi sebelumnya (rollback) tidak mencatat ulang semua putarannya.
 
 ## [0.9.0] - 2026-11-25
 

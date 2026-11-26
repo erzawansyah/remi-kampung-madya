@@ -100,7 +100,9 @@ function htmlKomponen(r: RincianSkor, h: HasilPutaran, nama: (i: number) => stri
     .join('');
   baris.push(
     `<div class="komp"><span>Kartu jadi${r.kartuJadi.length ? ` (${r.kartuJadi.length})` : ''}</span><b class="${kelas(r.nilaiKartuJadi)}">${tanda(r.nilaiKartuJadi)}</b></div>`,
-    jadi ? `<div class="chips">${jadi}</div>` : '<div class="chips redup">belum ada kartu jadi</div>',
+    // Meja sprint menyimpan kartu hanya untuk beberapa putaran terakhir (rampingkanGameSprint): nilainya ada,
+    // kartunya tidak, jadi baris kartunya dilewati (bukan "belum ada kartu jadi").
+    jadi ? `<div class="chips">${jadi}</div>` : r.nilaiKartuJadi ? '' : '<div class="chips redup">belum ada kartu jadi</div>',
   );
   // Kartu di tangan
   const perKartu = r.nilaiKartuTangan ?? r.tangan.map(() => 0);
@@ -108,7 +110,9 @@ function htmlKomponen(r: RincianSkor, h: HasilPutaran, nama: (i: number) => stri
     `<div class="komp"><span>Kartu di tangan${r.tangan.length ? ` (${r.tangan.length})` : ''}</span><b class="${kelas(-r.nilaiTangan)}">${tanda(-r.nilaiTangan)}</b></div>`,
     r.tangan.length
       ? `<div class="chips">${r.tangan.map((k, i) => chip(k, perKartu[i], perKartu[i] === 25 ? 'joker' : undefined)).join('')}</div>`
-      : '<div class="chips redup">tangan kosong</div>',
+      : r.nilaiTangan
+        ? ''
+        : '<div class="chips redup">tangan kosong</div>',
   );
   // Pentungan (teks polos dulu, di-escape sekali saat dipasang). Putaran kaldu (#42): "(150 × 2)".
   if (r.nilaiPentungan !== 0 && h.pentungan) {
@@ -123,7 +127,9 @@ function htmlKomponen(r: RincianSkor, h: HasilPutaran, nama: (i: number) => stri
     baris.push(`<div class="komp"><span>Buang joker (${r.jumlahJokerDibuang}× −25)</span><b class="negatif">${tanda(-r.penaltiJoker)}</b></div>`);
   }
   baris.push(`<div class="komp total-komp"><span>Skor putaran ini</span><b class="${kelas(r.total)}">${tanda(r.total)}</b></div>`);
-  baris.push(`<div class="hitung">${esc(minusTipografis(teksPerhitungan(r, { rankJoker: h.rankJoker, jokerMati: [] })))}</div>`);
+  // Tanpa kartunya (meja sprint, putaran lama) rumusnya tidak bisa ditulis ulang dengan benar.
+  const tanpaKartu = (!r.kartuJadi.length && r.nilaiKartuJadi !== 0) || (!r.tangan.length && r.nilaiTangan !== 0);
+  if (!tanpaKartu) baris.push(`<div class="hitung">${esc(minusTipografis(teksPerhitungan(r, { rankJoker: h.rankJoker, jokerMati: [] })))}</div>`);
   return `<div class="komponen">${baris.join('')}</div>`;
 }
 

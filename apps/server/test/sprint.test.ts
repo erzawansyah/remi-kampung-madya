@@ -418,7 +418,7 @@ describe('sprint di server', () => {
     const baris = dbLuar.prepare('SELECT data FROM meja_aktif WHERE kode = ?').get(String(masuk.kode)) as { data: string };
     const data = JSON.parse(baris.data) as { sprint: { putaranTercatat?: number } };
     expect(data.sprint.putaranTercatat).toBe(1);
-    delete data.sprint.putaranTercatat;
+    data.sprint.putaranTercatat = 0;
     dbLuar.prepare('UPDATE meja_aktif SET data = ? WHERE kode = ?').run(JSON.stringify(data), String(masuk.kode));
     dbLuar.close();
 
@@ -451,6 +451,43 @@ describe('sprint di server', () => {
     ]);
   }, 120_000);
 
+  it('putaran selesai: simpanan meja ditulis sebelum putarannya masuk papan (tanpa menunggu jeda simpan)', async () => {
+    const { server, db } = await nyalakan({ jedaSimpanMejaMs: 60 * 60_000 });
+    const a = await klien(server.port, pemainOtomatis(1));
+    a.kirim({ t: 'sprint', nama: 'Gita' });
+    const masuk = await tungguPesan(a, (p) => p.t === 'masuk');
+    await tungguPesan(a, (p) => p.t === 'sprintHasil' && p.putaran === 1, 40_000);
+    expect(barisSprint(db)).toHaveLength(1);
+    const baris = db.prepare('SELECT data FROM meja_aktif WHERE kode = ?').get(String(masuk.kode)) as { data: string } | undefined;
+    expect(baris).toBeDefined();
+    const data = JSON.parse(baris!.data) as { game: { riwayat: unknown[] }; sprint: { putaranTercatat?: number } };
+    // Simpanan sudah memuat putaran 1 (yang tercatat di papan), walau tanda tercatatnya belum ikut ditulis.
+    expect(data.game.riwayat).toHaveLength(1);
+    expect(data.sprint.putaranTercatat).toBe(0);
+    a.ws.close();
+  }, 60_000);
+
+  it('restart sesudah semua putaran tercatat: kabar putaran terakhir tetap dikirim ke yang tersambung kembali', async () => {
+    const path = dbBaru();
+    const jam = new JamGeser();
+    const s1 = await nyalakan({ penjadwal: jam, jedaSimpanMejaMs: 0 }, path);
+    const a = await klien(s1.server.port, pemainOtomatis(1));
+    a.kirim({ t: 'sprint', nama: 'Hana' });
+    const masuk = await tungguPesan(a, (p) => p.t === 'masuk');
+    const h1 = await tungguPesan(a, (p) => p.t === 'sprintHasil' && p.putaran === 1, 40_000);
+    await tungguPesan(a, putaranSelesai(1));
+    a.ws.close();
+    await s1.matikan();
+    const s2 = await nyalakan({ penjadwal: jam, jedaSimpanMejaMs: 0 }, path);
+    expect(s2.server.jumlahMeja()).toBe(1);
+    expect(s2.log.some((l) => l.includes('dicatat'))).toBe(false);
+    const b = await klien(s2.server.port);
+    b.kirim({ t: 'gabung', kode: masuk.kode, nama: 'Hana', token: masuk.token });
+    expect(await tungguPesan(b, (p) => p.t === 'sprintHasil')).toEqual(h1);
+    expect(barisSprint(s2.db)).toHaveLength(1);
+    b.ws.close();
+  }, 60_000);
+
   it('simpanan yang tidak dipulihkan: putaran yang belum tercatat dicatat dengan waktu selesainya', async () => {
     const path = dbBaru();
     const jam = new JamGeser();
@@ -468,7 +505,7 @@ describe('sprint di server', () => {
     dbLuar.exec('DELETE FROM sprint_putaran');
     const baris = dbLuar.prepare('SELECT data FROM meja_aktif WHERE kode = ?').get(String(masuk.kode)) as { data: string };
     const data = JSON.parse(baris.data) as { sprint: { putaranTercatat?: number } };
-    delete data.sprint.putaranTercatat;
+    data.sprint.putaranTercatat = 0;
     dbLuar.prepare('UPDATE meja_aktif SET data = ? WHERE kode = ?').run(JSON.stringify(data), String(masuk.kode));
     dbLuar.close();
     jam.geser += UMUR_MAKS_SIMPANAN_MEJA_MS + 60_000;
