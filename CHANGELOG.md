@@ -6,6 +6,22 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.10.3] - 2026-11-27
+
+Satu sprint tiap minggu, dan papan Sprint cuma menghitung sprint yang bisa dilanjut. Aturan main di meja tidak berubah.
+
+### Untuk pemain
+
+#### Diubah
+
+- **Satu sprint tiap minggu.** Tombol **Mulai dari 0** dihapus: sprint yang sudah jalan nggak bisa diulang, putaran yang sudah selesai tetap di papan. Kalau kamu punya sprint minggu ini, layar Sprint cuma menampilkan **Lanjut sprint**. Keluar boleh, nanti tinggal lanjut. Mulai lagi Senin pukul 00.00 WIB.
+- Papan **Sprint** (Minggu ini dan Sepanjang masa) cuma menghitung sprint yang bisa dilanjut. Skor dan angka dari sprint versi lama nggak ikut lagi, termasuk piala 🏆 dari minggu-minggu sebelumnya.
+
+### Teknis
+
+- Keputusan pemilik #65 (diubah 27 Nov 2026): pesan `{t:'sprint', ganti}` dari aplikasi 0.10.1–0.10.2 ditolak server dengan `TEKS_SPRINT_TANPA_MULAI_NOL` kalau sprint token itu masih minggu ini (sprint-nya tidak ditutup); token yang sprint-nya sudah tidak ada atau dari minggu lalu tidak menahan sprint baru. `TEKS_SPRINT_DITUTUP` dihapus. Layar Sprint tanpa `#nol-sprint`, konfirmasinya, dan `AksiSprint.main(ganti)`.
+- Skema riwayat **v11**: kolom `sprint_putaran.lanjut` (1 = meja sprint ber-token, 0 = meja tanpa token dari `meja_aktif`, NULL = ditulis server sebelum 0.10.3) dan tabel `sprint_mingguan_lanjut` (ringkasan mingguan khusus mode baru). Papan dan juara mingguan hanya membaca `sprint_putaran.lanjut = 1` dan `sprint_mingguan_lanjut`; tabel `sprint` (0.8.0), putaran tanpa token, dan `sprint_mingguan` tetap disimpan tapi tidak dibaca. Migrasi menandai putaran yang sudah tercatat: cocok dengan `sprint_simpanan` (kode meja + `data.sprint.mulaiPada`), atau mejanya mulai sesudah sprint ber-token pertama yang masih tersimpan dan kodenya tidak di `meja_aktif`. Baris NULL yang cocok dengan `sprint_simpanan` dikenali lagi saat database dibuka dan sebelum menggulung (rollback). `PenyimpanSprint.catat(c, lanjut)`; `gulung()` memisahkan ringkasan mode baru dan lama. Bentuk `GET /api/sprint` (lama dan `v=2`) tetap.
+
 ## [0.10.2] - 2026-11-27
 
 Papan Sprint menampilkan jumlah putaran, peringkat, dan minggu terbaik. Aturan main tidak berubah.

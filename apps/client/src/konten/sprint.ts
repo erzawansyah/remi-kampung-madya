@@ -1,5 +1,6 @@
 // Teks layar Sprint dan meja sprint (keputusan pemilik 25 Nov 2026, diubah 26 Nov 2026: tanpa batas
-// putaran, lima lawan, 2 deck; diubah 27 Nov 2026: satu sprint bisa dilanjut sepanjang minggu). Data saja;
+// putaran, lima lawan, 2 deck; diubah 27 Nov 2026: satu sprint bisa dilanjut sepanjang minggu, tanpa Mulai
+// dari 0 sejak 0.10.3). Data saja;
 // aturan sprint (pengaturan, hasil per putaran, urutan papan, juara mingguan) hanya di @remi/meja
 // (sprint.ts). Dijaga apps/client/test/antislop.test.ts.
 
@@ -9,21 +10,15 @@ export const TEKS_SPRINT = {
   judul: 'Sprint',
   /** Tombol di panel Main online beranda. */
   tombolBeranda: 'Sprint',
-  /** Satu kalimat pembuka di layar Sprint. */
-  intro: 'Lawan 5 warga kedai level Suhu pakai 2 deck. Main sepuasnya, tiap putaran langsung masuk papan. Keluar dulu juga boleh, nanti tinggal lanjut.',
+  /**
+   * Pembuka di layar Sprint. Sejak 0.10.3 tanpa "Mulai dari 0" (keputusan pemilik 27 Nov 2026: "sekali maju
+   * gak bisa mundur"): satu sprint per minggu, Keluar hanya menjeda, minggu baru mulai Senin 00.00 WIB.
+   */
+  intro:
+    'Lawan 5 warga kedai level Suhu pakai 2 deck, tiap putaran langsung masuk papan. Satu sprint tiap minggu. Keluar boleh, nanti tinggal lanjut. Mulai lagi Senin pukul 00.00 WIB.',
   tombolMain: 'Main sprint',
-  /** Ada sprint minggu ini di HP ini (27 Nov 2026): lanjutkan permainan yang sama. */
+  /** Ada sprint minggu ini di HP ini (27 Nov 2026): lanjutkan permainan yang sama. Satu-satunya tombol. */
   tombolLanjut: 'Lanjut sprint',
-  /** Tutup sprint yang sekarang lalu mulai baru (pakai konfirmasi). */
-  tombolMulaiNol: 'Mulai dari 0',
-  /** Keterangan kecil di bawah Lanjut sprint. */
-  ketMulaiNol: 'Sprint mulai dari 0 lagi tiap Senin pukul 00.00 WIB.',
-  konfirmasiMulaiNol: {
-    judul: 'Mulai dari 0?',
-    pesan: 'Sprint yang sekarang ditutup dan nggak bisa dilanjut lagi. Putaran yang sudah selesai tetap di papan.',
-    ya: 'Mulai dari 0',
-    tidak: 'Batal',
-  },
   /** Toast kalau tombol Sprint atau Main sprint diketuk tanpa internet. */
   butuhInternet: 'Sprint cuma bisa dimainkan online, Bos. Sambungkan internet dulu.',
   tabMinggu: 'Minggu ini',

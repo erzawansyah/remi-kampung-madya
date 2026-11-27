@@ -31,7 +31,7 @@ import {
 } from './kompetisi.js';
 import { buatPenyimpanUsulan, SKEMA_USULAN, type PenyimpanUsulan } from './usulan.js';
 import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, SKEMA_MEJA_AKTIF_TONTON, type PenyimpanMejaAktif } from './mejaAktif.js';
-import { buatPenyimpanSprint, SKEMA_SPRINT, SKEMA_SPRINT_MINGGUAN, SKEMA_SPRINT_PUTARAN, type PenyimpanSprint } from './sprint.js';
+import { buatPenyimpanSprint, SKEMA_SPRINT, SKEMA_SPRINT_LANJUT, SKEMA_SPRINT_MINGGUAN, SKEMA_SPRINT_PUTARAN, type PenyimpanSprint } from './sprint.js';
 import { buatPenyimpanSprintSimpanan, SKEMA_SPRINT_SIMPANAN, type PenyimpanSprintSimpanan } from './sprintSimpanan.js';
 
 export interface PermainanTersimpan {
@@ -196,6 +196,10 @@ export const MIGRASI: readonly string[] = [
   // v10 (27 Nov 2026, keputusan pemilik: Sepanjang masa = minggu terbaik): putaran sprint minggu yang sudah
   // selesai digulung jadi satu baris per orang per minggu, plus penanda putaran yang sudah digulung per meja.
   SKEMA_SPRINT_MINGGUAN,
+  // v11 (27 Nov 2026, 0.10.3, keputusan pemilik: papan sprint hanya sprint mode baru): penanda putaran sprint
+  // ber-token (sprint_putaran.lanjut, diisi untuk putaran yang sudah tercatat) dan ringkasan mingguan khusus
+  // mode baru. Data mode lama tidak dihapus, hanya tidak dibaca papan.
+  SKEMA_SPRINT_LANJUT,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */

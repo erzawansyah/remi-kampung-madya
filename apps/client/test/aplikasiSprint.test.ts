@@ -13,7 +13,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buatPermainan, terapkanAksi, viewUntuk, type GameState } from '@remi/engine';
-import { awalMingguWib, PENGATURAN_SPRINT, TEKS_SPRINT_DITUTUP, TEKS_SPRINT_TAK_BISA_LANJUT, type InfoMeja } from '@remi/meja';
+import { awalMingguWib, PENGATURAN_SPRINT, TEKS_SPRINT_TAK_BISA_LANJUT, TEKS_SPRINT_TANPA_MULAI_NOL, type InfoMeja } from '@remi/meja';
 import type { AppUntukMeja, PesanHasilSprint } from '../src/kontrolMeja';
 import { TEKS_SPRINT } from '../src/konten/sprint';
 import { WsPalsu } from './bantu';
@@ -290,6 +290,9 @@ describe('Aplikasi: Sprint', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(ws.jenisTerkirim()).toContain('keluar');
     expect(ui('#main-sprint')).toBeNull();
+    // Tanpa Mulai dari 0 (0.10.3): Lanjut sprint satu-satunya tombol.
+    expect(ui('#nol-sprint')).toBeNull();
+    expect(document.querySelectorAll('.layar-sprint .aksi-sprint button')).toHaveLength(1);
     expect(ui('#lanjut-sprint [data-ket-lanjut]')!.textContent).toBe('Putaran 2 · skor 30');
     ui('#lanjut-sprint')!.click();
     await vi.advanceTimersByTimeAsync(0);
@@ -323,13 +326,30 @@ describe('Aplikasi: Sprint', () => {
     expect(toastTeks()).toContain(TEKS_SPRINT_TAK_BISA_LANJUT);
   });
 
-  it('sprint ditutup dari HP lain (Mulai dari 0): keluar dari meja ke layar Sprint', async () => {
+  it('server 0.10.3 menolak Mulai dari 0 dari aplikasi lama: aplikasi ini tidak pernah mengirim `ganti`, tolakan jadi toast', async () => {
+    localStorage.setItem('remi.sprintSaya', JSON.stringify({ token: 'k'.repeat(32), minggu: awalMingguWib(Date.now()) }));
+    await bukaSprint();
+    ui('#lanjut-sprint')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    const ws = WsPalsu.terakhir();
+    ws.buka();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ws.terkirim.filter((p) => p.t === 'sprint').every((p) => !('ganti' in p))).toBe(true);
+    ws.kirimDariServer({ t: 'error', pesan: TEKS_SPRINT_TANPA_MULAI_NOL });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(toastTeks()).toContain(TEKS_SPRINT_TANPA_MULAI_NOL);
+    // Token tetap (sprint-nya masih bisa dilanjut), tombol bisa ditekan lagi.
+    expect(localStorage.getItem('remi.sprintSaya')).not.toBeNull();
+    expect(ui('#lanjut-sprint')!.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('meja sprint ditutup server (pesan keluar): keluar dari meja ke layar Sprint', async () => {
     const { ws } = await diMejaSprint();
     pasangFetch();
-    ws.kirimDariServer({ t: 'keluar', alasan: TEKS_SPRINT_DITUTUP });
+    ws.kirimDariServer({ t: 'keluar', alasan: TEKS_SPRINT_TAK_BISA_LANJUT });
     await vi.advanceTimersByTimeAsync(0);
     expect(ui('.layar-sprint')).not.toBeNull();
-    expect(toastTeks()).toContain(TEKS_SPRINT_DITUTUP);
+    expect(toastTeks()).toContain(TEKS_SPRINT_TAK_BISA_LANJUT);
     expect(localStorage.getItem('remi.sesiOnline')).toBeNull();
   });
 });

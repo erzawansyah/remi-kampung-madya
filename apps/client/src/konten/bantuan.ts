@@ -853,7 +853,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
     id: 'sprint',
     judul: 'Sprint',
     ikon: '⏱️',
-    ringkas: 'Lawan 5 warga kedai level Suhu tanpa batas putaran, lanjut kapan saja sampai Senin, dan papan sprint.',
+    ringkas: 'Lawan 5 warga kedai level Suhu tanpa batas putaran, satu sprint tiap minggu, dan papan sprint.',
     isi: [
       {
         t: 'paragraf',
@@ -866,14 +866,14 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Nggak ada voting akhiri dan nggak ada Main lagi. Permainannya jalan terus; Keluar cuma menjeda, nanti tinggal Lanjut sprint.',
           'Menang putaran: skormu di putaran itu nggak kalah dari kelima warga kedai. Skor sama dihitung menang.',
           'Keluar kapan saja: sprint-mu disimpan, termasuk putaran yang lagi jalan. Ketuk tombol Sprint di beranda, lalu Lanjut sprint buat meneruskan permainan yang sama (putaran dan skornya lanjut). Putaran yang sudah selesai sudah masuk papan.',
-          'Mulai dari 0 menutup sprint yang sekarang dan memulai yang baru. Putaran yang sudah selesai tetap di papan.',
-          'Tiap Senin pukul 00.00 WIB sprint mulai dari 0 lagi. Sprint yang masih kamu mainkan saat itu boleh diteruskan sampai kamu keluar.',
+          'Satu sprint tiap minggu. Sprint yang sudah jalan nggak bisa diulang dari 0: putaran yang sudah selesai tetap di papan, nggak bisa ditarik.',
+          'Mulai lagi Senin pukul 00.00 WIB: sprint minggu lalu selesai, Main sprint memulai yang baru. Sprint yang masih kamu mainkan saat itu boleh diteruskan sampai kamu keluar.',
           'Sprint dikenali dari HP (browser) yang kamu pakai, bukan dari nama. Ganti HP atau hapus data browser = sprint baru.',
         ],
       },
       {
         t: 'paragraf',
-        teks: `**Papan sprint** punya dua tab. ${TEKS_SPRINT.tabMinggu} (mulai Senin pukul 00.00 WIB): semua putaran sprint minggu ini dijumlah, urut menang terbanyak lalu skor tertinggi. ${TEKS_SPRINT.tabSemua}: tiap orang diwakili minggu terbaiknya (skor seminggu paling tinggi, minggu yang sedang jalan juga ikut), dengan tanggal minggunya di bawah nama, urut skor tertinggi lalu menang terbanyak. Kalau skor masih sama: mentung terbanyak, lalu kepentung paling sedikit.`,
+        teks: `**Papan sprint** punya dua tab. ${TEKS_SPRINT.tabMinggu} (mulai Senin pukul 00.00 WIB): semua putaran sprint minggu ini dijumlah, urut menang terbanyak lalu skor tertinggi. ${TEKS_SPRINT.tabSemua}: tiap orang diwakili minggu terbaiknya (skor seminggu paling tinggi, minggu yang sedang jalan juga ikut), dengan tanggal minggunya di bawah nama, urut skor tertinggi lalu menang terbanyak. Kalau skor masih sama: mentung terbanyak, lalu kepentung paling sedikit. Yang dihitung cuma sprint yang bisa dilanjut; sprint versi lama nggak masuk papan.`,
       },
       {
         t: 'daftar',

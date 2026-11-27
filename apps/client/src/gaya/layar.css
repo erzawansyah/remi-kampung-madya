@@ -1006,7 +1006,7 @@ table.skor tr.redup td {
 .layar-sprint .ket-sprint {
   font-size: var(--teks-sm);
 }
-/* Tombol Main sprint, atau Lanjut sprint (dua baris: judul + "Putaran N · skor X") dan Mulai dari 0 (27 Nov 2026). */
+/* Tombol Main sprint, atau Lanjut sprint (dua baris: judul + "Putaran N · skor X"; 27 Nov 2026). */
 .layar-sprint .aksi-sprint {
   display: flex;
   flex-direction: column;

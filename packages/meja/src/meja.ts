@@ -2489,13 +2489,16 @@ export function ringkasanLanjutSprint(data: DataMeja): RingkasanLanjutSprint | n
 /** Keluar dari meja sprint yang bisa dilanjut (27 Nov 2026): permainannya disimpan, bukan diteruskan warga kedai. */
 export const TEKS_SPRINT_DIJEDA = 'Sprint-mu disimpan. Lanjut kapan saja minggu ini lewat tombol Sprint di beranda, Bos.';
 /** Sprint yang diminta dilanjut sudah lewat minggunya (tiap Senin 00.00 WIB mulai dari 0 lagi). */
-export const TEKS_SPRINT_TAK_BISA_LANJUT = 'Sprint minggu lalu udah nggak bisa dilanjut. Mulai baru dari 0, ya.';
-/** Sprint yang diminta dilanjut tidak ada lagi (sudah ditutup lewat Mulai dari 0, atau simpanannya rusak). */
-export const TEKS_SPRINT_TIDAK_ADA = 'Sprint itu udah nggak bisa dilanjut. Mulai baru dari 0, ya.';
+export const TEKS_SPRINT_TAK_BISA_LANJUT = 'Sprint minggu lalu udah selesai. Sprint minggu ini mulai dari awal, ya.';
+/** Sprint yang diminta dilanjut tidak ada lagi (simpanannya rusak atau sudah dibuang). */
+export const TEKS_SPRINT_TIDAK_ADA = 'Sprint itu udah nggak bisa dilanjut. Main sprint baru, ya.';
 /** Sprint-nya masih ada, tapi belum bisa dibuka sekarang (server penuh atau sibuk): coba lagi nanti. */
 export const TEKS_SPRINT_COBA_LAGI = 'Sprint-mu belum bisa dibuka, coba lagi sebentar.';
-/** Sprint ini ditutup dari HP yang sama lewat "Mulai dari 0" (dikirim ke sambungan yang masih memegangnya). */
-export const TEKS_SPRINT_DITUTUP = 'Sprint ini udah ditutup karena kamu mulai dari 0.';
+/**
+ * Aplikasi lama (0.10.1–0.10.2) menekan "Mulai dari 0" padahal sprint minggu ini masih bisa dilanjut. Sejak
+ * 0.10.3 tombol itu tidak ada (keputusan pemilik: "sekali maju gak bisa mundur"): ditolak, sprint-nya tetap.
+ */
+export const TEKS_SPRINT_TANPA_MULAI_NOL = 'Sprint nggak bisa diulang dari 0, Bos. Satu sprint tiap minggu, lanjutkan yang ini.';
 
 /** Penolakan di meja sprint (aturannya dikunci). */
 export const TEKS_SPRINT_TERKUNCI = 'Aturan sprint udah dikunci, Bos. Yang bisa diganti cuma tempo warga kedai.';

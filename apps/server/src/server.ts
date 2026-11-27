@@ -28,7 +28,7 @@ import {
   TEKS_KURSI_KOMPETISI_LEPAS,
   TEKS_LOBI_KOMPETISI_BUBAR,
   TEKS_SPRINT_DIJEDA,
-  TEKS_SPRINT_DITUTUP,
+  TEKS_SPRINT_TANPA_MULAI_NOL,
   TEKS_SPRINT_COBA_LAGI,
   TEKS_SPRINT_TAK_BISA_LANJUT,
   TEKS_SPRINT_TIDAK_ADA,
@@ -785,9 +785,11 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
    * putaran). `meja` (kalau masih hidup) ditandai tercatat, dan pemainnya yang masih terhubung dikabari
    * putaran terakhirnya lewat `sprintHasil`. `waktu` hanya untuk putaran yang waktu selesainya tidak ada
    * di data (simpanan 0.8.0). True = beres (tidak ada yang perlu dicatat, atau sudah tercatat); false =
-   * galat database, coba lagi nanti (mejanya jangan dibuang).
+   * galat database, coba lagi nanti (mejanya jangan dibuang). `lanjut` = sprint ber-token (mode baru, tampil
+   * di papan sejak 0.10.3); bawaannya dari hashSprint (meja yang sedang di memori atau baru dimuat), jadi
+   * meja sprint tanpa token (0.10.0, dari meja_aktif) dicatat sebagai mode lama.
    */
-  const catatSprint = (kode: string, data: DataMeja, waktu = jam(), meja?: Meja): boolean => {
+  const catatSprint = (kode: string, data: DataMeja, waktu = jam(), meja?: Meja, lanjut = hashSprint.has(kode)): boolean => {
     const penyimpan = opsi.riwayat?.sprint;
     if (!penyimpan) return true;
     let cs: CatatanSprint[];
@@ -814,7 +816,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     }
     let baru = 0;
     try {
-      for (const x of cs) if (penyimpan.catat(x)) baru++;
+      for (const x of cs) if (penyimpan.catat(x, lanjut)) baru++;
     } catch (e) {
       log(`galat mencatat sprint meja ${kode} (dicoba lagi nanti)`, e);
       return false;
@@ -932,7 +934,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   };
 
   /**
-   * Tutup sprint `b` untuk selamanya ("Mulai dari 0", atau minggunya sudah lewat): putaran yang selesai dan
+   * Tutup sprint `b` untuk selamanya (minggunya sudah lewat, atau tempatnya dipakai sprint baru): putaran yang selesai dan
    * belum tercatat dicatat, mejanya (kalau di memori) dibuang dan pemainnya yang masih memegangnya diberi
    * `keluar` dengan `alasan`, lalu barisnya dihapus. False = galat database (baris dibiarkan, dicoba lagi).
    */
@@ -946,7 +948,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       hapusMeja(b.kode);
     } else if (b.data) {
       const d = bacaDataMeja(b.data, b.kode);
-      if (typeof d !== 'string' && d.sprint && !catatSprint(b.kode, d, b.diperbaruiPada)) return false;
+      if (typeof d !== 'string' && d.sprint && !catatSprint(b.kode, d, b.diperbaruiPada, undefined, true)) return false;
     }
     try {
       simpananSprint.hapus(b.hash);
@@ -1025,18 +1027,18 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   /**
    * Sprint baru dari `jaringan`: masih ada tempat di batas sprint tersimpan minggu ini per jaringan? Kalau penuh,
    * sprint dari jaringan itu yang belum pernah menyelesaikan satu putaran pun dan tidak sedang di memori
-   * dibuang (paling lama dulu). `ganti` = sprint yang akan ditutup ("Mulai dari 0"), tidak ikut dihitung.
+   * dibuang (paling lama dulu).
    */
-  const beriTempatSprint = (jaringan: string, ganti: BarisSprintSimpanan | null): boolean => {
+  const beriTempatSprint = (jaringan: string): boolean => {
     if (!simpananSprint) return true;
     const minggu = mingguIni();
     const batas = opsi.maksSimpananSprintPerIp ?? BAWAAN_MAKS_SIMPANAN_SPRINT_PER_IP;
     try {
-      let lebih = simpananSprint.jumlahDariJaringan(jaringan, minggu) - (ganti && ganti.pembuatJaringan === jaringan && ganti.minggu === minggu ? 1 : 0) - batas + 1;
+      let lebih = simpananSprint.jumlahDariJaringan(jaringan, minggu) - batas + 1;
       if (lebih <= 0) return true;
       for (const b of simpananSprint.belumDimainkan(jaringan, minggu, lebih + 20)) {
         if (lebih <= 0) break;
-        if (b.hash === ganti?.hash || hashSprint.get(b.kode) === b.hash) continue;
+        if (hashSprint.get(b.kode) === b.hash) continue;
         if (akhiriSprint(b, TEKS_SPRINT_TAK_BISA_LANJUT)) lebih--;
       }
       return lebih <= 0;
@@ -1717,6 +1719,19 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         if (!opsi.riwayat) return kirimKe(s, { t: 'error', pesan: 'Sprint belum bisa dimainkan di server ini.' });
         // Sprint bisa dilanjut (27 Nov 2026): "Lanjut sprint" membawa token sprint HP ini.
         if (pesan.lanjut) return lanjutkanSprint(s, pesan.lanjut, pesan.nama);
+        // "Mulai dari 0" dihapus (0.10.3, keputusan pemilik: "sekali maju gak bisa mundur"): aplikasi
+        // 0.10.1–0.10.2 yang masih mengirim `ganti` untuk sprint minggu ini ditolak, sprint-nya tetap utuh dan
+        // bisa dilanjut. Token yang sprint-nya sudah tidak ada atau dari minggu lalu tidak menahan apa pun.
+        if (pesan.ganti && simpananSprint) {
+          let ada: BarisSprintSimpanan | null;
+          try {
+            ada = simpananSprint.ambil(hashTokenSprint(pesan.ganti));
+          } catch (e) {
+            log('galat membaca sprint tersimpan', e);
+            return kirimKe(s, { t: 'error', pesan: TEKS_SPRINT_COBA_LAGI });
+          }
+          if (ada && ada.minggu === mingguIni()) return kirimKe(s, { t: 'error', pesan: TEKS_SPRINT_TANPA_MULAI_NOL });
+        }
         if (daftarMeja.size >= (opsi.maksMeja ?? 500)) {
           return kirimKe(s, { t: 'error', pesan: 'Server lagi penuh, coba lagi nanti.' });
         }
@@ -1731,12 +1746,9 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         if (baruDariSini.length >= (opsi.maksSprintBaruPerJamPerIp ?? BAWAAN_MAKS_SPRINT_BARU_PER_JAM_PER_IP)) {
           return kirimKe(s, { t: 'error', pesan: 'Kebanyakan sprint baru dari jaringanmu, Bos. Coba lagi nanti.' });
         }
-        // "Mulai dari 0": sprint lama HP ini (kalau masih ada) digantikan, jadi tidak ikut dihitung di batas.
-        let lama: BarisSprintSimpanan | null = null;
         let tersimpan = 0;
         try {
-          if (pesan.ganti && simpananSprint) lama = simpananSprint.ambil(hashTokenSprint(pesan.ganti));
-          tersimpan = (simpananSprint?.jumlah() ?? 0) - (lama ? 1 : 0);
+          tersimpan = simpananSprint?.jumlah() ?? 0;
         } catch (e) {
           log('galat membaca sprint tersimpan', e);
         }
@@ -1745,12 +1757,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         }
         // Sprint tersimpan minggu ini per jaringan: kalau penuh, yang belum pernah dimainkan sampai selesai satu
         // putaran (paling lama dulu, yang tidak sedang di memori) dibuang untuk memberi tempat.
-        if (simpananSprint && !beriTempatSprint(s.jaringan, lama)) {
+        if (simpananSprint && !beriTempatSprint(s.jaringan)) {
           return kirimKe(s, { t: 'error', pesan: 'Kebanyakan sprint dari jaringanmu minggu ini, Bos. Lanjutkan yang sudah ada.' });
-        }
-        // Sprint lama ditutup dulu (putaran yang sudah selesai tetap di papan).
-        if (lama && !akhiriSprint(lama, TEKS_SPRINT_DITUTUP)) {
-          return kirimKe(s, { t: 'error', pesan: 'Sprint yang lama belum bisa ditutup, coba lagi sebentar.' });
         }
         const kode = buatKode();
         const pemainId = randomUUID();

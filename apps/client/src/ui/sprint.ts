@@ -7,7 +7,8 @@
 // urutkanSprint), angka # tetap peringkat resmi. Piala juara mingguan di samping nama.
 // Sprint hanya online: permainannya dijalankan server supaya rekornya tidak bisa diakali dari HP.
 // Sejak 27 Nov 2026 satu sprint bisa dilanjut sepanjang minggu: kalau HP ini punya sprint minggu ini
-// (remi.sprintSaya), tombolnya "Lanjut sprint" (putaran dan skor dari POST /api/sprint/saya) dan "Mulai dari 0".
+// (remi.sprintSaya), satu-satunya tombolnya "Lanjut sprint" (putaran dan skor dari POST /api/sprint/saya).
+// "Mulai dari 0" dihapus di 0.10.3 (keputusan pemilik: satu sprint tiap minggu, "sekali maju gak bisa mundur").
 
 import {
   awalMingguWib,
@@ -23,7 +24,7 @@ import {
 } from '@remi/meja';
 import { ariaMingguSprint, ariaPiala, TEKS_SPRINT as T, teksLanjutSprint, teksMingguSprint, teksPiala } from '../konten/sprint';
 import { simpan } from '../penyimpanan';
-import { esc, konfirmasi, toast } from './dom';
+import { esc, toast } from './dom';
 import { pasangIsyaratGulir } from './riwayat';
 import { angkaSkor } from './rincianSkor';
 
@@ -43,11 +44,8 @@ export interface PapanSprint {
 
 export interface AksiSprint {
   kembali(): void;
-  /**
-   * Mulai meja sprint baru (kirim {t:'sprint'} lewat jalur online yang sama dengan Buat meja). `ganti` = token
-   * sprint HP ini yang ditutup dulu ("Mulai dari 0").
-   */
-  main(ganti?: string): void;
+  /** Mulai meja sprint baru (kirim {t:'sprint'} lewat jalur online yang sama dengan Buat meja). */
+  main(): void;
   /** Lanjutkan sprint HP ini ({t:'sprint', lanjut}). */
   lanjut(token: string): void;
 }
@@ -303,14 +301,12 @@ export function renderSprint(akar: HTMLElement, aksi: AksiSprint): SprintTerpasa
   });
 
   let sibuk = false;
-  /** Tombol aksi (Main sprint, atau Lanjut sprint + Mulai dari 0) sesuai sprint HP ini. */
+  /** Tombol aksi sesuai sprint HP ini: Lanjut sprint kalau ada sprint-nya, selain itu Main sprint. */
   const gambarAksi = () => {
     // Ada token = tombol Lanjut, apa pun kata jam HP; server yang memutuskan masih bisa atau tidak.
     const saya = simpan.sprintSaya();
     aksiEl.innerHTML = saya
-      ? `<button type="button" class="utama besar penuh" id="lanjut-sprint"><span>${esc(T.tombolLanjut)}</span><span class="ket-lanjut" data-ket-lanjut></span></button>
-         <button type="button" class="penuh" id="nol-sprint">${esc(T.tombolMulaiNol)}</button>
-         <p class="redup rapat ket-sprint">${esc(T.ketMulaiNol)}</p>`
+      ? `<button type="button" class="utama besar penuh" id="lanjut-sprint"><span>${esc(T.tombolLanjut)}</span><span class="ket-lanjut" data-ket-lanjut></span></button>`
       : `<button type="button" class="utama besar penuh" id="main-sprint">${esc(T.tombolMain)}</button>`;
     aturSibuk(sibuk);
     if (!saya || offline()) return;
@@ -353,12 +349,6 @@ export function renderSprint(akar: HTMLElement, aksi: AksiSprint): SprintTerpasa
     } else if (b.id === 'lanjut-sprint' && saya) {
       aturSibuk(true);
       aksi.lanjut(saya.token);
-    } else if (b.id === 'nol-sprint' && saya) {
-      void konfirmasi({ ...T.konfirmasiMulaiNol, bahaya: true }).then((ya) => {
-        if (!ya || !akar.contains(aksiEl) || !bisaDitekan()) return;
-        aturSibuk(true);
-        aksi.main(saya.token);
-      });
     }
   });
   q('#kembali').addEventListener('click', aksi.kembali);
