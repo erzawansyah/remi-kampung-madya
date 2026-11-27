@@ -193,7 +193,7 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
       [2, 'jos', 2000, SENIN - MG],
     ]);
     expect(semua.jumlah).toBe(2);
-    // Minggu ini tetap menang dulu (Jis menang 1, jos 0).
+    // Minggu ini juga urut skor (0.10.4).
     expect(r.sprint.papanV2('minggu', sekarang).atas.map((b) => [b.nama, b.skor])).toEqual([
       ['Jis', 2100],
       ['jos', 700],

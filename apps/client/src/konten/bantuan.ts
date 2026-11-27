@@ -873,7 +873,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: `**Papan sprint** punya dua tab. ${TEKS_SPRINT.tabMinggu} (mulai Senin pukul 00.00 WIB): semua putaran sprint minggu ini dijumlah, urut menang terbanyak lalu skor tertinggi. ${TEKS_SPRINT.tabSemua}: tiap orang diwakili minggu terbaiknya (skor seminggu paling tinggi, minggu yang sedang jalan juga ikut), dengan tanggal minggunya di bawah nama, urut skor tertinggi lalu menang terbanyak. Kalau skor masih sama: mentung terbanyak, lalu kepentung paling sedikit. Yang dihitung cuma sprint yang bisa dilanjut; sprint versi lama nggak masuk papan.`,
+        teks: `**Papan sprint** punya dua tab. ${TEKS_SPRINT.tabMinggu} (mulai Senin pukul 00.00 WIB): semua putaran sprint minggu ini dijumlah, urut skor tertinggi lalu menang terbanyak. ${TEKS_SPRINT.tabSemua}: tiap orang diwakili minggu terbaiknya (skor seminggu paling tinggi, minggu yang sedang jalan juga ikut), dengan tanggal minggunya di bawah nama, urut skor tertinggi lalu menang terbanyak. Kalau skor masih sama: mentung terbanyak, lalu kepentung paling sedikit. Yang dihitung cuma sprint yang bisa dilanjut; sprint versi lama nggak masuk papan.`,
       },
       {
         t: 'daftar',

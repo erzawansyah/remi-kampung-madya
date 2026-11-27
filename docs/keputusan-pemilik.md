@@ -1176,6 +1176,8 @@ Pilihan yang waktu itu ditawarkan dan **tidak dipilih**:
 
 **Penerapan (27 Nov 2026, 0.10.3):** server `apps/server/src/sprint.ts` (`SKEMA_SPRINT_LANJUT`, `catat(c, lanjut)`, papan hanya `lanjut = 1` dan `sprint_mingguan_lanjut`, `gulung()` memisah dua ringkasan), `server.ts` (`catatSprint(…, lanjut)` dari `hashSprint`, tolakan `ganti`); teks `TEKS_SPRINT_TANPA_MULAI_NOL` di `packages/meja/src/meja.ts` (`TEKS_SPRINT_DITUTUP` dihapus); aplikasi `ui/sprint.ts` dan `konten/sprint.ts` tanpa Mulai dari 0, Bantuan bab Sprint.
 
+**Diubah pemilik (27 Nov 2026, 0.10.4): peringkat Minggu ini berdasarkan skor.** Kata pemilik: "kok ranknya berdasarkan menang ya? bukan berdasarkan skor?", lalu "Urutkan berdasarkan skor aja ranknya, jadi bukan berdasarkan menang lagi" (tanpa metrik rasio baru: "Nggak usah ditambahin lagi dah metriknya"). Urutan bawaan kedua tab sekarang sama: skor tertinggi, lalu menang, mentung terbanyak, kepentung tersedikit, nama (`urutkanSprint()`). Juara mingguan 🏆 ikut: baris pertama papan minggu itu, jadi skor tertinggi. Jawaban bentuk lama `GET /api/sprint` (aplikasi 0.8.0–0.10.1) tetap memilih 100 baris seperti sebelumnya, dan aplikasi lama mengurutkan sendiri sampai pembaruan otomatisnya masuk. Bersamaan dengan itu (0.10.4) tombol Sprint pindah dari panel Main online ke panel beranda sendiri, **Kompetitif** (kata pemilik: "kasih segmen sendiri aja yang segmen kompetitif namanya ... cuman tombol sprint tadi sama satu placeholder yang intinya ngasih pengumuman kalau misalnya mode kompetitif lainnya akan menyusul"); penandanya teks biasa "Mode kompetitif lainnya menyusul.", bukan tombol.
+
 ---
 
 ## Catatan lain (belum masuk tabel)

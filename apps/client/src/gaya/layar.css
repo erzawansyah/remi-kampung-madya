@@ -370,8 +370,19 @@ html[data-efek='hemat'] .kipas canvas {
 /* ---------- Panel main & online ---------- */
 .panel-main h2,
 .panel-online h2,
+.panel-kompetitif h2,
 .tawaran-latihan h2 {
   font-size: var(--teks-lg);
+}
+/* Panel Kompetitif (0.10.4): Sprint + penanda mode lain menyusul (kotak putus-putus, bukan tombol). */
+.kompetitif-menyusul {
+  margin: 0;
+  padding: var(--ruang-2) var(--ruang-3);
+  border: 1px dashed var(--garis);
+  border-radius: var(--radius-besar);
+  color: var(--teks-redup);
+  font-size: var(--teks-sm);
+  text-align: center;
 }
 /* Tombol besar dua baris: label + ringkasan kecil */
 .tombol-dua-baris {

@@ -6,6 +6,20 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.10.4] - 2026-11-27
+
+### Untuk pemain
+
+#### Diubah
+
+- Papan **Sprint** Minggu ini sekarang diurutkan dari **skor**, sama dengan Sepanjang masa. Juara minggu = skor tertinggi minggu itu.
+- **Sprint** pindah ke bagian sendiri di beranda, **Kompetitif**. Mode kompetitif lainnya menyusul.
+
+### Teknis
+
+- `urutkanSprint()` memakai urutan yang sama untuk kedua tab (skor, menang, mentung, kepentung tersedikit, nama); `juaraMingguan()` ikut. Bentuk lama `GET /api/sprint` tetap memilih 100 baris dengan urutan aplikasi lama (`urutkanSprintLama()`).
+- Beranda: panel `.panel-kompetitif` (judul `TEKS_SPRINT.judulKompetitif`, tombol `#sprint`, penanda `TEKS_SPRINT.menyusul`), terpisah dari panel Main online.
+
 ## [0.10.3] - 2026-11-27
 
 Satu sprint tiap minggu, dan papan Sprint cuma menghitung sprint yang bisa dilanjut. Aturan main di meja tidak berubah.

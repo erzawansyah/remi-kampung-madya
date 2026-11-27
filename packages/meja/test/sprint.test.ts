@@ -28,6 +28,7 @@ import {
   TEKS_SPRINT_TANPA_VOTING,
   TEKS_SPRINT_TERKUNCI,
   urutkanSprint,
+  urutkanSprintLama,
   validasiPesan,
   BARIS_UJUNG_SPRINT,
   menangCatatan,
@@ -127,8 +128,8 @@ describe('papan sprint', () => {
   it('dijumlah per nama tanpa beda huruf besar/kecil, ejaan terakhir yang tampil', () => {
     const r = rekapSprint([p('budi', 1, true, 100, 1, 0), p('Ani', 2, false, 300, 2, 1), p('BUDI', 3, false, -50, 0, 2), p('Budi', 4, true, 20)]);
     expect(r).toEqual([
-      { nama: 'Budi', putaran: 3, menang: 2, mentung: 1, kepentung: 2, skor: 70, piala: 0 },
       { nama: 'Ani', putaran: 1, menang: 0, mentung: 2, kepentung: 1, skor: 300, piala: 0 },
+      { nama: 'Budi', putaran: 3, menang: 2, mentung: 1, kepentung: 2, skor: 70, piala: 0 },
     ]);
   });
 
@@ -151,7 +152,7 @@ describe('papan sprint', () => {
     expect(putaranCatatan({ putaran: 2.5 })).toBe(1);
   });
 
-  it('urutan bawaan: menang, skor, mentung, kepentung tersedikit, nama', () => {
+  it('urutan bawaan (0.10.4): skor, menang, mentung, kepentung tersedikit, nama', () => {
     const b = (nama: string, menang: number, skor: number, mentung: number, kepentung: number, putaran: number) => ({
       nama,
       putaran,
@@ -169,15 +170,17 @@ describe('papan sprint', () => {
       b('Budi', 1, 80, 0, 9, 9),
       b('Fajar', 2, -500, 0, 0, 3),
     ];
-    expect(urutkanSprint(baris).map((x) => x.nama)).toEqual(['Fajar', 'Budi', 'Dodi', 'Cici', 'Ani', 'Eko']);
+    expect(urutkanSprint(baris).map((x) => x.nama)).toEqual(['Budi', 'Dodi', 'Cici', 'Ani', 'Eko', 'Fajar']);
+    // Urutan lama (aplikasi 0.8.0–0.10.1): menang dulu.
+    expect(urutkanSprintLama(baris).map((x) => x.nama)).toEqual(['Fajar', 'Budi', 'Dodi', 'Cici', 'Ani', 'Eko']);
     // Ketuk judul kolom: kolom itu didahulukan, kepentung dari yang tersedikit.
     expect(urutkanSprint(baris, 'skor').map((x) => x.nama)).toEqual(['Budi', 'Dodi', 'Cici', 'Ani', 'Eko', 'Fajar']);
     expect(urutkanSprint(baris, 'mentung')[0].nama).toBe('Dodi');
-    expect(urutkanSprint(baris, 'kepentung').map((x) => x.nama)).toEqual(['Fajar', 'Cici', 'Ani', 'Eko', 'Dodi', 'Budi']);
+    expect(urutkanSprint(baris, 'kepentung').map((x) => x.nama)).toEqual(['Cici', 'Fajar', 'Ani', 'Eko', 'Dodi', 'Budi']);
     // Putaran terbanyak dulu; yang sama banyak memakai urutan bawaan (putaran tidak ikut urutan bawaan).
     expect(urutkanSprint(baris, 'putaran').map((x) => x.nama)).toEqual(['Budi', 'Cici', 'Ani', 'Eko', 'Fajar', 'Dodi']);
     // Kolom yang tidak dikenal = urutan bawaan; masukan tidak diubah.
-    expect(urutkanSprint(baris, 'ngawur' as never).map((x) => x.nama)).toEqual(['Fajar', 'Budi', 'Dodi', 'Cici', 'Ani', 'Eko']);
+    expect(urutkanSprint(baris, 'ngawur' as never).map((x) => x.nama)).toEqual(['Budi', 'Dodi', 'Cici', 'Ani', 'Eko', 'Fajar']);
     expect(baris[0].nama).toBe('Eko');
   });
 
@@ -190,7 +193,7 @@ describe('papan sprint', () => {
       // Minggu 23.59 WIB: masih minggu lalu (kalau terhitung minggu berjalan, Cici juara minggu lalu).
       p('budi', SENIN - 60_000, true, 600),
       p('Cici', lalu + HARI, true, 500),
-      p('Ani', lalu + 2 * HARI, false, 900),
+      p('Ani', lalu + 2 * HARI, false, 400),
       // Senin 00.00 WIB: minggu berjalan, belum ada juaranya.
       p('Ani', SENIN, true, 1000),
       p('Ani', SENIN + HARI, true, 1000),
@@ -250,11 +253,11 @@ describe('papan Sepanjang masa: minggu terbaik (27 Nov 2026)', () => {
     expect(b[0]!.minggu).toBe(M2);
   });
 
-  it('urutan Sepanjang masa: skor, lalu menang, mentung, kepentung tersedikit, nama; Minggu ini tetap menang dulu', () => {
+  it('urutan kedua tab (0.10.4): skor, lalu menang, mentung, kepentung tersedikit, nama', () => {
     const b = (nama: string, menang: number, skor: number, mentung = 0, kepentung = 0): Omit<BarisSprint, 'piala'> => ({ nama, putaran: 1, menang, skor, mentung, kepentung });
     const baris = [b('Ani', 9, 100), b('Budi', 1, 500), b('Cici', 2, 500), b('Dodi', 2, 500, 1), b('Eko', 2, 500, 1, 1)];
     expect(urutkanSprint(baris, null, 'semua').map((x) => x.nama)).toEqual(['Dodi', 'Eko', 'Cici', 'Budi', 'Ani']);
-    expect(urutkanSprint(baris).map((x) => x.nama)).toEqual(['Ani', 'Dodi', 'Eko', 'Cici', 'Budi']);
+    expect(urutkanSprint(baris).map((x) => x.nama)).toEqual(['Dodi', 'Eko', 'Cici', 'Budi', 'Ani']);
     // Kolom yang diketuk tetap didahulukan.
     expect(urutkanSprint(baris, 'menang', 'semua')[0]!.nama).toBe('Ani');
   });
