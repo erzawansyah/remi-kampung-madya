@@ -145,11 +145,18 @@ export interface PercobaanSprint {
   skor: number;
   mentung: number;
   kepentung: number;
+  /**
+   * Berapa putaran yang selesai dimainkan di catatan ini. Tidak ada = 1 (catatan per putaran sejak
+   * 26 Nov 2026); baris lama 0.8.0 membawa kolom `putaran`-nya sendiri (putaran yang selesai di percobaan itu).
+   */
+  putaran?: number;
 }
 
 /** Satu baris papan sprint (jumlah semua catatan di periodenya). */
 export interface BarisSprint {
   nama: string;
+  /** Putaran yang selesai dimainkan (permintaan pemilik 27 Nov 2026). */
+  putaran: number;
   menang: number;
   mentung: number;
   kepentung: number;
@@ -158,10 +165,15 @@ export interface BarisSprint {
   piala: number;
 }
 
-export const KOLOM_SPRINT = ['menang', 'mentung', 'kepentung', 'skor'] as const;
+/** Kolom angka papan, urut seperti di layar. */
+export const KOLOM_SPRINT = ['putaran', 'menang', 'mentung', 'kepentung', 'skor'] as const;
 export type KolomSprint = (typeof KOLOM_SPRINT)[number];
 
 const kunciDari = (p: PercobaanSprint) => p.kunci || kunciNama(p.nama);
+
+/** Putaran yang dibawa satu catatan: `putaran` kalau bilangan bulat ≥ 0, selain itu 1. */
+export const putaranCatatan = (p: Pick<PercobaanSprint, 'putaran'>): number =>
+  typeof p.putaran === 'number' && Number.isInteger(p.putaran) && p.putaran >= 0 ? p.putaran : 1;
 
 /**
  * Jumlahkan catatan (putaran, atau percobaan 0.8.0) per orang (nama tanpa beda huruf besar/kecil, kunciNama). Ejaan yang tampil:
@@ -177,13 +189,14 @@ export function rekapSprint(
     const kunci = kunciDari(p);
     let b = per.get(kunci);
     if (!b) {
-      b = { nama: p.nama, menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: piala?.get(kunci) ?? 0, w: -Infinity };
+      b = { nama: p.nama, putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: piala?.get(kunci) ?? 0, w: -Infinity };
       per.set(kunci, b);
     }
     if (p.waktu >= b.w) {
       b.nama = p.nama;
       b.w = p.waktu;
     }
+    b.putaran += putaranCatatan(p);
     if (p.menang) b.menang++;
     b.mentung += p.mentung;
     b.kepentung += p.kepentung;
@@ -195,8 +208,9 @@ export function rekapSprint(
 
 /**
  * Urutkan papan sprint. Bawaan: menang terbanyak, lalu skor tertinggi, mentung terbanyak, kepentung
- * tersedikit, lalu nama. `kolom` (pemain mengetuk judul kolom): kolom itu didahulukan (kepentung dari
- * yang tersedikit, yang lain dari yang terbanyak), sisanya urutan bawaan. Mengembalikan salinan.
+ * tersedikit, lalu nama (putaran tidak ikut urutan bawaan). `kolom` (pemain mengetuk judul kolom): kolom
+ * itu didahulukan (kepentung dari yang tersedikit, yang lain dari yang terbanyak), sisanya urutan bawaan.
+ * Mengembalikan salinan.
  */
 export function urutkanSprint<T extends Omit<BarisSprint, 'piala'>>(baris: readonly T[], kolom?: KolomSprint | null): T[] {
   const bawaan = (a: T, b: T) =>

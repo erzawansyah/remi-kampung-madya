@@ -130,15 +130,16 @@ describe('penyimpan sprint (migrasi v7 dan v8)', () => {
     expect(minggu).toMatchObject({ periode: 'minggu', mulai: senin });
     // Minggu lalu: Budi menang 1 (percobaan lama) dan Ani menang 1; skor Budi lebih tinggi, jadi Budi juara.
     expect(minggu.baris).toEqual([
-      { nama: 'ani', menang: 1, mentung: 0, kepentung: 0, skor: 25, piala: 0 },
-      { nama: 'Budi', menang: 1, mentung: 0, kepentung: 1, skor: -90, piala: 1 },
+      { nama: 'ani', putaran: 1, menang: 1, mentung: 0, kepentung: 0, skor: 25, piala: 0 },
+      { nama: 'Budi', putaran: 2, menang: 1, mentung: 0, kepentung: 1, skor: -90, piala: 1 },
     ]);
     expect(r.sprint.papan('semua', sekarang)).toEqual({
       periode: 'semua',
       mulai: null,
       baris: [
-        { nama: 'Budi', menang: 2, mentung: 2, kepentung: 2, skor: 210, piala: 1 },
-        { nama: 'ani', menang: 2, mentung: 1, kepentung: 1, skor: 65, piala: 0 },
+        // Putaran: percobaan 0.8.0 membawa 5 putaran yang tersimpan di kolom putaran-nya, lalu 2 putaran baru.
+        { nama: 'Budi', putaran: 7, menang: 2, mentung: 2, kepentung: 2, skor: 210, piala: 1 },
+        { nama: 'ani', putaran: 3, menang: 2, mentung: 1, kepentung: 1, skor: 65, piala: 0 },
       ],
     });
     expect(r.sprint.peringkatMinggu('BUDI', sekarang)).toBe(2);
@@ -252,9 +253,9 @@ describe('sprint di server', () => {
     expect(papan.periode).toBe('minggu');
     expect(papan.mulai).toBe(awalMingguWib(Date.now()));
     const jumlah = (k: 'skor' | 'menang' | 'mentung' | 'kepentung') => b.reduce((n, x) => n + Number(x[k]), 0);
-    // Bentuk jawaban API tetap (aplikasi lama).
+    // Bentuk jawaban API tetap (aplikasi lama); 0.10.2 hanya menambah putaran.
     expect(papan.baris).toEqual([
-      { nama: 'Budi', menang: jumlah('menang'), mentung: jumlah('mentung'), kepentung: jumlah('kepentung'), skor: jumlah('skor'), piala: 0 },
+      { nama: 'Budi', putaran: b.length, menang: jumlah('menang'), mentung: jumlah('mentung'), kepentung: jumlah('kepentung'), skor: jumlah('skor'), piala: 0 },
     ]);
     const semua = (await (await fetch(`${alamat}/api/sprint?periode=semua`)).json()) as PapanSprint;
     expect(semua).toEqual({ periode: 'semua', mulai: null, baris: papan.baris });
@@ -325,7 +326,7 @@ describe('sprint di server', () => {
     expect(papan.mulai).toBe(senin);
     // Minggu ini hanya putaran 2; minggu lalu (putaran 1) sudah punya juara: Eli.
     expect(papan.baris).toEqual([
-      { nama: 'Eli', menang: Number(b2.menang), mentung: Number(b2.mentung), kepentung: Number(b2.kepentung), skor: Number(b2.skor), piala: 1 },
+      { nama: 'Eli', putaran: 1, menang: Number(b2.menang), mentung: Number(b2.mentung), kepentung: Number(b2.kepentung), skor: Number(b2.skor), piala: 1 },
     ]);
     a.ws.close();
   }, 90_000);

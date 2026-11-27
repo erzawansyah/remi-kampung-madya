@@ -1026,7 +1026,9 @@ table.skor tr.redup td {
 .layar-sprint .ket-lanjut:empty {
   display: none;
 }
-/* Lima kolom harus muat di HP 360 px tanpa digeser: judul kolom tanpa huruf kapital/spasi lebar. */
+/* Enam kolom (sejak 0.10.2 ada Putaran) harus muat di HP 360 px tanpa digeser: judul kolom tanpa huruf
+   kapital/spasi lebar, dan boleh pecah dua baris lewat soft hyphen (TEKS_SPRINT.kolomPecah). Di layar
+   sempit tepi panel dan jarak kolom Skor dirapatkan supaya teks besar dengan skor 6 angka tetap muat. */
 #papan-sprint {
   padding-left: var(--ruang-2);
   padding-right: var(--ruang-2);
@@ -1039,6 +1041,16 @@ table.papan-sprint td {
 table.papan-sprint th:last-child,
 table.papan-sprint td:last-child {
   padding-left: var(--ruang-2);
+}
+@media (max-width: 380px) {
+  #papan-sprint {
+    padding-left: var(--ruang-1);
+    padding-right: var(--ruang-1);
+  }
+  table.papan-sprint th:last-child,
+  table.papan-sprint td:last-child {
+    padding-left: var(--ruang-1);
+  }
 }
 table.papan-sprint th {
   text-transform: none;

@@ -9,7 +9,7 @@ vi.hoisted(() => {
   Object.assign(globalThis, { __VERSI_APP__: '0.0.0', __BUILD_SHA__: 'dev', __BUILD_WAKTU__: '2026-11-25T00:00:00.000Z' });
 });
 
-import { awalMingguWib, NAMA_LAWAN_SPRINT, type BarisSprint } from '@remi/meja';
+import { awalMingguWib, KOLOM_SPRINT, NAMA_LAWAN_SPRINT, type BarisSprint } from '@remi/meja';
 import { BAB_BANTUAN } from '../src/konten/bantuan';
 import { TEKS_SPRINT, teksPiala } from '../src/konten/sprint';
 import { _setelUlangCache } from '../src/preferensi';
@@ -19,9 +19,9 @@ import { htmlPapanSprint, rapikanPapanSprint, rapikanSprintSaya, renderSprint, s
 import { pasangMatchMediaPalsu } from './bantu';
 
 const BARIS: BarisSprint[] = [
-  { nama: 'Ani', menang: 1, mentung: 5, kepentung: 4, skor: 900, piala: 0 },
-  { nama: 'Budi', menang: 3, mentung: 1, kepentung: 2, skor: -50, piala: 2 },
-  { nama: 'Cici', menang: 1, mentung: 2, kepentung: 0, skor: 300, piala: 1 },
+  { nama: 'Ani', putaran: 12, menang: 1, mentung: 5, kepentung: 4, skor: 900, piala: 0 },
+  { nama: 'Budi', putaran: 4, menang: 3, mentung: 1, kepentung: 2, skor: -50, piala: 2 },
+  { nama: 'Cici', putaran: 30, menang: 1, mentung: 2, kepentung: 0, skor: 300, piala: 1 },
 ];
 
 const namaBaris = (akar: ParentNode) => [...akar.querySelectorAll('tbody tr')].map((tr) => tr.querySelector('.nama-teks')!.textContent);
@@ -66,9 +66,13 @@ describe('papan sprint (htmlPapanSprint)', () => {
     expect(saya[0]!.textContent).toContain(TEKS_SPRINT.lencanaKamu);
     // Skor negatif memakai minus tipografis.
     expect(budi.textContent).toContain('−50');
-    // Kolom: Menang, Mentung, Kepentung, Skor (judulnya tombol), urutan bawaan = Menang menurun.
-    expect([...d.querySelectorAll('thead [data-kolom]')].map((b) => b.textContent)).toEqual(['Menang', 'Mentung', 'Kepentung', 'Skor']);
-    expect(d.querySelector('th[aria-sort]')!.textContent).toBe('Menang');
+    // Kolom: Putaran, Menang, Mentung, Kepentung, Skor (judulnya tombol), urutan bawaan = Menang menurun.
+    expect([...d.querySelectorAll('thead [data-kolom]')].map((b) => b.getAttribute('aria-label'))).toEqual(['Putaran', 'Menang', 'Mentung', 'Kepentung', 'Skor']);
+    // Teks yang tampil = nama kolom yang sama, boleh pecah dua baris lewat soft hyphen (enam kolom di HP 360 px).
+    expect([...d.querySelectorAll('thead [data-kolom]')].map((b) => b.textContent)).toEqual(['Pu\u00ADtaran', 'Me\u00ADnang', 'Men\u00ADtung', 'Kepen\u00ADtung', 'Skor']);
+    // Isi sel per baris sesuai judulnya: nama, putaran, menang, mentung, kepentung, skor.
+    expect([...budi.querySelectorAll('td')].slice(1).map((td) => td.textContent)).toEqual(['4', '3', '1', '2', '−50']);
+    expect(d.querySelector('th[aria-sort] button')!.getAttribute('aria-label')).toBe('Menang');
     expect(d.querySelector('th[aria-sort]')!.getAttribute('aria-sort')).toBe('descending');
   });
 
@@ -82,6 +86,19 @@ describe('papan sprint (htmlPapanSprint)', () => {
     expect(namaBaris(d)).toEqual(['Cici', 'Budi', 'Ani']);
     expect(d.querySelector('th[aria-sort]')!.getAttribute('aria-sort')).toBe('ascending');
     expect(d.querySelector('[data-kolom="kepentung"]')!.classList.contains('aktif')).toBe(true);
+    // Putaran terbanyak di atas.
+    d.innerHTML = htmlPapanSprint(BARIS, 'putaran', 'x', 'semua');
+    expect(namaBaris(d)).toEqual(['Cici', 'Ani', 'Budi']);
+    expect(d.querySelector('th[aria-sort] button')!.getAttribute('aria-label')).toBe('Putaran');
+    expect(d.querySelector('th[aria-sort]')!.getAttribute('aria-sort')).toBe('descending');
+    expect(d.querySelector('[data-kolom="putaran"]')!.classList.contains('aktif')).toBe(true);
+  });
+
+  it('judul kolom yang dipecah tetap kata yang sama (paling banyak satu tempat pecah)', () => {
+    for (const k of KOLOM_SPRINT) {
+      expect(TEKS_SPRINT.kolomPecah[k].replace('|', '')).toBe(TEKS_SPRINT.kolom[k]);
+      expect(TEKS_SPRINT.kolomPecah[k].split('|').length).toBeLessThanOrEqual(2);
+    }
   });
 
   it('kosong: kalimat per periode', () => {
@@ -91,7 +108,7 @@ describe('papan sprint (htmlPapanSprint)', () => {
 
   it('nama dari server ditulis aman (tanpa HTML)', () => {
     const d = document.createElement('div');
-    d.innerHTML = htmlPapanSprint([{ nama: '<img src=x onerror=1>', menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: 0 }], null, 'x', 'semua');
+    d.innerHTML = htmlPapanSprint([{ nama: '<img src=x onerror=1>', putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: 0 }], null, 'x', 'semua');
     expect(d.querySelector('img')).toBeNull();
   });
 
@@ -101,8 +118,11 @@ describe('papan sprint (htmlPapanSprint)', () => {
     expect(rapikanPapanSprint({ periode: 'aneh', mulai: 5, baris: [{ nama: 'A', menang: 'x', piala: 1.7 }, { menang: 3 }] })).toEqual({
       periode: 'minggu',
       mulai: 5,
-      baris: [{ nama: 'A', menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: 1 }],
+      baris: [{ nama: 'A', putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: 1 }],
     });
+    // Server sebelum 0.10.2 (tanpa putaran) tetap terbaca; putaran yang dikirim ikut dibawa.
+    expect(rapikanPapanSprint({ periode: 'semua', mulai: null, baris: [{ nama: 'B', menang: 2, mentung: 1, kepentung: 0, skor: -5, piala: 0 }] })!.baris[0]!.putaran).toBe(0);
+    expect(rapikanPapanSprint({ periode: 'semua', mulai: null, baris: [{ nama: 'B', putaran: 7 }] })!.baris[0]!.putaran).toBe(7);
   });
 });
 
@@ -131,6 +151,11 @@ describe('layar Sprint (renderSprint)', () => {
     expect(namaBaris(akar)).toEqual(['Ani', 'Cici', 'Budi']);
     expect(document.activeElement?.getAttribute('data-kolom')).toBe('skor');
     akar.querySelector<HTMLButtonElement>('[data-kolom="skor"]')!.click();
+    expect(namaBaris(akar)).toEqual(['Budi', 'Ani', 'Cici']);
+    // Kolom Putaran juga bisa diketuk.
+    akar.querySelector<HTMLButtonElement>('[data-kolom="putaran"]')!.click();
+    expect(namaBaris(akar)).toEqual(['Cici', 'Ani', 'Budi']);
+    akar.querySelector<HTMLButtonElement>('[data-kolom="putaran"]')!.click();
     expect(namaBaris(akar)).toEqual(['Budi', 'Ani', 'Cici']);
     // Main sprint: aksi dipanggil sekali, tombolnya menunggu.
     const tombol = akar.querySelector<HTMLButtonElement>('#main-sprint')!;

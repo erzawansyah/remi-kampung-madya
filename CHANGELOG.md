@@ -6,6 +6,20 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.10.2] - 2026-11-27
+
+Papan Sprint menampilkan jumlah putaran. Aturan main tidak berubah.
+
+### Untuk pemain
+
+#### Ditambahkan
+
+- Papan **Sprint** sekarang juga menampilkan jumlah putaran yang dimainkan (kolom **Putaran**, bisa diketuk buat mengurutkan).
+
+### Teknis
+
+- Papan sprint (keputusan pemilik #65, 27 Nov 2026): `BarisSprint.putaran` dihitung di `rekapSprint()` lewat `putaranCatatan()` (`packages/meja/src/sprint.ts`): satu baris `sprint_putaran` = 1 putaran, baris 0.8.0 di tabel `sprint` memakai kolom `putaran`-nya (putaran yang selesai di percobaan itu). `KOLOM_SPRINT` mendapat `putaran` (bisa diurutkan; urutan bawaan dan juara mingguan tetap). `GET /api/sprint` hanya menambah field `putaran` di tiap baris; tanpa perubahan skema. Judul kolom papan boleh pecah dua baris lewat soft hyphen (`TEKS_SPRINT.kolomPecah`, nama utuh di `aria-label`) dan tepi panel dirapatkan di layar ≤ 380 px supaya enam kolom muat di HP 360 px.
+
 ## [0.10.1] - 2026-11-27
 
 Sprint bisa dilanjut sepanjang minggu. Aturan main tidak berubah.

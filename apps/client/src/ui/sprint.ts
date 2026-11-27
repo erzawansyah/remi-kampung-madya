@@ -1,6 +1,6 @@
 // Layar Sprint (keputusan pemilik 25 Nov 2026): satu kalimat pembuka, tombol Main sprint, dan papan
-// sprint dari server (GET /api/sprint) dengan dua tab: Minggu ini dan Sepanjang masa. Kolom Menang,
-// Mentung, Kepentung, Skor; judul kolom bisa diketuk untuk mengurutkan (urutannya dari @remi/meja,
+// sprint dari server (GET /api/sprint) dengan dua tab: Minggu ini dan Sepanjang masa. Kolom Putaran
+// (27 Nov 2026), Menang, Mentung, Kepentung, Skor; judul kolom bisa diketuk untuk mengurutkan (urutannya dari @remi/meja,
 // urutkanSprint, jadi aturan urutan tetap satu sumber). Piala juara mingguan di samping nama.
 // Sprint hanya online: permainannya dijalankan server supaya rekornya tidak bisa diakali dari HP.
 // Sejak 27 Nov 2026 satu sprint bisa dilanjut sepanjang minggu: kalau HP ini punya sprint minggu ini
@@ -56,6 +56,8 @@ export function rapikanPapanSprint(x: unknown): PapanSprint | null {
     .filter((b): b is BarisSprint => !!b && typeof b === 'object' && typeof (b as BarisSprint).nama === 'string')
     .map((b) => ({
       nama: b.nama,
+      // Server sebelum 0.10.2 belum mengirim putaran: 0 (ditampilkan apa adanya sampai server ikut naik).
+      putaran: angka(b.putaran),
       menang: angka(b.menang),
       mentung: angka(b.mentung),
       kepentung: angka(b.kepentung),
@@ -82,7 +84,9 @@ export function htmlPapanSprint(baris: readonly BarisSprint[], kolom: KolomSprin
   const aktif = kolom ?? 'menang';
   const kepala = KOLOM_SPRINT.map((k) => {
     const sort = k === aktif ? ` aria-sort="${k === 'kepentung' ? 'ascending' : 'descending'}"` : '';
-    return `<th scope="col"${sort}><button type="button" class="judul-kolom${k === kolom ? ' aktif' : ''}" data-kolom="${k}">${esc(T.kolom[k])}</button></th>`;
+    // Teks yang tampil boleh pecah dua baris (soft hyphen); nama untuk pembaca layar tetap utuh.
+    const tampil = T.kolomPecah[k].split('|').map(esc).join('&shy;');
+    return `<th scope="col"${sort}><button type="button" class="judul-kolom${k === kolom ? ' aktif' : ''}" data-kolom="${k}" aria-label="${esc(T.kolom[k])}">${tampil}</button></th>`;
   }).join('');
   const isi = urut
     .map((b, i) => {
@@ -90,7 +94,7 @@ export function htmlPapanSprint(baris: readonly BarisSprint[], kolom: KolomSprin
       // Nomor (🥇🥈🥉, lalu angka) satu sel dengan nama supaya lima kolom muat di HP 360 px.
       return `<tr${saya ? ' class="saya"' : ''}><td class="nama-sprint"><span class="nomor-sprint">${MEDALI[i] ?? i + 1}</span><span class="nama-teks">${esc(
         b.nama,
-      )}</span>${htmlPialaSprint(b.piala)}${saya ? ` <span class="lencana emas">${esc(T.lencanaKamu)}</span>` : ''}</td><td>${b.menang}</td><td>${b.mentung}</td><td>${b.kepentung}</td><td>${angkaSkor(b.skor)}</td></tr>`;
+      )}</span>${htmlPialaSprint(b.piala)}${saya ? ` <span class="lencana emas">${esc(T.lencanaKamu)}</span>` : ''}</td><td>${b.putaran}</td><td>${b.menang}</td><td>${b.mentung}</td><td>${b.kepentung}</td><td>${angkaSkor(b.skor)}</td></tr>`;
     })
     .join('');
   return `<div class="tabel-gulir"><table class="skor papan-sprint">

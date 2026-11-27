@@ -1133,6 +1133,12 @@ Pilihan yang waktu itu ditawarkan dan **tidak dipilih**:
 - Paling banyak 40 sprint tersimpan per jaringan per minggu; kalau penuh, sprint dari jaringan itu yang belum pernah menyelesaikan satu putaran pun dibuang duluan, baru sesudahnya sprint baru ditolak ("Lanjutkan yang sudah ada"). Jadi satu-dua jaringan tidak bisa memenuhi batas 5000 untuk semua orang.
 - HP tidak membuang token sprint karena jam HP-nya sendiri (bisa meleset); token dibuang hanya kalau server bilang sprint itu sudah tidak ada. Teks konfirmasi Keluar membedakan sprint yang bisa dilanjut ("disimpan") dan yang tidak (minggunya sudah lewat, atau meja sprint 0.10.0).
 
+**Kolom Putaran di papan (permintaan pemilik 27 Nov 2026, 0.10.2):** "Di leaderboard itu ada jumlah putaran yang dimainkan." Papan sprint (Minggu ini dan Sepanjang masa) mendapat kolom **Putaran** di depan Menang: berapa putaran sprint yang selesai dimainkan orang itu di periode tersebut.
+- **Tafsiran pengembang:** hanya putaran yang **selesai** (yang memang tercatat di papan); putaran yang sedang jalan atau dijeda belum dihitung. Satu baris `sprint_putaran` = 1 putaran. Baris lama 0.8.0 (tabel `sprint`) menyimpan banyaknya putaran yang selesai di percobaan itu (kolom `putaran`, 1–5; percobaan yang ditinggal bisa kurang dari 5), jadi angka itu yang dipakai, bukan 1. Minggunya mengikuti waktu catatan seperti kolom lain.
+- Urutan bawaan papan dan juara mingguan **tidak berubah** (Putaran tidak ikut urutan bawaan). Judul Putaran bisa diketuk seperti kolom lain: putaran terbanyak di atas, yang sama banyak memakai urutan bawaan.
+- `GET /api/sprint` hanya menambah field `putaran` di tiap baris (aplikasi lama mengabaikannya; aplikasi baru yang bertemu server lama menampilkan 0). Tanpa perubahan skema: dihitung dari baris yang sudah ada (`putaranCatatan()`/`rekapSprint()` di `packages/meja/src/sprint.ts`).
+- Supaya enam kolom muat di HP 360 px tanpa digeser, judul kolom boleh pecah dua baris dengan tanda hubung ("Pu-taran", "Kepen-tung") hanya kalau tidak muat (`TEKS_SPRINT.kolomPecah`); nama kolom untuk pembaca layar tetap utuh.
+
 ---
 
 ## Catatan lain (belum masuk tabel)

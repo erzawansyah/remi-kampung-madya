@@ -96,10 +96,11 @@ export function buatPenyimpanSprint(db: DatabaseSync): PenyimpanSprint {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   // Percobaan 0.8.0 (tabel sprint) dan putaran sejak 26 Nov 2026 (sprint_putaran), dijumlah bersama.
+  // Kolom putaran: baris 0.8.0 menyimpan putaran yang selesai di percobaan itu; baris sprint_putaran = 1 putaran.
   const ambilSemua = db.prepare(
-    `SELECT nama, kunci_nama, waktu, menang, skor, mentung, kepentung, 0 AS sumber, id FROM sprint
+    `SELECT nama, kunci_nama, waktu, menang, skor, mentung, kepentung, putaran, 0 AS sumber, id FROM sprint
      UNION ALL
-     SELECT nama, kunci_nama, waktu, menang, skor, mentung, kepentung, 1 AS sumber, id FROM sprint_putaran
+     SELECT nama, kunci_nama, waktu, menang, skor, mentung, kepentung, 1 AS putaran, 1 AS sumber, id FROM sprint_putaran
      ORDER BY waktu, sumber, id`,
   );
 
@@ -114,6 +115,7 @@ export function buatPenyimpanSprint(db: DatabaseSync): PenyimpanSprint {
       skor: Number(b.skor),
       mentung: Number(b.mentung),
       kepentung: Number(b.kepentung),
+      putaran: Number(b.putaran),
     })));
 
   function hitung(periode: PeriodeSprint, sekarang: number): { mulai: number | null; baris: BarisSprint[] } {

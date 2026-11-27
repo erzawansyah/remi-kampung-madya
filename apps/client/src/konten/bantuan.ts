@@ -873,7 +873,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       },
       {
         t: 'paragraf',
-        teks: `**Papan sprint** punya dua tab: ${TEKS_SPRINT.tabMinggu} (mulai Senin pukul 00.00 WIB) dan ${TEKS_SPRINT.tabSemua}. Kolom Menang, Mentung, Kepentung, dan Skor dijumlah dari semua putaran sprint di periode itu. Urutan bawaannya: menang terbanyak, lalu skor tertinggi, mentung terbanyak, dan kepentung paling sedikit. Ketuk judul kolom buat mengurutkan pakai kolom itu.`,
+        teks: `**Papan sprint** punya dua tab: ${TEKS_SPRINT.tabMinggu} (mulai Senin pukul 00.00 WIB) dan ${TEKS_SPRINT.tabSemua}. Kolom Putaran (berapa putaran yang selesai dimainkan), Menang, Mentung, Kepentung, dan Skor dijumlah dari semua putaran sprint di periode itu. Urutan bawaannya: menang terbanyak, lalu skor tertinggi, mentung terbanyak, dan kepentung paling sedikit. Ketuk judul kolom buat mengurutkan pakai kolom itu.`,
       },
       {
         t: 'paragraf',

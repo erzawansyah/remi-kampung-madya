@@ -29,7 +29,12 @@ export const TEKS_SPRINT = {
   tabMinggu: 'Minggu ini',
   tabSemua: 'Sepanjang masa',
   kolomNama: 'Nama',
-  kolom: { menang: 'Menang', mentung: 'Mentung', kepentung: 'Kepentung', skor: 'Skor' } satisfies Record<KolomSprint, string>,
+  kolom: { putaran: 'Putaran', menang: 'Menang', mentung: 'Mentung', kepentung: 'Kepentung', skor: 'Skor' } satisfies Record<KolomSprint, string>,
+  /**
+   * Judul kolom yang boleh dipecah dua baris di HP sempit (tanda | = tempat pecah, tampil sebagai tanda
+   * hubung lewat soft hyphen). Hanya dipecah kalau tidak muat; tanpa itu enam kolom tidak muat di 360 px.
+   */
+  kolomPecah: { putaran: 'Pu|taran', menang: 'Me|nang', mentung: 'Men|tung', kepentung: 'Kepen|tung', skor: 'Skor' } satisfies Record<KolomSprint, string>,
   memuat: 'Memuat papan…',
   kosongMinggu: 'Belum ada yang sprint minggu ini. Jadi yang pertama, Bos.',
   kosongSemua: 'Belum ada yang sprint.',

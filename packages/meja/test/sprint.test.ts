@@ -22,6 +22,7 @@ import {
   NAMA_LAWAN_SPRINT,
   PENGATURAN_SPRINT,
   pialaSprint,
+  putaranCatatan,
   rekapSprint,
   TEKS_SPRINT_SEKALI_MAIN,
   TEKS_SPRINT_TANPA_VOTING,
@@ -119,19 +120,55 @@ describe('papan sprint', () => {
   it('dijumlah per nama tanpa beda huruf besar/kecil, ejaan terakhir yang tampil', () => {
     const r = rekapSprint([p('budi', 1, true, 100, 1, 0), p('Ani', 2, false, 300, 2, 1), p('BUDI', 3, false, -50, 0, 2), p('Budi', 4, true, 20)]);
     expect(r).toEqual([
-      { nama: 'Budi', menang: 2, mentung: 1, kepentung: 2, skor: 70, piala: 0 },
-      { nama: 'Ani', menang: 0, mentung: 2, kepentung: 1, skor: 300, piala: 0 },
+      { nama: 'Budi', putaran: 3, menang: 2, mentung: 1, kepentung: 2, skor: 70, piala: 0 },
+      { nama: 'Ani', putaran: 1, menang: 0, mentung: 2, kepentung: 1, skor: 300, piala: 0 },
     ]);
   });
 
+  it('putaran: catatan per putaran = 1, baris 0.8.0 membawa jumlah putarannya sendiri (0 juga sah)', () => {
+    const r = rekapSprint([
+      { ...p('Budi', 1, true, 400, 2, 1), putaran: 5 },
+      { ...p('budi', 2, false, -30), putaran: 0 },
+      p('Budi', 3, false, 10),
+      p('Ani', 4, true, 50),
+      // Data aneh dari database jatuh ke 1.
+      { ...p('Ani', 5, false, 0), putaran: Number.NaN },
+      { ...p('Ani', 6, false, 0), putaran: -2 },
+    ]);
+    expect(r.map((b) => [b.nama, b.putaran])).toEqual([
+      ['Budi', 6],
+      ['Ani', 3],
+    ]);
+    expect(putaranCatatan({})).toBe(1);
+    expect(putaranCatatan({ putaran: 5 })).toBe(5);
+    expect(putaranCatatan({ putaran: 2.5 })).toBe(1);
+  });
+
   it('urutan bawaan: menang, skor, mentung, kepentung tersedikit, nama', () => {
-    const b = (nama: string, menang: number, skor: number, mentung: number, kepentung: number) => ({ nama, menang, skor, mentung, kepentung, piala: 0 });
-    const baris = [b('Eko', 1, 50, 1, 1), b('Ani', 1, 50, 1, 1), b('Cici', 1, 50, 1, 0), b('Dodi', 1, 50, 2, 3), b('Budi', 1, 80, 0, 9), b('Fajar', 2, -500, 0, 0)];
+    const b = (nama: string, menang: number, skor: number, mentung: number, kepentung: number, putaran: number) => ({
+      nama,
+      putaran,
+      menang,
+      skor,
+      mentung,
+      kepentung,
+      piala: 0,
+    });
+    const baris = [
+      b('Eko', 1, 50, 1, 1, 4),
+      b('Ani', 1, 50, 1, 1, 9),
+      b('Cici', 1, 50, 1, 0, 9),
+      b('Dodi', 1, 50, 2, 3, 2),
+      b('Budi', 1, 80, 0, 9, 9),
+      b('Fajar', 2, -500, 0, 0, 3),
+    ];
     expect(urutkanSprint(baris).map((x) => x.nama)).toEqual(['Fajar', 'Budi', 'Dodi', 'Cici', 'Ani', 'Eko']);
     // Ketuk judul kolom: kolom itu didahulukan, kepentung dari yang tersedikit.
     expect(urutkanSprint(baris, 'skor').map((x) => x.nama)).toEqual(['Budi', 'Dodi', 'Cici', 'Ani', 'Eko', 'Fajar']);
     expect(urutkanSprint(baris, 'mentung')[0].nama).toBe('Dodi');
     expect(urutkanSprint(baris, 'kepentung').map((x) => x.nama)).toEqual(['Fajar', 'Cici', 'Ani', 'Eko', 'Dodi', 'Budi']);
+    // Putaran terbanyak dulu; yang sama banyak memakai urutan bawaan (putaran tidak ikut urutan bawaan).
+    expect(urutkanSprint(baris, 'putaran').map((x) => x.nama)).toEqual(['Budi', 'Cici', 'Ani', 'Eko', 'Fajar', 'Dodi']);
     // Kolom yang tidak dikenal = urutan bawaan; masukan tidak diubah.
     expect(urutkanSprint(baris, 'ngawur' as never).map((x) => x.nama)).toEqual(['Fajar', 'Budi', 'Dodi', 'Cici', 'Ani', 'Eko']);
     expect(baris[0].nama).toBe('Eko');
