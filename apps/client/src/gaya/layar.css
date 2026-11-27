@@ -1026,41 +1026,160 @@ table.skor tr.redup td {
 .layar-sprint .ket-lanjut:empty {
   display: none;
 }
-/* Lima kolom harus muat di HP 360 px tanpa digeser: judul kolom tanpa huruf kapital/spasi lebar. */
+/* Papan sprint (0.10.2): # · Nama · Ptr · M · Mtg · Kpg · Skor. # dan Nama menempel di kiri, Skor di kanan
+   (position: sticky di dalam .tabel-gulir yang overflow-x: auto); kolom tengah baru bisa digeser kalau
+   tabel tidak muat. Sel yang menempel berlatar pekat (--panel-pekat, padanan --panel di atas laken) supaya
+   sel yang digeser di bawahnya tidak tembus. Semua judul kolom seukuran isi tabel (1em), supaya lebar # dalam
+   em sama di judul dan isi (Nama menempel tepat di sebelahnya). */
 #papan-sprint {
   padding-left: var(--ruang-2);
   padding-right: var(--ruang-2);
 }
+@media (max-width: 380px) {
+  #papan-sprint {
+    padding-left: var(--ruang-1);
+    padding-right: var(--ruang-1);
+  }
+}
+.papan-sprint-gulir {
+  --lebar-no-sprint: 2.2em;
+}
 table.papan-sprint th,
 table.papan-sprint td {
-  padding-left: 2px;
-  padding-right: 2px;
-}
-table.papan-sprint th:last-child,
-table.papan-sprint td:last-child {
-  padding-left: var(--ruang-2);
+  padding-left: 3px;
+  padding-right: 3px;
+  white-space: nowrap;
 }
 table.papan-sprint th {
+  font-size: 1em;
   text-transform: none;
   letter-spacing: 0;
 }
-table.papan-sprint td.nama-sprint {
-  padding-left: 0;
-  overflow-wrap: anywhere;
+table.papan-sprint .kol-no,
+table.papan-sprint .kol-nama,
+table.papan-sprint .kol-skor {
+  position: sticky;
+  z-index: 1;
+  background: var(--panel-pekat);
 }
-table.papan-sprint .nomor-sprint {
-  display: inline-block;
-  min-width: 1.5em;
-  margin-right: 2px;
+table.papan-sprint :is(th, td).kol-no {
+  left: 0;
+  box-sizing: border-box;
+  width: var(--lebar-no-sprint);
+  min-width: var(--lebar-no-sprint);
+  max-width: var(--lebar-no-sprint);
+  padding-left: 0;
+  padding-right: 0;
   text-align: center;
 }
-table.papan-sprint td.nama-sprint .lencana {
+table.papan-sprint :is(th, td).kol-nama {
+  left: var(--lebar-no-sprint);
+  text-align: left;
+}
+/* # yang sedang dipakai cukup diwarnai emas, tanpa panah (kolomnya sempit). */
+table.papan-sprint .judul-kolom.aktif[data-kolom='peringkat']::after {
+  content: none;
+}
+table.papan-sprint .kol-skor {
+  right: 0;
+  padding-left: var(--ruang-1);
+}
+/* Garis tipis di tepi bagian yang menempel: batas kolom yang bisa digeser. */
+table.papan-sprint .kol-nama {
+  box-shadow: inset -1px 0 0 var(--garis);
+}
+table.papan-sprint .kol-skor {
+  box-shadow: inset 1px 0 0 var(--garis);
+}
+table.papan-sprint tbody tr:nth-child(even) :is(.kol-no, .kol-nama, .kol-skor) {
+  background: linear-gradient(var(--permukaan-1), var(--permukaan-1)), var(--panel-pekat);
+}
+table.papan-sprint tr.saya :is(.kol-no, .kol-nama, .kol-skor) {
+  background: linear-gradient(rgba(var(--emas-rgb), 0.12), rgba(var(--emas-rgb), 0.12)), var(--panel-pekat);
+}
+/* Nama hanya pecah di antara kata: kolomnya selebar kata terpanjang (min-content), tidak pernah dipotong
+   di tengah kata selama tabel bisa digeser. Label minggu terbaik (Sepanjang masa) di baris kedua. */
+table.papan-sprint td.kol-nama {
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  min-width: 5.5em;
+}
+table.papan-sprint .minggu-sprint {
+  display: block;
+  font-size: var(--teks-xs);
+  font-weight: 500;
+  color: var(--teks-redup);
+  white-space: nowrap;
+}
+table.papan-sprint td.kol-nama .lencana {
+  font-size: var(--teks-xs);
+}
+table.papan-sprint .nomor-sprint {
+  font-variant-numeric: tabular-nums;
+}
+table.papan-sprint tr.pemisah td {
+  padding-top: 0;
+  padding-bottom: 0;
+  text-align: left;
+  color: var(--teks-redup);
+  line-height: 1.6;
+}
+table.papan-sprint tr.pemisah span {
+  position: sticky;
+  left: 0;
+  display: inline-block;
+  width: var(--lebar-no-sprint);
+  text-align: center;
+  font-weight: 700;
+}
+table.papan-sprint abbr {
+  text-decoration: none;
+}
+/* HP sempit dengan teks besar: kolom #, Nama, dan jarak sel dirapatkan supaya ketujuh kolom muat di 360 px
+   (tanpa ini Skor yang menempel menutupi Kpg sebelum digeser). */
+@media (max-width: 420px) {
+  html[data-teks='besar'] .papan-sprint-gulir {
+    --lebar-no-sprint: 1.9em;
+  }
+  html[data-teks='besar'] table.papan-sprint :is(th, td) {
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+  html[data-teks='besar'] table.papan-sprint :is(th, td).kol-no {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  html[data-teks='besar'] table.papan-sprint td.kol-nama {
+    min-width: 4.5em;
+  }
+  html[data-teks='besar'] table.papan-sprint .judul-kolom {
+    padding: 0;
+  }
+  html[data-teks='besar'] table.papan-sprint .kol-skor {
+    padding-left: var(--ruang-1);
+  }
+}
+/* Isyarat masih bisa digeser (data-luap diisi pasangIsyaratGulir): bayangan di tepi dalam bagian yang
+   menempel, di sisi yang masih menyimpan kolom. */
+.papan-sprint-gulir[data-luap~='kanan'] table.papan-sprint .kol-skor {
+  box-shadow:
+    inset 1px 0 0 var(--garis),
+    -6px 0 6px -4px rgba(0, 0, 0, 0.55);
+}
+.papan-sprint-gulir[data-luap~='kiri'] table.papan-sprint .kol-nama {
+  box-shadow:
+    inset -1px 0 0 var(--garis),
+    6px 0 6px -4px rgba(0, 0, 0, 0.55);
+}
+.layar-sprint .legenda-sprint {
+  margin-top: var(--ruang-1);
   font-size: var(--teks-xs);
 }
 table.papan-sprint .judul-kolom {
   min-width: 0;
   min-height: 40px;
-  padding: 0 2px;
+  padding: 0 1px;
   border: 0;
   background: none;
   box-shadow: none;

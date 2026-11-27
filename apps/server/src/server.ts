@@ -50,7 +50,7 @@ import { buatKlienNotion } from './notion.js';
 import { jalankanPengirimUsulan, type PengirimUsulan } from './usulan.js';
 import { alamatKlien, HEADER_KEAMANAN, kunciIp, originDiizinkan } from './keamanan.js';
 import { buatPembatasLog } from './pembatasLog.js';
-import { rapikanPeriodeSprint } from './sprint.js';
+import { rapikanNamaPapan, rapikanPeriodeSprint } from './sprint.js';
 import { hashTokenKursi, hashTokenSprint, pasangTokenKursi, sandikanDataSprint, type BarisSprintSimpanan } from './sprintSimpanan.js';
 import { jawabanIce, type KonfigurasiTurn } from './suara.js';
 
@@ -963,17 +963,33 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
    * Yang masih dimainkan (di memori) jalan terus sampai pemainnya pergi (lepasSprint menutupnya).
    */
   const bersihkanSprintLama = () => {
-    if (!simpananSprint) return;
+    if (!simpananSprint) return gulungSprint();
     let xs: BarisSprintSimpanan[];
     try {
       xs = simpananSprint.lama(mingguIni(), 200);
     } catch (e) {
       log('galat membaca sprint lama', e);
-      return;
+      return gulungSprint();
     }
     for (const b of xs) {
       if (hashSprint.get(b.kode) === b.hash) continue;
       akhiriSprint(b, TEKS_SPRINT_TAK_BISA_LANJUT);
+    }
+    gulungSprint();
+  };
+
+  /**
+   * Putaran sprint minggu yang sudah selesai digulung jadi satu baris per orang per minggu (27 Nov 2026,
+   * sprint_mingguan). Murah: hanya membaca putaran sebelum minggu ini. Dipanggil sesudah sprint lama ditutup
+   * (putarannya baru tercatat), saat server mulai, dan tiap ±10 menit. Putaran yang tercatat telat sesudahnya
+   * ikut digulung di panggilan berikutnya.
+   */
+  const gulungSprint = () => {
+    try {
+      const n = opsi.riwayat?.sprint.gulung(jam()) ?? 0;
+      if (n) log(`sprint: ${n} putaran minggu lalu digulung`);
+    } catch (e) {
+      log('galat menggulung putaran sprint', e);
     }
   };
 
@@ -1195,11 +1211,16 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       return;
     }
     if (url.pathname === '/api/sprint') {
-      // Papan sprint (25 Nov 2026): ?periode=minggu (bawaan) atau semua. Urutan bawaan; urut ulang di aplikasi.
+      // Papan sprint (25 Nov 2026): ?periode=minggu (bawaan) atau semua, urutan bawaan periodenya. Tanpa v=2
+      // bentuk lama {periode, mulai, baris} untuk aplikasi 0.8.0–0.10.1; v=2 (27 Nov 2026) = 10 teratas,
+      // 10 terbawah, jumlah, dan baris pemain `nama` (nama = identitas, tanpa beda huruf besar/kecil).
       if (req.method !== 'GET') return jawabJson(res, 405, { error: 'Hanya GET.' });
       if (!opsi.riwayat) return jawabJson(res, 503, { error: 'Sprint belum aktif di server ini.' });
       try {
-        return jawabJson(res, 200, opsi.riwayat.sprint.papan(rapikanPeriodeSprint(url.searchParams.get('periode')), jam()));
+        const q = url.searchParams;
+        const periode = rapikanPeriodeSprint(q.get('periode'));
+        if (q.get('v') === '2') return jawabJson(res, 200, opsi.riwayat.sprint.papanV2(periode, jam(), rapikanNamaPapan(q.get('nama'))));
+        return jawabJson(res, 200, opsi.riwayat.sprint.papan(periode, jam()));
       } catch (e) {
         log('galat membaca papan sprint', e);
         return jawabJson(res, 500, { error: 'Gagal membaca papan sprint.' });

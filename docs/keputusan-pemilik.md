@@ -57,7 +57,7 @@ Pemilik menjawab lewat daftar pertanyaan bernomor 4–13. Padanannya: 4 = #25 da
 | [62](#k62) | Urutan duduk mengikuti urutan masuk lobi | `packages/meja` + client + `apps/server` | Diputuskan: diacak waktu mulai, saklar di lobi, bawaan menyala |
 | [63](#k63) | Joker bisa ditebak lewat tombol Turunkan | client | Diputuskan: Turunkan selalu bisa ditekan, satu pesan tolak, pilih susunan tanpa Batal |
 | [64](#k64) | Pemain lupa menurunkan kartu di susun akhir | client | Diputuskan: pengingat sebelum Selesai, bisa dimatikan sampai permainan selesai |
-| [65](#k65) | Kompetisi lama tidak terpakai | `packages/meja` + `apps/server` + client | Diputuskan: diganti mode Sprint (lawan warga kedai Suhu, papan mingguan) |
+| [65](#k65) | Kompetisi lama tidak terpakai | `packages/meja` + `apps/server` + client | Diputuskan: diganti mode Sprint (lawan warga kedai Suhu, papan mingguan); 27 Nov 2026: Sepanjang masa = minggu terbaik, 10 teratas + 10 terbawah, kolom #, judul disingkat |
 
 ---
 
@@ -1132,6 +1132,36 @@ Pilihan yang waktu itu ditawarkan dan **tidak dipilih**:
 - Memuat sprint dari database ikut batas meja server, batas meja per jaringan, dan paling banyak 10 kali per jaringan per menit. Kalau ditolak karena itu, HP tetap memegang tokennya ("coba lagi sebentar"). Sambungan yang pindah dari satu sprint ke meja lain langsung menyimpan dan melepas sprint yang ditinggal.
 - Paling banyak 40 sprint tersimpan per jaringan per minggu; kalau penuh, sprint dari jaringan itu yang belum pernah menyelesaikan satu putaran pun dibuang duluan, baru sesudahnya sprint baru ditolak ("Lanjutkan yang sudah ada"). Jadi satu-dua jaringan tidak bisa memenuhi batas 5000 untuk semua orang.
 - HP tidak membuang token sprint karena jam HP-nya sendiri (bisa meleset); token dibuang hanya kalau server bilang sprint itu sudah tidak ada. Teks konfirmasi Keluar membedakan sprint yang bisa dilanjut ("disimpan") dan yang tidak (minggunya sudah lewat, atau meja sprint 0.10.0).
+
+**Kolom Putaran di papan (permintaan pemilik 27 Nov 2026, 0.10.2):** "Di leaderboard itu ada jumlah putaran yang dimainkan." Papan sprint (Minggu ini dan Sepanjang masa) mendapat kolom **Putaran** di depan Menang: berapa putaran sprint yang selesai dimainkan orang itu di periode tersebut.
+- **Tafsiran pengembang:** hanya putaran yang **selesai** (yang memang tercatat di papan); putaran yang sedang jalan atau dijeda belum dihitung. Satu baris `sprint_putaran` = 1 putaran. Baris lama 0.8.0 (tabel `sprint`) menyimpan banyaknya putaran yang selesai di percobaan itu (kolom `putaran`, 1–5; percobaan yang ditinggal bisa kurang dari 5), jadi angka itu yang dipakai, bukan 1. Minggunya mengikuti waktu catatan seperti kolom lain.
+- Urutan bawaan papan dan juara mingguan **tidak berubah** (Putaran tidak ikut urutan bawaan). Judul Putaran bisa diketuk seperti kolom lain: putaran terbanyak di atas, yang sama banyak memakai urutan bawaan.
+- `GET /api/sprint` hanya menambah field `putaran` di tiap baris (aplikasi lama mengabaikannya; aplikasi baru yang bertemu server lama menampilkan 0). Tanpa perubahan skema: dihitung dari baris yang sudah ada (`putaranCatatan()`/`rekapSprint()` di `packages/meja/src/sprint.ts`).
+- Judul kolom yang pecah dua baris dengan tanda hubung (`TEKS_SPRINT.kolomPecah`) sempat dipakai di cabang yang sama, lalu diganti singkatan (lihat bagian berikut) sebelum dirilis.
+
+**Diubah pemilik (27 Nov 2026, 0.10.2): Sepanjang masa = minggu terbaik, 10 terbaik dan 10 terburuk, kolom #, judul disingkat.** Kata pemilik: "Sepanjang masa ... skor terbaik di setiap pekan" (contoh pemilik: minggu 1 Jos 2000; minggu 2 Jis 2100 dan Jos 700, jadi Sepanjang masa 1. Jis 2100, 2. Jos 2000), "10 terbaik dan 10 terburuk", "di paling kiri tetap ada rank-nya ... judul kolomnya ganti jadi #", "Menang = M. Mentung = Mtg, Kepentung = Kpg", dan "skor akhir tetap harus muncul". Pemilik bilang "gas". Yang berubah:
+- **Sepanjang masa tidak lagi dijumlah.** Tiap orang diwakili **minggu terbaiknya**: minggu WIB (Senin 00.00, `awalMingguWib`) dengan skor seminggu (jumlah skor putaran minggu itu) paling tinggi. Barisnya menampilkan Ptr, M, Mtg, Kpg, dan Skor minggu itu, plus label minggunya. Peringkat Sepanjang masa = skor minggu terbaik, tertinggi di atas.
+- **Minggu ini tidak berubah** (menang dulu, lalu skor).
+- **Kedua tab hanya menampilkan 10 teratas dan 10 terbawah**, dengan baris "…" di antaranya kalau orangnya lebih dari 20; kalau ≤ 20 semuanya tampil tanpa pemisah. Kalau pemain yang membuka papan tidak ada di keduanya, barisnya sendiri tampil di antaranya dengan peringkat aslinya, ditandai "kamu".
+- **Kolom paling kiri "#"** = peringkat (🥇🥈🥉 untuk 1–3). Judul lain bisa diketuk untuk mengurutkan baris yang tampil, tapi angka # tetap peringkat resmi; ketuk lagi (atau ketuk #) untuk kembali ke urutan peringkat.
+- **Judul kolom disingkat**: Ptr (putaran), M (menang), Mtg (mentung), Kpg (kepentung), Skor, dengan satu baris keterangan di bawah tabel. Skor selalu kelihatan: # dan Nama menempel di kiri, Skor di kanan, kolom tengah baru bisa digeser kalau tidak muat.
+- Juara mingguan dan piala 🏆 tidak berubah (tetap dari papan per minggu, urutan Minggu ini).
+
+**Tafsiran pengembang (27 Nov 2026, dikabarkan bersama rilis 0.10.2):**
+1. **Skor minggu terbaik yang sama:** dipilih minggu dengan menang lebih banyak, lalu minggu yang lebih baru (`terbaikMingguan()`).
+2. **Urutan Sepanjang masa:** skor minggu terbaik, lalu menang, lalu urutan sisa yang sudah ada (mentung terbanyak, kepentung tersedikit, nama) (`urutkanSprint(…, 'semua')`).
+3. **Minggu berjalan ikut dihitung langsung:** minggu yang sedang jalan bisa jadi minggu terbaik seseorang (skornya masih bisa naik atau turun sampai Senin).
+4. **Baris 0.8.0 (tabel `sprint`)** masuk minggu saat dicatat, dijumlah dengan putaran lain di minggu itu.
+5. **Peringkat = posisi** di urutan bawaan periodenya (1, 2, 3, …, tanpa peringkat bersama), supaya 10 teratas/terbawah selalu 10 baris.
+6. **10 teratas/terbawah dan baris sendiri berlaku di kedua tab** (permintaan pemilik tidak membedakan tab).
+7. **Baris sendiri dicari dari nama** (tanpa beda huruf besar/kecil, `kunciNama`, sama dengan identitas papan selama belum ada akun). Nama yang sama dengan orang lain menunjuk baris yang sama.
+8. **Pemisah "…" hanya di urutan peringkat**; kalau baris diurutkan menurut kolom lain, pemisahnya tidak ditampilkan (baris yang tampil diurutkan apa adanya).
+9. **Label minggu** pendek: "24–30 Nov", "28 Des–3 Jan", dengan tahun hanya kalau bukan tahun ini.
+10. **API:** `GET /api/sprint?v=2&nama=…` (aplikasi 0.10.2) menjawab `{v, periode, mulai, jumlah, atas, bawah, saya}` dengan `peringkat` di tiap baris. Tanpa `v=2` bentuk lama `{periode, mulai, baris}` tetap untuk aplikasi 0.8.0–0.10.1 (mereka mengurutkan sendiri dengan menang dulu, jadi Sepanjang masa mereka tampil dalam urutan lama walau barisnya minggu terbaik). Kalau orangnya lebih dari 100, yang dikirim ke bentuk lama = 100 teratas menurut urutan aplikasi lama itu (menang dulu), supaya orang yang banyak menang tidak hilang dari papan mereka.
+11. **Database (MIGRASI v10):** sesudah minggunya lewat, putaran minggu itu digulung jadi satu baris per orang per minggu di `sprint_mingguan` (jumlah putaran, menang, mentung, kepentung, skor) dan baris per putarannya dibuang dalam transaksi yang sama, saat server mulai, sesudah sprint lama ditutup, dan tiap ±10 menit. Hanya minggu sebelum minggu ini yang digulung. `sprint_tergulung` menyimpan nomor putaran terbesar yang sudah digulung per meja sprint (kode meja + waktu mulai): putaran yang nomornya sudah tergulung ditolak kalau dicatat lagi, tidak dibaca papan, dan dibuang saat menggulung. Putaran telat dari minggu yang sudah digulung (nomornya lebih besar) masuk sekali lalu ikut digulung berikutnya. Penanda meja yang mulai lebih dari 4 minggu sebelum minggu ini dan tidak ada lagi di `sprint_simpanan` maupun `meja_aktif` dibuang, supaya tabelnya tidak tumbuh terus.
+12. **Rollback:** server sebelum 0.10.2 tidak membaca `sprint_mingguan`, jadi selama rollback papannya hanya menampilkan minggu yang belum digulung, dan putaran yang ia catat ulang tidak terhitung dua kali sesudah naik lagi ke 0.10.2 (butir 11).
+
+**Penerapan (27 Nov 2026, 0.10.2):** `packages/meja/src/sprint.ts` (`ringkasMingguan`, `terbaikMingguan`, `urutkanSprint(baris, kolom, periode)`, `potongPapanSprint`, `susunPapanSprint`, `BARIS_UJUNG_SPRINT`); server `apps/server/src/sprint.ts` (`SKEMA_SPRINT_MINGGUAN`, `gulung()`, `papanV2()`, `potongBentukLama()`); aplikasi `ui/sprint.ts` (kolom #, pemisah, baris "kamu", isyarat geser), `konten/sprint.ts` (`kolomSingkat`, `legenda`, `teksMingguSprint`), Bantuan bab Sprint.
 
 ---
 

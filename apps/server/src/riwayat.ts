@@ -31,7 +31,7 @@ import {
 } from './kompetisi.js';
 import { buatPenyimpanUsulan, SKEMA_USULAN, type PenyimpanUsulan } from './usulan.js';
 import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, SKEMA_MEJA_AKTIF_TONTON, type PenyimpanMejaAktif } from './mejaAktif.js';
-import { buatPenyimpanSprint, SKEMA_SPRINT, SKEMA_SPRINT_PUTARAN, type PenyimpanSprint } from './sprint.js';
+import { buatPenyimpanSprint, SKEMA_SPRINT, SKEMA_SPRINT_MINGGUAN, SKEMA_SPRINT_PUTARAN, type PenyimpanSprint } from './sprint.js';
 import { buatPenyimpanSprintSimpanan, SKEMA_SPRINT_SIMPANAN, type PenyimpanSprintSimpanan } from './sprintSimpanan.js';
 
 export interface PermainanTersimpan {
@@ -193,6 +193,9 @@ export const MIGRASI: readonly string[] = [
   // v9 (27 Nov 2026, keputusan pemilik: sprint bisa dilanjut, reset tiap Senin): sprint yang dijeda,
   // satu baris per sprint, dikenali dari hash token HP (tokennya sendiri tidak disimpan).
   SKEMA_SPRINT_SIMPANAN,
+  // v10 (27 Nov 2026, keputusan pemilik: Sepanjang masa = minggu terbaik): putaran sprint minggu yang sudah
+  // selesai digulung jadi satu baris per orang per minggu, plus penanda putaran yang sudah digulung per meja.
+  SKEMA_SPRINT_MINGGUAN,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */
@@ -282,6 +285,13 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
   const usulan = buatPenyimpanUsulan(db);
   const mejaAktif = buatPenyimpanMejaAktif(db);
   const sprint = buatPenyimpanSprint(db);
+  // Putaran sprint minggu yang sudah selesai digulung saat database dibuka (lalu tiap detak pembersih server).
+  try {
+    const n = sprint.gulung(jam());
+    if (n) log(`sprint: ${n} putaran minggu lalu digulung`);
+  } catch (e) {
+    log('galat menggulung putaran sprint', e);
+  }
   const sprintSimpanan = buatPenyimpanSprintSimpanan(db);
 
   const tambahPermainan = db.prepare(
