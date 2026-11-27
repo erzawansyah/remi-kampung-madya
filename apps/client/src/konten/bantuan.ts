@@ -878,7 +878,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
       {
         t: 'daftar',
         butir: [
-          `Kolom: # (peringkat), Nama, ${TEKS_SPRINT.legenda}, dan Skor. Kalau tabelnya nggak muat, geser kolom tengahnya; #, Nama, dan Skor tetap kelihatan.`,
+          `Kolom: # (peringkat), Nama, Ptr (putaran), M (menang), Mtg (mentung), Kpg (kepentung), dan Skor. Kalau tabelnya nggak muat, geser kolom tengahnya; #, Nama, dan Skor tetap kelihatan.`,
           'Yang tampil 10 teratas dan 10 terbawah. Kalau kamu di antaranya, barismu ikut tampil dengan peringkatmu (tanda kamu).',
           'Ketuk judul kolom buat mengurutkan pakai kolom itu. Angka # tetap peringkat aslinya; ketuk # (atau kolom yang sama sekali lagi) buat balik ke urutan peringkat.',
         ],

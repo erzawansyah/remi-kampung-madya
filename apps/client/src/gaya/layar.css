@@ -1136,6 +1136,42 @@ table.papan-sprint tr.pemisah span {
 table.papan-sprint abbr {
   text-decoration: none;
 }
+/* HP sempit dengan teks besar: kolom #, Nama, dan jarak sel dirapatkan supaya ketujuh kolom muat di 360 px
+   (tanpa ini Skor yang menempel menutupi Kpg sebelum digeser). */
+@media (max-width: 420px) {
+  html[data-teks='besar'] .papan-sprint-gulir {
+    --lebar-no-sprint: 1.9em;
+  }
+  html[data-teks='besar'] table.papan-sprint :is(th, td) {
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+  html[data-teks='besar'] table.papan-sprint :is(th, td).kol-no {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  html[data-teks='besar'] table.papan-sprint td.kol-nama {
+    min-width: 4.5em;
+  }
+  html[data-teks='besar'] table.papan-sprint .judul-kolom {
+    padding: 0;
+  }
+  html[data-teks='besar'] table.papan-sprint .kol-skor {
+    padding-left: var(--ruang-1);
+  }
+}
+/* Isyarat masih bisa digeser (data-luap diisi pasangIsyaratGulir): bayangan di tepi dalam bagian yang
+   menempel, di sisi yang masih menyimpan kolom. */
+.papan-sprint-gulir[data-luap~='kanan'] table.papan-sprint .kol-skor {
+  box-shadow:
+    inset 1px 0 0 var(--garis),
+    -6px 0 6px -4px rgba(0, 0, 0, 0.55);
+}
+.papan-sprint-gulir[data-luap~='kiri'] table.papan-sprint .kol-nama {
+  box-shadow:
+    inset -1px 0 0 var(--garis),
+    6px 0 6px -4px rgba(0, 0, 0, 0.55);
+}
 .layar-sprint .legenda-sprint {
   margin-top: var(--ruang-1);
   font-size: var(--teks-xs);

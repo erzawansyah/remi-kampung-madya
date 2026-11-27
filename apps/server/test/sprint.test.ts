@@ -157,9 +157,11 @@ describe('penyimpan sprint (migrasi v7 dan v8)', () => {
 describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 2026)', () => {
   const MG = 7 * HARI;
   const SENIN = awalMingguWib(Date.UTC(2026, 10, 25, 5));
+  // Waktu mulai meja yang wajar (penanda sprint_tergulung dibuang kalau mejanya mulai > 4 minggu lalu).
+  const MULAI = SENIN - 2 * MG - HARI;
   const c = (kode: string, putaran: number, nama: string, waktu: number, skor: number, menang = false, mentung = 0, kepentung = 0) => ({
     kode,
-    mulaiPada: 1000,
+    mulaiPada: MULAI,
     putaran,
     nama,
     waktu,
@@ -274,6 +276,73 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
       { nama: 'Ani', putaran: 1, menang: 0, mentung: 0, kepentung: 0, skor: 20, piala: 1, minggu: SENIN },
     ]);
     r2.tutup();
+  });
+
+  it('rollback lalu naik lagi: putaran yang sudah digulung lalu dicatat ulang server lama tidak terhitung dua kali', () => {
+    const db = new DatabaseSync(':memory:');
+    const r = bukaRiwayat(db);
+    const sekarang = SENIN + HARI;
+    r.sprint.catat(c('AAAAA', 1, 'Ani', SENIN - MG + HARI, 100, true));
+    r.sprint.catat(c('AAAAA', 2, 'Ani', SENIN - MG + 2 * HARI, 50));
+    expect(r.sprint.gulung(sekarang)).toBe(2);
+    const sebelum = r.sprint.papan('semua', sekarang);
+    // Server sebelum 0.10.2 (INSERT OR IGNORE biasa, tanpa memeriksa sprint_tergulung) mencatat ulang
+    // putaran 2 (meja yang dipulihkan dengan putaranTercatat tertinggal), juga satu di minggu ini.
+    const lama = db.prepare(
+      `INSERT OR IGNORE INTO sprint_putaran (kode_meja, mulai_pada, putaran, nama, kunci_nama, waktu, skor, menang, mentung, kepentung)
+       VALUES (?, ?, ?, 'Ani', 'ani', ?, ?, 0, 0, 0)`,
+    );
+    lama.run('AAAAA', MULAI, 2, SENIN - MG + 2 * HARI, 50);
+    lama.run('AAAAA', MULAI, 1, SENIN + 1000, 100);
+    r.sprint.catat(c('ZZZZZ', 1, 'Budi', SENIN + 2000, 1)); // catatan baru = cache dikosongkan
+    // Papan tidak membaca baris yang nomornya sudah tergulung.
+    expect(r.sprint.papan('semua', sekarang).baris.find((b) => b.nama === 'Ani')).toEqual(sebelum.baris[0]);
+    expect(r.sprint.papan('minggu', sekarang).baris.map((b) => b.nama)).toEqual(['Budi']);
+    // Menggulung lagi: kedua baris itu dibuang tanpa dijumlah.
+    r.sprint.gulung(sekarang);
+    expect(ringkasan(db)).toEqual([{ minggu: SENIN - MG, kunci_nama: 'ani', nama: 'Ani', putaran: 2, menang: 1, mentung: 0, kepentung: 0, skor: 150 }]);
+    expect(barisSprint(db).map((x) => [x.kode_meja, x.putaran])).toEqual([['ZZZZZ', 1]]);
+    r.tutup();
+    db.close();
+  });
+
+  it('penanda sprint_tergulung yang lama dibuang, kecuali mejanya masih bisa mencatat', () => {
+    const db = new DatabaseSync(':memory:');
+    const r = bukaRiwayat(db);
+    const tambah = db.prepare('INSERT INTO sprint_tergulung (kode_meja, mulai_pada, putaran_sampai) VALUES (?, ?, 3)');
+    tambah.run('LAMA1', SENIN - 5 * MG); // lama, tidak ada di mana-mana: dibuang
+    tambah.run('LAMA2', SENIN - 5 * MG); // lama, tapi masih di sprint_simpanan
+    tambah.run('LAMA3', SENIN - 5 * MG); // lama, tapi masih di meja_aktif
+    tambah.run('BARU1', SENIN - 3 * MG); // belum lewat PENANDA_GULUNG_MINGGU minggu
+    db.prepare(
+      "INSERT INTO sprint_simpanan (token_hash, kode, minggu, dibuat_pada, diperbarui_pada) VALUES ('h', 'LAMA2', 0, 0, 0)",
+    ).run();
+    db.prepare("INSERT INTO meja_aktif (kode, data, diperbarui_pada) VALUES ('LAMA3', '{}', 0)").run();
+    r.sprint.gulung(SENIN + HARI);
+    expect(db.prepare('SELECT kode_meja FROM sprint_tergulung ORDER BY kode_meja').all().map((x) => x.kode_meja)).toEqual([
+      'BARU1',
+      'LAMA2',
+      'LAMA3',
+    ]);
+    r.tutup();
+    db.close();
+  });
+
+  it('bentuk lama dengan lebih dari 100 orang: yang dipilih = 100 teratas menurut urutan aplikasi lama (menang dulu)', () => {
+    const db = new DatabaseSync(':memory:');
+    const r = bukaRiwayat(db);
+    const sekarang = SENIN + HARI;
+    // 110 orang skor 1000..; satu orang banyak menang tapi skor minggu terbaiknya paling rendah.
+    for (let i = 1; i <= 110; i++) r.sprint.catat(c(`K${String(i).padStart(4, '0')}`, 1, `Orang ${i}`, SENIN + i, 2000 - i));
+    for (let k = 1; k <= 5; k++) r.sprint.catat(c('MMMMM', k, 'Menang Terus', SENIN + 1000 + k, -100, true));
+    const lama = r.sprint.papan('semua', sekarang);
+    expect(lama.baris).toHaveLength(MAKS_BARIS_SPRINT);
+    expect(lama.baris.some((b) => b.nama === 'Menang Terus')).toBe(true);
+    // Urutan kirimnya tetap urutan Sepanjang masa (skor dulu): dia di paling bawah.
+    expect(lama.baris.at(-1)?.nama).toBe('Menang Terus');
+    expect(lama.baris[0].nama).toBe('Orang 1');
+    r.tutup();
+    db.close();
   });
 
   it('papanV2: 10 teratas, 10 terbawah, baris sendiri di antaranya (nama tanpa beda huruf besar/kecil)', () => {

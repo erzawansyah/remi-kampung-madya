@@ -24,6 +24,7 @@ import {
 import { ariaMingguSprint, ariaPiala, TEKS_SPRINT as T, teksLanjutSprint, teksMingguSprint, teksPiala } from '../konten/sprint';
 import { simpan } from '../penyimpanan';
 import { esc, konfirmasi, toast } from './dom';
+import { pasangIsyaratGulir } from './riwayat';
 import { angkaSkor } from './rincianSkor';
 
 export type { PeriodeSprint };
@@ -111,10 +112,13 @@ export function rapikanPapanSprint(x: unknown, namaSaya?: string): PapanSprint |
   return { periode, mulai, ...potongPapanSprint(urutkanSprint(baris, null, periode), namaSaya) };
 }
 
-/** Piala juara mingguan di samping nama. */
+/**
+ * Piala juara mingguan di samping nama. Spasinya tidak bisa dipatahkan (U+00A0), supaya piala tetap di
+ * baris kata terakhir nama, tidak turun sendirian ke baris baru.
+ */
 export function htmlPialaSprint(n: number): string {
   const teks = teksPiala(n);
-  return teks ? ` <span class="piala" role="img" aria-label="${esc(ariaPiala(n))}">${teks}</span>` : '';
+  return teks ? `\u00a0<span class="piala" role="img" aria-label="${esc(ariaPiala(n))}">${teks}</span>` : '';
 }
 
 /** Nomor di kolom #: 🥇🥈🥉 untuk peringkat 1–3, selain itu angkanya. */
@@ -239,6 +243,9 @@ export function renderSprint(akar: HTMLElement, aksi: AksiSprint): SprintTerpasa
   const tampil = () => {
     if (!data) return;
     papanEl.innerHTML = htmlPapanSprint(data, kolom, namaSaya);
+    // Isyarat "masih bisa digeser" (data-luap): bayangan di tepi kolom yang menempel (layar.css).
+    const gulir = papanEl.querySelector<HTMLElement>('.papan-sprint-gulir');
+    if (gulir) pasangIsyaratGulir(gulir);
   };
   papanEl.addEventListener('click', (e) => {
     const b = (e.target as Element | null)?.closest<HTMLElement>('[data-kolom]');

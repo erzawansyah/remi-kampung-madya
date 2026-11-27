@@ -89,6 +89,8 @@ describe('papan sprint (htmlPapanSprint)', () => {
     expect(budi.querySelector('.piala')!.textContent).toBe(teksPiala(2));
     expect(budi.querySelector('.piala')!.textContent).toBe('🏆2');
     expect(budi.querySelector('.piala')!.getAttribute('aria-label')).toBe('juara sprint mingguan 2 kali');
+    // Piala menempel di kata terakhir nama (spasi tak terpatah), tidak turun sendirian ke baris baru.
+    expect(budi.querySelector('.piala')!.previousSibling!.textContent).toBe('\u00a0');
     expect(d.querySelectorAll('tbody tr')[2]!.querySelector('.piala')!.textContent).toBe('🏆');
     expect(d.querySelectorAll('tbody tr')[1]!.querySelector('.piala')).toBeNull();
     const saya = d.querySelectorAll('tbody tr.saya');
@@ -111,7 +113,9 @@ describe('papan sprint (htmlPapanSprint)', () => {
     expect([...d.querySelectorAll('thead abbr')].map((x) => x.getAttribute('title'))).toEqual(['Peringkat', 'Putaran', 'Menang', 'Mentung', 'Kepentung', 'Skor']);
     expect(KOLOM_SPRINT.map((k) => TEKS_SPRINT.kolomSingkat[k])).toEqual(['Ptr', 'M', 'Mtg', 'Kpg', 'Skor']);
     // Keterangan singkatan satu baris di bawah tabel.
-    expect(d.querySelector('.legenda-sprint')!.textContent).toBe('Ptr = putaran · M = menang · Mtg = mentung · Kpg = kepentung');
+    // Spasi di sekitar "=" dan sebelum "·" tak terpatah: baris hanya pindah sesudah "·".
+    expect(d.querySelector('.legenda-sprint')!.textContent!.replace(/\u00a0/g, ' ')).toBe('Ptr = putaran · M = menang · Mtg = mentung · Kpg = kepentung');
+    expect(TEKS_SPRINT.legenda.split(' ')).toEqual(['Ptr\u00a0=\u00a0putaran\u00a0·', 'M\u00a0=\u00a0menang\u00a0·', 'Mtg\u00a0=\u00a0mentung\u00a0·', 'Kpg\u00a0=\u00a0kepentung']);
     // Isi sel per baris sesuai judulnya.
     expect([...budi.querySelectorAll('td')].map((td) => td.textContent).slice(2)).toEqual(['4', '3', '1', '2', '−50']);
     // Urutan peringkat aktif: # yang diberi aria-sort.
@@ -290,6 +294,16 @@ describe('layar Sprint (renderSprint)', () => {
     akar.querySelector<HTMLButtonElement>('[data-kolom="peringkat"]')!.click();
     expect(namaBaris(akar)).toEqual(['Budi', 'Ani', 'Cici']);
     expect(document.activeElement?.getAttribute('data-kolom')).toBe('peringkat');
+    // Isyarat masih bisa digeser (data-luap, bayangan di tepi kolom yang menempel) ikut lebar tabel.
+    const gulir = akar.querySelector<HTMLElement>('.papan-sprint-gulir')!;
+    expect(gulir.hasAttribute('data-luap')).toBe(false);
+    Object.defineProperty(gulir, 'scrollWidth', { configurable: true, get: () => 340 });
+    Object.defineProperty(gulir, 'clientWidth', { configurable: true, get: () => 318 });
+    gulir.dispatchEvent(new Event('scroll'));
+    expect(gulir.getAttribute('data-luap')).toBe('kanan');
+    gulir.scrollLeft = 22;
+    gulir.dispatchEvent(new Event('scroll'));
+    expect(gulir.getAttribute('data-luap')).toBe('kiri');
     // Main sprint: aksi dipanggil sekali, tombolnya menunggu.
     const tombol = akar.querySelector<HTMLButtonElement>('#main-sprint')!;
     expect(tombol.textContent).toBe(TEKS_SPRINT.tombolMain);

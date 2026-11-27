@@ -15,6 +15,7 @@ import {
   rekapSprint,
   ringkasMingguan,
   terbaikMingguan,
+  urutkanSprint,
   type BarisPeringkatSprint,
   type BarisSprint,
   type CatatanSprint,
@@ -102,6 +103,14 @@ export const SKEMA_SPRINT_MINGGUAN = `
 export type { PeriodeSprint };
 
 
+/** Syarat SQL: baris sprint_putaran ini nomor putarannya sudah masuk sprint_mingguan (sprint_tergulung). */
+const SUDAH_TERGULUNG = `SELECT 1 FROM sprint_tergulung t WHERE t.kode_meja = sprint_putaran.kode_meja
+  AND t.mulai_pada = sprint_putaran.mulai_pada AND t.putaran_sampai >= sprint_putaran.putaran`;
+
+const MINGGU_MS = 7 * 24 * 60 * 60 * 1000;
+/** Penanda sprint_tergulung disimpan paling sedikit sekian minggu sesudah mejanya mulai. */
+export const PENANDA_GULUNG_MINGGU = 4;
+
 /** Baris papan paling banyak di jawaban API. */
 export const MAKS_BARIS_SPRINT = 100;
 
@@ -148,6 +157,17 @@ export interface PenyimpanSprint {
   peringkatMinggu(nama: string, sekarang: number): number | null;
 }
 
+/**
+ * Potong papan bentuk lama ke MAKS_BARIS_SPRINT baris. Aplikasi 0.8.0–0.10.1 mengurutkan sendiri dengan
+ * menang lebih dulu (urutkanSprint bawaan), jadi yang dipilih = 100 baris teratas menurut urutan itu; urutan
+ * kirimnya tetap urutan bawaan periodenya. Papan dengan ≤ 100 orang tidak berubah.
+ */
+export function potongBentukLama(baris: readonly BarisSprint[]): BarisSprint[] {
+  if (baris.length <= MAKS_BARIS_SPRINT) return [...baris];
+  const pilih = new Set(urutkanSprint(baris, null, 'minggu').slice(0, MAKS_BARIS_SPRINT));
+  return baris.filter((b) => pilih.has(b));
+}
+
 /** Nama pemain dari parameter URL papan (`nama=`): dipotong 60 huruf; kosong = null. Hanya untuk mencari barisnya. */
 export function rapikanNamaPapan(x: unknown): string | null {
   if (typeof x !== 'string') return null;
@@ -177,7 +197,20 @@ export function buatPenyimpanSprint(db: DatabaseSync): PenyimpanSprint {
      SELECT nama, kunci_nama, waktu, menang, skor, mentung, kepentung, putaran, 1 AS sumber, rowid AS id FROM sprint_mingguan
      UNION ALL
      SELECT nama, kunci_nama, waktu, menang, skor, mentung, kepentung, 1 AS putaran, 2 AS sumber, id FROM sprint_putaran
+     WHERE NOT EXISTS (${SUDAH_TERGULUNG})
      ORDER BY waktu, sumber, id`,
+  );
+  // Putaran yang nomornya sudah masuk sprint_mingguan tapi barisnya ada lagi di sprint_putaran: hanya bisa
+  // terjadi kalau server versi sebelum 0.10.2 (yang tidak memeriksa sprint_tergulung) sempat mencatatnya
+  // ulang sesudah rollback. Tidak dibaca papan dan dibuang saat menggulung, jadi tidak terhitung dua kali.
+  const buangTergulung = db.prepare(`DELETE FROM sprint_putaran WHERE EXISTS (${SUDAH_TERGULUNG})`);
+  // Penanda meja yang sudah lama (mulai lebih dari PENANDA_GULUNG_MINGGU minggu sebelum minggu ini) dan
+  // tidak bisa mencatat lagi (tidak ada di sprint_simpanan maupun meja_aktif) dibuang, supaya tabelnya
+  // tidak tumbuh terus.
+  const buangPenanda = db.prepare(
+    `DELETE FROM sprint_tergulung WHERE mulai_pada < ?
+       AND NOT EXISTS (SELECT 1 FROM sprint_simpanan s WHERE s.kode = sprint_tergulung.kode_meja)
+       AND NOT EXISTS (SELECT 1 FROM meja_aktif a WHERE a.kode = sprint_tergulung.kode_meja)`,
   );
   const ambilLewat = db.prepare(
     'SELECT kode_meja, mulai_pada, putaran, nama, kunci_nama, waktu, menang, skor, mentung, kepentung FROM sprint_putaran WHERE waktu < ? ORDER BY waktu, id',
@@ -263,7 +296,7 @@ export function buatPenyimpanSprint(db: DatabaseSync): PenyimpanSprint {
     },
     papan(periode, sekarang) {
       const { mulai, baris } = hitung(periode, sekarang);
-      return { periode, mulai, baris: baris.slice(0, MAKS_BARIS_SPRINT) };
+      return { periode, mulai, baris: potongBentukLama(baris) };
     },
     papanV2(periode, sekarang, namaSaya) {
       const { mulai, baris } = hitung(periode, sekarang);
@@ -272,6 +305,8 @@ export function buatPenyimpanSprint(db: DatabaseSync): PenyimpanSprint {
     gulung(sekarang) {
       const batas = awalMingguWib(sekarang);
       const n = transaksi(() => {
+        buangTergulung.run();
+        buangPenanda.run(batas - PENANDA_GULUNG_MINGGU * MINGGU_MS);
         const xs = ambilLewat.all(batas) as Record<string, number | string>[];
         if (!xs.length) return 0;
         const catatan: PercobaanSprint[] = xs.map((b) => ({

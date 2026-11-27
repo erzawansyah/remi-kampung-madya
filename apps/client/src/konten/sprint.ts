@@ -37,8 +37,11 @@ export const TEKS_SPRINT = {
   kolom: { putaran: 'Putaran', menang: 'Menang', mentung: 'Mentung', kepentung: 'Kepentung', skor: 'Skor' } satisfies Record<KolomSprint, string>,
   /** Judul kolom yang tampil (27 Nov 2026, "Menang = M. Mentung = Mtg, Kepentung = Kpg"). */
   kolomSingkat: { putaran: 'Ptr', menang: 'M', mentung: 'Mtg', kepentung: 'Kpg', skor: 'Skor' } satisfies Record<KolomSprint, string>,
-  /** Satu baris di bawah tabel: arti singkatan judul kolom. */
-  legenda: 'Ptr = putaran · M = menang · Mtg = mentung · Kpg = kepentung',
+  /**
+   * Satu baris di bawah tabel: arti singkatan judul kolom. Spasi di sekitar "=" tidak bisa dipatahkan
+   * (U+00A0), begitu juga sebelum "·", jadi baris hanya pindah sesudah "·", tidak di antara singkatan dan artinya.
+   */
+  legenda: 'Ptr\u00a0=\u00a0putaran\u00a0· M\u00a0=\u00a0menang\u00a0· Mtg\u00a0=\u00a0mentung\u00a0· Kpg\u00a0=\u00a0kepentung',
   /** Baris pemisah di antara 10 teratas, baris sendiri, dan 10 terbawah (untuk pembaca layar). */
   ariaPemisah: 'Sebagian peringkat dilewati',
   memuat: 'Memuat papan…',
