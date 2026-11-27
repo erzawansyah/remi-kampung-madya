@@ -865,7 +865,8 @@ class Aplikasi implements AppUntukMeja {
         // Kursinya dipegang tab/perangkat lain: sesi disimpan (bisa masuk lagi lewat kode), tapi jangan
         // disambung ulang sendiri, nanti saling rebut.
         if (ditendang) this.sesiDitendang = true;
-        // Meja sprint ditutup dari HP lain ("Mulai dari 0") atau sudah lewat minggunya: ke layar Sprint.
+        // Meja sprint ditutup server (dijeda, sudah lewat minggunya, atau dari server 0.10.1–0.10.2 yang masih
+        // punya "Mulai dari 0"): ke layar Sprint.
         if (this.info?.sprint === true && !this.tontonan) {
           toast(p.alasan);
           this.keluarMeja(!ditendang, undefined, true);
@@ -1176,19 +1177,19 @@ class Aplikasi implements AppUntukMeja {
         this.tampilkanBeranda();
         this.beranda?.fokusNav('sprint');
       },
-      main: (ganti) => this.mulaiSprint(ganti),
+      main: () => this.mulaiSprint(),
       lanjut: (token) => this.lanjutSprint(token),
     });
     this.pastikanJaga();
   }
 
   /**
-   * Meja sprint baru: server membuat mejanya dan langsung memulai permainan. `ganti` ("Mulai dari 0") = token
-   * sprint HP ini yang ditutup dulu.
+   * Meja sprint baru: server membuat mejanya dan langsung memulai permainan. Hanya kalau HP ini belum punya
+   * sprint minggu ini (tanpa "Mulai dari 0" sejak 0.10.3).
    */
-  private mulaiSprint(ganti?: string) {
+  private mulaiSprint() {
     this.sesiDitendang = false;
-    this.kirimOnline({ t: 'sprint', nama: simpan.nama() || 'Pemain', ...(ganti ? { ganti } : {}) });
+    this.kirimOnline({ t: 'sprint', nama: simpan.nama() || 'Pemain' });
   }
 
   /** Lanjutkan sprint HP ini (27 Nov 2026): server memuat permainan yang sama dan mengirim `masuk`. */

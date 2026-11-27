@@ -11,7 +11,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import type { ViewPemain } from '@remi/engine';
 import { awalMingguWib, hasilPutaranSprint, TEKS_SPRINT_TERKUNCI } from '@remi/meja';
 import { bukaRiwayat, MIGRASI, type PenyimpanRiwayat } from '../src/riwayat.js';
-import { MAKS_BARIS_SPRINT, SKEMA_SPRINT, SKEMA_SPRINT_MINGGUAN, SKEMA_SPRINT_PUTARAN, type PapanSprint, type PapanSprintV2 } from '../src/sprint.js';
+import { MAKS_BARIS_SPRINT, SKEMA_SPRINT, SKEMA_SPRINT_LANJUT, SKEMA_SPRINT_MINGGUAN, SKEMA_SPRINT_PUTARAN, type PapanSprint, type PapanSprintV2 } from '../src/sprint.js';
 import { SKEMA_SPRINT_SIMPANAN } from '../src/sprintSimpanan.js';
 import { jalankanServer, UMUR_MAKS_SIMPANAN_MEJA_MS, type OpsiServer, type ServerRemi } from '../src/server.js';
 import {
@@ -93,8 +93,9 @@ function hasilDariView(v: ViewPemain, i: number, k: number) {
 const HARI = 86_400_000;
 
 describe('penyimpan sprint (migrasi v7 dan v8)', () => {
-  it('v8 = tabel sprint_putaran; putaran yang sama tercatat sekali; baris v7 (0.8.0) ikut dijumlah; minggu per waktu putaran', () => {
-    expect(MIGRASI.length).toBe(10);
+  it('v8 = tabel sprint_putaran; putaran yang sama tercatat sekali; baris v7 (0.8.0) tidak dibaca papan (0.10.3); minggu per waktu putaran', () => {
+    expect(MIGRASI.length).toBe(11);
+    expect(MIGRASI[10]).toBe(SKEMA_SPRINT_LANJUT);
     expect(MIGRASI[9]).toBe(SKEMA_SPRINT_MINGGUAN);
     expect(MIGRASI[6]).toBe(SKEMA_SPRINT);
     expect(MIGRASI[7]).toBe(SKEMA_SPRINT_PUTARAN);
@@ -118,36 +119,36 @@ describe('penyimpan sprint (migrasi v7 dan v8)', () => {
       mentung,
       kepentung,
     });
-    expect(r.sprint.catat(c('AAAAA', 1, 'Ani', senin - 2 * HARI, true, 80, 1))).toBe(true);
+    expect(r.sprint.catat(c('AAAAA', 1, 'Ani', senin - 2 * HARI, true, 80, 1), true)).toBe(true);
     // Putaran yang sama (kode + waktu mulai + nomor putaran) tidak tercatat dua kali.
-    expect(r.sprint.catat(c('AAAAA', 1, 'Ani', senin - 2 * HARI, true, 80, 1))).toBe(false);
+    expect(r.sprint.catat(c('AAAAA', 1, 'Ani', senin - 2 * HARI, true, 80, 1), true)).toBe(false);
     // Minggu 23.59 WIB: masih minggu lalu; putaran berikutnya di meja yang sama selesai Senin 00.00 WIB.
-    expect(r.sprint.catat(c('AAAAA', 2, 'Ani', senin - 60_000, false, -40, 0, 1))).toBe(true);
-    expect(r.sprint.catat(c('AAAAA', 3, 'ani', senin, true, 25))).toBe(true);
-    r.sprint.catat(c('BBBBB', 1, 'budi', senin + 3_600_000, true, 10, 0, 0));
-    r.sprint.catat(c('BBBBB', 2, 'Budi', senin + 7_200_000, false, -100, 0, 1));
+    expect(r.sprint.catat(c('AAAAA', 2, 'Ani', senin - 60_000, false, -40, 0, 1), true)).toBe(true);
+    expect(r.sprint.catat(c('AAAAA', 3, 'ani', senin, true, 25), true)).toBe(true);
+    r.sprint.catat(c('BBBBB', 1, 'budi', senin + 3_600_000, true, 10, 0, 0), true);
+    r.sprint.catat(c('BBBBB', 2, 'Budi', senin + 7_200_000, false, -100, 0, 1), true);
     const sekarang = senin + HARI;
     const minggu = r.sprint.papan('minggu', sekarang);
     expect(minggu).toMatchObject({ periode: 'minggu', mulai: senin });
-    // Minggu lalu: Budi menang 1 (percobaan lama) dan Ani menang 1; skor Budi lebih tinggi, jadi Budi juara.
+    // Minggu lalu: percobaan 0.8.0 Budi tidak dihitung (0.10.3), jadi Ani satu-satunya dan juara.
     expect(minggu.baris).toEqual([
-      { nama: 'ani', putaran: 1, menang: 1, mentung: 0, kepentung: 0, skor: 25, piala: 0 },
-      { nama: 'Budi', putaran: 2, menang: 1, mentung: 0, kepentung: 1, skor: -90, piala: 1 },
+      { nama: 'ani', putaran: 1, menang: 1, mentung: 0, kepentung: 0, skor: 25, piala: 1 },
+      { nama: 'Budi', putaran: 2, menang: 1, mentung: 0, kepentung: 1, skor: -90, piala: 0 },
     ]);
-    // Sepanjang masa (27 Nov 2026): minggu terbaik tiap orang. Budi: minggu lalu (percobaan 0.8.0, 5 putaran,
-    // 300) lebih baik dari minggu ini (−90); Ani: minggu lalu 80 − 40 = 40 lebih baik dari minggu ini 25.
+    // Sepanjang masa (27 Nov 2026): minggu terbaik tiap orang. Ani: minggu lalu 80 − 40 = 40 lebih baik dari
+    // minggu ini 25; Budi hanya minggu ini (percobaan 0.8.0 tidak dibaca).
     expect(r.sprint.papan('semua', sekarang)).toEqual({
       periode: 'semua',
       mulai: null,
       baris: [
-        { nama: 'Budi', putaran: 5, menang: 1, mentung: 2, kepentung: 1, skor: 300, piala: 1, minggu: senin - 7 * HARI },
-        { nama: 'ani', putaran: 2, menang: 1, mentung: 1, kepentung: 1, skor: 40, piala: 0, minggu: senin - 7 * HARI },
+        { nama: 'ani', putaran: 2, menang: 1, mentung: 1, kepentung: 1, skor: 40, piala: 1, minggu: senin - 7 * HARI },
+        { nama: 'Budi', putaran: 2, menang: 1, mentung: 0, kepentung: 1, skor: -90, piala: 0, minggu: senin },
       ],
     });
     expect(r.sprint.peringkatMinggu('BUDI', sekarang)).toBe(2);
     expect(r.sprint.peringkatMinggu('Cici', sekarang)).toBeNull();
     expect(jumlahBarisLama(db)).toBe(1);
-    for (let i = 0; i < MAKS_BARIS_SPRINT + 5; i++) r.sprint.catat(c(`X${String(i).padStart(4, '0')}`, 1, `Orang ${i}`, sekarang, false, i));
+    for (let i = 0; i < MAKS_BARIS_SPRINT + 5; i++) r.sprint.catat(c(`X${String(i).padStart(4, '0')}`, 1, `Orang ${i}`, sekarang, false, i), true);
     expect(r.sprint.papan('semua', sekarang).baris).toHaveLength(MAKS_BARIS_SPRINT);
     r.tutup();
     db.close();
@@ -171,15 +172,15 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
     kepentung,
   });
   const ringkasan = (db: DatabaseSync) =>
-    db.prepare('SELECT minggu, kunci_nama, nama, putaran, menang, mentung, kepentung, skor FROM sprint_mingguan ORDER BY minggu, kunci_nama').all().map((x) => ({ ...x }));
+    db.prepare('SELECT minggu, kunci_nama, nama, putaran, menang, mentung, kepentung, skor FROM sprint_mingguan_lanjut ORDER BY minggu, kunci_nama').all().map((x) => ({ ...x }));
 
-  it('contoh pemilik: minggu 1 Jos 2000; minggu 2 Jis 2100, Jos 700 → Jis lalu Jos; minggu berjalan ikut; baris v7 ikut minggunya', () => {
+  it('contoh pemilik: minggu 1 Jos 2000; minggu 2 Jis 2100, Jos 700 → Jis lalu Jos; minggu berjalan ikut; baris v7 tidak dibaca', () => {
     const db = new DatabaseSync(':memory:');
     const r = bukaRiwayat(db);
-    r.sprint.catat(c('JOS01', 1, 'Jos', SENIN - MG + HARI, 1500, true));
-    r.sprint.catat(c('JOS01', 2, 'Jos', SENIN - MG + 2 * HARI, 500, true));
-    r.sprint.catat(c('JIS01', 1, 'Jis', SENIN + HARI, 2100, true));
-    r.sprint.catat(c('JOS02', 1, 'jos', SENIN + HARI, 700));
+    r.sprint.catat(c('JOS01', 1, 'Jos', SENIN - MG + HARI, 1500, true), true);
+    r.sprint.catat(c('JOS01', 2, 'Jos', SENIN - MG + 2 * HARI, 500, true), true);
+    r.sprint.catat(c('JIS01', 1, 'Jis', SENIN + HARI, 2100, true), true);
+    r.sprint.catat(c('JOS02', 1, 'jos', SENIN + HARI, 700), true);
     // Percobaan 0.8.0 tiga minggu lalu: 1900, tidak mengalahkan 2000.
     db.prepare(
       `INSERT INTO sprint (kode_meja, mulai_pada, nama, kunci_nama, waktu, putaran, skor, menang, mentung, kepentung, selesai)
@@ -197,10 +198,10 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
       ['Jis', 2100],
       ['jos', 700],
     ]);
-    // Percobaan 0.8.0 jadi minggu terbaik kalau skornya lebih tinggi.
+    // Percobaan 0.8.0 tidak pernah jadi minggu terbaik, walau skornya lebih tinggi (0.10.3).
     db.prepare("UPDATE sprint SET skor = 2500").run();
-    r.sprint.catat(c('JIS01', 2, 'Jis', SENIN + HARI + 1, 0)); // catatan baru = cache dikosongkan
-    expect(r.sprint.papan('semua', sekarang).baris.find((b) => b.nama === 'jos')).toMatchObject({ skor: 2500, putaran: 5, minggu: SENIN - 3 * MG });
+    r.sprint.catat(c('JIS01', 2, 'Jis', SENIN + HARI + 1, 0), true); // catatan baru = cache dikosongkan
+    expect(r.sprint.papan('semua', sekarang).baris.find((b) => b.nama === 'jos')).toMatchObject({ skor: 2000, putaran: 2, minggu: SENIN - MG });
     r.tutup();
     db.close();
   });
@@ -209,13 +210,13 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
     const db = new DatabaseSync(':memory:');
     const r = bukaRiwayat(db);
     // Dua minggu lalu dan minggu lalu, beberapa meja; minggu ini juga.
-    r.sprint.catat(c('AAAAA', 1, 'ani', SENIN - 2 * MG + HARI, 50, true, 1));
-    r.sprint.catat(c('AAAAA', 2, 'Ani', SENIN - 2 * MG + 2 * HARI, -20, false, 0, 1));
-    r.sprint.catat(c('BBBBB', 1, 'Ani', SENIN - MG + HARI, 300, true));
-    r.sprint.catat(c('CCCCC', 1, 'Budi', SENIN - MG + HARI, 90, true));
-    r.sprint.catat(c('CCCCC', 2, 'Budi', SENIN - 60_000, 10, false, 1));
+    r.sprint.catat(c('AAAAA', 1, 'ani', SENIN - 2 * MG + HARI, 50, true, 1), true);
+    r.sprint.catat(c('AAAAA', 2, 'Ani', SENIN - 2 * MG + 2 * HARI, -20, false, 0, 1), true);
+    r.sprint.catat(c('BBBBB', 1, 'Ani', SENIN - MG + HARI, 300, true), true);
+    r.sprint.catat(c('CCCCC', 1, 'Budi', SENIN - MG + HARI, 90, true), true);
+    r.sprint.catat(c('CCCCC', 2, 'Budi', SENIN - 60_000, 10, false, 1), true);
     // Meja CCCCC lanjut lewat Senin 00.00 WIB: putaran 3 masuk minggu ini dan tidak digulung.
-    r.sprint.catat(c('CCCCC', 3, 'Budi', SENIN + 60_000, 5));
+    r.sprint.catat(c('CCCCC', 3, 'Budi', SENIN + 60_000, 5), true);
     const sekarang = SENIN + HARI;
     const sebelum = { m: r.sprint.papan('minggu', sekarang), s: r.sprint.papan('semua', sekarang), p: r.sprint.peringkatMinggu('budi', sekarang) };
     expect(r.sprint.gulung(sekarang)).toBe(5);
@@ -242,15 +243,15 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
     expect(r.sprint.gulung(sekarang + 3 * HARI)).toBe(0);
     expect(ringkasan(db)).toHaveLength(3);
     // Putaran yang sudah digulung dicatat lagi (restart, pencatatan ulang): ditolak, tidak terhitung dua kali.
-    expect(r.sprint.catat(c('AAAAA', 2, 'Ani', SENIN - 2 * MG + 2 * HARI, -20))).toBe(false);
-    expect(r.sprint.catat(c('CCCCC', 1, 'Budi', SENIN - MG + HARI, 90, true))).toBe(false);
+    expect(r.sprint.catat(c('AAAAA', 2, 'Ani', SENIN - 2 * MG + 2 * HARI, -20), true)).toBe(false);
+    expect(r.sprint.catat(c('CCCCC', 1, 'Budi', SENIN - MG + HARI, 90, true), true)).toBe(false);
     // Putaran telat dari minggu yang sudah digulung (meja yang dipulihkan mencatat belakangan): masuk sekali.
-    expect(r.sprint.catat(c('CCCCC', 3, 'Budi', SENIN + 60_000, 5))).toBe(false); // sudah ada (belum digulung)
-    expect(r.sprint.catat(c('BBBBB', 2, 'Ani', SENIN - MG + 3 * HARI, 40, true))).toBe(true);
-    expect(r.sprint.catat(c('BBBBB', 2, 'Ani', SENIN - MG + 3 * HARI, 40, true))).toBe(false);
+    expect(r.sprint.catat(c('CCCCC', 3, 'Budi', SENIN + 60_000, 5), true)).toBe(false); // sudah ada (belum digulung)
+    expect(r.sprint.catat(c('BBBBB', 2, 'Ani', SENIN - MG + 3 * HARI, 40, true), true)).toBe(true);
+    expect(r.sprint.catat(c('BBBBB', 2, 'Ani', SENIN - MG + 3 * HARI, 40, true), true)).toBe(false);
     expect(r.sprint.papan('semua', sekarang).baris[0]).toMatchObject({ nama: 'Ani', skor: 340, putaran: 2, menang: 2 });
     expect(r.sprint.gulung(sekarang)).toBe(1);
-    expect(r.sprint.catat(c('BBBBB', 2, 'Ani', SENIN - MG + 3 * HARI, 40, true))).toBe(false);
+    expect(r.sprint.catat(c('BBBBB', 2, 'Ani', SENIN - MG + 3 * HARI, 40, true), true)).toBe(false);
     expect(ringkasan(db)[1]).toEqual({ minggu: SENIN - MG, kunci_nama: 'ani', nama: 'Ani', putaran: 2, menang: 2, mentung: 0, kepentung: 0, skor: 340 });
     expect(r.sprint.papan('semua', sekarang).baris[0]).toMatchObject({ nama: 'Ani', skor: 340, putaran: 2, menang: 2 });
     // Minggu berganti: minggu ini ikut digulung; papan Sepanjang masa tetap sama.
@@ -265,8 +266,8 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
   it('gulung saat database dibuka (server mulai), dengan log', () => {
     const path = dbBaru();
     const r1 = bukaRiwayat(path, { sekarang: () => SENIN + HARI });
-    r1.sprint.catat(c('AAAAA', 1, 'Ani', SENIN - HARI, 10));
-    r1.sprint.catat(c('AAAAA', 2, 'Ani', SENIN + 60_000, 20));
+    r1.sprint.catat(c('AAAAA', 1, 'Ani', SENIN - HARI, 10), true);
+    r1.sprint.catat(c('AAAAA', 2, 'Ani', SENIN + 60_000, 20), true);
     r1.tutup();
     const log: string[] = [];
     const r2 = bukaRiwayat(path, { sekarang: () => SENIN + HARI, log: (...x) => log.push(x.join(' ')) });
@@ -282,8 +283,8 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
     const db = new DatabaseSync(':memory:');
     const r = bukaRiwayat(db);
     const sekarang = SENIN + HARI;
-    r.sprint.catat(c('AAAAA', 1, 'Ani', SENIN - MG + HARI, 100, true));
-    r.sprint.catat(c('AAAAA', 2, 'Ani', SENIN - MG + 2 * HARI, 50));
+    r.sprint.catat(c('AAAAA', 1, 'Ani', SENIN - MG + HARI, 100, true), true);
+    r.sprint.catat(c('AAAAA', 2, 'Ani', SENIN - MG + 2 * HARI, 50), true);
     expect(r.sprint.gulung(sekarang)).toBe(2);
     const sebelum = r.sprint.papan('semua', sekarang);
     // Server sebelum 0.10.2 (INSERT OR IGNORE biasa, tanpa memeriksa sprint_tergulung) mencatat ulang
@@ -294,7 +295,7 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
     );
     lama.run('AAAAA', MULAI, 2, SENIN - MG + 2 * HARI, 50);
     lama.run('AAAAA', MULAI, 1, SENIN + 1000, 100);
-    r.sprint.catat(c('ZZZZZ', 1, 'Budi', SENIN + 2000, 1)); // catatan baru = cache dikosongkan
+    r.sprint.catat(c('ZZZZZ', 1, 'Budi', SENIN + 2000, 1), true); // catatan baru = cache dikosongkan
     // Papan tidak membaca baris yang nomornya sudah tergulung.
     expect(r.sprint.papan('semua', sekarang).baris.find((b) => b.nama === 'Ani')).toEqual(sebelum.baris[0]);
     expect(r.sprint.papan('minggu', sekarang).baris.map((b) => b.nama)).toEqual(['Budi']);
@@ -333,8 +334,8 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
     const r = bukaRiwayat(db);
     const sekarang = SENIN + HARI;
     // 110 orang skor 1000..; satu orang banyak menang tapi skor minggu terbaiknya paling rendah.
-    for (let i = 1; i <= 110; i++) r.sprint.catat(c(`K${String(i).padStart(4, '0')}`, 1, `Orang ${i}`, SENIN + i, 2000 - i));
-    for (let k = 1; k <= 5; k++) r.sprint.catat(c('MMMMM', k, 'Menang Terus', SENIN + 1000 + k, -100, true));
+    for (let i = 1; i <= 110; i++) r.sprint.catat(c(`K${String(i).padStart(4, '0')}`, 1, `Orang ${i}`, SENIN + i, 2000 - i), true);
+    for (let k = 1; k <= 5; k++) r.sprint.catat(c('MMMMM', k, 'Menang Terus', SENIN + 1000 + k, -100, true), true);
     const lama = r.sprint.papan('semua', sekarang);
     expect(lama.baris).toHaveLength(MAKS_BARIS_SPRINT);
     expect(lama.baris.some((b) => b.nama === 'Menang Terus')).toBe(true);
@@ -349,7 +350,7 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
     const db = new DatabaseSync(':memory:');
     const r = bukaRiwayat(db);
     const sekarang = SENIN + HARI;
-    for (let i = 1; i <= 30; i++) r.sprint.catat(c(`K${String(i).padStart(4, '0')}`, 1, `Orang ${i}`, SENIN + 1000 + i, 1000 - i * 10, false));
+    for (let i = 1; i <= 30; i++) r.sprint.catat(c(`K${String(i).padStart(4, '0')}`, 1, `Orang ${i}`, SENIN + 1000 + i, 1000 - i * 10, false), true);
     const p = r.sprint.papanV2('minggu', sekarang, 'orang 15');
     expect([p.v, p.jumlah, p.atas.length, p.bawah.length]).toEqual([2, 30, 10, 10]);
     expect(p.atas[0]).toMatchObject({ nama: 'Orang 1', peringkat: 1 });
@@ -363,6 +364,140 @@ describe('papan Sepanjang masa dan penggulungan mingguan (migrasi v10, 27 Nov 20
     expect(lama.baris).toHaveLength(30);
     expect(lama.baris[0]).not.toHaveProperty('peringkat');
     r.tutup();
+    db.close();
+  });
+});
+
+describe('papan hanya sprint mode baru (0.10.3, keputusan pemilik 27 Nov 2026)', () => {
+  const MG = 7 * HARI;
+  const SENIN = awalMingguWib(Date.UTC(2026, 10, 25, 5));
+  const c = (kode: string, putaran: number, nama: string, waktu: number, skor: number, menang = false, mentung = 0, kepentung = 0) => ({
+    kode,
+    mulaiPada: SENIN + 1000,
+    putaran,
+    nama,
+    waktu,
+    menang,
+    skor,
+    mentung,
+    kepentung,
+  });
+
+  it('contoh pemilik: sprint lama −195 lalu sprint baru −130 → papan −130 (Minggu ini dan Sepanjang masa), Ptr/M/Mtg/Kpg hanya dari yang baru', async () => {
+    const db = new DatabaseSync(':memory:');
+    const r = bukaRiwayat(db);
+    const sekarang = SENIN + 2 * HARI;
+    // Sprint 0.10.0 (tanpa token) minggu ini: −195, dengan menang dan mentung.
+    r.sprint.catat(c('LAMA1', 1, 'Erza', SENIN + HARI, -100, false, 0, 1), false);
+    r.sprint.catat(c('LAMA1', 2, 'Erza', SENIN + HARI + 1000, 5, true, 1, 0), false);
+    r.sprint.catat(c('LAMA1', 3, 'Erza', SENIN + HARI + 2000, -100, false, 0, 1), false);
+    // Percobaan 0.8.0 minggu ini dan ringkasan lama yang sudah digulung (minggu lalu, juara): juga mode lama.
+    db.prepare(
+      `INSERT INTO sprint (kode_meja, mulai_pada, nama, kunci_nama, waktu, putaran, skor, menang, mentung, kepentung, selesai)
+       VALUES ('LAMA0', 1, 'Erza', 'erza', ?, 5, 900, 1, 3, 0, 1)`,
+    ).run(SENIN + 3000);
+    db.prepare(
+      `INSERT INTO sprint_mingguan (minggu, kunci_nama, nama, waktu, putaran, menang, mentung, kepentung, skor)
+       VALUES (?, 'erza', 'Erza', ?, 40, 20, 9, 1, 5000)`,
+    ).run(SENIN - MG, SENIN - MG + HARI);
+    // Sprint baru (ber-token) minggu ini: −80 dan −50 = −130.
+    r.sprint.catat(c('BARU1', 1, 'Erza', SENIN + 2 * HARI - 5000, -80, false, 0, 1), true);
+    r.sprint.catat(c('BARU1', 2, 'Erza', SENIN + 2 * HARI - 4000, -50, false, 0, 0), true);
+    const harapan = { nama: 'Erza', putaran: 2, menang: 0, mentung: 0, kepentung: 1, skor: -130, piala: 0 };
+    expect(r.sprint.papan('minggu', sekarang).baris).toEqual([harapan]);
+    expect(r.sprint.papan('semua', sekarang).baris).toEqual([{ ...harapan, minggu: SENIN }]);
+    expect(r.sprint.papanV2('semua', sekarang, 'erza')).toMatchObject({ jumlah: 1, atas: [{ ...harapan, peringkat: 1 }] });
+    expect(r.sprint.peringkatMinggu('Erza', sekarang)).toBe(1);
+    // Data lama tidak dihapus (bisa dikembalikan).
+    expect(barisSprint(db)).toHaveLength(5);
+    expect(jumlahBarisLama(db)).toBe(1);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM sprint_mingguan').get()).toMatchObject({ n: 1 });
+    r.tutup();
+    // Lewat server (GET /api/sprint, bentuk lama dan v=2): sama.
+    const path = dbBaru();
+    const db2 = new DatabaseSync(path);
+    const r2 = bukaRiwayat(db2);
+    for (const [k, lanjut] of [
+      ['LAMA1', false],
+      ['BARU1', true],
+    ] as const) {
+      for (const x of db.prepare('SELECT * FROM sprint_putaran WHERE kode_meja = ?').all(k) as Record<string, number | string>[]) {
+        r2.sprint.catat(
+          { kode: k, mulaiPada: Number(x.mulai_pada), putaran: Number(x.putaran), nama: String(x.nama), waktu: Date.now() - 1000, menang: Number(x.menang) === 1, skor: Number(x.skor), mentung: Number(x.mentung), kepentung: Number(x.kepentung) },
+          lanjut,
+        );
+      }
+    }
+    r2.tutup();
+    db2.close();
+    db.close();
+    const { alamat } = await nyalakan({}, path);
+    const minggu = (await (await fetch(`${alamat}/api/sprint`)).json()) as PapanSprint;
+    expect(minggu.baris).toEqual([harapan]);
+    const semua = (await (await fetch(`${alamat}/api/sprint?periode=semua&v=2&nama=Erza`)).json()) as PapanSprintV2;
+    expect(semua.atas).toEqual([{ ...harapan, minggu: awalMingguWib(Date.now()), peringkat: 1 }]);
+    expect(semua.saya).toBeNull();
+  });
+
+  it('juara dan piala hanya dari sprint mode baru; gulung memisahkan ringkasan mode baru dan lama, papan tidak berubah', () => {
+    const db = new DatabaseSync(':memory:');
+    const r = bukaRiwayat(db);
+    // Minggu lalu: Ani juara di sprint lama (skor besar), Budi satu-satunya di sprint baru.
+    r.sprint.catat(c('LAMA1', 1, 'Ani', SENIN - MG + HARI, 900, true), false);
+    r.sprint.catat(c('BARU1', 1, 'Budi', SENIN - MG + HARI, -20), true);
+    r.sprint.catat(c('BARU1', 2, 'Budi', SENIN - MG + 2 * HARI, 30, true, 1), true);
+    // Minggu ini: Ani main sprint baru.
+    r.sprint.catat(c('BARU2', 1, 'Ani', SENIN + HARI, 15, true), true);
+    // Baris lama yang ditulis server sebelum 0.10.3 (lanjut NULL) dari meja tanpa token: tidak dibaca.
+    db.prepare(
+      `INSERT INTO sprint_putaran (kode_meja, mulai_pada, putaran, nama, kunci_nama, waktu, skor, menang, mentung, kepentung)
+       VALUES ('LAMA2', 1, 1, 'Cici', 'cici', ?, 400, 1, 0, 0)`,
+    ).run(SENIN - MG + HARI);
+    const sekarang = SENIN + 2 * HARI;
+    const sebelum = { m: r.sprint.papan('minggu', sekarang), s: r.sprint.papan('semua', sekarang) };
+    expect(sebelum.s.baris.map((b) => [b.nama, b.skor, b.piala])).toEqual([
+      ['Ani', 15, 0],
+      ['Budi', 10, 1],
+    ]);
+    expect(r.sprint.gulung(sekarang)).toBe(4);
+    expect(db.prepare('SELECT kunci_nama, putaran, menang, skor FROM sprint_mingguan_lanjut').all().map((x) => ({ ...x }))).toEqual([
+      { kunci_nama: 'budi', putaran: 2, menang: 1, skor: 10 },
+    ]);
+    expect(db.prepare('SELECT kunci_nama, putaran, skor FROM sprint_mingguan ORDER BY kunci_nama').all().map((x) => ({ ...x }))).toEqual([
+      { kunci_nama: 'ani', putaran: 1, skor: 900 },
+      { kunci_nama: 'cici', putaran: 1, skor: 400 },
+    ]);
+    expect({ m: r.sprint.papan('minggu', sekarang), s: r.sprint.papan('semua', sekarang) }).toEqual(sebelum);
+    r.tutup();
+    db.close();
+  });
+
+  it('baris tanpa penanda dari server lama (rollback) yang cocok dengan sprint ber-token dikenali saat dibuka dan sebelum digulung', () => {
+    const path = dbBaru();
+    const db = new DatabaseSync(path);
+    const r = bukaRiwayat(db);
+    const MULAI = SENIN + 1000;
+    db.prepare(
+      `INSERT INTO sprint_simpanan (token_hash, kode, minggu, data, dibuat_pada, diperbarui_pada) VALUES ('h1', 'TOKA1', ?, ?, ?, ?)`,
+    ).run(SENIN, JSON.stringify({ sprint: { mulaiPada: MULAI, kursi: 0 } }), MULAI, MULAI);
+    const lama = db.prepare(
+      `INSERT INTO sprint_putaran (kode_meja, mulai_pada, putaran, nama, kunci_nama, waktu, skor, menang, mentung, kepentung)
+       VALUES (?, ?, ?, 'Ani', 'ani', ?, 10, 0, 0, 0)`,
+    );
+    lama.run('TOKA1', MULAI, 1, SENIN + HARI);
+    lama.run('TOKA1', MULAI + 1, 1, SENIN + HARI); // kode sama, meja lain (waktu mulai beda)
+    r.tutup();
+    const r2 = bukaRiwayat(db);
+    expect(db.prepare('SELECT mulai_pada, lanjut FROM sprint_putaran ORDER BY id').all().map((x) => ({ ...x }))).toEqual([
+      { mulai_pada: MULAI, lanjut: 1 },
+      { mulai_pada: MULAI + 1, lanjut: null },
+    ]);
+    expect(r2.sprint.papan('minggu', SENIN + 2 * HARI).baris).toMatchObject([{ nama: 'Ani', putaran: 1, skor: 10 }]);
+    // Ditulis lagi oleh server lama sesudah dibuka: dikenali saat menggulung.
+    lama.run('TOKA1', MULAI, 2, SENIN + HARI + 1);
+    expect(r2.sprint.gulung(SENIN + MG + HARI)).toBe(3);
+    expect(db.prepare('SELECT putaran, skor FROM sprint_mingguan_lanjut').all().map((x) => ({ ...x }))).toEqual([{ putaran: 2, skor: 20 }]);
+    r2.tutup();
     db.close();
   });
 });
@@ -603,9 +738,10 @@ describe('sprint di server', () => {
     const s3 = await nyalakan({ penjadwal: jam }, path);
     expect(s3.server.jumlahMeja()).toBe(0);
     expect((s3.db.prepare('SELECT COUNT(*) AS n FROM sprint_simpanan').get() as { n: number }).n).toBe(0);
-    // Minggu itu sudah selesai: kedua putarannya digulung jadi satu baris sprint_mingguan (27 Nov 2026).
+    // Minggu itu sudah selesai: kedua putarannya digulung jadi satu baris ringkasan mode baru (27 Nov 2026, 0.10.3).
     expect(barisSprint(s3.db)).toEqual([]);
-    expect(s3.db.prepare('SELECT kunci_nama, putaran FROM sprint_mingguan').all().map((x) => ({ ...x }))).toEqual([{ kunci_nama: 'cici', putaran: 2 }]);
+    expect(s3.db.prepare('SELECT kunci_nama, putaran FROM sprint_mingguan_lanjut').all().map((x) => ({ ...x }))).toEqual([{ kunci_nama: 'cici', putaran: 2 }]);
+    expect(s3.db.prepare('SELECT COUNT(*) AS n FROM sprint_mingguan').get()).toMatchObject({ n: 0 });
     expect(s3.db.prepare('SELECT kode_meja, putaran_sampai FROM sprint_tergulung').all().map((x) => ({ ...x }))).toEqual([
       { kode_meja: masuk.kode, putaran_sampai: 2 },
     ]);
@@ -673,6 +809,12 @@ describe('sprint di server', () => {
     b.kirim({ t: 'keluar' });
     await sampai(() => s2.server.jumlahMeja() === 0);
     expect(barisSprint(s2.db).map((x) => x.putaran)).toEqual([1, 2]);
+    // Putaran 2 dicatat meja tanpa token = mode lama (0.10.3): tersimpan, tapi tidak tampil di papan.
+    expect(s2.db.prepare('SELECT putaran, lanjut FROM sprint_putaran ORDER BY putaran').all().map((x) => ({ ...x }))).toEqual([
+      { putaran: 1, lanjut: 1 },
+      { putaran: 2, lanjut: 0 },
+    ]);
+    expect(s2.riwayat.sprint.papan('minggu', jam.sekarang()).baris).toMatchObject([{ nama: 'Fajar', putaran: 1 }]);
     expect((s2.db.prepare('SELECT COUNT(*) AS n FROM meja_aktif').get() as { n: number }).n).toBe(0);
     expect((s2.db.prepare('SELECT COUNT(*) AS n FROM sprint_simpanan').get() as { n: number }).n).toBe(0);
     b.ws.close();

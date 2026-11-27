@@ -387,9 +387,9 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
     return db;
   }
 
-  it('v3 persis migrasi usul fitur (fitur/usul-fitur), v4 tabel meja_aktif, v5 tabel hasil_kompetisi_ditinggal, v6 kolom kode_tonton, v7 tabel sprint, v8 tabel sprint_putaran, v9 tabel sprint_simpanan, v10 tabel sprint_mingguan dan sprint_tergulung', () => {
-    expect(MIGRASI).toHaveLength(10);
-    const db = sampaiVersi(10);
+  it('v3 persis migrasi usul fitur (fitur/usul-fitur), v4 tabel meja_aktif, v5 tabel hasil_kompetisi_ditinggal, v6 kolom kode_tonton, v7 tabel sprint, v8 tabel sprint_putaran, v9 tabel sprint_simpanan, v10 tabel sprint_mingguan dan sprint_tergulung, v11 kolom sprint_putaran.lanjut dan tabel sprint_mingguan_lanjut', () => {
+    expect(MIGRASI).toHaveLength(11);
+    const db = sampaiVersi(11);
     expect(kolom(db, 'usulan')).toEqual([
       ['id', 0, 1],
       ['dibuat_pada', 1, 0],
@@ -455,6 +455,8 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
       ['menang', 1, 0],
       ['mentung', 1, 0],
       ['kepentung', 1, 0],
+      // v11 (0.10.3): penanda sprint mode baru, boleh NULL (server versi sebelumnya tetap bisa menulis).
+      ['lanjut', 0, 0],
     ]);
     expect(indeks(db, 'sprint_putaran')).toEqual(['sprint_putaran_waktu']);
     // v9 (sprint bisa dilanjut, 27 Nov 2026): satu baris per sprint, kunci hash token; data boleh NULL.
@@ -488,11 +490,13 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
       ['mulai_pada', 1, 2],
       ['putaran_sampai', 1, 0],
     ]);
+    // v11 (0.10.3): ringkasan mingguan khusus sprint mode baru, bentuknya sama dengan sprint_mingguan.
+    expect(kolom(db, 'sprint_mingguan_lanjut')).toEqual(kolom(db, 'sprint_mingguan'));
     db.close();
   });
 
-  it('database v1, v2, v3, v4 (server dev), v5 (produksi 0.5.0), v6 (produksi 0.6.0/0.7.x), v7 (produksi 0.8.0/0.9.x), v8 (produksi 0.10.0), dan v9 (produksi 0.10.1) dimigrasi ke v10 tanpa menyentuh isi lama', () => {
-    for (const v of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+  it('database v1, v2, v3, v4 (server dev), v5 (produksi 0.5.0), v6 (produksi 0.6.0/0.7.x), v7 (produksi 0.8.0/0.9.x), v8 (produksi 0.10.0), v9 (produksi 0.10.1), dan v10 (produksi 0.10.2) dimigrasi ke v11 tanpa menyentuh isi lama', () => {
+    for (const v of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
       const db = sampaiVersi(v);
       tulisV0(db, 'LAMAA', '2026-10-20T10:00:00.000Z', [['Budi', 10], ['Siti', 0]]);
       tulisV0(db, 'LAMAB', '2026-10-21T10:00:00.000Z', [['Budi', -5], ['Siti', 20], ['Kipas Dua', 0, true]]);
@@ -506,8 +510,8 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
       const sebelum = isiLama();
       const log: string[] = [];
       const r = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
-      expect(versiSkema(db)).toBe(10);
-      expect(log).toEqual([`skema riwayat dimigrasi v${v} → v10`]);
+      expect(versiSkema(db)).toBe(11);
+      expect(log).toEqual([`skema riwayat dimigrasi v${v} → v11`]);
       const sesudah = isiLama();
       expect(sesudah).toEqual(sebelum);
       expect(r.daftar(10).map((g) => g.kodeMeja)).toEqual(['LAMAB', 'LAMAA']);
@@ -517,6 +521,7 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
       expect(db.prepare('SELECT COUNT(*) AS n FROM sprint_putaran').get()).toMatchObject({ n: 0 });
       expect(db.prepare('SELECT COUNT(*) AS n FROM sprint_simpanan').get()).toMatchObject({ n: 0 });
       expect(db.prepare('SELECT COUNT(*) AS n FROM sprint_mingguan').get()).toMatchObject({ n: 0 });
+      expect(db.prepare('SELECT COUNT(*) AS n FROM sprint_mingguan_lanjut').get()).toMatchObject({ n: 0 });
       expect(r.sprintSimpanan.jumlah()).toBe(0);
       const daftar = r.daftar(10);
       const papan = r.papan();
@@ -533,7 +538,57 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
     }
   });
 
-  it('database v2 pra-rilis (skema kompetisi versi 1) dimigrasi ke v10: perbaikan pra-rilis tetap jalan, tabel v5 ada dan kosong', () => {
+  it('v11 (0.10.3): putaran sprint yang sudah tercatat ditandai mode baru kalau mejanya sprint ber-token; sisanya tetap NULL (tidak di papan)', () => {
+    const db = sampaiVersi(10);
+    const HARI = 86_400_000;
+    const senin = Date.UTC(2026, 10, 22, 17); // Senin 23 Nov 2026 00.00 WIB
+    const T1 = senin + 3 * HARI; // sprint ber-token pertama yang masih tersimpan dibuat (server 0.10.1)
+    const simpanan = db.prepare(
+      `INSERT INTO sprint_simpanan (token_hash, kode, minggu, data, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    simpanan.run('h1', 'TOKA1', senin, JSON.stringify({ sprint: { mulaiPada: T1, kursi: 0 } }), T1, T1);
+    simpanan.run('h2', 'TOKB1', senin, 'bukan json', T1 + 10, T1 + 10);
+    db.prepare("INSERT INTO meja_aktif (kode, data, diperbarui_pada) VALUES ('LAMA1', '{}', 0), ('GAGAL', '{}', 0)").run();
+    const putaran = db.prepare(
+      `INSERT INTO sprint_putaran (kode_meja, mulai_pada, putaran, nama, kunci_nama, waktu, skor, menang, mentung, kepentung)
+       VALUES (?, ?, ?, 'Erza', 'erza', ?, ?, 0, 0, 0)`,
+    );
+    putaran.run('TOKA1', T1, 1, T1 + 100, -80); // cocok sprint_simpanan: mode baru
+    putaran.run('TOKA1', T1, 2, T1 + 200, -50);
+    putaran.run('LAMA1', senin + HARI, 1, T1 + 50, -100); // meja 0.10.0 dari meja_aktif (dicatat sesudah deploy)
+    putaran.run('LAMA2', senin + HARI, 1, senin + 2 * HARI, -95); // meja 0.10.0 yang sudah selesai
+    putaran.run('NOLAA', T1 + 5000, 1, T1 + 6000, 7); // sprint ber-token yang ditutup lewat Mulai dari 0 (barisnya dibuang)
+    putaran.run('GAGAL', T1 + 7000, 1, T1 + 8000, 3); // sprint baru yang token-nya gagal disimpan (di meja_aktif)
+    const r = bukaRiwayat(db, { sekarang: () => T1 + HARI });
+    expect(versiSkema(db)).toBe(11);
+    expect(db.prepare('SELECT kode_meja, putaran, lanjut FROM sprint_putaran ORDER BY id').all().map((x) => ({ ...x }))).toEqual([
+      { kode_meja: 'TOKA1', putaran: 1, lanjut: 1 },
+      { kode_meja: 'TOKA1', putaran: 2, lanjut: 1 },
+      { kode_meja: 'LAMA1', putaran: 1, lanjut: null },
+      { kode_meja: 'LAMA2', putaran: 1, lanjut: null },
+      { kode_meja: 'NOLAA', putaran: 1, lanjut: 1 },
+      { kode_meja: 'GAGAL', putaran: 1, lanjut: null },
+    ]);
+    expect(r.sprint.papan('minggu', T1 + HARI).baris).toEqual([
+      { nama: 'Erza', putaran: 3, menang: 0, mentung: 0, kepentung: 0, skor: -123, piala: 0 },
+    ]);
+    r.tutup();
+    db.close();
+  });
+
+  it('v11 tanpa sprint ber-token sama sekali (server belum pernah 0.10.1): semua putaran lama tetap NULL', () => {
+    const db = sampaiVersi(10);
+    db.prepare(
+      `INSERT INTO sprint_putaran (kode_meja, mulai_pada, putaran, nama, kunci_nama, waktu, skor, menang, mentung, kepentung)
+       VALUES ('LAMA1', 5, 1, 'Erza', 'erza', 10, -195, 0, 0, 0)`,
+    ).run();
+    const r = bukaRiwayat(db, { sekarang: () => 20 });
+    expect(db.prepare('SELECT lanjut FROM sprint_putaran').get()).toMatchObject({ lanjut: null });
+    r.tutup();
+    db.close();
+  });
+
+  it('database v2 pra-rilis (skema kompetisi versi 1) dimigrasi ke v11: perbaikan pra-rilis tetap jalan, tabel v5 ada dan kosong', () => {
     const db = sampaiVersi(1);
     // Seperti server dev yang sempat menjalankan kompetisi versi 1 (v2 waktu itu): skema kompetisi lama.
     db.exec(`CREATE TABLE kompetisi (kode TEXT PRIMARY KEY, nama TEXT NOT NULL, masa TEXT NOT NULL, pengaturan TEXT NOT NULL,
@@ -550,8 +605,8 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
     tulisV0(db, 'LAMAA', '2026-10-20T10:00:00.000Z', [['Budi', 10], ['Siti', 0]]);
     const log: string[] = [];
     const r = bukaRiwayat(db, { log: (...x) => log.push(x.join(' ')) });
-    expect(versiSkema(db)).toBe(10);
-    expect(log).toContain('skema riwayat dimigrasi v2 → v10');
+    expect(versiSkema(db)).toBe(11);
+    expect(log).toContain('skema riwayat dimigrasi v2 → v11');
     expect(log.some((l) => l.includes('skema kompetisi pra-rilis'))).toBe(true);
     expect(db.prepare('SELECT COUNT(*) AS n FROM hasil_kompetisi_ditinggal').get()).toMatchObject({ n: 0 });
     expect(r.kompetisi.status('LAMAA', 2)).toBeNull();

@@ -488,8 +488,10 @@ export type PesanKlien =
    * Sprint (keputusan pemilik 25 Nov 2026): buat meja sprint baru dan langsung main.
    * Pengirim dapat `masuk` seperti biasa; aplikasi lama tidak mengirimnya.
    * Sejak 27 Nov 2026 (sprint bisa dilanjut seminggu): `lanjut` = token sprint HP ini (dari `sprintSaya`),
-   * lanjutkan sprint itu alih-alih membuat yang baru. `ganti` = token sprint lama yang ditutup dulu sebelum
-   * sprint baru dibuat ("Mulai dari 0"). Keduanya rahasia milik HP itu (server hanya menyimpan hash-nya).
+   * lanjutkan sprint itu alih-alih membuat yang baru. `ganti` = token sprint lama dari "Mulai dari 0"
+   * (hanya aplikasi 0.10.1–0.10.2): sejak 0.10.3 ditolak server kalau sprint itu masih minggu ini
+   * (TEKS_SPRINT_TANPA_MULAI_NOL) dan sprint-nya tidak pernah ditutup. Keduanya rahasia milik HP itu (server
+   * hanya menyimpan hash-nya).
    */
   | { t: 'sprint'; nama: string; lanjut?: string; ganti?: string }
   /**

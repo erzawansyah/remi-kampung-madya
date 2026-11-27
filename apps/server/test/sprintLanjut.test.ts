@@ -1,7 +1,8 @@
 // Sprint bisa dilanjut (keputusan pemilik 27 Nov 2026: "maunya sprint ini terus2an bisa dilanjut", "kalau
 // minggu berganti ya reset"): satu sprint = satu permainan sepanjang minggu WIB. Keluar, putus, dan restart
 // hanya menjedanya; "Lanjut sprint" (token rahasia HP, di database hanya hash-nya) melanjutkan permainan yang
-// sama; "Mulai dari 0" menutupnya; Senin 00.00 WIB sprint yang dijeda tidak bisa dilanjut lagi.
+// sama; Senin 00.00 WIB sprint yang dijeda tidak bisa dilanjut lagi. Sejak 0.10.3 tidak ada "Mulai dari 0":
+// `ganti` dari aplikasi lama ditolak dan sprint-nya tetap utuh.
 
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -10,7 +11,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import type { ViewPemain } from '@remi/engine';
-import { awalMingguWib, TEKS_SPRINT_DIJEDA, TEKS_SPRINT_DITUTUP, TEKS_SPRINT_COBA_LAGI, TEKS_SPRINT_TAK_BISA_LANJUT, TEKS_SPRINT_TIDAK_ADA, type DataMeja } from '@remi/meja';
+import { awalMingguWib, TEKS_SPRINT_DIJEDA, TEKS_SPRINT_TANPA_MULAI_NOL, TEKS_SPRINT_COBA_LAGI, TEKS_SPRINT_TAK_BISA_LANJUT, TEKS_SPRINT_TIDAK_ADA, type DataMeja } from '@remi/meja';
 import { bukaRiwayat, type PenyimpanRiwayat } from '../src/riwayat.js';
 import { jalankanServer, type OpsiServer, type ServerRemi } from '../src/server.js';
 import {
@@ -282,29 +283,39 @@ describe('sprint bisa dilanjut', () => {
     c.ws.close();
   }, 180_000);
 
-  it('Mulai dari 0: sprint lama ditutup (putarannya tetap di papan, HP lain yang memegangnya dikeluarkan), sprint baru dari 0', async () => {
+  it('tanpa Mulai dari 0 (0.10.3): `ganti` dari aplikasi lama ditolak, sprint-nya tetap jalan dan bisa dilanjut; token yang sudah tidak berlaku tidak menahan', async () => {
     const { server, db, saya } = await nyalakan();
     const lama = await sprintSampai(server.port, 'Eko', 1);
     const kodeLama = infoTerakhir(lama.a)!.kode;
-    // Sprint lama masih dibuka di sambungan lain; dari "HP yang sama" ditekan Mulai dari 0.
+    // Aplikasi 0.10.1–0.10.2 menekan Mulai dari 0 dari sambungan lain.
     const b = await klien(server.port);
     b.kirim({ t: 'sprint', nama: 'Eko', ganti: lama.token });
-    expect((await tungguPesan(lama.a, (p) => p.t === 'keluar')).alasan).toBe(TEKS_SPRINT_DITUTUP);
-    const masuk = await tungguPesan(b, (p) => p.t === 'masuk');
-    expect(masuk.kode).not.toBe(kodeLama);
-    const baru = await tokenDari(b);
-    expect(baru.token).not.toBe(lama.token);
-    const v = (await tungguPesan(b, (p) => p.t === 'view')).view as ViewPemain;
-    expect(v.riwayat).toHaveLength(0);
-    expect(v.putaran!.nomor).toBe(1);
-    // Putaran sprint lama tetap di papan; tokennya tidak bisa dipakai lagi.
-    expect(barisSprint(db).map((x) => [x.kode_meja, x.putaran])).toEqual([[kodeLama, 1]]);
-    expect(await saya(lama.token)).toEqual({ ada: false });
-    expect((await saya(baru.token)).ada).toBe(true);
-    expect(jumlahSimpanan(db)).toBe(1);
+    expect((await tungguPesan(b, (p) => p.t === 'error')).pesan).toBe(TEKS_SPRINT_TANPA_MULAI_NOL);
+    await tunggu(100);
+    // Tidak ada meja baru, tidak ada token baru, sprint lama tidak ditutup.
+    expect(b.pesan.some((p) => p.t === 'masuk' || p.t === 'sprintSaya')).toBe(false);
+    expect(lama.a.pesan.some((p) => p.t === 'keluar')).toBe(false);
     expect(server.jumlahMeja()).toBe(1);
-    lama.a.ws.close();
+    expect(jumlahSimpanan(db)).toBe(1);
+    expect(await saya(lama.token)).toMatchObject({ ada: true });
+    expect(barisSprint(db).map((x) => [x.kode_meja, x.putaran])).toEqual([[kodeLama, 1]]);
+    // Keluar lalu Lanjut sprint: permainan yang sama.
+    lama.a.kirim({ t: 'keluar' });
+    await sampai(() => server.jumlahMeja() === 0);
+    b.pesan.length = 0;
+    b.kirim({ t: 'sprint', nama: 'Eko', lanjut: lama.token });
+    expect((await tungguPesan(b, (p) => p.t === 'masuk')).kode).toBe(kodeLama);
+    b.kirim({ t: 'keluar' });
+    await sampai(() => server.jumlahMeja() === 0);
     b.ws.close();
+    lama.a.ws.close();
+    // Token yang sprint-nya sudah tidak ada (atau dari minggu lalu): sprint baru dibuat seperti biasa.
+    db.prepare('UPDATE sprint_simpanan SET minggu = minggu - 7 * 86400000').run();
+    const c = await klien(server.port);
+    c.kirim({ t: 'sprint', nama: 'Eko', ganti: lama.token });
+    const baru = await tokenDari(c);
+    expect(baru.token).not.toBe(lama.token);
+    c.ws.close();
   }, 90_000);
 
   it('Senin 00.00 WIB: sprint minggu lalu yang dijeda tidak bisa dilanjut; yang masih dimainkan jalan terus sampai Keluar', async () => {
@@ -373,10 +384,10 @@ describe('sprint bisa dilanjut', () => {
     b.pesan.length = 0;
     b.kirim({ t: 'sprint', nama: 'Ida' });
     expect((await tungguPesan(b, (p) => p.t === 'error')).pesan).toBe('Server lagi penuh, coba lagi nanti.');
-    // Mulai dari 0 menggantikan sprint lamanya sendiri, jadi tetap boleh.
+    // Mulai dari 0 dari aplikasi lama ditolak (0.10.3); sprint-nya tetap.
     b.pesan.length = 0;
     b.kirim({ t: 'sprint', nama: 'Ida', ganti: satu.token });
-    expect((await tokenDari(b)).token).not.toBe(satu.token);
+    expect((await tungguPesan(b, (p) => p.t === 'error')).pesan).toBe(TEKS_SPRINT_TANPA_MULAI_NOL);
     expect(jumlahSimpanan(s2.db)).toBe(1);
     b.ws.close();
   }, 30_000);
@@ -478,7 +489,7 @@ describe('sprint bisa dilanjut', () => {
     expect(jumlahSimpanan(db)).toBe(2);
     expect(await saya(tokens[0])).toEqual({ ada: false });
     expect((await saya(tokens[1])).ada).toBe(true);
-    // Semuanya sudah pernah dimainkan: sprint baru dari jaringan ini ditolak; Mulai dari 0 tetap boleh.
+    // Semuanya sudah pernah dimainkan: sprint baru dari jaringan ini ditolak (Mulai dari 0 juga, 0.10.3).
     a.kirim({ t: 'keluar' });
     await sampai(() => server.jumlahMeja() === 0);
     db.prepare('UPDATE sprint_simpanan SET putaran = 3').run();
@@ -486,8 +497,9 @@ describe('sprint bisa dilanjut', () => {
     expect((await tungguPesan(a, (p) => p.t === 'error')).pesan).toBe('Kebanyakan sprint dari jaringanmu minggu ini, Bos. Lanjutkan yang sudah ada.');
     a.pesan.length = 0;
     a.kirim({ t: 'sprint', nama: 'Mira', ganti: tokens[2] });
-    expect((await tokenDari(a)).token).not.toBe(tokens[2]);
+    expect((await tungguPesan(a, (p) => p.t === 'error')).pesan).toBe(TEKS_SPRINT_TANPA_MULAI_NOL);
     expect(jumlahSimpanan(db)).toBe(2);
+    expect((await saya(tokens[2])).ada).toBe(true);
     a.ws.close();
   }, 30_000);
 

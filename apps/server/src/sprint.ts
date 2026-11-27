@@ -2,7 +2,11 @@
 // putaran) satu baris per putaran di tabel sprint_putaran (migrasi v8); tabel sprint (migrasi v7) hanya
 // berisi percobaan 5 putaran dari 0.8.0, tetap dibaca apa adanya dan tidak ditulis lagi. Sejak 27 Nov 2026
 // putaran minggu yang sudah selesai digulung jadi satu baris per orang per minggu (sprint_mingguan,
-// migrasi v10). Aturan hitung papan, minggu terbaik, juara mingguan, dan ringkasan mingguan hanya di
+// migrasi v10). Sejak 0.10.3 (27 Nov 2026, keputusan pemilik "Bisa gak skor dari versi sebelumnya itu gak
+// dimasukin?") papan hanya membaca sprint mode baru, yaitu sprint ber-token yang bisa dilanjut (sejak
+// 0.10.1): sprint_putaran.lanjut = 1 dan ringkasannya di sprint_mingguan_lanjut (migrasi v11). Percobaan
+// 0.8.0 (tabel sprint), putaran meja sprint tanpa token (0.10.0), dan sprint_mingguan (semuanya data mode
+// lama) tetap disimpan apa adanya, hanya tidak dibaca papan. Aturan hitung papan, minggu terbaik, juara mingguan, dan ringkasan mingguan hanya di
 // @remi/meja (sprint.ts); di sini hanya menyimpan, menjumlah, dan membaca.
 
 import type { DatabaseSync } from 'node:sqlite';
@@ -100,6 +104,47 @@ export const SKEMA_SPRINT_MINGGUAN = `
   );
 `;
 
+/**
+ * Migrasi v11 (27 Nov 2026, 0.10.3): penanda sprint mode baru. `sprint_putaran.lanjut` = 1 untuk putaran
+ * sprint ber-token (bisa dilanjut, sejak 0.10.1), 0 untuk meja sprint tanpa token (0.10.0, dipulihkan dari
+ * meja_aktif), NULL = belum diketahui (ditulis server sebelum 0.10.3). `sprint_mingguan_lanjut`: ringkasan
+ * mingguan khusus putaran mode baru (bentuknya sama dengan sprint_mingguan, yang sekarang hanya menampung
+ * putaran mode lama). Pengisian sekali saat migrasi, untuk putaran yang sudah tercatat:
+ * - cocok dengan sprint ber-token yang masih ada di sprint_simpanan (kode meja sama dan
+ *   `data.sprint.mulaiPada` = mulai_pada) = mode baru;
+ * - mejanya dimulai sesudah sprint ber-token pertama yang masih tersimpan dibuat (server sudah 0.10.1) dan
+ *   kode mejanya tidak ada di meja_aktif (tempat meja sprint tanpa token disimpan) = mode baru juga. Ini
+ *   menangkap sprint ber-token yang barisnya sudah dibuang lewat "Mulai dari 0" di 0.10.1–0.10.2.
+ * Sisanya tetap NULL dan tidak dibaca papan. Baris NULL yang ditulis server lama sesudah rollback dicocokkan
+ * lagi dengan sprint_simpanan setiap database dibuka dan sebelum menggulung (tandaiLanjut).
+ */
+export const SKEMA_SPRINT_LANJUT = `
+  ALTER TABLE sprint_putaran ADD COLUMN lanjut INTEGER;
+  CREATE TABLE IF NOT EXISTS sprint_mingguan_lanjut (
+    minggu INTEGER NOT NULL,
+    kunci_nama TEXT NOT NULL,
+    nama TEXT NOT NULL,
+    waktu INTEGER NOT NULL,
+    putaran INTEGER NOT NULL DEFAULT 0,
+    menang INTEGER NOT NULL DEFAULT 0,
+    mentung INTEGER NOT NULL DEFAULT 0,
+    kepentung INTEGER NOT NULL DEFAULT 0,
+    skor INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (minggu, kunci_nama)
+  );
+  UPDATE sprint_putaran SET lanjut = 1 WHERE lanjut IS NULL AND EXISTS (
+    SELECT 1 FROM sprint_simpanan s WHERE s.kode = sprint_putaran.kode_meja
+      AND json_valid(s.data) AND json_extract(s.data, '$.sprint.mulaiPada') = sprint_putaran.mulai_pada);
+  UPDATE sprint_putaran SET lanjut = 1 WHERE lanjut IS NULL
+    AND mulai_pada >= (SELECT MIN(dibuat_pada) FROM sprint_simpanan)
+    AND NOT EXISTS (SELECT 1 FROM meja_aktif a WHERE a.kode = sprint_putaran.kode_meja);
+`;
+
+/** Baris sprint_putaran NULL (belum diketahui) yang cocok dengan sprint ber-token di sprint_simpanan = mode baru. Idempoten. */
+const TANDAI_LANJUT = `UPDATE sprint_putaran SET lanjut = 1 WHERE lanjut IS NULL AND EXISTS (
+  SELECT 1 FROM sprint_simpanan s WHERE s.kode = sprint_putaran.kode_meja
+    AND json_valid(s.data) AND json_extract(s.data, '$.sprint.mulaiPada') = sprint_putaran.mulai_pada)`;
+
 export type { PeriodeSprint };
 
 
@@ -141,8 +186,12 @@ export interface PapanSprintV2 {
 }
 
 export interface PenyimpanSprint {
-  /** Catat satu putaran. False = putaran ini sudah tercatat sebelumnya (tidak ditulis lagi). */
-  catat(c: CatatanSprint): boolean;
+  /**
+   * Catat satu putaran. `lanjut` = meja sprint ber-token (mode baru, sejak 0.10.1); false = meja sprint tanpa
+   * token (0.10.0), dicatat tapi tidak tampil di papan. False = putaran ini sudah tercatat sebelumnya (tidak
+   * ditulis lagi).
+   */
+  catat(c: CatatanSprint, lanjut: boolean): boolean;
   /** Papan sprint bentuk lama, urutan bawaan (paling banyak MAKS_BARIS_SPRINT baris). */
   papan(periode: PeriodeSprint, sekarang: number): PapanSprint;
   /** Papan sprint untuk aplikasi baru: atas, bawah, jumlah, dan baris `namaSaya`. */
@@ -183,23 +232,23 @@ export function rapikanPeriodeSprint(x: unknown): PeriodeSprint {
 export function buatPenyimpanSprint(db: DatabaseSync): PenyimpanSprint {
   // Putaran yang nomornya sudah masuk sprint_mingguan (sprint_tergulung) tidak ditulis lagi.
   const tambah = db.prepare(
-    `INSERT OR IGNORE INTO sprint_putaran (kode_meja, mulai_pada, putaran, nama, kunci_nama, waktu, skor, menang, mentung, kepentung)
-     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
+    `INSERT OR IGNORE INTO sprint_putaran (kode_meja, mulai_pada, putaran, nama, kunci_nama, waktu, skor, menang, mentung, kepentung, lanjut)
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
      WHERE NOT EXISTS (SELECT 1 FROM sprint_tergulung WHERE kode_meja = ?1 AND mulai_pada = ?2 AND putaran_sampai >= ?3)`,
   );
-  // Percobaan 0.8.0 (tabel sprint), ringkasan minggu yang sudah digulung (sprint_mingguan), dan putaran
-  // yang belum digulung (sprint_putaran), dijumlah bersama. Kolom putaran: baris 0.8.0 menyimpan putaran yang
-  // selesai di percobaan itu; sprint_mingguan jumlahnya; baris sprint_putaran = 1 putaran. Kolom menang
-  // sprint_mingguan berupa jumlah (PercobaanSprint.menang boleh angka).
+  // Papan hanya membaca sprint mode baru (0.10.3): ringkasan minggu yang sudah digulung
+  // (sprint_mingguan_lanjut) dan putaran ber-token yang belum digulung (sprint_putaran.lanjut = 1), dijumlah
+  // bersama. Percobaan 0.8.0 (tabel sprint), putaran tanpa token, dan sprint_mingguan tidak dibaca. Kolom
+  // putaran: ringkasan = jumlahnya, baris sprint_putaran = 1 putaran. Kolom menang ringkasan berupa jumlah
+  // (PercobaanSprint.menang boleh angka).
   const ambilSemua = db.prepare(
-    `SELECT nama, kunci_nama, waktu, menang, skor, mentung, kepentung, putaran, 0 AS sumber, id FROM sprint
-     UNION ALL
-     SELECT nama, kunci_nama, waktu, menang, skor, mentung, kepentung, putaran, 1 AS sumber, rowid AS id FROM sprint_mingguan
+    `SELECT nama, kunci_nama, waktu, menang, skor, mentung, kepentung, putaran, 1 AS sumber, rowid AS id FROM sprint_mingguan_lanjut
      UNION ALL
      SELECT nama, kunci_nama, waktu, menang, skor, mentung, kepentung, 1 AS putaran, 2 AS sumber, id FROM sprint_putaran
-     WHERE NOT EXISTS (${SUDAH_TERGULUNG})
+     WHERE lanjut = 1 AND NOT EXISTS (${SUDAH_TERGULUNG})
      ORDER BY waktu, sumber, id`,
   );
+  const tandaiLanjut = db.prepare(TANDAI_LANJUT);
   // Putaran yang nomornya sudah masuk sprint_mingguan tapi barisnya ada lagi di sprint_putaran: hanya bisa
   // terjadi kalau server versi sebelum 0.10.2 (yang tidak memeriksa sprint_tergulung) sempat mencatatnya
   // ulang sesudah rollback. Tidak dibaca papan dan dibuang saat menggulung, jadi tidak terhitung dua kali.
@@ -213,25 +262,31 @@ export function buatPenyimpanSprint(db: DatabaseSync): PenyimpanSprint {
        AND NOT EXISTS (SELECT 1 FROM meja_aktif a WHERE a.kode = sprint_tergulung.kode_meja)`,
   );
   const ambilLewat = db.prepare(
-    'SELECT kode_meja, mulai_pada, putaran, nama, kunci_nama, waktu, menang, skor, mentung, kepentung FROM sprint_putaran WHERE waktu < ? ORDER BY waktu, id',
+    'SELECT kode_meja, mulai_pada, putaran, nama, kunci_nama, waktu, menang, skor, mentung, kepentung, lanjut FROM sprint_putaran WHERE waktu < ? ORDER BY waktu, id',
   );
-  const tambahMingguan = db.prepare(
-    `INSERT INTO sprint_mingguan (minggu, kunci_nama, nama, waktu, putaran, menang, mentung, kepentung, skor)
+  // Ringkasan mingguan: putaran mode baru ke sprint_mingguan_lanjut (dibaca papan), sisanya (mode lama atau
+  // belum diketahui) ke sprint_mingguan (disimpan, tidak dibaca papan).
+  const sqlTambahMingguan = (tabel: string) =>
+    `INSERT INTO ${tabel} (minggu, kunci_nama, nama, waktu, putaran, menang, mentung, kepentung, skor)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (minggu, kunci_nama) DO UPDATE SET
-       nama = CASE WHEN excluded.waktu >= sprint_mingguan.waktu THEN excluded.nama ELSE sprint_mingguan.nama END,
-       waktu = max(sprint_mingguan.waktu, excluded.waktu),
-       putaran = sprint_mingguan.putaran + excluded.putaran,
-       menang = sprint_mingguan.menang + excluded.menang,
-       mentung = sprint_mingguan.mentung + excluded.mentung,
-       kepentung = sprint_mingguan.kepentung + excluded.kepentung,
-       skor = sprint_mingguan.skor + excluded.skor`,
-  );
+       nama = CASE WHEN excluded.waktu >= ${tabel}.waktu THEN excluded.nama ELSE ${tabel}.nama END,
+       waktu = max(${tabel}.waktu, excluded.waktu),
+       putaran = ${tabel}.putaran + excluded.putaran,
+       menang = ${tabel}.menang + excluded.menang,
+       mentung = ${tabel}.mentung + excluded.mentung,
+       kepentung = ${tabel}.kepentung + excluded.kepentung,
+       skor = ${tabel}.skor + excluded.skor`;
+  const tambahMingguanLanjut = db.prepare(sqlTambahMingguan('sprint_mingguan_lanjut'));
+  const tambahMingguanLama = db.prepare(sqlTambahMingguan('sprint_mingguan'));
   const tandaiTergulung = db.prepare(
     `INSERT INTO sprint_tergulung (kode_meja, mulai_pada, putaran_sampai) VALUES (?, ?, ?)
      ON CONFLICT (kode_meja, mulai_pada) DO UPDATE SET putaran_sampai = max(sprint_tergulung.putaran_sampai, excluded.putaran_sampai)`,
   );
   const buangLewat = db.prepare('DELETE FROM sprint_putaran WHERE waktu < ?');
+
+  // Baris NULL dari server sebelum 0.10.3 (rollback) yang cocok dengan sprint ber-token: dikenali saat dibuka.
+  tandaiLanjut.run();
 
   /** Semua catatan (dibaca sekali, dikosongkan setiap ada catatan baru). */
   let cache: PercobaanSprint[] | null = null;
@@ -277,7 +332,7 @@ export function buatPenyimpanSprint(db: DatabaseSync): PenyimpanSprint {
   };
 
   return {
-    catat(c) {
+    catat(c, lanjut) {
       const hasil = tambah.run(
         c.kode,
         c.mulaiPada,
@@ -289,6 +344,7 @@ export function buatPenyimpanSprint(db: DatabaseSync): PenyimpanSprint {
         c.menang ? 1 : 0,
         c.mentung,
         c.kepentung,
+        lanjut ? 1 : 0,
       );
       const baru = Number(hasil.changes) > 0;
       if (baru) cache = null;
@@ -305,11 +361,13 @@ export function buatPenyimpanSprint(db: DatabaseSync): PenyimpanSprint {
     gulung(sekarang) {
       const batas = awalMingguWib(sekarang);
       const n = transaksi(() => {
+        // Baris yang ditulis server sebelum 0.10.3 (rollback) dikenali dulu, supaya ikut ringkasan mode baru.
+        if (Number(tandaiLanjut.run().changes) > 0) cache = null;
         buangTergulung.run();
         buangPenanda.run(batas - PENANDA_GULUNG_MINGGU * MINGGU_MS);
         const xs = ambilLewat.all(batas) as Record<string, number | string>[];
         if (!xs.length) return 0;
-        const catatan: PercobaanSprint[] = xs.map((b) => ({
+        const keCatatan = (b: Record<string, number | string>): PercobaanSprint => ({
           nama: String(b.nama),
           kunci: String(b.kunci_nama),
           waktu: Number(b.waktu),
@@ -317,9 +375,16 @@ export function buatPenyimpanSprint(db: DatabaseSync): PenyimpanSprint {
           skor: Number(b.skor),
           mentung: Number(b.mentung),
           kepentung: Number(b.kepentung),
-        }));
-        for (const r of ringkasMingguan(catatan)) {
-          tambahMingguan.run(r.minggu, r.kunci, r.nama, r.waktu, r.putaran, r.menang, r.mentung, r.kepentung, r.skor);
+        });
+        const baru = xs.filter((b) => Number(b.lanjut) === 1);
+        const lama = xs.filter((b) => Number(b.lanjut) !== 1);
+        for (const [rows, tambah] of [
+          [baru, tambahMingguanLanjut],
+          [lama, tambahMingguanLama],
+        ] as const) {
+          for (const r of ringkasMingguan(rows.map(keCatatan))) {
+            tambah.run(r.minggu, r.kunci, r.nama, r.waktu, r.putaran, r.menang, r.mentung, r.kepentung, r.skor);
+          }
         }
         const sampai = new Map<string, [string, number, number]>();
         for (const b of xs) {
