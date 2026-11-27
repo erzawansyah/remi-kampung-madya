@@ -1051,14 +1051,20 @@ table.papan-sprint td:last-child {
   table.papan-sprint td:last-child {
     padding-left: var(--ruang-1);
   }
+  /* Teks besar di HP sempit: angka sedikit dikecilkan supaya Nama tetap muat satu kata per baris. */
+  html[data-teks='besar'] table.papan-sprint td:not(.nama-sprint) {
+    font-size: 0.9em;
+  }
 }
 table.papan-sprint th {
   text-transform: none;
   letter-spacing: 0;
 }
+/* Nama hanya pecah di antara kata (break-word tidak ikut mengecilkan lebar minimum kolom, jadi tabel
+   memberi Nama selebar kata terpanjangnya); kata yang lebih panjang dari seluruh kolom baru dipotong. */
 table.papan-sprint td.nama-sprint {
   padding-left: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 table.papan-sprint .nomor-sprint {
   display: inline-block;
