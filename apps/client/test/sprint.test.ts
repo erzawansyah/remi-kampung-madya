@@ -83,16 +83,16 @@ describe('papan sprint (htmlPapanSprint)', () => {
   it('# paling kiri (peringkat, 🥇🥈🥉), Nama, lalu Ptr M Mtg Kpg Skor; piala di samping nama; baris sendiri disorot tanpa beda huruf', () => {
     const d = document.createElement('div');
     d.innerHTML = htmlPapanSprint(papanLama(BARIS), null, 'CICI');
-    expect(namaBaris(d)).toEqual(['Budi', 'Ani', 'Cici']);
+    expect(namaBaris(d)).toEqual(['Ani', 'Cici', 'Budi']);
     expect(nomor(d)).toEqual(['🥇', '🥈', '🥉']);
-    const budi = d.querySelector('tbody tr')!;
+    const budi = [...d.querySelectorAll('tbody tr')].find((tr) => tr.querySelector('.nama-teks')!.textContent === 'Budi')!;
     expect(budi.querySelector('.piala')!.textContent).toBe(teksPiala(2));
     expect(budi.querySelector('.piala')!.textContent).toBe('🏆2');
     expect(budi.querySelector('.piala')!.getAttribute('aria-label')).toBe('juara sprint mingguan 2 kali');
     // Piala menempel di kata terakhir nama (spasi tak terpatah), tidak turun sendirian ke baris baru.
     expect(budi.querySelector('.piala')!.previousSibling!.textContent).toBe('\u00a0');
-    expect(d.querySelectorAll('tbody tr')[2]!.querySelector('.piala')!.textContent).toBe('🏆');
-    expect(d.querySelectorAll('tbody tr')[1]!.querySelector('.piala')).toBeNull();
+    expect(d.querySelectorAll('tbody tr')[1]!.querySelector('.piala')!.textContent).toBe('🏆');
+    expect(d.querySelectorAll('tbody tr')[0]!.querySelector('.piala')).toBeNull();
     const saya = d.querySelectorAll('tbody tr.saya');
     expect(saya).toHaveLength(1);
     expect(saya[0]!.textContent).toContain('Cici');
@@ -134,9 +134,9 @@ describe('papan sprint (htmlPapanSprint)', () => {
   it('urut per kolom: baris yang tampil diurutkan, angka # tetap peringkat resmi', () => {
     const d = document.createElement('div');
     const p = papanLama(BARIS);
-    d.innerHTML = htmlPapanSprint(p, 'skor', 'x');
-    expect(namaBaris(d)).toEqual(['Ani', 'Cici', 'Budi']);
-    expect(nomor(d)).toEqual(['🥈', '🥉', '🥇']);
+    d.innerHTML = htmlPapanSprint(p, 'menang', 'x');
+    expect(namaBaris(d)).toEqual(['Budi', 'Ani', 'Cici']);
+    expect(nomor(d)).toEqual(['🥉', '🥇', '🥈']);
     d.innerHTML = htmlPapanSprint(p, 'kepentung', 'x');
     expect(namaBaris(d)).toEqual(['Cici', 'Budi', 'Ani']);
     expect(d.querySelector('th[aria-sort]')!.getAttribute('aria-sort')).toBe('ascending');
@@ -277,22 +277,22 @@ describe('layar Sprint (renderSprint)', () => {
     expect(akar.querySelector('#tab-sprint-minggu')!.getAttribute('aria-selected')).toBe('true');
     await tunggu();
     expect(url).toEqual(['/api/sprint?periode=minggu&v=2&nama=cici']);
-    expect(namaBaris(akar)).toEqual(['Budi', 'Ani', 'Cici']);
-    akar.querySelector<HTMLButtonElement>('[data-kolom="skor"]')!.click();
     expect(namaBaris(akar)).toEqual(['Ani', 'Cici', 'Budi']);
-    expect(document.activeElement?.getAttribute('data-kolom')).toBe('skor');
-    akar.querySelector<HTMLButtonElement>('[data-kolom="skor"]')!.click();
+    akar.querySelector<HTMLButtonElement>('[data-kolom="menang"]')!.click();
     expect(namaBaris(akar)).toEqual(['Budi', 'Ani', 'Cici']);
+    expect(document.activeElement?.getAttribute('data-kolom')).toBe('menang');
+    akar.querySelector<HTMLButtonElement>('[data-kolom="menang"]')!.click();
+    expect(namaBaris(akar)).toEqual(['Ani', 'Cici', 'Budi']);
     // Kolom Putaran juga bisa diketuk.
     akar.querySelector<HTMLButtonElement>('[data-kolom="putaran"]')!.click();
     expect(namaBaris(akar)).toEqual(['Cici', 'Ani', 'Budi']);
     akar.querySelector<HTMLButtonElement>('[data-kolom="putaran"]')!.click();
-    expect(namaBaris(akar)).toEqual(['Budi', 'Ani', 'Cici']);
-    // # = kembali ke urutan peringkat dari kolom mana pun.
-    akar.querySelector<HTMLButtonElement>('[data-kolom="mentung"]')!.click();
     expect(namaBaris(akar)).toEqual(['Ani', 'Cici', 'Budi']);
+    // # = kembali ke urutan peringkat dari kolom mana pun.
+    akar.querySelector<HTMLButtonElement>('[data-kolom="kepentung"]')!.click();
+    expect(namaBaris(akar)).toEqual(['Cici', 'Budi', 'Ani']);
     akar.querySelector<HTMLButtonElement>('[data-kolom="peringkat"]')!.click();
-    expect(namaBaris(akar)).toEqual(['Budi', 'Ani', 'Cici']);
+    expect(namaBaris(akar)).toEqual(['Ani', 'Cici', 'Budi']);
     expect(document.activeElement?.getAttribute('data-kolom')).toBe('peringkat');
     // Isyarat masih bisa digeser (data-luap, bayangan di tepi kolom yang menempel) ikut lebar tabel.
     const gulir = akar.querySelector<HTMLElement>('.papan-sprint-gulir')!;
@@ -504,7 +504,13 @@ describe('ubin Sprint di beranda', () => {
     const b = renderBeranda(document.getElementById('ui')!, aksi);
     const tombol = document.querySelector<HTMLButtonElement>('#sprint')!;
     expect(tombol.textContent).toContain(TEKS_SPRINT.tombolBeranda);
-    expect(tombol.closest('.panel-online')).not.toBeNull();
+    // 0.10.4: panel sendiri "Kompetitif", terpisah dari Main online, dengan penanda mode lain menyusul.
+    const panel = tombol.closest('.panel-kompetitif')!;
+    expect(panel).not.toBeNull();
+    expect(tombol.closest('.panel-online')).toBeNull();
+    expect(panel.querySelector('h2')!.textContent).toBe(TEKS_SPRINT.judulKompetitif);
+    expect(panel.querySelector('.kompetitif-menyusul')!.textContent).toBe(TEKS_SPRINT.menyusul);
+    expect(panel.querySelector('.kompetitif-menyusul')!.closest('button')).toBeNull();
     expect(document.querySelector('#kompetisi')).toBeNull();
     expect(document.querySelector('.tombol-segera')).toBeNull();
     tombol.click();

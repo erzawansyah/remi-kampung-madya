@@ -300,7 +300,13 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
             <button type="button" id="gabung">Gabung</button>
           </div>
           <button type="button" class="hantu penuh" id="publik">Cari meja publik</button>
-          <button type="button" class="hantu penuh" id="sprint"><span aria-hidden="true">⏱️</span> ${esc(TEKS_SPRINT.tombolBeranda)}</button>
+        </section>
+
+        <section class="kartu-panel panel-kompetitif" aria-labelledby="judul-kompetitif">
+          <div class="kepala-panel">
+            <h2 id="judul-kompetitif">${esc(TEKS_SPRINT.judulKompetitif)}</h2>
+          </div>
+          <button type="button" class="penuh" id="sprint"><span aria-hidden="true">⏱️</span> ${esc(TEKS_SPRINT.tombolBeranda)}</button>
           ${
             // Kompetisi antar-manusia ditutup sementara (0.7.0); sejak 0.8.0 ubinnya diganti Sprint. Kodenya
             // tetap ada: tombolnya kembali kalau KOMPETISI_DIBUKA dinyalakan lagi.
@@ -308,6 +314,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
               ? `<button type="button" class="hantu penuh" id="kompetisi"><span aria-hidden="true">🏅</span> ${esc(TEKS_KOMPETISI.tombolBeranda)}</button>`
               : ''
           }
+          <p class="kompetitif-menyusul">${esc(TEKS_SPRINT.menyusul)}</p>
         </section>
       </div>
 
@@ -691,7 +698,7 @@ export function renderBeranda(akar: HTMLElement, aksi: AksiBeranda, opsi: OpsiBe
   aturPasang(aksi.pasangAplikasi);
   aturMuatUlang(aksi.muatUlang);
 
-  // Ubin menu, atau tombol dengan id itu (Sprint ada di panel Main online).
+  // Ubin menu, atau tombol dengan id itu (Sprint ada di panel Kompetitif).
   const fokusNav = (n: string) => {
     const bersih = n.replace(/[^a-z-]/gi, '');
     (nav.querySelector<HTMLElement>(`[data-nav="${bersih}"]`) ?? (bersih ? el(bersih) : null))?.focus();

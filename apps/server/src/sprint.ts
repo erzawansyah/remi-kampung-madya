@@ -20,6 +20,7 @@ import {
   ringkasMingguan,
   terbaikMingguan,
   urutkanSprint,
+  urutkanSprintLama,
   type BarisPeringkatSprint,
   type BarisSprint,
   type CatatanSprint,
@@ -208,12 +209,12 @@ export interface PenyimpanSprint {
 
 /**
  * Potong papan bentuk lama ke MAKS_BARIS_SPRINT baris. Aplikasi 0.8.0–0.10.1 mengurutkan sendiri dengan
- * menang lebih dulu (urutkanSprint bawaan), jadi yang dipilih = 100 baris teratas menurut urutan itu; urutan
+ * menang lebih dulu (`urutkanSprintLama`, urutan sebelum 0.10.4), jadi yang dipilih = 100 baris teratas menurut urutan itu; urutan
  * kirimnya tetap urutan bawaan periodenya. Papan dengan ≤ 100 orang tidak berubah.
  */
 export function potongBentukLama(baris: readonly BarisSprint[]): BarisSprint[] {
   if (baris.length <= MAKS_BARIS_SPRINT) return [...baris];
-  const pilih = new Set(urutkanSprint(baris, null, 'minggu').slice(0, MAKS_BARIS_SPRINT));
+  const pilih = new Set(urutkanSprintLama(baris).slice(0, MAKS_BARIS_SPRINT));
   return baris.filter((b) => pilih.has(b));
 }
 

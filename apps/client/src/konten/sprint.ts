@@ -8,8 +8,12 @@ import { WIB_MS, type KolomSprint } from '@remi/meja';
 
 export const TEKS_SPRINT = {
   judul: 'Sprint',
-  /** Tombol di panel Main online beranda. */
+  /** Tombol di panel Kompetitif beranda (0.10.4). */
   tombolBeranda: 'Sprint',
+  /** Judul panel beranda yang memuat Sprint (keputusan pemilik 27 Nov 2026: "segmen kompetitif"). */
+  judulKompetitif: 'Kompetitif',
+  /** Penanda di panel Kompetitif: mode kompetitif lain menyusul. */
+  menyusul: 'Mode kompetitif lainnya menyusul.',
   /**
    * Pembuka di layar Sprint. Sejak 0.10.3 tanpa "Mulai dari 0" (keputusan pemilik 27 Nov 2026: "sekali maju
    * gak bisa mundur"): satu sprint per minggu, Keluar hanya menjeda, minggu baru mulai Senin 00.00 WIB.

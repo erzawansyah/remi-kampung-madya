@@ -307,9 +307,9 @@ export function terbaikMingguan(
 }
 
 /**
- * Urutkan papan sprint. Urutan bawaan Minggu ini (`periode` 'minggu'): menang terbanyak, lalu skor
- * tertinggi. Sepanjang masa ('semua', 27 Nov 2026): skor (minggu terbaik) tertinggi, lalu menang. Sisanya
- * sama: mentung terbanyak, kepentung tersedikit, lalu nama (putaran tidak ikut urutan bawaan). `kolom`
+ * Urutkan papan sprint. Urutan bawaan kedua tab (0.10.4, keputusan pemilik 27 Nov 2026): skor tertinggi
+ * (Sepanjang masa: skor minggu terbaik), lalu menang terbanyak, mentung terbanyak, kepentung tersedikit, lalu
+ * nama (putaran tidak ikut urutan bawaan). `kolom`
  * (pemain mengetuk judul kolom): kolom itu didahulukan (kepentung dari yang tersedikit, yang lain dari
  * yang terbanyak), sisanya urutan bawaan. Mengembalikan salinan.
  */
@@ -318,7 +318,10 @@ export function urutkanSprint<T extends Omit<BarisSprint, 'piala'>>(
   kolom?: KolomSprint | null,
   periode: PeriodeSprint = 'minggu',
 ): T[] {
-  const utama = (a: T, b: T) => (periode === 'semua' ? b.skor - a.skor || b.menang - a.menang : b.menang - a.menang || b.skor - a.skor);
+  // Sejak 0.10.4 (keputusan pemilik 27 Nov 2026, "Urutkan berdasarkan skor aja ranknya") kedua periode sama:
+  // skor dulu, lalu menang. `periode` tetap diterima supaya pemanggil lama tidak berubah.
+  void periode;
+  const utama = (a: T, b: T) => b.skor - a.skor || b.menang - a.menang;
   const bawaan = (a: T, b: T) =>
     utama(a, b) ||
     b.mentung - a.mentung ||
@@ -330,6 +333,22 @@ export function urutkanSprint<T extends Omit<BarisSprint, 'piala'>>(
     return kolom === 'kepentung' ? a.kepentung - b.kepentung : b[kolom] - a[kolom];
   };
   return [...baris].sort((a, b) => depan(a, b) || bawaan(a, b));
+}
+
+/**
+ * Urutan bawaan papan sebelum 0.10.4 (menang dulu, lalu skor, mentung, kepentung tersedikit, nama). Hanya
+ * untuk memilih baris bentuk lama `GET /api/sprint` yang diurutkan sendiri oleh aplikasi 0.8.0–0.10.1.
+ */
+export function urutkanSprintLama<T extends Omit<BarisSprint, 'piala'>>(baris: readonly T[]): T[] {
+  return [...baris].sort(
+    (a, b) =>
+      b.menang - a.menang ||
+      b.skor - a.skor ||
+      b.mentung - a.mentung ||
+      a.kepentung - b.kepentung ||
+      kunciNama(a.nama).localeCompare(kunciNama(b.nama), 'id-ID') ||
+      a.nama.localeCompare(b.nama, 'id-ID'),
+  );
 }
 
 /** Banyaknya baris teratas dan terbawah yang tampil di papan (keputusan pemilik 27 Nov 2026). */
