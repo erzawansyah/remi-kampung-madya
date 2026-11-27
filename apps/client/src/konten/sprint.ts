@@ -3,7 +3,7 @@
 // aturan sprint (pengaturan, hasil per putaran, urutan papan, juara mingguan) hanya di @remi/meja
 // (sprint.ts). Dijaga apps/client/test/antislop.test.ts.
 
-import type { KolomSprint } from '@remi/meja';
+import { WIB_MS, type KolomSprint } from '@remi/meja';
 
 export const TEKS_SPRINT = {
   judul: 'Sprint',
@@ -29,12 +29,18 @@ export const TEKS_SPRINT = {
   tabMinggu: 'Minggu ini',
   tabSemua: 'Sepanjang masa',
   kolomNama: 'Nama',
+  /** Kolom paling kiri: peringkat resmi (27 Nov 2026, "judul kolomnya ganti jadi #"). */
+  kolomPeringkat: '#',
+  /** Nama lengkap kolom # untuk pembaca layar dan tooltip. */
+  kolomPeringkatLengkap: 'Peringkat',
+  /** Nama lengkap kolom angka (aria-label, title). */
   kolom: { putaran: 'Putaran', menang: 'Menang', mentung: 'Mentung', kepentung: 'Kepentung', skor: 'Skor' } satisfies Record<KolomSprint, string>,
-  /**
-   * Judul kolom yang boleh dipecah dua baris di HP sempit (tanda | = tempat pecah, tampil sebagai tanda
-   * hubung lewat soft hyphen). Hanya dipecah kalau tidak muat; tanpa itu enam kolom tidak muat di 360 px.
-   */
-  kolomPecah: { putaran: 'Pu|taran', menang: 'Me|nang', mentung: 'Men|tung', kepentung: 'Kepen|tung', skor: 'Skor' } satisfies Record<KolomSprint, string>,
+  /** Judul kolom yang tampil (27 Nov 2026, "Menang = M. Mentung = Mtg, Kepentung = Kpg"). */
+  kolomSingkat: { putaran: 'Ptr', menang: 'M', mentung: 'Mtg', kepentung: 'Kpg', skor: 'Skor' } satisfies Record<KolomSprint, string>,
+  /** Satu baris di bawah tabel: arti singkatan judul kolom. */
+  legenda: 'Ptr = putaran · M = menang · Mtg = mentung · Kpg = kepentung',
+  /** Baris pemisah di antara 10 teratas, baris sendiri, dan 10 terbawah (untuk pembaca layar). */
+  ariaPemisah: 'Sebagian peringkat dilewati',
   memuat: 'Memuat papan…',
   kosongMinggu: 'Belum ada yang sprint minggu ini. Jadi yang pertama, Bos.',
   kosongSemua: 'Belum ada yang sprint.',
@@ -42,7 +48,8 @@ export const TEKS_SPRINT = {
   offline: 'Kamu lagi offline. Papan sprint butuh internet.',
   cobaLagi: 'Coba lagi',
   /** Keterangan di bawah papan. */
-  ketPapan: 'Minggu ini dihitung mulai Senin pukul 00.00 WIB. Juara tiap minggu dapat 🏆. Ketuk judul kolom buat mengurutkan.',
+  ketPapan:
+    'Minggu ini dihitung mulai Senin pukul 00.00 WIB. Sepanjang masa memakai minggu terbaik tiap orang (skor seminggu paling tinggi). Juara tiap minggu dapat 🏆. Ketuk judul kolom buat mengurutkan, ketuk # buat balik ke peringkat.',
   kembali: '← Kembali ke beranda',
   lencanaKamu: 'kamu',
   /** Bar atas meja sprint (diikuti "Putaran N"). */
@@ -89,3 +96,26 @@ export function teksSprintPutaran(nomor: number, h: { putaran?: number; menang: 
 export const teksPiala = (n: number): string => (n > 0 ? (n === 1 ? '🏆' : `🏆${n}`) : '');
 /** Untuk pembaca layar. */
 export const ariaPiala = (n: number): string => (n === 1 ? 'juara sprint mingguan sekali' : `juara sprint mingguan ${n} kali`);
+
+const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const HARI_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Label minggu terbaik di papan Sepanjang masa: "24–30 Nov", "29 Des–4 Jan", tahun hanya kalau bukan
+ * tahun ini ("24–30 Nov 2025"). `mulai` = awal minggu WIB (Senin), sampai Minggu; tanggal menurut WIB.
+ */
+export function teksMingguSprint(mulai: number, sekarang: number): string {
+  const tgl = (ms: number) => {
+    const d = new Date(ms + WIB_MS);
+    return { h: d.getUTCDate(), b: BULAN[d.getUTCMonth()]!, t: d.getUTCFullYear() };
+  };
+  const a = tgl(mulai);
+  const z = tgl(mulai + 6 * HARI_MS);
+  const ini = tgl(sekarang).t;
+  const th = (t: number) => (t === ini ? '' : ` ${t}`);
+  if (a.b === z.b && a.t === z.t) return `${a.h}–${z.h} ${z.b}${th(z.t)}`;
+  return `${a.h} ${a.b}${a.t === z.t ? '' : th(a.t)}–${z.h} ${z.b}${th(z.t)}`;
+}
+
+/** Label minggu terbaik untuk pembaca layar. */
+export const ariaMingguSprint = (teks: string): string => `minggu terbaik ${teks}`;

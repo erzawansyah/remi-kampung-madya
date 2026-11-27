@@ -109,6 +109,8 @@
   /* ---------- Permukaan ---------- */
   /* Panel gelap tembus sedikit: papan di atas laken */
   --panel: rgba(9, 27, 17, 0.92);
+  /* --panel yang sudah dicampur di atas --laken, pekat: latar sel tabel yang menempel saat digeser (papan sprint) */
+  --panel-pekat: #0a2013;
   /* Panel lebih terang: tombol sekunder, baris aktif */
   --panel-terang: #24523a;
   --panel-terang-hover: #2c6045;
@@ -242,4 +244,5 @@ html[data-laken='kompetisi'] {
   --laken-pekat: var(--laken-kompetisi-pekat);
   --kaca: rgba(8, 18, 36, 0.72);
   --panel: rgba(8, 18, 36, 0.92);
+  --panel-pekat: #081a2c;
 }

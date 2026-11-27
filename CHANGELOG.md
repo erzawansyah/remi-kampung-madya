@@ -8,17 +8,28 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [0.10.2] - 2026-11-27
 
-Papan Sprint menampilkan jumlah putaran. Aturan main tidak berubah.
+Papan Sprint menampilkan jumlah putaran, peringkat, dan minggu terbaik. Aturan main tidak berubah.
 
 ### Untuk pemain
 
 #### Ditambahkan
 
-- Papan **Sprint** sekarang juga menampilkan jumlah putaran yang dimainkan (kolom **Putaran**, bisa diketuk buat mengurutkan).
+- Papan **Sprint** sekarang juga menampilkan jumlah putaran yang dimainkan (kolom **Ptr**, bisa diketuk buat mengurutkan).
+- Kolom **#** paling kiri: peringkatmu. Angkanya tetap walau tabel diurutkan pakai kolom lain; ketuk # buat balik ke urutan peringkat.
+
+#### Diubah
+
+- **Sepanjang masa** sekarang memakai **minggu terbaik** tiap orang: skor seminggu paling tinggi (minggu yang sedang jalan juga ikut), lengkap dengan tanggal minggunya. Urutannya skor dulu, baru menang. **Minggu ini** tetap seperti biasa.
+- Papan cuma menampilkan **10 teratas dan 10 terbawah**. Kalau kamu di antaranya, barismu tetap tampil dengan peringkatmu.
+- Judul kolom disingkat (Ptr, M, Mtg, Kpg) dengan keterangan satu baris di bawah tabel. Di HP sempit, #, Nama, dan Skor tetap kelihatan; kolom tengahnya yang digeser.
 
 ### Teknis
 
-- Papan sprint (keputusan pemilik #65, 27 Nov 2026): `BarisSprint.putaran` dihitung di `rekapSprint()` lewat `putaranCatatan()` (`packages/meja/src/sprint.ts`): satu baris `sprint_putaran` = 1 putaran, baris 0.8.0 di tabel `sprint` memakai kolom `putaran`-nya (putaran yang selesai di percobaan itu). `KOLOM_SPRINT` mendapat `putaran` (bisa diurutkan; urutan bawaan dan juara mingguan tetap). `GET /api/sprint` hanya menambah field `putaran` di tiap baris; tanpa perubahan skema. Judul kolom papan boleh pecah dua baris lewat soft hyphen (`TEKS_SPRINT.kolomPecah`, nama utuh di `aria-label`) dan tepi panel dirapatkan di layar ≤ 380 px supaya enam kolom muat di HP 360 px.
+- Papan sprint (keputusan pemilik #65, 27 Nov 2026): `BarisSprint.putaran` dihitung di `rekapSprint()` lewat `putaranCatatan()` (`packages/meja/src/sprint.ts`): satu baris `sprint_putaran` = 1 putaran, baris 0.8.0 di tabel `sprint` memakai kolom `putaran`-nya (putaran yang selesai di percobaan itu). `KOLOM_SPRINT` mendapat `putaran` (bisa diurutkan; urutan bawaan dan juara mingguan tetap). `GET /api/sprint` hanya menambah field `putaran` di tiap baris; tanpa perubahan skema. Tepi panel dirapatkan di layar ≤ 380 px.
+- Papan Sepanjang masa = minggu terbaik (keputusan pemilik #65, 27 Nov 2026): `terbaikMingguan()` dan `ringkasMingguan()` di `packages/meja/src/sprint.ts` (minggu = `awalMingguWib` waktu catatan; skor minggu sama: menang lebih banyak, lalu minggu yang lebih baru). `urutkanSprint(baris, kolom, periode)`: Sepanjang masa urut skor lalu menang, Minggu ini tetap menang lalu skor. `PercobaanSprint.menang` boleh berupa jumlah (`menangCatatan()`), `BarisSprint.minggu` hanya di Sepanjang masa.
+- Potongan papan: `potongPapanSprint()` (10 teratas, 10 terbawah, baris sendiri di antaranya, `BARIS_UJUNG_SPRINT`) dan `susunPapanSprint()` (pemisah "…" di setiap lompatan peringkat). `GET /api/sprint?v=2&nama=` menjawab `{v, periode, mulai, jumlah, atas, bawah, saya}` dengan `peringkat` per baris; tanpa `v=2` bentuk lama `{periode, mulai, baris}` tetap untuk aplikasi 0.8.0–0.10.1 (baris Sepanjang masa ikut jadi minggu terbaik, dengan field `minggu` tambahan). Aplikasi baru yang bertemu server lama memotong bentuk lama sendiri.
+- Skema riwayat **v10**: `sprint_mingguan` (satu baris per orang per minggu WIB yang sudah selesai) dan `sprint_tergulung` (per meja sprint, nomor putaran terbesar yang sudah digulung). `PenyimpanSprint.gulung()` memindahkan putaran minggu yang sudah lewat ke ringkasan dan membuang barisnya dalam satu transaksi, saat database dibuka, sesudah sprint lama ditutup, dan tiap ±10 menit. Putaran yang nomornya sudah digulung ditolak saat dicatat lagi; putaran telat dari minggu yang sudah digulung masuk sekali lalu ikut digulung berikutnya.
+- Papan di aplikasi: kolom # (`data-kolom="peringkat"`), singkatan `TEKS_SPRINT.kolomSingkat` + `legenda` (nama lengkap di `aria-label` dan `abbr title`), sel `.kol-no`/`.kol-nama` menempel di kiri dan `.kol-skor` di kanan (`position: sticky` di `.tabel-gulir`, latar `--panel-pekat`), label minggu `teksMingguSprint()`. Soft hyphen judul kolom (`kolomPecah`) dihapus.
 
 ## [0.10.1] - 2026-11-27
 

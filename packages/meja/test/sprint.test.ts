@@ -29,6 +29,13 @@ import {
   TEKS_SPRINT_TERKUNCI,
   urutkanSprint,
   validasiPesan,
+  BARIS_UJUNG_SPRINT,
+  menangCatatan,
+  potongPapanSprint,
+  ringkasMingguan,
+  susunPapanSprint,
+  terbaikMingguan,
+  type BarisSprint,
   type DataMeja,
   type OpsiMeja,
   type PercobaanSprint,
@@ -200,6 +207,115 @@ describe('papan sprint', () => {
     expect(juaraMingguan([], SENIN)).toEqual([]);
     // Piala ikut di baris papan.
     expect(rekapSprint(xs, undefined, pialaSprint(juara)).find((b) => b.nama.toLowerCase() === 'budi')!.piala).toBe(2);
+  });
+});
+
+describe('papan Sepanjang masa: minggu terbaik (27 Nov 2026)', () => {
+  const p = (nama: string, waktu: number, menang: boolean | number, skor: number, mentung = 0, kepentung = 0, putaran?: number): PercobaanSprint => ({
+    nama,
+    waktu,
+    menang,
+    skor,
+    mentung,
+    kepentung,
+    ...(putaran === undefined ? {} : { putaran }),
+  });
+  const M1 = SENIN - 7 * HARI;
+  const M2 = SENIN;
+
+  it('contoh pemilik: minggu 1 Jos 2000; minggu 2 Jis 2100, Jos 700 → 1. Jis 2100, 2. Jos 2000', () => {
+    const xs = [p('Jos', M1 + HARI, true, 1500), p('Jos', M1 + 2 * HARI, true, 500), p('Jis', M2 + HARI, true, 2100), p('Jos', M2 + HARI, false, 700)];
+    const r = terbaikMingguan(xs);
+    expect(r.map((b) => [b.nama, b.skor, b.minggu])).toEqual([
+      ['Jis', 2100, M2],
+      ['Jos', 2000, M1],
+    ]);
+    // Angka baris = minggu terbaik saja (bukan jumlah semua minggu).
+    expect(r[1]).toEqual({ nama: 'Jos', putaran: 2, menang: 2, mentung: 0, kepentung: 0, skor: 2000, piala: 0, minggu: M1 });
+  });
+
+  it('minggu berjalan ikut; minggu = minggu WIB tiap catatan (Minggu 23.59 masih minggu lalu)', () => {
+    const xs = [p('Ani', SENIN - 60_000, true, 100), p('Ani', SENIN, true, 150), p('Ani', SENIN + HARI, false, -20)];
+    expect(terbaikMingguan(xs)[0]).toMatchObject({ skor: 130, minggu: SENIN, putaran: 2 });
+    expect(ringkasMingguan(xs).map((r) => [r.minggu, r.kunci, r.skor, r.menang, r.putaran, r.waktu])).toEqual([
+      [M1, 'ani', 100, 1, 1, SENIN - 60_000],
+      [SENIN, 'ani', 130, 1, 2, SENIN + HARI],
+    ]);
+  });
+
+  it('skor minggu sama: menang lebih banyak, lalu minggu yang lebih baru', () => {
+    const a = terbaikMingguan([p('Ani', M1 + HARI, 2, 300, 0, 0, 5), p('Ani', M2 + HARI, 1, 300, 0, 0, 2)]);
+    expect(a[0]).toMatchObject({ minggu: M1, menang: 2, putaran: 5 });
+    const b = terbaikMingguan([p('Ani', M1 + HARI, 1, 300), p('Ani', M2 + HARI, 1, 300)]);
+    expect(b[0]!.minggu).toBe(M2);
+  });
+
+  it('urutan Sepanjang masa: skor, lalu menang, mentung, kepentung tersedikit, nama; Minggu ini tetap menang dulu', () => {
+    const b = (nama: string, menang: number, skor: number, mentung = 0, kepentung = 0): Omit<BarisSprint, 'piala'> => ({ nama, putaran: 1, menang, skor, mentung, kepentung });
+    const baris = [b('Ani', 9, 100), b('Budi', 1, 500), b('Cici', 2, 500), b('Dodi', 2, 500, 1), b('Eko', 2, 500, 1, 1)];
+    expect(urutkanSprint(baris, null, 'semua').map((x) => x.nama)).toEqual(['Dodi', 'Eko', 'Cici', 'Budi', 'Ani']);
+    expect(urutkanSprint(baris).map((x) => x.nama)).toEqual(['Ani', 'Dodi', 'Eko', 'Cici', 'Budi']);
+    // Kolom yang diketuk tetap didahulukan.
+    expect(urutkanSprint(baris, 'menang', 'semua')[0]!.nama).toBe('Ani');
+  });
+
+  it('ringkasan mingguan (menang berupa jumlah) dan putaran 0.8.0 bisa dicampur dengan putaran biasa', () => {
+    expect(menangCatatan({ menang: true })).toBe(1);
+    expect(menangCatatan({ menang: false })).toBe(0);
+    expect(menangCatatan({ menang: 7 })).toBe(7);
+    expect(menangCatatan({ menang: -1 })).toBe(0);
+    expect(menangCatatan({ menang: 1.5 })).toBe(0);
+    const xs = [p('Ani', M1 + HARI, 4, 900, 2, 1, 10), p('ani', M1 + 2 * HARI, true, 50), { ...p('ANI', M1 + 3 * HARI, true, 400, 2, 1), putaran: 5 }];
+    expect(rekapSprint(xs)).toEqual([{ nama: 'ANI', putaran: 16, menang: 6, mentung: 4, kepentung: 2, skor: 1350, piala: 0 }]);
+    // Ringkas ulang hasil ringkasan = sama (penggulungan idempoten secara hitungan).
+    const r1 = ringkasMingguan(xs);
+    const r2 = ringkasMingguan(r1.map((r) => ({ ...r, nama: r.nama })));
+    expect(r2).toEqual(r1);
+    // Juara mingguan dari ringkasan sama dengan dari catatan rinci.
+    const rinci = [p('Ani', M1 + HARI, true, 10), p('Budi', M1 + HARI, true, 50), p('Budi', M1 + 2 * HARI, false, 5)];
+    const ringkas = ringkasMingguan(rinci);
+    expect(juaraMingguan(ringkas, SENIN + HARI)).toEqual(juaraMingguan(rinci, SENIN + HARI));
+  });
+
+  it('ejaan: catatan paling akhir orang itu (juga di luar minggu terbaiknya), atau peta ejaan', () => {
+    const xs = [p('budi', M1 + HARI, true, 900), p('BUDI', M2 + HARI, false, 1)];
+    expect(terbaikMingguan(xs)[0]).toMatchObject({ nama: 'BUDI', skor: 900, minggu: M1 });
+    expect(terbaikMingguan(xs, new Map([['budi', 'Budi']]), new Map([['budi', 3]]))[0]).toMatchObject({ nama: 'Budi', piala: 3 });
+  });
+});
+
+describe('potongan papan: 10 teratas, 10 terbawah, baris sendiri', () => {
+  const papan = (n: number) =>
+    Array.from({ length: n }, (_, i): BarisSprint => ({ nama: `Orang ${i + 1}`, putaran: 1, menang: 0, mentung: 0, kepentung: 0, skor: -i, piala: 0 }));
+
+  it('≤ 20 orang: semua di atas, tanpa bawah dan tanpa baris sendiri terpisah', () => {
+    expect(BARIS_UJUNG_SPRINT).toBe(10);
+    const p = potongPapanSprint(papan(20), 'orang 15');
+    expect([p.jumlah, p.atas.length, p.bawah.length, p.saya]).toEqual([20, 20, 0, null]);
+    expect(p.atas.map((b) => b.peringkat)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
+    expect(susunPapanSprint(p).every((t) => !t.pemisah)).toBe(true);
+    expect(potongPapanSprint([], 'x')).toEqual({ jumlah: 0, atas: [], bawah: [], saya: null });
+  });
+
+  it('> 20 orang: 10 + 10; baris sendiri hanya kalau di antara keduanya (nama tanpa beda huruf besar/kecil)', () => {
+    const p = potongPapanSprint(papan(35), 'ORANG 17');
+    expect(p.atas.map((b) => b.peringkat)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(p.bawah.map((b) => b.peringkat)).toEqual([26, 27, 28, 29, 30, 31, 32, 33, 34, 35]);
+    expect(p.saya).toMatchObject({ nama: 'Orang 17', peringkat: 17 });
+    expect(potongPapanSprint(papan(35), 'orang 3').saya).toBeNull();
+    expect(potongPapanSprint(papan(35), 'orang 26').saya).toBeNull();
+    expect(potongPapanSprint(papan(35), 'orang 25').saya!.peringkat).toBe(25);
+    expect(potongPapanSprint(papan(35), 'tidak ada').saya).toBeNull();
+    expect(potongPapanSprint(papan(35)).saya).toBeNull();
+    // Pemisah di setiap lompatan peringkat.
+    const pola = (x: ReturnType<typeof potongPapanSprint>) => susunPapanSprint(x).map((t) => (t.pemisah ? '…' : t.baris.peringkat));
+    expect(pola(p)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, '…', 17, '…', 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]);
+    expect(pola(potongPapanSprint(papan(35), 'orang 11'))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, '…', 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]);
+    expect(pola(potongPapanSprint(papan(35), 'orang 25'))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, '…', 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]);
+    expect(pola(potongPapanSprint(papan(21)))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, '…', 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    // Baris kembar (saya juga ada di atas) tidak ditampilkan dua kali.
+    const q = potongPapanSprint(papan(35));
+    expect(susunPapanSprint({ ...q, saya: q.atas[2]! }).filter((t) => !t.pemisah)).toHaveLength(20);
   });
 });
 

@@ -9,13 +9,13 @@ vi.hoisted(() => {
   Object.assign(globalThis, { __VERSI_APP__: '0.0.0', __BUILD_SHA__: 'dev', __BUILD_WAKTU__: '2026-11-25T00:00:00.000Z' });
 });
 
-import { awalMingguWib, KOLOM_SPRINT, NAMA_LAWAN_SPRINT, type BarisSprint } from '@remi/meja';
+import { awalMingguWib, KOLOM_SPRINT, NAMA_LAWAN_SPRINT, type BarisPeringkatSprint, type BarisSprint } from '@remi/meja';
 import { BAB_BANTUAN } from '../src/konten/bantuan';
-import { TEKS_SPRINT, teksPiala } from '../src/konten/sprint';
+import { TEKS_SPRINT, teksMingguSprint, teksPiala } from '../src/konten/sprint';
 import { _setelUlangCache } from '../src/preferensi';
 import { renderBeranda, type AksiBeranda } from '../src/ui/beranda';
 import { tutupSemuaJendela } from '../src/ui/dom';
-import { htmlPapanSprint, rapikanPapanSprint, rapikanSprintSaya, renderSprint, sprintBisaDilanjut } from '../src/ui/sprint';
+import { htmlPapanSprint, rapikanPapanSprint, rapikanSprintSaya, renderSprint, sprintBisaDilanjut, type PapanSprint } from '../src/ui/sprint';
 import { pasangMatchMediaPalsu } from './bantu';
 
 const BARIS: BarisSprint[] = [
@@ -48,12 +48,43 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+/** Papan bentuk lama (baris saja) dirapikan seperti jawaban server sebelum 0.10.2. */
+const papanLama = (baris: BarisSprint[], periode: 'minggu' | 'semua' = 'minggu', nama?: string) =>
+  rapikanPapanSprint({ periode, mulai: 0, baris }, nama)!;
+
+/** n orang, peringkat 1..n (skor menurun), untuk potongan 10 teratas / 10 terbawah. */
+function papanBanyak(n: number, saya: number | null, periode: 'minggu' | 'semua' = 'minggu'): PapanSprint {
+  const semua: BarisPeringkatSprint[] = Array.from({ length: n }, (_, i) => ({
+    nama: i + 1 === saya ? 'Cici' : `Orang ${i + 1}`,
+    putaran: i + 1,
+    menang: 0,
+    mentung: 0,
+    kepentung: 0,
+    skor: 1000 - i * 10,
+    piala: 0,
+    peringkat: i + 1,
+    ...(periode === 'semua' ? { minggu: SENIN } : {}),
+  }));
+  const muat = n <= 20;
+  const milik = saya ? semua[saya - 1]! : null;
+  return {
+    periode,
+    mulai: null,
+    jumlah: n,
+    atas: muat ? semua : semua.slice(0, 10),
+    bawah: muat ? [] : semua.slice(-10),
+    saya: milik && !muat && saya! > 10 && saya! <= n - 10 ? milik : null,
+  };
+}
+const SENIN = awalMingguWib(Date.UTC(2026, 10, 25, 5));
+const nomor = (akar: ParentNode) => [...akar.querySelectorAll('tbody tr:not(.pemisah) .kol-no')].map((x) => x.textContent);
+
 describe('papan sprint (htmlPapanSprint)', () => {
-  it('urutan bawaan: menang, lalu skor (Ani 900 di atas Cici 300); nomor 🥇🥈🥉; piala di samping nama; baris sendiri disorot tanpa beda huruf', () => {
+  it('# paling kiri (peringkat, 🥇🥈🥉), Nama, lalu Ptr M Mtg Kpg Skor; piala di samping nama; baris sendiri disorot tanpa beda huruf', () => {
     const d = document.createElement('div');
-    d.innerHTML = htmlPapanSprint(BARIS, null, 'CICI', 'minggu');
+    d.innerHTML = htmlPapanSprint(papanLama(BARIS), null, 'CICI');
     expect(namaBaris(d)).toEqual(['Budi', 'Ani', 'Cici']);
-    expect([...d.querySelectorAll('.nomor-sprint')].map((x) => x.textContent)).toEqual(['🥇', '🥈', '🥉']);
+    expect(nomor(d)).toEqual(['🥇', '🥈', '🥉']);
     const budi = d.querySelector('tbody tr')!;
     expect(budi.querySelector('.piala')!.textContent).toBe(teksPiala(2));
     expect(budi.querySelector('.piala')!.textContent).toBe('🏆2');
@@ -61,68 +92,164 @@ describe('papan sprint (htmlPapanSprint)', () => {
     expect(d.querySelectorAll('tbody tr')[2]!.querySelector('.piala')!.textContent).toBe('🏆');
     expect(d.querySelectorAll('tbody tr')[1]!.querySelector('.piala')).toBeNull();
     const saya = d.querySelectorAll('tbody tr.saya');
-    expect(saya[0]?.textContent).toContain('Cici');
     expect(saya).toHaveLength(1);
+    expect(saya[0]!.textContent).toContain('Cici');
     expect(saya[0]!.textContent).toContain(TEKS_SPRINT.lencanaKamu);
     // Skor negatif memakai minus tipografis.
     expect(budi.textContent).toContain('−50');
-    // Kolom: Putaran, Menang, Mentung, Kepentung, Skor (judulnya tombol), urutan bawaan = Menang menurun.
-    expect([...d.querySelectorAll('thead [data-kolom]')].map((b) => b.getAttribute('aria-label'))).toEqual(['Putaran', 'Menang', 'Mentung', 'Kepentung', 'Skor']);
-    // Teks yang tampil = nama kolom yang sama, boleh pecah dua baris lewat soft hyphen (enam kolom di HP 360 px).
-    expect([...d.querySelectorAll('thead [data-kolom]')].map((b) => b.textContent)).toEqual(['Pu\u00ADtaran', 'Me\u00ADnang', 'Men\u00ADtung', 'Kepen\u00ADtung', 'Skor']);
-    // Isi sel per baris sesuai judulnya: nama, putaran, menang, mentung, kepentung, skor.
-    expect([...budi.querySelectorAll('td')].slice(1).map((td) => td.textContent)).toEqual(['4', '3', '1', '2', '−50']);
-    expect(d.querySelector('th[aria-sort] button')!.getAttribute('aria-label')).toBe('Menang');
-    expect(d.querySelector('th[aria-sort]')!.getAttribute('aria-sort')).toBe('descending');
+    // Judul: # (tombol kembali ke peringkat), Nama, lalu singkatan; nama lengkap di aria-label dan title.
+    const judul = [...d.querySelectorAll('thead th')];
+    expect(judul.map((th) => th.textContent)).toEqual(['#', 'Nama', 'Ptr', 'M', 'Mtg', 'Kpg', 'Skor']);
+    expect([...d.querySelectorAll('thead [data-kolom]')].map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Peringkat',
+      'Putaran',
+      'Menang',
+      'Mentung',
+      'Kepentung',
+      'Skor',
+    ]);
+    expect([...d.querySelectorAll('thead abbr')].map((x) => x.getAttribute('title'))).toEqual(['Peringkat', 'Putaran', 'Menang', 'Mentung', 'Kepentung', 'Skor']);
+    expect(KOLOM_SPRINT.map((k) => TEKS_SPRINT.kolomSingkat[k])).toEqual(['Ptr', 'M', 'Mtg', 'Kpg', 'Skor']);
+    // Keterangan singkatan satu baris di bawah tabel.
+    expect(d.querySelector('.legenda-sprint')!.textContent).toBe('Ptr = putaran · M = menang · Mtg = mentung · Kpg = kepentung');
+    // Isi sel per baris sesuai judulnya.
+    expect([...budi.querySelectorAll('td')].map((td) => td.textContent).slice(2)).toEqual(['4', '3', '1', '2', '−50']);
+    // Urutan peringkat aktif: # yang diberi aria-sort.
+    expect(d.querySelector('th[aria-sort] button')!.getAttribute('data-kolom')).toBe('peringkat');
+    expect(d.querySelector('th[aria-sort]')!.getAttribute('aria-sort')).toBe('ascending');
+    // Kelas penempel: # dan Nama di kiri, Skor di kanan (judul dan isi).
+    for (const tr of d.querySelectorAll('tr')) {
+      const sel = [...tr.children];
+      expect(sel[0]!.classList.contains('kol-no')).toBe(true);
+      expect(sel[1]!.classList.contains('kol-nama')).toBe(true);
+      expect(sel.at(-1)!.classList.contains('kol-skor')).toBe(true);
+    }
+    expect(d.querySelector('.tabel-gulir table.papan-sprint')).not.toBeNull();
   });
 
-  it('urut per kolom: menurun, kecuali kepentung (paling sedikit di atas)', () => {
+  it('urut per kolom: baris yang tampil diurutkan, angka # tetap peringkat resmi', () => {
     const d = document.createElement('div');
-    d.innerHTML = htmlPapanSprint(BARIS, 'skor', 'x', 'semua');
+    const p = papanLama(BARIS);
+    d.innerHTML = htmlPapanSprint(p, 'skor', 'x');
     expect(namaBaris(d)).toEqual(['Ani', 'Cici', 'Budi']);
-    d.innerHTML = htmlPapanSprint(BARIS, 'mentung', 'x', 'semua');
-    expect(namaBaris(d)).toEqual(['Ani', 'Cici', 'Budi']);
-    d.innerHTML = htmlPapanSprint(BARIS, 'kepentung', 'x', 'semua');
+    expect(nomor(d)).toEqual(['🥈', '🥉', '🥇']);
+    d.innerHTML = htmlPapanSprint(p, 'kepentung', 'x');
     expect(namaBaris(d)).toEqual(['Cici', 'Budi', 'Ani']);
     expect(d.querySelector('th[aria-sort]')!.getAttribute('aria-sort')).toBe('ascending');
     expect(d.querySelector('[data-kolom="kepentung"]')!.classList.contains('aktif')).toBe(true);
-    // Putaran terbanyak di atas.
-    d.innerHTML = htmlPapanSprint(BARIS, 'putaran', 'x', 'semua');
+    expect(d.querySelector('[data-kolom="peringkat"]')!.classList.contains('aktif')).toBe(false);
+    d.innerHTML = htmlPapanSprint(p, 'putaran', 'x');
     expect(namaBaris(d)).toEqual(['Cici', 'Ani', 'Budi']);
     expect(d.querySelector('th[aria-sort] button')!.getAttribute('aria-label')).toBe('Putaran');
     expect(d.querySelector('th[aria-sort]')!.getAttribute('aria-sort')).toBe('descending');
-    expect(d.querySelector('[data-kolom="putaran"]')!.classList.contains('aktif')).toBe(true);
   });
 
-  it('judul kolom yang dipecah tetap kata yang sama (paling banyak satu tempat pecah)', () => {
-    for (const k of KOLOM_SPRINT) {
-      expect(TEKS_SPRINT.kolomPecah[k].replace('|', '')).toBe(TEKS_SPRINT.kolom[k]);
-      expect(TEKS_SPRINT.kolomPecah[k].split('|').length).toBeLessThanOrEqual(2);
-    }
+  it('lebih dari 20 orang: 10 teratas, "…", 10 terbawah; baris sendiri di tengah dengan peringkat aslinya', () => {
+    const d = document.createElement('div');
+    d.innerHTML = htmlPapanSprint(papanBanyak(35, 17), null, 'cici');
+    const baris = [...d.querySelectorAll('tbody tr')];
+    expect(baris).toHaveLength(10 + 1 + 1 + 1 + 10);
+    expect(baris[10]!.classList.contains('pemisah')).toBe(true);
+    expect(baris[10]!.textContent).toBe('…');
+    expect(baris[10]!.querySelector('td')!.getAttribute('colspan')).toBe('7');
+    expect(baris[11]!.classList.contains('saya')).toBe(true);
+    expect(baris[11]!.querySelector('.kol-no')!.textContent).toBe('17');
+    expect(baris[11]!.textContent).toContain(TEKS_SPRINT.lencanaKamu);
+    expect(baris[12]!.classList.contains('pemisah')).toBe(true);
+    expect(nomor(d).slice(-10)).toEqual(['26', '27', '28', '29', '30', '31', '32', '33', '34', '35']);
+    // Baris sendiri bersambung dengan 10 teratas: tidak ada pemisah di antaranya.
+    d.innerHTML = htmlPapanSprint(papanBanyak(35, 11), null, 'cici');
+    expect([...d.querySelectorAll('tbody tr')].map((tr) => tr.classList.contains('pemisah'))).toEqual([
+      ...Array(11).fill(false),
+      true,
+      ...Array(10).fill(false),
+    ]);
+    // Tidak di papan / sudah di 10 teratas: satu pemisah.
+    d.innerHTML = htmlPapanSprint(papanBanyak(35, null), null, 'cici');
+    expect(d.querySelectorAll('tbody tr.pemisah')).toHaveLength(1);
+    expect(d.querySelectorAll('tbody tr')).toHaveLength(21);
+    // Pas 21 orang: 10 + pemisah + 10 (peringkat 11 tidak tampil).
+    d.innerHTML = htmlPapanSprint(papanBanyak(21, null), null, 'x');
+    expect(d.querySelectorAll('tbody tr.pemisah')).toHaveLength(1);
+    expect(nomor(d)).not.toContain('11');
+    // 20 orang atau kurang: semua, tanpa pemisah.
+    d.innerHTML = htmlPapanSprint(papanBanyak(20, 15), null, 'cici');
+    expect(d.querySelectorAll('tbody tr')).toHaveLength(20);
+    expect(d.querySelectorAll('tbody tr.pemisah')).toHaveLength(0);
+    expect(d.querySelectorAll('tbody tr.saya')).toHaveLength(1);
+    // Diurutkan per kolom: tanpa pemisah, # tetap.
+    d.innerHTML = htmlPapanSprint(papanBanyak(35, 17), 'putaran', 'cici');
+    expect(d.querySelectorAll('tbody tr.pemisah')).toHaveLength(0);
+    expect(nomor(d)[0]).toBe('35');
+    expect(d.querySelector('tr.saya .kol-no')!.textContent).toBe('17');
+  });
+
+  it('Sepanjang masa: label minggu terbaik di bawah nama', () => {
+    const d = document.createElement('div');
+    d.innerHTML = htmlPapanSprint(papanBanyak(3, null, 'semua'), null, 'x', SENIN + 86_400_000);
+    const label = d.querySelector('tbody tr .minggu-sprint')!;
+    expect(label.textContent).toBe('23–29 Nov');
+    expect(label.getAttribute('aria-label')).toBe('minggu terbaik 23–29 Nov');
+    // Minggu ini tidak memakai label.
+    d.innerHTML = htmlPapanSprint(papanBanyak(3, null, 'minggu'), null, 'x');
+    expect(d.querySelector('.minggu-sprint')).toBeNull();
+  });
+
+  it('teksMingguSprint: bulan singkat, beda bulan, tahun hanya kalau bukan tahun ini (WIB)', () => {
+    const now = Date.UTC(2026, 10, 27);
+    expect(teksMingguSprint(awalMingguWib(Date.UTC(2026, 10, 25)), now)).toBe('23–29 Nov');
+    expect(teksMingguSprint(awalMingguWib(Date.UTC(2026, 9, 28)), now)).toBe('26 Okt–1 Nov');
+    expect(teksMingguSprint(awalMingguWib(Date.UTC(2025, 10, 25)), now)).toBe('24–30 Nov 2025');
+    expect(teksMingguSprint(awalMingguWib(Date.UTC(2025, 11, 31)), now)).toBe('29 Des 2025–4 Jan');
+    expect(teksMingguSprint(awalMingguWib(Date.UTC(2026, 11, 31)), now)).toBe('28 Des–3 Jan 2027');
   });
 
   it('kosong: kalimat per periode', () => {
-    expect(htmlPapanSprint([], null, 'x', 'minggu')).toContain(TEKS_SPRINT.kosongMinggu);
-    expect(htmlPapanSprint([], null, 'x', 'semua')).toContain(TEKS_SPRINT.kosongSemua);
+    expect(htmlPapanSprint(papanLama([]), null, 'x')).toContain(TEKS_SPRINT.kosongMinggu);
+    expect(htmlPapanSprint(papanLama([], 'semua'), null, 'x')).toContain(TEKS_SPRINT.kosongSemua);
   });
 
   it('nama dari server ditulis aman (tanpa HTML)', () => {
     const d = document.createElement('div');
-    d.innerHTML = htmlPapanSprint([{ nama: '<img src=x onerror=1>', putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: 0 }], null, 'x', 'semua');
+    d.innerHTML = htmlPapanSprint(papanLama([{ nama: '<img src=x onerror=1>', putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: 0 }]), null, 'x');
     expect(d.querySelector('img')).toBeNull();
   });
 
-  it('rapikanPapanSprint: bentuk asing ditolak, angka rusak jadi 0, baris tanpa nama dibuang', () => {
+  it('rapikanPapanSprint: bentuk v2 dipakai, peringkat rusak dibuang; bentuk lama (server sebelum 0.10.2) dipotong di aplikasi', () => {
     expect(rapikanPapanSprint(null)).toBeNull();
     expect(rapikanPapanSprint({ periode: 'minggu' })).toBeNull();
+    const v2 = rapikanPapanSprint({
+      v: 2,
+      periode: 'semua',
+      mulai: null,
+      jumlah: 40,
+      atas: [{ nama: 'A', peringkat: 1, skor: 9, minggu: SENIN }, { nama: 'B', peringkat: 0 }, { peringkat: 2 }],
+      bawah: [{ nama: 'Z', peringkat: 40, skor: -5, menang: 'x' }],
+      saya: { nama: 'S', peringkat: 20 },
+    })!;
+    expect(v2).toEqual({
+      periode: 'semua',
+      mulai: null,
+      jumlah: 40,
+      atas: [{ nama: 'A', putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: 9, piala: 0, minggu: SENIN, peringkat: 1 }],
+      bawah: [{ nama: 'Z', putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: -5, piala: 0, peringkat: 40 }],
+      saya: { nama: 'S', putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: 0, peringkat: 20 },
+    });
+    // Bentuk lama: angka rusak jadi 0, tanpa nama dibuang, diurutkan urutan bawaan periodenya.
     expect(rapikanPapanSprint({ periode: 'aneh', mulai: 5, baris: [{ nama: 'A', menang: 'x', piala: 1.7 }, { menang: 3 }] })).toEqual({
       periode: 'minggu',
       mulai: 5,
-      baris: [{ nama: 'A', putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: 1 }],
+      jumlah: 1,
+      atas: [{ nama: 'A', putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: 1, peringkat: 1 }],
+      bawah: [],
+      saya: null,
     });
-    // Server sebelum 0.10.2 (tanpa putaran) tetap terbaca; putaran yang dikirim ikut dibawa.
-    expect(rapikanPapanSprint({ periode: 'semua', mulai: null, baris: [{ nama: 'B', menang: 2, mentung: 1, kepentung: 0, skor: -5, piala: 0 }] })!.baris[0]!.putaran).toBe(0);
-    expect(rapikanPapanSprint({ periode: 'semua', mulai: null, baris: [{ nama: 'B', putaran: 7 }] })!.baris[0]!.putaran).toBe(7);
+    // Sepanjang masa bentuk lama: skor dulu.
+    expect(papanLama(BARIS, 'semua').atas.map((b) => b.nama)).toEqual(['Ani', 'Cici', 'Budi']);
+    // 30 orang dari server lama: dipotong 10/10, baris sendiri dicari dari nama.
+    const banyak = Array.from({ length: 30 }, (_, i) => ({ nama: `O${i}`, putaran: 1, menang: 30 - i, mentung: 0, kepentung: 0, skor: 0, piala: 0 }));
+    const p = papanLama(banyak, 'minggu', 'o14');
+    expect([p.jumlah, p.atas.length, p.bawah.length, p.saya?.peringkat]).toEqual([30, 10, 10, 15]);
   });
 });
 
@@ -145,7 +272,7 @@ describe('layar Sprint (renderSprint)', () => {
     expect(TEKS_SPRINT.intro).not.toMatch(/\d putaran/);
     expect(akar.querySelector('#tab-sprint-minggu')!.getAttribute('aria-selected')).toBe('true');
     await tunggu();
-    expect(url).toEqual(['/api/sprint?periode=minggu']);
+    expect(url).toEqual(['/api/sprint?periode=minggu&v=2&nama=cici']);
     expect(namaBaris(akar)).toEqual(['Budi', 'Ani', 'Cici']);
     akar.querySelector<HTMLButtonElement>('[data-kolom="skor"]')!.click();
     expect(namaBaris(akar)).toEqual(['Ani', 'Cici', 'Budi']);
@@ -157,6 +284,12 @@ describe('layar Sprint (renderSprint)', () => {
     expect(namaBaris(akar)).toEqual(['Cici', 'Ani', 'Budi']);
     akar.querySelector<HTMLButtonElement>('[data-kolom="putaran"]')!.click();
     expect(namaBaris(akar)).toEqual(['Budi', 'Ani', 'Cici']);
+    // # = kembali ke urutan peringkat dari kolom mana pun.
+    akar.querySelector<HTMLButtonElement>('[data-kolom="mentung"]')!.click();
+    expect(namaBaris(akar)).toEqual(['Ani', 'Cici', 'Budi']);
+    akar.querySelector<HTMLButtonElement>('[data-kolom="peringkat"]')!.click();
+    expect(namaBaris(akar)).toEqual(['Budi', 'Ani', 'Cici']);
+    expect(document.activeElement?.getAttribute('data-kolom')).toBe('peringkat');
     // Main sprint: aksi dipanggil sekali, tombolnya menunggu.
     const tombol = akar.querySelector<HTMLButtonElement>('#main-sprint')!;
     expect(tombol.textContent).toBe(TEKS_SPRINT.tombolMain);
@@ -181,7 +314,7 @@ describe('layar Sprint (renderSprint)', () => {
     akar.querySelector<HTMLButtonElement>('[data-kolom="kepentung"]')!.click();
     akar.querySelector<HTMLButtonElement>('#tab-sprint-semua')!.click();
     await tunggu();
-    expect(url).toEqual(['/api/sprint?periode=minggu', '/api/sprint?periode=semua']);
+    expect(url).toEqual(['/api/sprint?periode=minggu&v=2&nama=cici', '/api/sprint?periode=semua&v=2&nama=cici']);
     expect(akar.querySelector('#tab-sprint-semua')!.getAttribute('aria-selected')).toBe('true');
     expect(namaBaris(akar)).toEqual(['Cici', 'Budi', 'Ani']);
   });

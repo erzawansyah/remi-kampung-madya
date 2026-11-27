@@ -1,25 +1,43 @@
 // Layar Sprint (keputusan pemilik 25 Nov 2026): satu kalimat pembuka, tombol Main sprint, dan papan
-// sprint dari server (GET /api/sprint) dengan dua tab: Minggu ini dan Sepanjang masa. Kolom Putaran
-// (27 Nov 2026), Menang, Mentung, Kepentung, Skor; judul kolom bisa diketuk untuk mengurutkan (urutannya dari @remi/meja,
-// urutkanSprint, jadi aturan urutan tetap satu sumber). Piala juara mingguan di samping nama.
+// sprint dari server (GET /api/sprint?v=2) dengan dua tab: Minggu ini dan Sepanjang masa (sejak 27 Nov 2026
+// minggu terbaik tiap orang, dengan label minggunya). Kolom # (peringkat resmi), Nama, Ptr, M, Mtg, Kpg,
+// Skor (singkatan + satu baris keterangan); # dan Nama menempel di kiri, Skor di kanan, kolom tengah
+// digeser kalau tidak muat. Hanya 10 teratas, 10 terbawah, dan baris sendiri yang tampil (pemisah "…" di
+// antaranya). Judul kolom bisa diketuk untuk mengurutkan baris yang tampil (urutannya dari @remi/meja,
+// urutkanSprint), angka # tetap peringkat resmi. Piala juara mingguan di samping nama.
 // Sprint hanya online: permainannya dijalankan server supaya rekornya tidak bisa diakali dari HP.
 // Sejak 27 Nov 2026 satu sprint bisa dilanjut sepanjang minggu: kalau HP ini punya sprint minggu ini
 // (remi.sprintSaya), tombolnya "Lanjut sprint" (putaran dan skor dari POST /api/sprint/saya) dan "Mulai dari 0".
 
-import { awalMingguWib, KOLOM_SPRINT, kunciNama, urutkanSprint, type BarisSprint, type KolomSprint } from '@remi/meja';
-import { ariaPiala, TEKS_SPRINT as T, teksLanjutSprint, teksPiala } from '../konten/sprint';
+import {
+  awalMingguWib,
+  KOLOM_SPRINT,
+  kunciNama,
+  potongPapanSprint,
+  susunPapanSprint,
+  urutkanSprint,
+  type BarisPeringkatSprint,
+  type BarisSprint,
+  type KolomSprint,
+  type PeriodeSprint,
+} from '@remi/meja';
+import { ariaMingguSprint, ariaPiala, TEKS_SPRINT as T, teksLanjutSprint, teksMingguSprint, teksPiala } from '../konten/sprint';
 import { simpan } from '../penyimpanan';
 import { esc, konfirmasi, toast } from './dom';
 import { angkaSkor } from './rincianSkor';
 
-export type PeriodeSprint = 'minggu' | 'semua';
+export type { PeriodeSprint };
 
-/** Jawaban GET /api/sprint. */
+/** Papan yang sudah dirapikan dari GET /api/sprint (bentuk v2, atau bentuk lama yang dipotong di sini). */
 export interface PapanSprint {
   periode: PeriodeSprint;
   /** Awal minggu (ms epoch) untuk periode minggu; null untuk sepanjang masa. */
   mulai: number | null;
-  baris: BarisSprint[];
+  /** Banyaknya orang di papan. */
+  jumlah: number;
+  atas: BarisPeringkatSprint[];
+  bawah: BarisPeringkatSprint[];
+  saya: BarisPeringkatSprint | null;
 }
 
 export interface AksiSprint {
@@ -47,24 +65,50 @@ const offline = (): boolean => navigator.onLine === false;
 
 const angka = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
 
-/** Rapikan jawaban server (data dari jaringan); null kalau bentuknya tidak dikenal. */
-export function rapikanPapanSprint(x: unknown): PapanSprint | null {
+/** Satu baris dari jaringan (tanpa peringkat); null kalau tidak bernama. */
+function rapikanBaris(x: unknown): BarisSprint | null {
+  if (!x || typeof x !== 'object' || typeof (x as BarisSprint).nama !== 'string') return null;
+  const b = x as BarisSprint;
+  return {
+    nama: b.nama,
+    // Server sebelum 0.10.2 belum mengirim putaran: 0 (ditampilkan apa adanya sampai server ikut naik).
+    putaran: angka(b.putaran),
+    menang: angka(b.menang),
+    mentung: angka(b.mentung),
+    kepentung: angka(b.kepentung),
+    skor: angka(b.skor),
+    piala: Math.max(0, Math.floor(angka(b.piala))),
+    ...(typeof b.minggu === 'number' && Number.isFinite(b.minggu) ? { minggu: b.minggu } : {}),
+  };
+}
+
+function rapikanBerperingkat(x: unknown): BarisPeringkatSprint | null {
+  const b = rapikanBaris(x);
+  const p = (x as { peringkat?: unknown } | null)?.peringkat;
+  return b && typeof p === 'number' && Number.isInteger(p) && p >= 1 ? { ...b, peringkat: p } : null;
+}
+
+/**
+ * Rapikan jawaban server (data dari jaringan); null kalau bentuknya tidak dikenal. Bentuk v2 (atas, bawah,
+ * saya, jumlah) dipakai apa adanya; bentuk lama (server sebelum 0.10.2: baris saja) diurutkan dengan urutan
+ * bawaan periodenya lalu dipotong di sini, dengan `namaSaya` untuk baris sendiri.
+ */
+export function rapikanPapanSprint(x: unknown, namaSaya?: string): PapanSprint | null {
   if (!x || typeof x !== 'object') return null;
-  const p = x as Partial<PapanSprint>;
+  const p = x as Record<string, unknown>;
+  const periode: PeriodeSprint = p.periode === 'semua' ? 'semua' : 'minggu';
+  const mulai = typeof p.mulai === 'number' ? p.mulai : null;
+  if (Array.isArray(p.atas)) {
+    const daftar = (xs: unknown) => (Array.isArray(xs) ? xs.map(rapikanBerperingkat).filter((b): b is BarisPeringkatSprint => !!b) : []);
+    const atas = daftar(p.atas);
+    const bawah = daftar(p.bawah);
+    const saya = rapikanBerperingkat(p.saya);
+    const jumlah = Math.max(Math.floor(angka(p.jumlah)), atas.length + bawah.length + (saya ? 1 : 0));
+    return { periode, mulai, jumlah, atas, bawah, saya };
+  }
   if (!Array.isArray(p.baris)) return null;
-  const baris = p.baris
-    .filter((b): b is BarisSprint => !!b && typeof b === 'object' && typeof (b as BarisSprint).nama === 'string')
-    .map((b) => ({
-      nama: b.nama,
-      // Server sebelum 0.10.2 belum mengirim putaran: 0 (ditampilkan apa adanya sampai server ikut naik).
-      putaran: angka(b.putaran),
-      menang: angka(b.menang),
-      mentung: angka(b.mentung),
-      kepentung: angka(b.kepentung),
-      skor: angka(b.skor),
-      piala: Math.max(0, Math.floor(angka(b.piala))),
-    }));
-  return { periode: p.periode === 'semua' ? 'semua' : 'minggu', mulai: typeof p.mulai === 'number' ? p.mulai : null, baris };
+  const baris = p.baris.map(rapikanBaris).filter((b): b is BarisSprint => !!b);
+  return { periode, mulai, ...potongPapanSprint(urutkanSprint(baris, null, periode), namaSaya) };
 }
 
 /** Piala juara mingguan di samping nama. */
@@ -73,34 +117,51 @@ export function htmlPialaSprint(n: number): string {
   return teks ? ` <span class="piala" role="img" aria-label="${esc(ariaPiala(n))}">${teks}</span>` : '';
 }
 
+/** Nomor di kolom #: 🥇🥈🥉 untuk peringkat 1–3, selain itu angkanya. */
+const nomorPeringkat = (n: number): string => MEDALI[n - 1] ?? String(n);
+
 /**
- * Tabel papan sprint, diurutkan `kolom` (null = urutan bawaan). Baris milik `namaSaya` (tanpa beda huruf
- * besar/kecil) disorot. Judul kolom angka berupa tombol `data-kolom`.
+ * Tabel papan sprint. `kolom` null = urutan peringkat (dengan pemisah "…" di setiap lompatan peringkat);
+ * kolom lain = baris yang tampil diurutkan menurut kolom itu (tanpa pemisah), angka # tetap peringkat
+ * resminya. Baris milik `namaSaya` (tanpa beda huruf besar/kecil) disorot dan diberi lencana "kamu". Judul
+ * kolom berupa tombol `data-kolom` ("peringkat" = kembali ke urutan peringkat). Sel # dan Nama menempel di
+ * kiri, Skor di kanan (.kol-no, .kol-nama, .kol-skor).
  */
-export function htmlPapanSprint(baris: readonly BarisSprint[], kolom: KolomSprint | null, namaSaya: string, periode: PeriodeSprint): string {
-  if (!baris.length) return `<p class="redup rapat">${esc(periode === 'minggu' ? T.kosongMinggu : T.kosongSemua)}</p>`;
-  const urut = urutkanSprint(baris, kolom);
+export function htmlPapanSprint(papan: PapanSprint, kolom: KolomSprint | null, namaSaya: string, sekarang = Date.now()): string {
+  const { periode } = papan;
+  const tampil = susunPapanSprint(papan);
+  if (!tampil.length) return `<p class="redup rapat">${esc(periode === 'minggu' ? T.kosongMinggu : T.kosongSemua)}</p>`;
+  const baris = tampil.flatMap((t) => (t.pemisah ? [] : [t.baris]));
+  const urut = kolom ? urutkanSprint(baris, kolom, periode).map((b) => ({ pemisah: false as const, baris: b })) : tampil;
   const kunciSaya = kunciNama(namaSaya);
-  const aktif = kolom ?? 'menang';
+  const sort = (aktif: boolean, naik: boolean) => (aktif ? ` aria-sort="${naik ? 'ascending' : 'descending'}"` : '');
+  const kepalaNo = `<th scope="col" class="kol-no"${sort(!kolom, true)}><button type="button" class="judul-kolom${kolom ? '' : ' aktif'}" data-kolom="peringkat" aria-label="${esc(
+    T.kolomPeringkatLengkap,
+  )}"><abbr title="${esc(T.kolomPeringkatLengkap)}">${esc(T.kolomPeringkat)}</abbr></button></th>`;
   const kepala = KOLOM_SPRINT.map((k) => {
-    const sort = k === aktif ? ` aria-sort="${k === 'kepentung' ? 'ascending' : 'descending'}"` : '';
-    // Teks yang tampil boleh pecah dua baris (soft hyphen); nama untuk pembaca layar tetap utuh.
-    const tampil = T.kolomPecah[k].split('|').map(esc).join('&shy;');
-    return `<th scope="col"${sort}><button type="button" class="judul-kolom${k === kolom ? ' aktif' : ''}" data-kolom="${k}" aria-label="${esc(T.kolom[k])}">${tampil}</button></th>`;
+    const kelas = k === 'skor' ? ' class="kol-skor"' : '';
+    return `<th scope="col"${kelas}${sort(k === kolom, k === 'kepentung')}><button type="button" class="judul-kolom${k === kolom ? ' aktif' : ''}" data-kolom="${k}" aria-label="${esc(
+      T.kolom[k],
+    )}"><abbr title="${esc(T.kolom[k])}">${esc(T.kolomSingkat[k])}</abbr></button></th>`;
   }).join('');
   const isi = urut
-    .map((b, i) => {
+    .map((t) => {
+      if (t.pemisah) return `<tr class="pemisah"><td colspan="7" aria-label="${esc(T.ariaPemisah)}"><span aria-hidden="true">…</span></td></tr>`;
+      const b = t.baris;
       const saya = kunciNama(b.nama) === kunciSaya;
-      // Nomor (🥇🥈🥉, lalu angka) satu sel dengan nama supaya lima kolom muat di HP 360 px.
-      return `<tr${saya ? ' class="saya"' : ''}><td class="nama-sprint"><span class="nomor-sprint">${MEDALI[i] ?? i + 1}</span><span class="nama-teks">${esc(
+      const minggu = periode === 'semua' && typeof b.minggu === 'number' ? teksMingguSprint(b.minggu, sekarang) : '';
+      return `<tr${saya ? ' class="saya"' : ''}><td class="kol-no nomor-sprint">${nomorPeringkat(b.peringkat)}</td><td class="kol-nama nama-sprint"><span class="nama-teks">${esc(
         b.nama,
-      )}</span>${htmlPialaSprint(b.piala)}${saya ? ` <span class="lencana emas">${esc(T.lencanaKamu)}</span>` : ''}</td><td>${b.putaran}</td><td>${b.menang}</td><td>${b.mentung}</td><td>${b.kepentung}</td><td>${angkaSkor(b.skor)}</td></tr>`;
+      )}</span>${htmlPialaSprint(b.piala)}${saya ? ` <span class="lencana emas">${esc(T.lencanaKamu)}</span>` : ''}${
+        minggu ? `<span class="minggu-sprint" aria-label="${esc(ariaMingguSprint(minggu))}">${esc(minggu)}</span>` : ''
+      }</td><td>${b.putaran}</td><td>${b.menang}</td><td>${b.mentung}</td><td>${b.kepentung}</td><td class="kol-skor">${angkaSkor(b.skor)}</td></tr>`;
     })
     .join('');
-  return `<div class="tabel-gulir"><table class="skor papan-sprint">
-      <thead><tr><th scope="col">${esc(T.kolomNama)}</th>${kepala}</tr></thead>
+  return `<div class="tabel-gulir papan-sprint-gulir"><table class="skor papan-sprint">
+      <thead><tr>${kepalaNo}<th scope="col" class="kol-nama">${esc(T.kolomNama)}</th>${kepala}</tr></thead>
       <tbody>${isi}</tbody>
-    </table></div>`;
+    </table></div>
+    <p class="redup rapat legenda-sprint">${esc(T.legenda)}</p>`;
 }
 
 /**
@@ -133,10 +194,14 @@ async function tanyaSprintSaya(token: string) {
   return rapikanSprintSaya(await r.json());
 }
 
-async function ambilPapan(periode: PeriodeSprint): Promise<PapanSprint> {
-  const r = await fetch(`/api/sprint?periode=${periode}`, { cache: 'no-store' });
+/** URL papan: v=2 (10 teratas, 10 terbawah, baris sendiri dicari dari nama). */
+export const urlPapanSprint = (periode: PeriodeSprint, nama: string): string =>
+  `/api/sprint?periode=${periode}&v=2&nama=${encodeURIComponent(nama)}`;
+
+async function ambilPapan(periode: PeriodeSprint, nama: string): Promise<PapanSprint> {
+  const r = await fetch(urlPapanSprint(periode, nama), { cache: 'no-store' });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const p = rapikanPapanSprint(await r.json());
+  const p = rapikanPapanSprint(await r.json(), nama);
   if (!p) throw new Error('bentuk papan');
   return p;
 }
@@ -173,14 +238,14 @@ export function renderSprint(akar: HTMLElement, aksi: AksiSprint): SprintTerpasa
 
   const tampil = () => {
     if (!data) return;
-    papanEl.innerHTML = htmlPapanSprint(data.baris, kolom, namaSaya, periode);
+    papanEl.innerHTML = htmlPapanSprint(data, kolom, namaSaya);
   };
   papanEl.addEventListener('click', (e) => {
     const b = (e.target as Element | null)?.closest<HTMLElement>('[data-kolom]');
     if (b) {
-      const k = b.dataset.kolom as KolomSprint;
-      // Ketuk kolom yang sedang dipakai = kembali ke urutan bawaan.
-      kolom = kolom === k ? null : k;
+      const k = b.dataset.kolom as KolomSprint | 'peringkat';
+      // Ketuk kolom yang sedang dipakai, atau #, = kembali ke urutan peringkat.
+      kolom = k === 'peringkat' || kolom === k ? null : k;
       tampil();
       papanEl.querySelector<HTMLElement>(`[data-kolom="${k}"]`)?.focus();
       return;
@@ -200,7 +265,7 @@ export function renderSprint(akar: HTMLElement, aksi: AksiSprint): SprintTerpasa
     }
     papanEl.innerHTML = `<p class="redup rapat">${esc(T.memuat)}</p>`;
     try {
-      const p = await ambilPapan(periode);
+      const p = await ambilPapan(periode, namaSaya);
       if (no !== permintaan || !akar.contains(papanEl)) return;
       data = p;
       tampil();

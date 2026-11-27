@@ -133,21 +133,25 @@ export function rampingkanGameSprint(g: GameState, putaranTercatat: number): Gam
 
 /**
  * Satu catatan papan (bahan papan dan juara mingguan): sejak 26 Nov 2026 satu putaran (menang, mentung,
- * kepentung 0/1); baris lama 0.8.0 satu percobaan 5 putaran (mentung/kepentung bisa lebih dari 1).
+ * kepentung 0/1); baris lama 0.8.0 satu percobaan 5 putaran (mentung/kepentung bisa lebih dari 1); sejak
+ * 27 Nov 2026 juga ringkasan satu orang satu minggu yang sudah lewat (server menggulung putaran minggu
+ * yang sudah selesai jadi satu baris, `menang` berupa jumlah).
  */
 export interface PercobaanSprint {
   nama: string;
   /** kunciNama(nama); kosong = dihitung dari nama. */
   kunci?: string;
-  /** Kapan dicatat (ms epoch). */
+  /** Kapan dicatat (ms epoch). Ringkasan mingguan: catatan terakhir di minggu itu. */
   waktu: number;
-  menang: boolean;
+  /** Menang atau tidak (satu putaran/percobaan), atau banyaknya menang (ringkasan mingguan). */
+  menang: boolean | number;
   skor: number;
   mentung: number;
   kepentung: number;
   /**
    * Berapa putaran yang selesai dimainkan di catatan ini. Tidak ada = 1 (catatan per putaran sejak
-   * 26 Nov 2026); baris lama 0.8.0 membawa kolom `putaran`-nya sendiri (putaran yang selesai di percobaan itu).
+   * 26 Nov 2026); baris lama 0.8.0 membawa kolom `putaran`-nya sendiri (putaran yang selesai di percobaan
+   * itu), ringkasan mingguan jumlah putarannya.
    */
   putaran?: number;
 }
@@ -163,7 +167,20 @@ export interface BarisSprint {
   skor: number;
   /** Berapa kali juara mingguan (minggu yang sudah lewat), sepanjang masa. */
   piala: number;
+  /**
+   * Hanya di papan Sepanjang masa (sejak 27 Nov 2026): awal minggu terbaik orang ini (awalMingguWib);
+   * semua angka di baris ini angka minggu itu saja.
+   */
+  minggu?: number;
 }
+
+/** Baris papan yang sudah diberi peringkat resmi (1 = teratas menurut urutan bawaan periodenya). */
+export interface BarisPeringkatSprint extends BarisSprint {
+  peringkat: number;
+}
+
+/** Dua papan sprint: Minggu ini dan Sepanjang masa. */
+export type PeriodeSprint = 'minggu' | 'semua';
 
 /** Kolom angka papan, urut seperti di layar. */
 export const KOLOM_SPRINT = ['putaran', 'menang', 'mentung', 'kepentung', 'skor'] as const;
@@ -175,21 +192,18 @@ const kunciDari = (p: PercobaanSprint) => p.kunci || kunciNama(p.nama);
 export const putaranCatatan = (p: Pick<PercobaanSprint, 'putaran'>): number =>
   typeof p.putaran === 'number' && Number.isInteger(p.putaran) && p.putaran >= 0 ? p.putaran : 1;
 
-/**
- * Jumlahkan catatan (putaran, atau percobaan 0.8.0) per orang (nama tanpa beda huruf besar/kecil, kunciNama). Ejaan yang tampil:
- * `ejaan` kalau ada, selain itu ejaan catatan paling akhir. Urutan hasil: urutan bawaan.
- */
-export function rekapSprint(
-  catatan: readonly PercobaanSprint[],
-  ejaan?: ReadonlyMap<string, string>,
-  piala?: ReadonlyMap<string, number>,
-): BarisSprint[] {
-  const per = new Map<string, BarisSprint & { w: number }>();
+/** Menang yang dibawa satu catatan: boolean = 0/1, angka (ringkasan mingguan) = bilangan bulat ≥ 0. */
+export const menangCatatan = (p: Pick<PercobaanSprint, 'menang'>): number =>
+  typeof p.menang === 'number' ? (Number.isInteger(p.menang) && p.menang > 0 ? p.menang : 0) : p.menang ? 1 : 0;
+
+/** Jumlah catatan per orang (kunciNama) tanpa urutan; `w` = waktu catatan terakhir (ejaannya yang dipakai). */
+function jumlahkan(catatan: readonly PercobaanSprint[]): Map<string, Omit<BarisSprint, 'piala'> & { w: number }> {
+  const per = new Map<string, Omit<BarisSprint, 'piala'> & { w: number }>();
   for (const p of catatan) {
     const kunci = kunciDari(p);
     let b = per.get(kunci);
     if (!b) {
-      b = { nama: p.nama, putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: 0, piala: piala?.get(kunci) ?? 0, w: -Infinity };
+      b = { nama: p.nama, putaran: 0, menang: 0, mentung: 0, kepentung: 0, skor: 0, w: -Infinity };
       per.set(kunci, b);
     }
     if (p.waktu >= b.w) {
@@ -197,25 +211,116 @@ export function rekapSprint(
       b.w = p.waktu;
     }
     b.putaran += putaranCatatan(p);
-    if (p.menang) b.menang++;
+    b.menang += menangCatatan(p);
     b.mentung += p.mentung;
     b.kepentung += p.kepentung;
     b.skor += p.skor;
   }
-  const baris = [...per].map(([kunci, { w: _w, ...b }]) => ({ ...b, nama: ejaan?.get(kunci) ?? b.nama }));
-  return urutkanSprint(baris);
+  return per;
 }
 
 /**
- * Urutkan papan sprint. Bawaan: menang terbanyak, lalu skor tertinggi, mentung terbanyak, kepentung
- * tersedikit, lalu nama (putaran tidak ikut urutan bawaan). `kolom` (pemain mengetuk judul kolom): kolom
- * itu didahulukan (kepentung dari yang tersedikit, yang lain dari yang terbanyak), sisanya urutan bawaan.
- * Mengembalikan salinan.
+ * Jumlahkan catatan (putaran, percobaan 0.8.0, atau ringkasan mingguan) per orang (nama tanpa beda huruf
+ * besar/kecil, kunciNama). Ejaan yang tampil: `ejaan` kalau ada, selain itu ejaan catatan paling akhir.
+ * Urutan hasil: urutan bawaan Minggu ini. Dipakai papan Minggu ini dan juara mingguan.
  */
-export function urutkanSprint<T extends Omit<BarisSprint, 'piala'>>(baris: readonly T[], kolom?: KolomSprint | null): T[] {
+export function rekapSprint(
+  catatan: readonly PercobaanSprint[],
+  ejaan?: ReadonlyMap<string, string>,
+  piala?: ReadonlyMap<string, number>,
+): BarisSprint[] {
+  const baris = [...jumlahkan(catatan)].map(([kunci, { w: _w, ...b }]) => ({
+    ...b,
+    nama: ejaan?.get(kunci) ?? b.nama,
+    piala: piala?.get(kunci) ?? 0,
+  }));
+  return urutkanSprint(baris);
+}
+
+/** Ringkasan satu orang di satu minggu WIB (bahan tabel ringkasan server dan papan Sepanjang masa). */
+export interface RingkasanMingguSprint extends Omit<BarisSprint, 'piala' | 'minggu'> {
+  /** awalMingguWib minggu itu. */
+  minggu: number;
+  kunci: string;
+  /** Waktu catatan terakhir orang ini di minggu itu (ejaan `nama` dari catatan itu). */
+  waktu: number;
+}
+
+/**
+ * Ringkas catatan jadi satu baris per orang per minggu WIB (minggu = minggu `waktu` catatannya). Dipakai
+ * server untuk menggulung putaran minggu yang sudah selesai (SQL hanya menyimpan hasilnya) dan untuk
+ * mencari minggu terbaik. Urut minggu lalu kunci.
+ */
+export function ringkasMingguan(catatan: readonly PercobaanSprint[]): RingkasanMingguSprint[] {
+  const per = new Map<number, PercobaanSprint[]>();
+  for (const p of catatan) {
+    const m = awalMingguWib(p.waktu);
+    let xs = per.get(m);
+    if (!xs) per.set(m, (xs = []));
+    xs.push(p);
+  }
+  const hasil: RingkasanMingguSprint[] = [];
+  for (const m of [...per.keys()].sort((a, b) => a - b)) {
+    const baris = [...jumlahkan(per.get(m)!)].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    for (const [kunci, { w, ...b }] of baris) hasil.push({ ...b, minggu: m, kunci, waktu: w });
+  }
+  return hasil;
+}
+
+/**
+ * Papan Sepanjang masa (keputusan pemilik 27 Nov 2026: "Sepanjang masa ... skor terbaik di setiap pekan"):
+ * tiap orang diwakili minggu terbaiknya, yaitu minggu WIB dengan Skor minggu tertinggi; angka di barisnya
+ * (putaran, menang, mentung, kepentung, skor) angka minggu itu saja, `minggu` = awal minggunya. Minggu
+ * berjalan ikut dihitung. Dua minggu dengan skor sama (tafsiran pengembang): menang lebih banyak, lalu
+ * minggu yang lebih baru. Urutan hasil: urutan bawaan Sepanjang masa.
+ */
+export function terbaikMingguan(
+  catatan: readonly PercobaanSprint[],
+  ejaan?: ReadonlyMap<string, string>,
+  piala?: ReadonlyMap<string, number>,
+): BarisSprint[] {
+  const terbaik = new Map<string, RingkasanMingguSprint>();
+  for (const r of ringkasMingguan(catatan)) {
+    const t = terbaik.get(r.kunci);
+    if (!t || r.skor > t.skor || (r.skor === t.skor && (r.menang > t.menang || (r.menang === t.menang && r.minggu > t.minggu)))) {
+      terbaik.set(r.kunci, r);
+    }
+  }
+  // Ejaan bawaan: catatan paling akhir orang itu (juga di luar minggu terbaiknya).
+  const akhir = new Map<string, { nama: string; w: number }>();
+  for (const p of catatan) {
+    const k = kunciDari(p);
+    const a = akhir.get(k);
+    if (!a || p.waktu >= a.w) akhir.set(k, { nama: p.nama, w: p.waktu });
+  }
+  const baris = [...terbaik].map(([kunci, r]) => ({
+    nama: ejaan?.get(kunci) ?? akhir.get(kunci)?.nama ?? r.nama,
+    putaran: r.putaran,
+    menang: r.menang,
+    mentung: r.mentung,
+    kepentung: r.kepentung,
+    skor: r.skor,
+    piala: piala?.get(kunci) ?? 0,
+    minggu: r.minggu,
+  }));
+  return urutkanSprint(baris, null, 'semua');
+}
+
+/**
+ * Urutkan papan sprint. Urutan bawaan Minggu ini (`periode` 'minggu'): menang terbanyak, lalu skor
+ * tertinggi. Sepanjang masa ('semua', 27 Nov 2026): skor (minggu terbaik) tertinggi, lalu menang. Sisanya
+ * sama: mentung terbanyak, kepentung tersedikit, lalu nama (putaran tidak ikut urutan bawaan). `kolom`
+ * (pemain mengetuk judul kolom): kolom itu didahulukan (kepentung dari yang tersedikit, yang lain dari
+ * yang terbanyak), sisanya urutan bawaan. Mengembalikan salinan.
+ */
+export function urutkanSprint<T extends Omit<BarisSprint, 'piala'>>(
+  baris: readonly T[],
+  kolom?: KolomSprint | null,
+  periode: PeriodeSprint = 'minggu',
+): T[] {
+  const utama = (a: T, b: T) => (periode === 'semua' ? b.skor - a.skor || b.menang - a.menang : b.menang - a.menang || b.skor - a.skor);
   const bawaan = (a: T, b: T) =>
-    b.menang - a.menang ||
-    b.skor - a.skor ||
+    utama(a, b) ||
     b.mentung - a.mentung ||
     a.kepentung - b.kepentung ||
     kunciNama(a.nama).localeCompare(kunciNama(b.nama), 'id-ID') ||
@@ -225,6 +330,56 @@ export function urutkanSprint<T extends Omit<BarisSprint, 'piala'>>(baris: reado
     return kolom === 'kepentung' ? a.kepentung - b.kepentung : b[kolom] - a[kolom];
   };
   return [...baris].sort((a, b) => depan(a, b) || bawaan(a, b));
+}
+
+/** Banyaknya baris teratas dan terbawah yang tampil di papan (keputusan pemilik 27 Nov 2026). */
+export const BARIS_UJUNG_SPRINT = 10;
+
+/** Potongan papan yang dikirim ke aplikasi: 10 teratas, 10 terbawah, dan baris pemain sendiri. */
+export interface PotonganPapanSprint<T> {
+  /** Banyaknya orang di papan. */
+  jumlah: number;
+  /** Peringkat 1..BARIS_UJUNG_SPRINT (semua baris kalau jumlah ≤ 2 × BARIS_UJUNG_SPRINT). */
+  atas: T[];
+  /** BARIS_UJUNG_SPRINT terbawah; kosong kalau semua baris sudah di `atas`. */
+  bawah: T[];
+  /** Baris `namaSaya` kalau ada di papan dan tidak di `atas`/`bawah`; selain itu null. */
+  saya: T | null;
+}
+
+/**
+ * Beri peringkat resmi (urutan bawaan periodenya, 1 = teratas) lalu potong (keputusan pemilik 27 Nov 2026:
+ * "10 terbaik dan 10 terburuk"). `baris` sudah dalam urutan bawaan (rekapSprint / terbaikMingguan).
+ */
+export function potongPapanSprint(baris: readonly BarisSprint[], namaSaya?: string | null): PotonganPapanSprint<BarisPeringkatSprint> {
+  const semua = baris.map((b, i) => ({ ...b, peringkat: i + 1 }));
+  const n = BARIS_UJUNG_SPRINT;
+  const muat = semua.length <= 2 * n;
+  const atas = muat ? semua : semua.slice(0, n);
+  const bawah = muat ? [] : semua.slice(-n);
+  const kunci = namaSaya ? kunciNama(namaSaya) : '';
+  const milik = kunci ? semua.find((b) => kunciNama(b.nama) === kunci) : undefined;
+  const saya = milik && !muat && milik.peringkat > n && milik.peringkat <= semua.length - n ? milik : null;
+  return { jumlah: semua.length, atas, bawah, saya };
+}
+
+/** Satu baris yang tampil di papan: baris pemain, atau pemisah "…" di antara peringkat yang tidak bersambung. */
+export type TampilanPapanSprint<T> = { pemisah: true } | { pemisah: false; baris: T };
+
+/**
+ * Baris yang tampil dalam urutan peringkat: atas, baris sendiri, bawah (tanpa kembar), dengan pemisah di
+ * setiap lompatan peringkat (jadi hanya kalau lebih dari 2 × BARIS_UJUNG_SPRINT orang).
+ */
+export function susunPapanSprint<T extends { peringkat: number }>(p: Pick<PotonganPapanSprint<T>, 'atas' | 'bawah' | 'saya'>): TampilanPapanSprint<T>[] {
+  const per = new Map<number, T>();
+  for (const b of [...p.atas, ...(p.saya ? [p.saya] : []), ...p.bawah]) if (!per.has(b.peringkat)) per.set(b.peringkat, b);
+  const urut = [...per.values()].sort((a, b) => a.peringkat - b.peringkat);
+  const hasil: TampilanPapanSprint<T>[] = [];
+  urut.forEach((b, i) => {
+    if (i > 0 && b.peringkat > urut[i - 1].peringkat + 1) hasil.push({ pemisah: true });
+    hasil.push({ pemisah: false, baris: b });
+  });
+  return hasil;
 }
 
 /** Juara satu minggu yang sudah lewat. */

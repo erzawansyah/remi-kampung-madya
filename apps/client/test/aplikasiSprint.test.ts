@@ -192,7 +192,7 @@ describe('Aplikasi: Sprint', () => {
     const url = await bukaSprint();
     expect(ui('.layar-sprint')).not.toBeNull();
     expect(ui('.layar.beranda')).toBeNull();
-    expect(url).toContain('/api/sprint?periode=minggu');
+    expect(url.some((u) => u.startsWith('/api/sprint?periode=minggu&v=2&nama='))).toBe(true);
     expect(ui('#papan-sprint tbody tr.saya')!.textContent).toContain('aku');
     // Belum ada sambungan meja: layar Sprint cuma membaca papan.
     expect(WsPalsu.semua).toHaveLength(0);
@@ -230,7 +230,7 @@ describe('Aplikasi: Sprint', () => {
     expect(ws.jenisTerkirim()).toContain('keluar');
     expect(localStorage.getItem('remi.sesiOnline')).toBeNull();
     expect(ui('.layar-sprint')).not.toBeNull();
-    expect(url).toContain('/api/sprint?periode=minggu');
+    expect(url.some((u) => u.startsWith('/api/sprint?periode=minggu&v=2&nama='))).toBe(true);
     // Tidak langsung main lagi: tombol Main sprint siap ditekan, tidak ada sambungan baru.
     expect(ui('#main-sprint')!.hasAttribute('aria-busy')).toBe(false);
     expect(WsPalsu.semua.at(-1)).toBe(ws);
