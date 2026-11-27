@@ -13,11 +13,14 @@ export function periksaInvarian(state: GameState): string[] {
   if (state.riwayat.length) {
     const terakhir = state.riwayat[state.riwayat.length - 1].skorAkumulasi;
     if (terakhir.some((x, i) => x !== state.skor[i])) salah.push('skor akumulasi tidak cocok dengan riwayat');
-    const jumlahTotal = state.riwayat.reduce(
-      (acc, h) => acc.map((x, i) => x + h.rincian[i].total),
-      state.skor.map(() => 0),
-    );
-    if (jumlahTotal.some((x, i) => x !== state.skor[i])) salah.push('skor bukan jumlah skor per putaran');
+    // Meja sprint yang riwayat awalnya sudah dibuang (riwayatDibuang): jumlahnya tidak bisa diperiksa lagi.
+    if (!state.riwayatDibuang) {
+      const jumlahTotal = state.riwayat.reduce(
+        (acc, h) => acc.map((x, i) => x + h.rincian[i].total),
+        state.skor.map(() => 0),
+      );
+      if (jumlahTotal.some((x, i) => x !== state.skor[i])) salah.push('skor bukan jumlah skor per putaran');
+    }
     // Keputusan #40: angka joker tidak pernah sama dengan putaran tepat sebelumnya.
     state.riwayat.forEach((h, i) => {
       if (i > 0 && h.rankJoker === state.riwayat[i - 1].rankJoker) salah.push(`joker putaran ${h.nomor} sama dengan putaran sebelumnya`);
@@ -60,7 +63,8 @@ export function periksaInvarian(state: GameState): string[] {
 
   // Riwayat berisi putaran yang sudah selesai: putaran ke-k ada di indeks k − 1, jadi putaran
   // sebelumnya ada di indeks nomor − 2 (putaran pertama, termasuk sesudah "Main lagi", tanpa syarat).
-  const sebelumnya = p.nomor >= 2 ? state.riwayat[p.nomor - 2] : undefined;
+  // Meja sprint: riwayat[0] adalah putaran ke-(riwayatDibuang + 1).
+  const sebelumnya = p.nomor >= 2 ? state.riwayat[p.nomor - 2 - (state.riwayatDibuang ?? 0)] : undefined;
   if (sebelumnya && sebelumnya.rankJoker === p.rankJoker) salah.push(`joker putaran ${p.nomor} sama dengan putaran sebelumnya`);
   if (p.kartuDibuka.rank !== p.rankJoker) salah.push('angka joker tidak sama dengan kartu yang dibuka');
 

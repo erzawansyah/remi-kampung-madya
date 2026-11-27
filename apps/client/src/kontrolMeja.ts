@@ -26,6 +26,7 @@ import {
   type Peristiwa,
   type ViewPemain,
   berikutnya,
+  jumlahPutaranSelesai,
 } from '@remi/engine';
 import {
   MAKS_LEDEK_PER_PUTARAN,
@@ -60,7 +61,8 @@ import { teksPengumuman, Tutorial, type KeadaanTutorial } from './ui/tutorial';
 import { TEKS_TUTORIAL } from './konten/tutorial';
 import { TEKS_KALDU } from './konten/kaldu';
 import { KOMPETISI_DIBUKA, TEKS_KOMPETISI, teksHasilKompetisi } from './konten/kompetisi';
-import { TEKS_SPRINT, teksSprintPutaran } from './konten/sprint';
+import { TEKS_SPRINT, teksRiwayatSprintTerakhir, teksSprintPutaran } from './konten/sprint';
+import { sprintBisaDilanjut } from './ui/sprint';
 import { TEKS_LANJUT, TEKS_LEDEK } from './konten/ledek';
 import {
   apaEmoji,
@@ -1248,8 +1250,9 @@ export class KontrolMeja implements AksiAdegan {
     for (const id of [...this.dipilih]) if (!ids.has(id) && !this.idPungutan().has(id)) this.dipilih.delete(id);
 
     // Hasil putaran baru → tampilkan rinciannya.
-    if (v.riwayat.length > this.hasilTerlihat && v.status !== 'putaranBerjalan') {
-      this.hasilTerlihat = v.riwayat.length;
+    // jumlahPutaranSelesai, bukan riwayat.length: riwayat meja sprint dibuang awalnya (panjangnya tetap).
+    if (jumlahPutaranSelesai(v) > this.hasilTerlihat && v.status !== 'putaranBerjalan') {
+      this.hasilTerlihat = jumlahPutaranSelesai(v);
       if (v.status === 'selesai') this.modalSelesai();
       else this.modalHasil(v.riwayat[v.riwayat.length - 1]);
     } else if (v.status === 'selesai' && !this.selesaiDitampilkan) {
@@ -1261,7 +1264,7 @@ export class KontrolMeja implements AksiAdegan {
       this.modalHasil(v.riwayat[v.riwayat.length - 1]);
     }
     if (v.status === 'putaranBerjalan' && document.querySelector('[data-hasil]')) tutupModal();
-    this.hasilTerlihat = Math.max(this.hasilTerlihat, v.riwayat.length);
+    this.hasilTerlihat = Math.max(this.hasilTerlihat, jumlahPutaranSelesai(v));
     if (v.status !== 'selesai') this.selesaiDitampilkan = false;
 
     // Pengumuman joker: sekali di awal putaran, harus ditekan OK.
@@ -1356,7 +1359,7 @@ export class KontrolMeja implements AksiAdegan {
     const info = this.info;
     const v = this.view;
     if (this.hancur || this.app.jenis !== 'online' || !info?.lanjut || v?.status !== 'putaranSelesai') return;
-    if (this.siapLanjutDikirim !== v.riwayat.length || info.kursiSaya === info.host || info.lanjut.siap.includes(this.saya)) return;
+    if (this.siapLanjutDikirim !== jumlahPutaranSelesai(v) || info.kursiSaya === info.host || info.lanjut.siap.includes(this.saya)) return;
     const sambungan = this.sambunganKini();
     if ((this.app.statusKoneksi?.() ?? 'tersambung') !== 'tersambung' || sambungan === this.siapLanjutDiSambungan) return;
     this.siapLanjutDiSambungan = sambungan;
@@ -1942,7 +1945,7 @@ export class KontrolMeja implements AksiAdegan {
 
   private matikanPengingatSusun() {
     const kode = this.kodePermainan();
-    if (kode) simpan.setTanpaPengingatSusun({ kode, riwayat: this.view?.riwayat.length ?? 0 });
+    if (kode) simpan.setTanpaPengingatSusun({ kode, riwayat: this.view ? jumlahPutaranSelesai(this.view) : 0 });
   }
 
   /**
@@ -1953,8 +1956,9 @@ export class KontrolMeja implements AksiAdegan {
   private rapikanPengingatSusun(v: ViewPemain) {
     const t = simpan.tanpaPengingatSusun();
     if (!t || t.kode !== this.kodePermainan()) return;
-    if (v.status === 'selesai' || v.riwayat.length < t.riwayat) simpan.setTanpaPengingatSusun(null);
-    else if (v.riwayat.length > t.riwayat) simpan.setTanpaPengingatSusun({ ...t, riwayat: v.riwayat.length });
+    const selesai = jumlahPutaranSelesai(v);
+    if (v.status === 'selesai' || selesai < t.riwayat) simpan.setTanpaPengingatSusun(null);
+    else if (selesai > t.riwayat) simpan.setTanpaPengingatSusun({ ...t, riwayat: selesai });
   }
 
   /**
@@ -3157,7 +3161,7 @@ export class KontrolMeja implements AksiAdegan {
     const terkunci = this.lanjutTerkunci();
     if (info.kursiSaya !== info.host) {
       if (!terkunci) return '<p class="redup rapat">Menunggu host memulai putaran berikutnya…</p>';
-      if (info.lanjut!.siap.includes(this.saya) || this.siapLanjutDikirim === v.riwayat.length) {
+      if (info.lanjut!.siap.includes(this.saya) || this.siapLanjutDikirim === jumlahPutaranSelesai(v)) {
         return `<p class="redup rapat" data-siap-lanjut-terkirim>${esc(TEKS_LANJUT.menungguHost)}</p>`;
       }
       return `<p class="redup rapat">${esc(TEKS_LANJUT.ajakSiap)}</p>
@@ -3557,7 +3561,7 @@ export class KontrolMeja implements AksiAdegan {
             // Sinyal putus: pesannya tidak berangkat (aplikasi memberi tahu lewat toast "coba lagi"),
             // jadi tombol Siap dibiarkan supaya bisa ditekan lagi sesudah tersambung.
             if ((this.app.statusKoneksi?.() ?? 'tersambung') === 'tersambung') {
-              this.siapLanjutDikirim = this.view!.riwayat.length;
+              this.siapLanjutDikirim = jumlahPutaranSelesai(this.view!);
               this.siapLanjutDiSambungan = this.sambunganKini();
             }
             this.app.kirim({ t: 'siapLanjut' });
@@ -3768,7 +3772,7 @@ export class KontrolMeja implements AksiAdegan {
       `<div data-selesai></div>
        <h2>Klasemen akhir</h2>
        <p class="juara-teks"><span aria-hidden="true">🏆</span> ${esc(juara.join(' & '))} ${juara.length > 1 ? 'juara bareng' : 'juara'}!</p>
-       <p class="redup rapat">${esc(v.alasanSelesai ? alasan[v.alasanSelesai] : '')} ${v.riwayat.length} putaran.</p>
+       <p class="redup rapat">${esc(v.alasanSelesai ? alasan[v.alasanSelesai] : '')} ${jumlahPutaranSelesai(v)} putaran.</p>
        ${kompetisi ? `<div class="hasil-kompetisi" data-hasil-kompetisi aria-live="polite">${htmlHasilKompetisi(this.hasilKompetisi, v.saya)}</div>` : ''}
        ${penutup.skor}
        ${htmlKlasemen(nama, v.skor, v.saya, terakhir)}
@@ -3877,9 +3881,14 @@ export class KontrolMeja implements AksiAdegan {
     if (!v) return;
     const isi = (t: 'peringkat' | 'riwayat') => {
       const sekarang = this.view ?? v;
-      return t === 'peringkat'
-        ? htmlPeringkat(sekarang.pemain.map((p) => p.nama), sekarang.skor, sekarang.riwayat, this.saya)
-        : htmlRiwayat((i) => sekarang.pemain[i].nama, sekarang.riwayat, this.saya);
+      // Meja sprint yang riwayat awalnya sudah dibuang: statistik dan riwayat hanya dari putaran yang tersisa.
+      const catatan = sekarang.riwayatDibuang ? `<p class="redup rapat">${esc(teksRiwayatSprintTerakhir(sekarang.riwayat.length))}</p>` : '';
+      return (
+        catatan +
+        (t === 'peringkat'
+          ? htmlPeringkat(sekarang.pemain.map((p) => p.nama), sekarang.skor, sekarang.riwayat, this.saya)
+          : htmlRiwayat((i) => sekarang.pemain[i].nama, sekarang.riwayat, this.saya))
+      );
     };
     const id = `skor-${Math.random().toString(36).slice(2, 8)}`;
     const tabHtml = (t: 'peringkat' | 'riwayat', label: string) =>
@@ -4002,6 +4011,7 @@ export class KontrolMeja implements AksiAdegan {
                   masukPeringkat: mejaMasukPeringkat(this.info),
                   kompetisi: !!this.info?.kompetisi,
                   sprint: this.info?.sprint === true,
+                  sprintLanjut: sprintBisaDilanjut(),
                 }),
               ).then((ya) => {
                 if (!ya || this.hancur) return;

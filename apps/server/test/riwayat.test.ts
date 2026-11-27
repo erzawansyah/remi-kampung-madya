@@ -463,11 +463,13 @@ describe('riwayat SQLite: migrasi v3 (usul fitur), v4 (meja aktif), v5 (hasil ko
       ['kode', 1, 0],
       ['minggu', 1, 0],
       ['data', 0, 0],
+      ['kursi_hash', 0, 0],
+      ['putaran', 1, 0],
       ['pembuat_jaringan', 0, 0],
       ['dibuat_pada', 1, 0],
       ['diperbarui_pada', 1, 0],
     ]);
-    expect(indeks(db, 'sprint_simpanan')).toEqual(['sprint_simpanan_kode', 'sprint_simpanan_minggu']);
+    expect(indeks(db, 'sprint_simpanan')).toEqual(['sprint_simpanan_jaringan', 'sprint_simpanan_kode', 'sprint_simpanan_minggu']);
     db.close();
   });
 

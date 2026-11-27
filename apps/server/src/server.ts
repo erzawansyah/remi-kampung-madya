@@ -29,7 +29,9 @@ import {
   TEKS_LOBI_KOMPETISI_BUBAR,
   TEKS_SPRINT_DIJEDA,
   TEKS_SPRINT_DITUTUP,
+  TEKS_SPRINT_COBA_LAGI,
   TEKS_SPRINT_TAK_BISA_LANJUT,
+  TEKS_SPRINT_TIDAK_ADA,
   tokenSprintSah,
   validasiPesan,
   type CatatanSprint,
@@ -49,7 +51,7 @@ import { jalankanPengirimUsulan, type PengirimUsulan } from './usulan.js';
 import { alamatKlien, HEADER_KEAMANAN, kunciIp, originDiizinkan } from './keamanan.js';
 import { buatPembatasLog } from './pembatasLog.js';
 import { rapikanPeriodeSprint } from './sprint.js';
-import { hashTokenSprint, type BarisSprintSimpanan } from './sprintSimpanan.js';
+import { hashTokenKursi, hashTokenSprint, pasangTokenKursi, sandikanDataSprint, type BarisSprintSimpanan } from './sprintSimpanan.js';
 import { jawabanIce, type KonfigurasiTurn } from './suara.js';
 
 /**
@@ -103,6 +105,17 @@ export const BAWAAN_LEPAS_SPRINT_KOSONG_MS = 5 * 60_000;
  */
 export const BAWAAN_MAKS_SPRINT_BARU_PER_JAM_PER_IP = 30;
 export const BAWAAN_MAKS_SIMPANAN_SPRINT = 5000;
+/**
+ * Sprint tersimpan minggu ini per jaringan (bawaan). Kalau penuh, sprint dari jaringan itu yang belum pernah
+ * menyelesaikan satu putaran pun (paling lama dulu) dibuang untuk memberi tempat; kalau tidak ada, ditolak.
+ * Jadi satu jaringan tidak bisa memenuhi batas seluruh server ({@link BAWAAN_MAKS_SIMPANAN_SPRINT}).
+ */
+export const BAWAAN_MAKS_SIMPANAN_SPRINT_PER_IP = 40;
+/**
+ * Sprint yang dimuat dari database ("Lanjut sprint" atau sambung ulang ke sprint yang dijeda) per jaringan per
+ * menit (bawaan), supaya token yang dikumpulkan tidak bisa dipakai untuk memenuhi memori server.
+ */
+export const BAWAAN_MAKS_MUAT_SPRINT_PER_MENIT_PER_IP = 10;
 /** POST /api/sprint/saya per jaringan per menit. */
 export const BATAS_TANYA_SPRINT_PER_MENIT = 60;
 
@@ -233,6 +246,10 @@ export interface OpsiServer {
   maksSprintBaruPerJamPerIp?: number;
   /** Sprint tersimpan paling banyak (bawaan {@link BAWAAN_MAKS_SIMPANAN_SPRINT}). */
   maksSimpananSprint?: number;
+  /** Sprint tersimpan minggu ini per jaringan (bawaan {@link BAWAAN_MAKS_SIMPANAN_SPRINT_PER_IP}). */
+  maksSimpananSprintPerIp?: number;
+  /** Sprint dimuat dari database per jaringan per menit (bawaan {@link BAWAAN_MAKS_MUAT_SPRINT_PER_MENIT_PER_IP}). */
+  maksMuatSprintPerMenitPerIp?: number;
   log?: (...x: unknown[]) => void;
 }
 
@@ -395,6 +412,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
   const tanyaSprint = new Map<string, number>();
   /** Jaringan → waktu sprint baru dalam sejam terakhir (hanya di memori). */
   const sprintBaruPerJaringan = new Map<string, number[]>();
+  /** Sprint yang dimuat dari database per jaringan di menit ini. */
+  const muatSprintPerJaringan = new Map<string, number>();
   /**
    * Sprint yang bisa dilanjut (27 Nov 2026) yang sedang di memori: kode meja → hash token sprintnya.
    * Datanya disimpan di sprint_simpanan (bukan meja_aktif) dan tidak dibuang saat mejanya dilepas.
@@ -491,7 +510,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     const hash = hashSprint.get(kode);
     if (hash) {
       try {
-        simpananSprint?.simpan(hash, JSON.stringify(data), penjadwalDasar.sekarang());
+        simpananSprint?.simpan(hash, sandikanDataSprint(data), penjadwalDasar.sekarang());
       } catch (e) {
         log(`galat menyimpan sprint meja ${kode}`, e);
       }
@@ -854,7 +873,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     const selesai = mingguSprint(data) !== mingguIni();
     try {
       if (selesai && tercatat) simpananSprint.hapus(hash);
-      else simpananSprint.simpan(hash, JSON.stringify(dataMejaDipulihkan(data)), jam());
+      else simpananSprint.simpan(hash, sandikanDataSprint(dataMejaDipulihkan(data)), jam());
     } catch (e) {
       log(`galat menyimpan sprint meja ${kode} (dicoba lagi nanti)`, e);
       return false;
@@ -864,19 +883,35 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     return true;
   };
 
+  /** Kenapa sprint tidak bisa dimuat. `sementara` = coba lagi nanti (sprint-nya tetap ada dan bisa dilanjut). */
+  interface GagalMuatSprint {
+    alasan: string;
+    sementara: boolean;
+  }
+
   /**
-   * Muat sprint yang dijeda ke memori (atau pakai yang sudah di memori). Meja atau alasan (untuk log)
-   * kenapa tidak bisa. Semua kursi manusia terputus (dataMejaDipulihkan), jadi permainannya tetap dijeda
-   * sampai pemainnya masuk. Putaran yang belum tercatat dicatat sekarang.
+   * Muat sprint yang dijeda ke memori (atau pakai yang sudah di memori). `pemainId` = token kursi yang dipasang
+   * ke kursi pemainnya (token kursi asli tidak pernah disimpan, lihat sprintSimpanan.ts). Semua kursi manusia
+   * terputus (dataMejaDipulihkan), jadi permainannya tetap dijeda sampai pemainnya masuk. Putaran yang belum
+   * tercatat dicatat sekarang. Memuat sprint dari database ikut batas meja di server, batas meja per jaringan,
+   * dan batas muat per jaringan per menit.
    */
-  const muatSprint = (b: BarisSprintSimpanan, jaringan: string | null): Meja | string => {
+  const muatSprint = (b: BarisSprintSimpanan, jaringan: string, pemainId: string): Meja | GagalMuatSprint => {
     const ada = daftarMeja.get(b.kode);
-    if (ada) return hashSprint.get(b.kode) === b.hash ? ada : 'kodenya dipakai meja lain';
-    if (!b.data) return 'belum ada datanya';
+    if (ada) return hashSprint.get(b.kode) === b.hash ? ada : { alasan: 'kodenya dipakai meja lain', sementara: false };
+    if (daftarMeja.size >= (opsi.maksMeja ?? 500)) return { alasan: 'server penuh', sementara: true };
+    let dariIpIni = 0;
+    for (const ip of pembuatMeja.values()) if (ip === jaringan) dariIpIni++;
+    if (dariIpIni >= (opsi.maksMejaPerIp ?? BAWAAN_MAKS_MEJA_PER_IP)) return { alasan: 'kebanyakan meja dari jaringan ini', sementara: true };
+    const kali = (muatSprintPerJaringan.get(jaringan) ?? 0) + 1;
+    if (kali > (opsi.maksMuatSprintPerMenitPerIp ?? BAWAAN_MAKS_MUAT_SPRINT_PER_MENIT_PER_IP)) return { alasan: 'kebanyakan dimuat', sementara: true };
+    muatSprintPerJaringan.set(jaringan, kali);
+    if (!b.data) return { alasan: 'belum ada datanya', sementara: false };
     const d = bacaDataMeja(b.data, b.kode);
-    if (typeof d === 'string') return `rusak (${d})`;
-    if (mingguSprint(d) !== b.minggu) return 'bukan sprint minggu itu';
-    if (!ringkasanLanjutSprint(d)) return 'kursi pemainnya tidak ada';
+    if (typeof d === 'string') return { alasan: `rusak (${d})`, sementara: false };
+    if (mingguSprint(d) !== b.minggu) return { alasan: 'bukan sprint minggu itu', sementara: false };
+    if (!ringkasanLanjutSprint(d)) return { alasan: 'kursi pemainnya tidak ada', sementara: false };
+    pasangTokenKursi(d, pemainId);
     let meja: Meja | null = null;
     try {
       meja = new Meja(opsiMeja(b.kode), dataMejaDipulihkan(d));
@@ -885,12 +920,11 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     } catch (e) {
       meja?.hentikan();
       log(`galat memuat sprint meja ${b.kode}`, e);
-      return 'rusak (meja tidak bisa dibuat)';
+      return { alasan: 'rusak (meja tidak bisa dibuat)', sementara: false };
     }
     daftarMeja.set(b.kode, meja);
     hashSprint.set(b.kode, b.hash);
-    const j = jaringan ?? b.pembuatJaringan;
-    if (j) pembuatMeja.set(b.kode, j);
+    pembuatMeja.set(b.kode, jaringan);
     kosongSejak.set(b.kode, penjadwalDasar.sekarang());
     catatSprint(b.kode, meja.data, b.diperbaruiPada, meja);
     log(`meja ${b.kode} dimuat (sprint dilanjut)`);
@@ -943,57 +977,87 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     }
   };
 
-  /** Sambung ulang (gabung dengan token kursi) ke sprint yang sedang dijeda di database: dimuat dulu. */
+  /**
+   * Sambung ulang (gabung dengan token kursi) ke sprint yang sedang dijeda di database: dimuat dulu. Token
+   * kursi dicocokkan dengan hash-nya sebelum data sprint dibaca, jadi kode meja yang ditebak dengan token
+   * sembarang tidak membuat server membaca simpanannya.
+   */
   const muatSprintDariKode = (kode: string, token: string | undefined, jaringan: string): Meja | undefined => {
     if (!simpananSprint || !token) return undefined;
     let b: BarisSprintSimpanan | null;
     try {
       b = simpananSprint.dariKode(kode);
+      if (!b?.kursiHash || b.kursiHash !== hashTokenKursi(token)) return undefined;
+      b = simpananSprint.ambil(b.hash);
     } catch (e) {
       log(`galat membaca sprint meja ${kode}`, e);
       return undefined;
     }
     if (!b?.data) return undefined;
-    const d = bacaDataMeja(b.data, kode);
-    if (typeof d === 'string' || !d.sprint) return undefined;
-    const k = d.kursi[d.sprint.kursi];
-    if (k?.jenis !== 'manusia' || k.pemainId !== token) return undefined;
     if (b.minggu !== mingguIni()) {
       akhiriSprint(b, TEKS_SPRINT_TAK_BISA_LANJUT);
       return undefined;
     }
-    const m = muatSprint(b, jaringan);
-    if (typeof m === 'string') {
-      log(`sprint meja ${kode} tidak bisa dimuat: ${m}`);
+    const m = muatSprint(b, jaringan, token);
+    if (!(m instanceof Meja)) {
+      log(`sprint meja ${kode} tidak bisa dimuat: ${m.alasan}`);
       return undefined;
     }
     return m;
   };
 
+  /**
+   * Sprint baru dari `jaringan`: masih ada tempat di batas sprint tersimpan minggu ini per jaringan? Kalau penuh,
+   * sprint dari jaringan itu yang belum pernah menyelesaikan satu putaran pun dan tidak sedang di memori
+   * dibuang (paling lama dulu). `ganti` = sprint yang akan ditutup ("Mulai dari 0"), tidak ikut dihitung.
+   */
+  const beriTempatSprint = (jaringan: string, ganti: BarisSprintSimpanan | null): boolean => {
+    if (!simpananSprint) return true;
+    const minggu = mingguIni();
+    const batas = opsi.maksSimpananSprintPerIp ?? BAWAAN_MAKS_SIMPANAN_SPRINT_PER_IP;
+    try {
+      let lebih = simpananSprint.jumlahDariJaringan(jaringan, minggu) - (ganti && ganti.pembuatJaringan === jaringan && ganti.minggu === minggu ? 1 : 0) - batas + 1;
+      if (lebih <= 0) return true;
+      for (const b of simpananSprint.belumDimainkan(jaringan, minggu, lebih + 20)) {
+        if (lebih <= 0) break;
+        if (b.hash === ganti?.hash || hashSprint.get(b.kode) === b.hash) continue;
+        if (akhiriSprint(b, TEKS_SPRINT_TAK_BISA_LANJUT)) lebih--;
+      }
+      return lebih <= 0;
+    } catch (e) {
+      log('galat membaca sprint tersimpan per jaringan', e);
+      return true;
+    }
+  };
+
   /** Pesan `sprint` dengan `lanjut`: lanjutkan sprint HP ini (token rahasianya). */
   const lanjutkanSprint = (s: Sambungan, token: string, nama: string) => {
-    const tolak = (pesan = TEKS_SPRINT_TAK_BISA_LANJUT) => {
+    // Sprint-nya memang sudah tidak ada (atau rusak): HP-nya diberi tahu supaya tokennya dilupakan.
+    const tolak = (pesan = TEKS_SPRINT_TIDAK_ADA) => {
       kirimKe(s, { t: 'sprintSaya', token: null });
       kirimKe(s, { t: 'error', pesan });
     };
+    // Gagal sementara (server penuh, database galat): tokennya tetap disimpan HP, bisa dicoba lagi.
+    const nanti = () => kirimKe(s, { t: 'error', pesan: TEKS_SPRINT_COBA_LAGI });
     if (!simpananSprint) return tolak();
     let b: BarisSprintSimpanan | null;
     try {
       b = simpananSprint.ambil(hashTokenSprint(token));
     } catch (e) {
       log('galat membaca sprint', e);
-      return kirimKe(s, { t: 'error', pesan: 'Sprint-mu belum bisa dibuka, coba lagi sebentar.' });
+      return nanti();
     }
     if (!b) return tolak();
     // Minggunya sudah lewat ("kalau minggu berganti ya reset"): sprint itu selesai, mulai baru dari 0.
     if (b.minggu !== mingguIni()) {
       akhiriSprint(b, TEKS_SPRINT_TAK_BISA_LANJUT);
-      return tolak();
+      return tolak(TEKS_SPRINT_TAK_BISA_LANJUT);
     }
-    const m = muatSprint(b, s.jaringan);
-    if (typeof m === 'string') {
-      log(`sprint meja ${b.kode} tidak bisa dilanjut: ${m}`);
-      return tolak();
+    // Yang dimuat dari database diberi token kursi baru (token kursi lama tidak pernah disimpan).
+    const m = muatSprint(b, s.jaringan, randomUUID());
+    if (!(m instanceof Meja)) {
+      log(`sprint meja ${b.kode} tidak bisa dilanjut: ${m.alasan}`);
+      return m.sementara ? nanti() : tolak();
     }
     const meja = m;
     const pemainId = meja.pemainSprint;
@@ -1033,6 +1097,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       if (!b || b.minggu !== mingguIni()) return json(200, { ada: false });
       const meja = hashSprint.get(b.kode) === b.hash ? daftarMeja.get(b.kode) : undefined;
       const data = meja ? meja.data : b.data ? bacaDataMeja(b.data, b.kode) : null;
+      // (Simpanan sprint tetap kecil berapa pun putarannya: rampingkanGameSprint.)
       const r = data && typeof data !== 'string' ? ringkasanLanjutSprint(data) : null;
       return json(200, r ? { ada: true, minggu: b.minggu, putaran: r.putaran, skor: r.skor } : { ada: false });
     } catch (e) {
@@ -1503,6 +1568,11 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
       } catch (e) {
         log(`galat saat pemain pindah dari meja ${kodeLama}`, e);
       }
+      // Sprint yang bisa dilanjut yang baru ditinggal sambungan ini ke meja lain: langsung disimpan dan
+      // dilepas dari memori (tidak menunggu lepasSprintKosongMs), kalau tidak ada lagi yang terhubung.
+      if (kodeLama && kodeLama !== kode && hashSprint.has(kodeLama) && daftarMeja.get(kodeLama)?.jumlahManusiaTerhubung === 0) {
+        lepasSprint(kodeLama);
+      }
     }
   };
 
@@ -1652,6 +1722,11 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
         if (tersimpan >= (opsi.maksSimpananSprint ?? BAWAAN_MAKS_SIMPANAN_SPRINT)) {
           return kirimKe(s, { t: 'error', pesan: 'Server lagi penuh, coba lagi nanti.' });
         }
+        // Sprint tersimpan minggu ini per jaringan: kalau penuh, yang belum pernah dimainkan sampai selesai satu
+        // putaran (paling lama dulu, yang tidak sedang di memori) dibuang untuk memberi tempat.
+        if (simpananSprint && !beriTempatSprint(s.jaringan, lama)) {
+          return kirimKe(s, { t: 'error', pesan: 'Kebanyakan sprint dari jaringanmu minggu ini, Bos. Lanjutkan yang sudah ada.' });
+        }
         // Sprint lama ditutup dulu (putaran yang sudah selesai tetap di papan).
         if (lama && !akhiriSprint(lama, TEKS_SPRINT_DITUTUP)) {
           return kirimKe(s, { t: 'error', pesan: 'Sprint yang lama belum bisa ditutup, coba lagi sebentar.' });
@@ -1672,7 +1747,8 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
           const hash = hashTokenSprint(token);
           const minggu = mingguSprint(meja.data) ?? mingguIni();
           try {
-            simpananSprint.buat({ hash, kode, minggu, data: JSON.stringify(meja.data), pembuatJaringan: s.jaringan, waktu: sekarang });
+            const d = sandikanDataSprint(meja.data);
+            simpananSprint.buat({ hash, kode, minggu, data: d.json, kursiHash: d.kursiHash, putaran: d.putaran, pembuatJaringan: s.jaringan, waktu: sekarang });
             hashSprint.set(kode, hash);
             kirimKe(s, { t: 'sprintSaya', token, minggu });
           } catch (e) {
@@ -1888,6 +1964,7 @@ export async function jalankanServer(opsi: OpsiServer): Promise<ServerRemi> {
     tulisKompetisi.clear();
     tanyaIce.clear();
     tanyaSprint.clear();
+    muatSprintPerJaringan.clear();
     const sekarang = jam();
     for (const [jaringan, waktu] of sprintBaruPerJaringan) {
       const sisa = waktu.filter((t) => sekarang - t < JAM_MS);

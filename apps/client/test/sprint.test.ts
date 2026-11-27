@@ -15,7 +15,7 @@ import { TEKS_SPRINT, teksPiala } from '../src/konten/sprint';
 import { _setelUlangCache } from '../src/preferensi';
 import { renderBeranda, type AksiBeranda } from '../src/ui/beranda';
 import { tutupSemuaJendela } from '../src/ui/dom';
-import { htmlPapanSprint, rapikanPapanSprint, rapikanSprintSaya, renderSprint } from '../src/ui/sprint';
+import { htmlPapanSprint, rapikanPapanSprint, rapikanSprintSaya, renderSprint, sprintBisaDilanjut } from '../src/ui/sprint';
 import { pasangMatchMediaPalsu } from './bantu';
 
 const BARIS: BarisSprint[] = [
@@ -283,15 +283,36 @@ describe('layar Sprint: Lanjut sprint', () => {
     expect(akar.querySelector('#lanjut-sprint')).not.toBeNull();
   });
 
-  it('sprint minggu lalu: dilupakan tanpa bertanya ke server (Senin 00.00 WIB mulai dari 0)', async () => {
+  it('token tidak dibuang karena jam HP: tetap Lanjut sprint, server yang memutuskan', async () => {
+    // Jam HP bilang minggunya sudah lewat (misalnya jam HP kecepetan), tapi server masih menganggapnya minggu ini.
     simpanSprint(awalMingguWib(Date.now()) - 7 * 86_400_000);
     const panggilan = pasangFetch({ ada: true, putaran: 2, skor: 10 });
     const akar = document.getElementById('ui')!;
     renderSprint(akar, { kembali: vi.fn(), main: vi.fn(), lanjut: vi.fn() });
     await tunggu();
+    expect(localStorage.getItem('remi.sprintSaya')).not.toBeNull();
+    expect(akar.querySelector('#lanjut-sprint')).not.toBeNull();
+    expect(panggilan.some((x) => x.url === '/api/sprint/saya')).toBe(true);
+    expect(sprintBisaDilanjut()).toBe(false);
+  });
+
+  it('sprint minggu lalu: server bilang sudah tidak ada, baru dilupakan (Senin 00.00 WIB mulai dari 0)', async () => {
+    simpanSprint(awalMingguWib(Date.now()) - 7 * 86_400_000);
+    pasangFetch({ ada: false });
+    const akar = document.getElementById('ui')!;
+    renderSprint(akar, { kembali: vi.fn(), main: vi.fn(), lanjut: vi.fn() });
+    await tunggu();
     expect(localStorage.getItem('remi.sprintSaya')).toBeNull();
     expect(akar.querySelector('#main-sprint')).not.toBeNull();
-    expect(panggilan.some((x) => x.url === '/api/sprint/saya')).toBe(false);
+    expect(akar.querySelector('#lanjut-sprint')).toBeNull();
+  });
+
+  it('sprintBisaDilanjut: token minggu ini (jam HP), tanpa membuang apa pun', () => {
+    expect(sprintBisaDilanjut()).toBe(false);
+    simpanSprint();
+    expect(sprintBisaDilanjut()).toBe(true);
+    expect(sprintBisaDilanjut(Date.now() + 8 * 86_400_000)).toBe(false);
+    expect(localStorage.getItem('remi.sprintSaya')).not.toBeNull();
   });
 
   it('jawaban /api/sprint/saya dirapikan', () => {

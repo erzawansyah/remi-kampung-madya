@@ -8,7 +8,7 @@
 
 import { awalMingguWib, KOLOM_SPRINT, kunciNama, urutkanSprint, type BarisSprint, type KolomSprint } from '@remi/meja';
 import { ariaPiala, TEKS_SPRINT as T, teksLanjutSprint, teksPiala } from '../konten/sprint';
-import { simpan, type SprintSaya } from '../penyimpanan';
+import { simpan } from '../penyimpanan';
 import { esc, konfirmasi, toast } from './dom';
 import { angkaSkor } from './rincianSkor';
 
@@ -99,14 +99,14 @@ export function htmlPapanSprint(baris: readonly BarisSprint[], kolom: KolomSprin
     </table></div>`;
 }
 
-/** Sprint HP ini yang masih minggu ini; yang minggunya sudah lewat dilupakan. */
-export function sprintMingguIni(sekarang = Date.now()): SprintSaya | null {
+/**
+ * Sprint HP ini yang tampaknya masih bisa dilanjut (minggunya sama dengan minggu ini menurut jam HP). Hanya
+ * untuk teks; tokennya tidak pernah dibuang berdasarkan jam HP (bisa meleset): yang memutuskan server
+ * (POST /api/sprint/saya menjawab `ada: false`, atau pesan sprintSaya dengan token null).
+ */
+export function sprintBisaDilanjut(sekarang = Date.now()): boolean {
   const s = simpan.sprintSaya();
-  if (s && s.minggu !== awalMingguWib(sekarang)) {
-    simpan.setSprintSaya(null);
-    return null;
-  }
-  return s;
+  return !!s && s.minggu === awalMingguWib(sekarang);
 }
 
 /** Jawaban POST /api/sprint/saya (data dari jaringan, dirapikan). */
@@ -229,7 +229,8 @@ export function renderSprint(akar: HTMLElement, aksi: AksiSprint): SprintTerpasa
   let sibuk = false;
   /** Tombol aksi (Main sprint, atau Lanjut sprint + Mulai dari 0) sesuai sprint HP ini. */
   const gambarAksi = () => {
-    const saya = sprintMingguIni();
+    // Ada token = tombol Lanjut, apa pun kata jam HP; server yang memutuskan masih bisa atau tidak.
+    const saya = simpan.sprintSaya();
     aksiEl.innerHTML = saya
       ? `<button type="button" class="utama besar penuh" id="lanjut-sprint"><span>${esc(T.tombolLanjut)}</span><span class="ket-lanjut" data-ket-lanjut></span></button>
          <button type="button" class="penuh" id="nol-sprint">${esc(T.tombolMulaiNol)}</button>

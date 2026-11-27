@@ -40,7 +40,8 @@ import {
   type GameState,
   type ViewPemain,
 } from '@remi/engine';
-import { MAKS_PESAN, PENGATURAN_BAWAAN, rapikanPesan, type InfoMeja, type PesanKlien } from '@remi/meja';
+import { awalMingguWib, MAKS_PESAN, PENGATURAN_BAWAAN, rapikanPesan, type InfoMeja, type PesanKlien } from '@remi/meja';
+import { sprintBisaDilanjut } from '../src/ui/sprint';
 import { MAKS_ISIAN_PESAN, Obrolan } from '../src/ui/obrolan';
 import { ctx, id, kartuJadi, semuaSelesaiSusun, skenario, spek, type Skenario } from '../../../packages/engine/test/bantu';
 
@@ -2194,6 +2195,21 @@ describe('modal hasil putaran', () => {
   });
 });
 
+describe('riwayat meja sprint yang awalnya dibuang (riwayatDibuang)', () => {
+  it('hasil putaran baru tetap tampil walau panjang riwayat di view tidak bertambah', async () => {
+    meja = await mejaSiapMentung();
+    const m = meja;
+    const dlg = await sampaiHasil(m);
+    expect(dlg.querySelector('[data-hasil="1"]')).not.toBeNull();
+    dlg.querySelector<HTMLButtonElement>('[data-tutup]')!.click();
+    expect(document.querySelector('#modal [data-hasil]')).toBeNull();
+    // Putaran 2 selesai, putaran 1 sudah dibuang dari riwayat: panjangnya tetap 1, jumlahPutaranSelesai 2.
+    const v = m.view();
+    m.kontrol.perbarui(null, { ...v, riwayat: [{ ...v.riwayat[0], nomor: 2 }], riwayatDibuang: 1 });
+    await sampai(() => !!document.querySelector('#modal [data-hasil="2"]'));
+  });
+});
+
 describe('fokus sesudah modal hasil ditutup', () => {
   /** Tunggu setTimeout(0) penunda fokus. */
   const fokusDiHasil = async (m: MejaUji) => {
@@ -2691,11 +2707,13 @@ describe('meja sprint (25 Nov 2026, tanpa batas putaran sejak 26 Nov 2026)', () 
 
   it('Keluar dari menu: konfirmasi sprint (disimpan, bisa dilanjut sampai Senin), lalu ke papan sprint', async () => {
     const tinggalkanSprint = vi.fn();
+    // HP ini memegang token sprint minggu ini.
+    localStorage.setItem('remi.sprintSaya', JSON.stringify({ token: 'k'.repeat(32), minggu: awalMingguWib(Date.now()) }));
     meja = await mejaSprint({ tinggalkanSprint });
     meja.akar.querySelector<HTMLElement>('[data-a="menu"]')!.click();
     document.querySelector<HTMLElement>('#modal [data-m="keluar"]')!.click();
     const d = document.querySelector<HTMLElement>('.dialog.konfirmasi')!;
-    const harap = opsiKonfirmasiKeluar({ asal: 'meja', offline: false, sprint: true });
+    const harap = opsiKonfirmasiKeluar({ asal: 'meja', offline: false, sprint: true, sprintLanjut: true });
     expect(d.querySelector('h2')!.textContent).toBe(harap.judul);
     expect(d.querySelector('p')!.textContent).toBe(TEKS_SPRINT.keluarMain);
     expect(d.querySelector('p')!.textContent).toMatch(/disimpan/i);
@@ -2705,6 +2723,21 @@ describe('meja sprint (25 Nov 2026, tanpa batas putaran sejak 26 Nov 2026)', () 
     await tunggu();
     expect(tinggalkanSprint).toHaveBeenCalledWith(true);
     expect(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, selesai: true, sprint: true }).pesan).toBe(TEKS_SPRINT.keluarSelesai);
+    localStorage.removeItem('remi.sprintSaya');
+  });
+
+  it('Keluar dari meja sprint yang tidak bisa dilanjut (tanpa token minggu ini): tidak bilang disimpan', async () => {
+    localStorage.removeItem('remi.sprintSaya');
+    meja = await mejaSprint({ tinggalkanSprint: vi.fn() });
+    meja.akar.querySelector<HTMLElement>('[data-a="menu"]')!.click();
+    document.querySelector<HTMLElement>('#modal [data-m="keluar"]')!.click();
+    const p = document.querySelector<HTMLElement>('.dialog.konfirmasi p')!.textContent!;
+    expect(p).toBe(TEKS_SPRINT.keluarTutup);
+    expect(p).not.toMatch(/disimpan/i);
+    // Token dari minggu lalu (jam HP) juga tidak dibilang disimpan.
+    localStorage.setItem('remi.sprintSaya', JSON.stringify({ token: 'k'.repeat(32), minggu: awalMingguWib(Date.now()) - 7 * 86_400_000 }));
+    expect(opsiKonfirmasiKeluar({ asal: 'meja', offline: false, sprint: true, sprintLanjut: sprintBisaDilanjut() }).pesan).toBe(TEKS_SPRINT.keluarTutup);
+    localStorage.removeItem('remi.sprintSaya');
   });
 
   it('Keluar dari menu tanpa tinggalkanSprint: pesan keluar tetap dikirim', async () => {

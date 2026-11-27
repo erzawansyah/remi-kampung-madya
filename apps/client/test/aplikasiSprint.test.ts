@@ -238,6 +238,8 @@ describe('Aplikasi: Sprint', () => {
 
   it('Back di meja sprint: konfirmasi keluar sprint, lalu papan sprint', async () => {
     const { ws } = await diMejaSprint();
+    // HP ini memegang token sprint minggu ini: keluar = disimpan.
+    localStorage.setItem('remi.sprintSaya', JSON.stringify({ token: 'k'.repeat(32), minggu: awalMingguWib(Date.now()) }));
     pasangFetch();
     window.dispatchEvent(new PopStateEvent('popstate'));
     await vi.advanceTimersByTimeAsync(0);

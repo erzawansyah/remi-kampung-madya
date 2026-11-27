@@ -44,7 +44,7 @@ export const TEKS_SPRINT = {
   labelAtas: 'Sprint',
   /** Menu ☰ di meja sprint. */
   menuMeja:
-    'Sprint: lawan 5 warga kedai level Suhu, 2 deck, tanpa batas putaran. Tiap putaran yang selesai langsung masuk papan. Keluar kapan saja, sprint-nya disimpan dan bisa dilanjut sampai Senin. Aturannya dikunci, yang bisa diganti cuma tempo warga kedai (Pengaturan).',
+    'Sprint: lawan 5 warga kedai level Suhu, 2 deck, tanpa batas putaran. Tiap putaran yang selesai langsung masuk papan. Keluar kapan saja, sprint-nya disimpan dan bisa dilanjut lewat tombol Sprint di beranda sampai Senin. Aturannya dikunci, yang bisa diganti cuma tempo warga kedai (Pengaturan).',
   /** Satu baris di hasil putaran meja sprint, sebelum pesan sprintHasil putaran itu datang dari server. */
   mencatat: 'Lagi dicatat di papan…',
   /** Hasil putaran meja sprint sesudah tercatat. */
@@ -54,12 +54,18 @@ export const TEKS_SPRINT = {
   papanSprint: 'Papan sprint',
   /** Konfirmasi keluar meja sprint (lewat opsiKonfirmasiKeluar). Sejak 27 Nov 2026 keluar hanya menjeda. */
   keluarJudul: 'Udahan dulu?',
-  keluarMain: 'Sprint-mu disimpan, termasuk putaran yang lagi jalan. Lanjut kapan saja dari menu Sprint sampai Senin pukul 00.00 WIB.',
+  keluarMain: 'Sprint-mu disimpan, termasuk putaran yang lagi jalan. Lanjut kapan saja lewat tombol Sprint di beranda sampai Senin pukul 00.00 WIB.',
+  /** Meja sprint yang tidak bisa dilanjut (minggunya sudah lewat, atau meja sprint versi lama). */
+  keluarTutup: 'Sprint ini nggak bisa dilanjut sesudah keluar. Putaran yang sudah selesai udah masuk papan.',
   keluarSelesai: 'Hasil sprint ini sudah dicatat di papan.',
 } as const;
 
 /** Keterangan tombol Lanjut sprint: putaran yang sedang jalan dan skor sejauh ini. */
 export const teksLanjutSprint = (putaran: number, skor: string): string => `Putaran ${putaran} · skor ${skor}`;
+
+/** Papan skor di meja sprint yang riwayat awalnya sudah dibuang (state sprint tidak tumbuh tiap putaran). */
+export const teksRiwayatSprintTerakhir = (n: number): string =>
+  `Mentung, kepentung, dan riwayat di sini cuma ${n} putaran terakhir. Skor total tetap dari awal, hitungan lengkapnya di papan sprint.`;
 
 /** Posisi di papan minggu ini, dari pesan sprintHasil. */
 export const teksPeringkatMinggu = (n: number): string => `Peringkat ${n} minggu ini`;

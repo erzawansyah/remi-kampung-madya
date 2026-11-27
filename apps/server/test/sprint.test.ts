@@ -73,9 +73,11 @@ afterAll(() => rmSync(folder, { recursive: true, force: true }));
  * Jadikan sprint `kode` seperti meja sprint 0.10.0 (tanpa token): datanya dipindah ke meja_aktif, barisnya di
  * sprint_simpanan dibuang. Server yang mulai sesudahnya memulihkannya lewat jalur lama.
  */
-function jadikanSprintLama(path: string, kode: unknown, ubah?: (d: { sprint: { putaranTercatat?: number } }) => void, umur = 0) {
+function jadikanSprintLama(path: string, kode: unknown, token: unknown, ubah?: (d: { sprint: { putaranTercatat?: number } }) => void, umur = 0) {
   const db = new DatabaseSync(path);
-  const data = dataSprintTersimpan<{ sprint: { putaranTercatat?: number } }>(db, kode)!;
+  const data = dataSprintTersimpan<{ sprint: { putaranTercatat?: number; kursi: number }; kursi: { pemainId: unknown }[] }>(db, kode)!;
+  // Di sprint_simpanan token kursi hanya sebagai hash; meja 0.10.0 di meja_aktif memuat token aslinya.
+  data.kursi[data.sprint.kursi].pemainId = token;
   ubah?.(data);
   db.prepare('INSERT INTO meja_aktif (kode, data, pembuat_jaringan, diperbarui_pada) VALUES (?, ?, NULL, ?)').run(String(kode), JSON.stringify(data), Date.now() - umur);
   db.prepare('DELETE FROM sprint_simpanan WHERE kode = ?').run(String(kode));
@@ -434,7 +436,7 @@ describe('sprint di server', () => {
     await tungguPesan(a, putaranSelesai(1));
     a.ws.close();
     await s1.matikan();
-    jadikanSprintLama(path, masuk.kode);
+    jadikanSprintLama(path, masuk.kode, masuk.token);
     const lanjut = { sampai: 1 };
     const s2 = await nyalakan({ penjadwal: jam, jedaSimpanMejaMs: 0 }, path);
     expect(s2.server.jumlahMeja()).toBe(1);
@@ -470,7 +472,7 @@ describe('sprint di server', () => {
     const waktuAsli = Number(barisSprint(dbLuar)[0].waktu);
     dbLuar.exec('DELETE FROM sprint_putaran');
     dbLuar.close();
-    jadikanSprintLama(path, masuk.kode, (d) => (d.sprint.putaranTercatat = 0));
+    jadikanSprintLama(path, masuk.kode, masuk.token, (d) => (d.sprint.putaranTercatat = 0));
     jam.geser += UMUR_MAKS_SIMPANAN_MEJA_MS + 60_000;
     const s2 = await nyalakan({ penjadwal: jam }, path);
     expect(s2.server.jumlahMeja()).toBe(0);

@@ -66,6 +66,8 @@ export interface ViewPemain {
   alasanSelesai: GameState['alasanSelesai'];
   /** Mode kaldu (#42, info publik): semua sudah sepakat putaran berikutnya putaran terakhir. Hanya ada kalau true. */
   kalduDiminta?: true;
+  /** Meja sprint: putaran awal yang sudah dibuang dari riwayat (GameState.riwayatDibuang). Hanya ada kalau > 0. */
+  riwayatDibuang?: number;
 }
 
 /** Jumlah peristiwa terakhir yang ikut dikirim di view. */
@@ -119,5 +121,6 @@ export function viewUntuk(state: GameState, saya: number | null): ViewPemain {
     alasanSelesai: state.alasanSelesai,
     // Hanya ditulis kalau true, supaya view lama dan golden tidak berubah.
     ...(state.kalduDiminta ? { kalduDiminta: true as const } : {}),
+    ...(state.riwayatDibuang ? { riwayatDibuang: state.riwayatDibuang } : {}),
   };
 }

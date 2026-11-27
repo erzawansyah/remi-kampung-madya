@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import type { ViewPemain } from '@remi/engine';
-import { awalMingguWib, TEKS_SPRINT_DIJEDA, TEKS_SPRINT_DITUTUP, TEKS_SPRINT_TAK_BISA_LANJUT, type DataMeja } from '@remi/meja';
+import { awalMingguWib, TEKS_SPRINT_DIJEDA, TEKS_SPRINT_DITUTUP, TEKS_SPRINT_COBA_LAGI, TEKS_SPRINT_TAK_BISA_LANJUT, TEKS_SPRINT_TIDAK_ADA, type DataMeja } from '@remi/meja';
 import { bukaRiwayat, type PenyimpanRiwayat } from '../src/riwayat.js';
 import { jalankanServer, type OpsiServer, type ServerRemi } from '../src/server.js';
 import {
@@ -133,6 +133,12 @@ describe('sprint bisa dilanjut', () => {
     expect((await tungguPesan(a, (p) => p.t === 'keluar')).alasan).toBe(TEKS_SPRINT_DIJEDA);
     await sampai(() => server.jumlahMeja() === 0);
     expect(log).toContain(`meja ${kode} dilepas (sprint dijeda)`);
+    // Token kursi (untuk sambung ulang) juga hanya sebagai hash: database tidak memuat kunci apa pun.
+    expect(isiDatabase(db)).not.toContain(String(masuk.token));
+    expect(db.prepare('SELECT kursi_hash, putaran FROM sprint_simpanan').get()).toEqual({
+      kursi_hash: createHash('sha256').update(String(masuk.token)).digest('hex'),
+      putaran: 1,
+    });
     const data = dataSprintTersimpan<DataMeja>(db, kode)!;
     expect(data.kursi[data.sprint!.kursi]).toMatchObject({ jenis: 'manusia', nama: 'Budi', terhubung: false });
     expect(data.kursi.some((k) => k.keluar)).toBe(false);
@@ -173,7 +179,7 @@ describe('sprint bisa dilanjut', () => {
     const c = await klien(server.port);
     c.kirim({ t: 'sprint', nama: 'Ani', lanjut: 'x'.repeat(32) });
     expect(await tungguPesan(c, (p) => p.t === 'sprintSaya')).toEqual({ t: 'sprintSaya', token: null });
-    expect((await tungguPesan(c, (p) => p.t === 'error')).pesan).toBe(TEKS_SPRINT_TAK_BISA_LANJUT);
+    expect((await tungguPesan(c, (p) => p.t === 'error')).pesan).toBe(TEKS_SPRINT_TIDAK_ADA);
     // Bentuk token yang tidak sah: pesannya ditolak sebelum sampai ke meja.
     c.pesan.length = 0;
     c.kirim({ t: 'sprint', nama: 'Ani', lanjut: 'pendek' });
@@ -384,4 +390,128 @@ describe('sprint bisa dilanjut', () => {
     }
     expect(terakhir).toBe(429);
   });
+
+  it('memuat sprint ikut batas meja server dan batas muat per jaringan; ditolak sementara = token tetap berlaku', async () => {
+    const s1 = await nyalakan({ maksMeja: 1 });
+    const satu = await sprintSampai(s1.server.port, 'Joko', 0);
+    satu.a.kirim({ t: 'keluar' });
+    await sampai(() => s1.server.jumlahMeja() === 0);
+    satu.a.ws.close();
+    // Meja lain memenuhi server: Lanjut sprint ditolak sementara, tanpa sprintSaya null.
+    const lain = await klien(s1.server.port);
+    lain.kirim({ t: 'buat', nama: 'Lain' });
+    await tungguPesan(lain, (p) => p.t === 'masuk');
+    const b = await klien(s1.server.port);
+    b.kirim({ t: 'sprint', nama: 'Joko', lanjut: satu.token });
+    expect((await tungguPesan(b, (p) => p.t === 'error')).pesan).toBe(TEKS_SPRINT_COBA_LAGI);
+    expect(b.pesan.some((p) => p.t === 'sprintSaya')).toBe(false);
+    expect(s1.server.jumlahMeja()).toBe(1);
+    expect(s1.log.some((l) => l.includes('server penuh'))).toBe(true);
+    expect((await s1.saya(satu.token)).ada).toBe(true);
+    b.ws.close();
+    lain.ws.close();
+
+    // Batas muat per jaringan per menit: muat ke-3 dalam semenit ditolak sementara.
+    const s2 = await nyalakan({ maksMuatSprintPerMenitPerIp: 2 });
+    const dua = await sprintSampai(s2.server.port, 'Joko', 0);
+    dua.a.kirim({ t: 'keluar' });
+    await sampai(() => s2.server.jumlahMeja() === 0);
+    const c = dua.a;
+    for (let i = 0; i < 2; i++) {
+      c.pesan.length = 0;
+      c.kirim({ t: 'sprint', nama: 'Joko', lanjut: dua.token });
+      expect((await tokenDari(c)).token).toBe(dua.token);
+      c.kirim({ t: 'keluar' });
+      await sampai(() => s2.server.jumlahMeja() === 0);
+    }
+    c.pesan.length = 0;
+    c.kirim({ t: 'sprint', nama: 'Joko', lanjut: dua.token });
+    expect((await tungguPesan(c, (p) => p.t === 'error')).pesan).toBe(TEKS_SPRINT_COBA_LAGI);
+    expect(c.pesan.some((p) => p.t === 'sprintSaya')).toBe(false);
+    expect(s2.server.jumlahMeja()).toBe(0);
+    expect(s2.log.some((l) => l.includes('kebanyakan dimuat'))).toBe(true);
+    c.ws.close();
+  }, 30_000);
+
+  it('sambungan yang pindah dari sprint ke sprint lain: yang ditinggal langsung disimpan dan dilepas dari memori', async () => {
+    const { server, log } = await nyalakan();
+    const satu = await sprintSampai(server.port, 'Kiki', 0);
+    const kodeSatu = infoTerakhir(satu.a)!.kode;
+    satu.a.kirim({ t: 'keluar' });
+    await sampai(() => server.jumlahMeja() === 0);
+    satu.a.ws.close();
+    const dua = await sprintSampai(server.port, 'Lala', 0);
+    const kodeDua = infoTerakhir(dua.a)!.kode;
+    dua.a.kirim({ t: 'keluar' });
+    await sampai(() => server.jumlahMeja() === 0);
+    dua.a.ws.close();
+    // Satu sambungan memutar dua token: memori server tetap satu meja.
+    const c = await klien(server.port);
+    for (let i = 0; i < 3; i++) {
+      for (const t of [satu.token, dua.token]) {
+        c.pesan.length = 0;
+        c.kirim({ t: 'sprint', nama: 'Kiki', lanjut: t });
+        expect((await tokenDari(c)).token).toBe(t);
+        expect(server.jumlahMeja()).toBe(1);
+      }
+    }
+    expect(log.filter((l) => l === `meja ${kodeSatu} dilepas (sprint dijeda)`).length).toBeGreaterThanOrEqual(3);
+    expect(log.filter((l) => l === `meja ${kodeDua} dilepas (sprint dijeda)`).length).toBeGreaterThanOrEqual(3);
+    c.ws.close();
+  }, 30_000);
+
+  it('batas sprint tersimpan per jaringan minggu ini: yang belum pernah dimainkan dibuang duluan, kalau tidak ada ditolak', async () => {
+    const { server, db, saya } = await nyalakan({ maksSimpananSprintPerIp: 2 });
+    const a = await klien(server.port);
+    const tokens: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      a.kirim({ t: 'sprint', nama: 'Mira' });
+      tokens.push((await tokenDari(a)).token);
+      a.pesan.length = 0;
+    }
+    a.kirim({ t: 'keluar' });
+    await sampai(() => server.jumlahMeja() === 0);
+    // Sprint ke-3: sprint pertama (belum pernah selesai satu putaran) dibuang untuk memberi tempat.
+    a.kirim({ t: 'sprint', nama: 'Mira' });
+    tokens.push((await tokenDari(a)).token);
+    a.pesan.length = 0;
+    expect(jumlahSimpanan(db)).toBe(2);
+    expect(await saya(tokens[0])).toEqual({ ada: false });
+    expect((await saya(tokens[1])).ada).toBe(true);
+    // Semuanya sudah pernah dimainkan: sprint baru dari jaringan ini ditolak; Mulai dari 0 tetap boleh.
+    a.kirim({ t: 'keluar' });
+    await sampai(() => server.jumlahMeja() === 0);
+    db.prepare('UPDATE sprint_simpanan SET putaran = 3').run();
+    a.kirim({ t: 'sprint', nama: 'Mira' });
+    expect((await tungguPesan(a, (p) => p.t === 'error')).pesan).toBe('Kebanyakan sprint dari jaringanmu minggu ini, Bos. Lanjutkan yang sudah ada.');
+    a.pesan.length = 0;
+    a.kirim({ t: 'sprint', nama: 'Mira', ganti: tokens[2] });
+    expect((await tokenDari(a)).token).not.toBe(tokens[2]);
+    expect(jumlahSimpanan(db)).toBe(2);
+    a.ws.close();
+  }, 30_000);
+
+  it('sambung ulang ke sprint yang dijeda: token kursi dicocokkan dengan hash-nya sebelum simpanannya dibaca', async () => {
+    const { server, db, log } = await nyalakan();
+    const { a, masuk } = await sprintSampai(server.port, 'Nana', 0);
+    const kode = infoTerakhir(a)!.kode;
+    a.kirim({ t: 'keluar' });
+    await sampai(() => server.jumlahMeja() === 0);
+    a.ws.close();
+    // Token kursinya sendiri: dimuat lagi lewat sambung ulang biasa (kode + token kursi).
+    const b = await klien(server.port);
+    b.kirim({ t: 'gabung', kode, nama: 'Nana', token: String(masuk.token) });
+    expect(await tungguPesan(b, (p) => p.t === 'masuk')).toMatchObject({ kode, token: masuk.token });
+    b.kirim({ t: 'keluar' });
+    await sampai(() => server.jumlahMeja() === 0);
+    b.ws.close();
+    // Simpanannya dirusak: kalau server sempat membacanya untuk token sembarang, "rusak" tercatat di log.
+    db.prepare("UPDATE sprint_simpanan SET data = '{rusak'").run();
+    const d = await klien(server.port);
+    d.kirim({ t: 'gabung', kode, nama: 'Maling', token: 'bukan-token-kursi' });
+    expect((await tungguPesan(d, (p) => p.t === 'error')).pesan).toBe(`Meja ${kode} nggak ketemu.`);
+    expect(log.some((l) => l.includes('rusak'))).toBe(false);
+    expect(server.jumlahMeja()).toBe(0);
+    d.ws.close();
+  }, 30_000);
 });

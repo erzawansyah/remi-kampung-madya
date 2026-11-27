@@ -2,7 +2,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 import WebSocket from 'ws';
-import { pilihAksiBot, Rng, type ViewPemain } from '@remi/engine';
+import { jumlahPutaranSelesai, pilihAksiBot, Rng, type ViewPemain } from '@remi/engine';
 import type { InfoMeja, Penjadwal } from '@remi/meja';
 
 export const tunggu = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -107,5 +107,5 @@ export const tulisDataSprint = (db: DatabaseSync, kode: unknown, data: unknown) 
 
 export const viewTerakhir = (k: Klien) => ([...k.pesan].reverse().find((p) => p.t === 'view') as unknown as { view: ViewPemain }).view;
 export const putaranSelesai = (n: number) => (p: Pesan) =>
-  p.t === 'view' && (p.view as ViewPemain).status === 'putaranSelesai' && (p.view as ViewPemain).riwayat.length === n;
+  p.t === 'view' && (p.view as ViewPemain).status === 'putaranSelesai' && jumlahPutaranSelesai(p.view as ViewPemain) === n;
 

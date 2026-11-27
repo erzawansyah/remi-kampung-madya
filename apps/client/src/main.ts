@@ -54,7 +54,7 @@ import {
 import { mejaMasukPeringkat, opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
 import { renderRiwayat } from './ui/riwayat';
 import { renderKompetisi } from './ui/kompetisi';
-import { renderSprint, type SprintTerpasang } from './ui/sprint';
+import { renderSprint, sprintBisaDilanjut, type SprintTerpasang } from './ui/sprint';
 import { TEKS_SPRINT } from './konten/sprint';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang, siapkanJendelaMalas } from './ui/jendelaMalas';
@@ -539,6 +539,7 @@ class Aplikasi implements AppUntukMeja {
         masukPeringkat: asal === 'meja' && !offline && mejaMasukPeringkat(this.info),
         kompetisi: !offline && !!this.info?.kompetisi,
         sprint: !offline && this.info?.sprint === true,
+        sprintLanjut: sprintBisaDilanjut(),
       }),
     );
     // Layar sudah berganti selagi dialog terbuka (mis. host memulai permainan dari lobi):
