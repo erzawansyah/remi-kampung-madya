@@ -6,7 +6,7 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
-## [0.11.0] - 2026-11-27
+## [0.10.1] - 2026-11-27
 
 Sprint bisa dilanjut sepanjang minggu. Aturan main tidak berubah.
 
