@@ -8,6 +8,7 @@ import {
   aturanPembagian,
   buatPermainan,
   isJokerHidup,
+  jumlahPutaranSelesai,
   migrasiState,
   pilihAksiBot,
   pungutanBerlaku,
@@ -60,7 +61,15 @@ import {
   type PengaturanKompetisi,
 } from './kompetisi.js';
 import { isiLedek, kunciNama, rapikanLevel, rapikanNama, validasiSinyalSuara } from './validasi.js';
-import { hasilPutaranSprint, LEVEL_SPRINT, NAMA_LAWAN_SPRINT, PENGATURAN_SPRINT, rampingkanGameSprint, type HasilPutaranSprint } from './sprint.js';
+import {
+  awalMingguWib,
+  hasilPutaranSprint,
+  LEVEL_SPRINT,
+  NAMA_LAWAN_SPRINT,
+  PENGATURAN_SPRINT,
+  rampingkanGameSprint,
+  type HasilPutaranSprint,
+} from './sprint.js';
 
 export interface Penjadwal {
   setel(ms: number, fn: () => void): unknown;
@@ -563,6 +572,31 @@ export class Meja {
   }
 
   /**
+   * Sprint: token (pemainId) kursi pemainnya, kalau kursinya masih kursi manusia. Null = bukan meja sprint,
+   * atau pemainnya sudah Keluar (meja sprint 0.10.0, kursinya diteruskan warga kedai).
+   */
+  get pemainSprint(): string | null {
+    const s = this.d.sprint;
+    const k = s ? this.d.kursi[s.kursi] : undefined;
+    return k?.jenis === 'manusia' && k.pemainId ? k.pemainId : null;
+  }
+
+  /**
+   * Sprint dilanjut (27 Nov 2026): nama kursi pemain ikut nama yang dipakainya sekarang (nama dikunci
+   * seminggu di HP, #49). Kalau nama barunya sama dengan nama salah satu warga kedai di meja ini, nama
+   * lama dipertahankan (nama warga kedai menentukan gayanya, #47, jadi tidak diganti di tengah permainan).
+   * Tidak menyiarkan apa pun; pemanggil memanggil `masuk` sesudahnya.
+   */
+  gantiNamaSprint(pemainId: string, nama: string): void {
+    const i = this.kursiDari(pemainId);
+    if (i === null || !this.d.sprint || i !== this.d.sprint.kursi) return;
+    const baru = rapikanNama(nama);
+    const kunci = kunciNama(baru);
+    if (this.d.kursi.some((k, j) => j !== i && kunciNama(k.nama) === kunci)) return;
+    this.d.kursi[i].nama = baru;
+  }
+
+  /**
    * Sprint: `putaran` putaran pertama sudah dicatat server (supaya tidak dicatat lagi, juga sesudah meja
    * dipulihkan; database juga menolak catatan kembar). Tidak menyiarkan apa pun.
    */
@@ -785,9 +819,9 @@ export class Meja {
       if (this.status === 'main' && g) {
         this.d.kursi[i].keluar = true;
         // Di susun akhir yang mentung dan kepentung putaran ini sudah ketahuan, jadi ikut dihitung.
-        this.d.kursi[i].keluarSesudahPutaran = g.riwayat.length + (g.status === 'susunAkhir' ? 1 : 0);
+        this.d.kursi[i].keluarSesudahPutaran = jumlahPutaranSelesai(g) + (g.status === 'susunAkhir' ? 1 : 0);
         // Sprint: putaran yang belum selesai (juga susun akhir) tidak pernah dihitung.
-        if (this.d.sprint && this.d.sprint.kursi === i) this.d.sprint.putaranSampai = g.riwayat.length;
+        if (this.d.sprint && this.d.sprint.kursi === i) this.d.sprint.putaranSampai = jumlahPutaranSelesai(g);
       }
     }
     this.putusSejak.delete(i);
@@ -1451,12 +1485,19 @@ export class Meja {
     // Sprint (tanpa batas putaran): state dirampingkan tiap putaran baru supaya view dan simpanan tidak
     // tumbuh tanpa batas (rampingkanGameSprint). Meja biasa tidak berubah.
     const putaranBaru = h.state.status === 'putaranBerjalan' && h.state.putaran?.nomor !== sebelum?.nomor;
-    this.d.game = this.d.sprint && putaranBaru ? rampingkanGameSprint(h.state) : h.state;
+    const sprint = this.d.sprint;
+    if (sprint && putaranBaru) {
+      const ramping = rampingkanGameSprint(h.state, sprint.putaranTercatat ?? 0);
+      // waktuPutaran sejajar dengan riwayat: yang dibuang dari riwayat ikut dibuang.
+      const buang = (ramping.riwayatDibuang ?? 0) - (h.state.riwayatDibuang ?? 0);
+      if (buang > 0 && sprint.waktuPutaran) sprint.waktuPutaran = sprint.waktuPutaran.slice(buang);
+      this.d.game = ramping;
+    } else this.d.game = h.state;
     // Sprint: catat kapan putaran selesai (minggu papannya), lalu server mencatatnya sesudah berubah().
-    const putaranSprint = !!this.d.sprint && h.state.riwayat.length > game.riwayat.length;
+    const putaranSprint = !!sprint && jumlahPutaranSelesai(h.state) > jumlahPutaranSelesai(game);
     if (putaranSprint) {
-      const w = (this.d.sprint!.waktuPutaran ??= []);
-      while (w.length < h.state.riwayat.length) w.push(this.penjadwal.sekarang());
+      const w = (sprint!.waktuPutaran ??= []);
+      while (w.length < this.d.game.riwayat.length) w.push(this.penjadwal.sekarang());
     }
     if (h.state.status === 'putaranSelesai' && game.status !== 'putaranSelesai') this.mulaiJedaLanjut(h.state);
     else if (h.state.status !== 'putaranSelesai') this.jedaLanjut = null;
@@ -1514,7 +1555,7 @@ export class Meja {
     if (!Number.isInteger(ke) || ke === dari || this.d.kursi[ke]?.jenis !== 'manusia') galat('Yang mau diledek nggak ada di meja.');
     const sekarang = this.penjadwal.sekarang();
     if (sekarang - (this.emoteTerakhir.get(dari) ?? -Infinity) < 1200) return;
-    if (this.ledekPutaran?.putaran !== g.riwayat.length) this.ledekPutaran = { putaran: g.riwayat.length, jumlah: new Map() };
+    if (this.ledekPutaran?.putaran !== jumlahPutaranSelesai(g)) this.ledekPutaran = { putaran: jumlahPutaranSelesai(g), jumlah: new Map() };
     const jumlah = this.ledekPutaran.jumlah.get(dari) ?? 0;
     if (jumlah >= MAKS_LEDEK_PER_PUTARAN) galat('Udah, cukup ngeledeknya, Bos.');
     this.ledekPutaran.jumlah.set(dari, jumlah + 1);
@@ -1529,7 +1570,7 @@ export class Meja {
     // Jatah ledekan mulai dari 0 di setiap hasil putaran (juga sesudah Main lagi, saat nomor putaran
     // kembali ke 1), apa pun jedaLanjutMs-nya.
     this.ledekPutaran = null;
-    this.jedaLanjut = ms > 0 ? { putaran: g.riwayat.length, akhir: this.penjadwal.sekarang() + ms } : null;
+    this.jedaLanjut = ms > 0 ? { putaran: jumlahPutaranSelesai(g), akhir: this.penjadwal.sekarang() + ms } : null;
   }
 
   /** Kursi yang ditunggu di jeda lanjut: manusia yang terhubung selain host. */
@@ -1546,7 +1587,7 @@ export class Meja {
   private keadaanLanjut(): { sisaMs: number; siap: number[] } | null {
     const j = this.jedaLanjut;
     const g = this.d.game;
-    if (!j || g?.status !== 'putaranSelesai' || g.riwayat.length !== j.putaran) return null;
+    if (!j || g?.status !== 'putaranSelesai' || jumlahPutaranSelesai(g) !== j.putaran) return null;
     const sisaMs = j.akhir - this.penjadwal.sekarang();
     if (sisaMs <= 0) return null;
     const ditunggu = this.pemilihLanjut();
@@ -2326,7 +2367,9 @@ export function buatRingkasanAkhir(
   const pemain: RingkasanAkhir['pemain'] = game.pemain
     .map((p, i) => {
       const keluar = !!kursi[i]?.keluar;
-      const dimainkan = keluar ? game.riwayat.slice(0, kursi[i].keluarSesudahPutaran ?? game.riwayat.length) : game.riwayat;
+      // keluarSesudahPutaran dihitung dari putaran pertama; riwayat meja sprint bisa sudah dibuang awalnya.
+      const dibuang = game.riwayatDibuang ?? 0;
+      const dimainkan = keluar ? game.riwayat.slice(0, Math.max(0, (kursi[i].keluarSesudahPutaran ?? jumlahPutaranSelesai(game)) - dibuang)) : game.riwayat;
       return {
         kursi: i,
         nama: p.nama,
@@ -2345,7 +2388,7 @@ export function buatRingkasanAkhir(
     kode,
     selesaiPada,
     alasan: game.alasanSelesai,
-    jumlahPutaran: game.riwayat.length,
+    jumlahPutaran: jumlahPutaranSelesai(game),
     jumlahDeck: aturanPembagian(game.pemain.length, game.konfigurasi.duaDeckUntukEmpat).jumlahDeck,
     modeKaldu: game.konfigurasi.modeKaldu === true,
     ...(kompetisi !== undefined ? { kompetisi } : {}),
@@ -2393,10 +2436,14 @@ export function catatanSprint(data: DataMeja, waktu: number): CatatanSprint[] {
   if (!s || (s.tercatat && s.putaranTercatat === undefined) || !riwayat?.length) return [];
   const k = data.kursi[s.kursi];
   if (!k) return [];
-  const sampai = Math.min(riwayat.length, s.putaranSampai ?? Infinity);
+  // Indeks di sini nomor putaran − 1 (absolut); riwayat dan waktuPutaran dimulai dari putaran ke-(dibuang + 1).
+  const dibuang = data.game?.riwayatDibuang ?? 0;
+  const sampai = Math.min(dibuang + riwayat.length, s.putaranSampai ?? Infinity);
   const hasil: CatatanSprint[] = [];
-  for (let i = s.putaranTercatat ?? 0; i < sampai; i++) {
-    hasil.push({ ...hasilPutaranSprint(riwayat, i, s.kursi), kode: data.kode, mulaiPada: s.mulaiPada, nama: k.nama, waktu: s.waktuPutaran?.[i] ?? waktu });
+  // rampingkanGameSprint tidak pernah membuang putaran yang belum tercatat maupun satu putaran sebelumnya.
+  for (let i = Math.max(s.putaranTercatat ?? 0, dibuang > 0 ? dibuang + 1 : 0); i < sampai; i++) {
+    const j = i - dibuang;
+    hasil.push({ ...hasilPutaranSprint(riwayat, j, s.kursi, dibuang), kode: data.kode, mulaiPada: s.mulaiPada, nama: k.nama, waktu: s.waktuPutaran?.[j] ?? waktu });
   }
   return hasil;
 }
@@ -2410,15 +2457,49 @@ export function catatanSprintTerakhir(data: DataMeja): CatatanSprint | null {
   const s = data.sprint;
   const riwayat = data.game?.riwayat;
   if (!s || s.putaranTercatat === undefined || !riwayat) return null;
-  const n = Math.min(s.putaranTercatat, riwayat.length);
+  const dibuang = data.game?.riwayatDibuang ?? 0;
+  const n = Math.min(s.putaranTercatat, dibuang + riwayat.length);
   const k = data.kursi[s.kursi];
-  if (n < 1 || !k) return null;
-  return { ...hasilPutaranSprint(riwayat, n - 1, s.kursi), kode: data.kode, mulaiPada: s.mulaiPada, nama: k.nama, waktu: s.waktuPutaran?.[n - 1] ?? 0 };
+  const j = n - 1 - dibuang;
+  if (n < 1 || !k || j < (dibuang > 0 ? 1 : 0)) return null;
+  return { ...hasilPutaranSprint(riwayat, j, s.kursi, dibuang), kode: data.kode, mulaiPada: s.mulaiPada, nama: k.nama, waktu: s.waktuPutaran?.[j] ?? 0 };
 }
+
+/** Minggu WIB sprint ini (awalMingguWib saat mejanya dibuat); null = bukan meja sprint. */
+export function mingguSprint(data: Pick<DataMeja, 'sprint'>): number | null {
+  return data.sprint ? awalMingguWib(data.sprint.mulaiPada) : null;
+}
+
+/** Ringkasan sprint yang dijeda untuk tombol "Lanjut sprint" (27 Nov 2026). */
+export interface RingkasanLanjutSprint {
+  /** Nomor putaran yang sedang (atau akan) dimainkan, sama dengan bar atas meja ("Putaran N"). */
+  putaran: number;
+  /** Skor total pemain sejauh ini. */
+  skor: number;
+}
+
+/** Null = bukan meja sprint, belum mulai, atau kursi pemainnya bukan kursi manusia lagi. `data` tidak diubah. */
+export function ringkasanLanjutSprint(data: DataMeja): RingkasanLanjutSprint | null {
+  const s = data.sprint;
+  const g = data.game;
+  if (!s || !g || data.kursi[s.kursi]?.jenis !== 'manusia') return null;
+  return { putaran: g.putaran?.nomor ?? jumlahPutaranSelesai(g) + 1, skor: g.skor[s.kursi] ?? 0 };
+}
+
+/** Keluar dari meja sprint yang bisa dilanjut (27 Nov 2026): permainannya disimpan, bukan diteruskan warga kedai. */
+export const TEKS_SPRINT_DIJEDA = 'Sprint-mu disimpan. Lanjut kapan saja minggu ini lewat tombol Sprint di beranda, Bos.';
+/** Sprint yang diminta dilanjut sudah lewat minggunya (tiap Senin 00.00 WIB mulai dari 0 lagi). */
+export const TEKS_SPRINT_TAK_BISA_LANJUT = 'Sprint minggu lalu udah nggak bisa dilanjut. Mulai baru dari 0, ya.';
+/** Sprint yang diminta dilanjut tidak ada lagi (sudah ditutup lewat Mulai dari 0, atau simpanannya rusak). */
+export const TEKS_SPRINT_TIDAK_ADA = 'Sprint itu udah nggak bisa dilanjut. Mulai baru dari 0, ya.';
+/** Sprint-nya masih ada, tapi belum bisa dibuka sekarang (server penuh atau sibuk): coba lagi nanti. */
+export const TEKS_SPRINT_COBA_LAGI = 'Sprint-mu belum bisa dibuka, coba lagi sebentar.';
+/** Sprint ini ditutup dari HP yang sama lewat "Mulai dari 0" (dikirim ke sambungan yang masih memegangnya). */
+export const TEKS_SPRINT_DITUTUP = 'Sprint ini udah ditutup karena kamu mulai dari 0.';
 
 /** Penolakan di meja sprint (aturannya dikunci). */
 export const TEKS_SPRINT_TERKUNCI = 'Aturan sprint udah dikunci, Bos. Yang bisa diganti cuma tempo warga kedai.';
-export const TEKS_SPRINT_TANPA_VOTING = 'Sprint jalan terus sampai kamu Keluar, nggak pakai voting, Bos.';
+export const TEKS_SPRINT_TANPA_VOTING = 'Sprint nggak pakai voting, Bos. Keluar aja kalau mau udahan, nanti bisa dilanjut.';
 export const TEKS_SPRINT_SEKALI_MAIN = 'Meja sprint nggak pakai Main lagi. Buka Sprint di beranda buat meja baru, Bos.';
 
 /**

@@ -241,6 +241,13 @@ export interface GameState {
    * Hanya ditulis kalau true.
    */
   kalduDiminta?: true;
+  /**
+   * Meja sprint saja (tanpa batas putaran): banyaknya putaran selesai paling awal yang sudah dibuang dari
+   * `riwayat` supaya state tidak tumbuh tanpa batas (rampingkanGameSprint di @remi/meja). `riwayat[0]`
+   * adalah putaran ke-(riwayatDibuang + 1). Tidak ada = 0 (semua meja selain sprint; golden tetap). Hitung
+   * putaran yang sudah selesai lewat jumlahPutaranSelesai(), jangan riwayat.length.
+   */
+  riwayatDibuang?: number;
   /** 'kaldu': putaran kaldu ditutup mentung (#42). */
   alasanSelesai: 'sepakat' | 'batasPutaran' | 'batasSkor' | 'kaldu' | null;
 }

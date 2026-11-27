@@ -88,7 +88,7 @@ export function buatPermainan(opsi: {
  */
 export function kandidatPengocok(state: GameState): number[] {
   const semua = state.pemain.map((_, i) => i);
-  if (state.riwayat.length === 0) return semua;
+  if (jumlahPutaranSelesai(state) === 0) return semua;
   const min = Math.min(...state.skor);
   return semua.filter((i) => state.skor[i] === min);
 }
@@ -102,11 +102,21 @@ export function kandidatPengocok(state: GameState): number[] {
 export function putaranBerikutKaldu(g: {
   konfigurasi: Pick<KonfigurasiPermainan, 'batasPutaran' | 'modeKaldu'>;
   riwayat: readonly unknown[];
+  riwayatDibuang?: number;
   kalduDiminta?: boolean;
 }): boolean {
   const k = g.konfigurasi;
   if (k.modeKaldu !== true) return false;
-  return g.kalduDiminta === true || (k.batasPutaran !== null && g.riwayat.length + 1 >= k.batasPutaran);
+  return g.kalduDiminta === true || (k.batasPutaran !== null && jumlahPutaranSelesai(g) + 1 >= k.batasPutaran);
+}
+
+/**
+ * Banyaknya putaran yang sudah selesai: `riwayat.length` ditambah putaran yang dibuang dari riwayat meja
+ * sprint (GameState.riwayatDibuang). Untuk GameState maupun ViewPemain. Pakai ini, bukan riwayat.length,
+ * untuk nomor putaran dan untuk tahu apakah ada putaran baru yang selesai.
+ */
+export function jumlahPutaranSelesai(g: { riwayat: readonly unknown[]; riwayatDibuang?: number }): number {
+  return (g.riwayatDibuang ?? 0) + g.riwayat.length;
 }
 
 /**
@@ -207,12 +217,12 @@ function jalankan(s: GameState, aksi: Aksi): void {
 }
 
 function catat(s: GameState, pesan: string): void {
-  s.log.push({ putaran: s.putaran?.nomor ?? s.riwayat.length + 1, pesan });
+  s.log.push({ putaran: s.putaran?.nomor ?? jumlahPutaranSelesai(s) + 1, pesan });
 }
 
 function terjadi(s: GameState, isi: IsiPeristiwa): void {
   const id = (s.peristiwa.at(-1)?.id ?? 0) + 1;
-  s.peristiwa.push({ ...isi, id, putaran: s.putaran?.nomor ?? s.riwayat.length + 1 } as Peristiwa);
+  s.peristiwa.push({ ...isi, id, putaran: s.putaran?.nomor ?? jumlahPutaranSelesai(s) + 1 } as Peristiwa);
 }
 
 const isKembarAsEmpat = (kj: { jenis: string; kartu: unknown[] }) => kj.jenis === 'kembarAs' && kj.kartu.length === 4;
@@ -270,7 +280,7 @@ function mulaiPutaran(s: GameState, pengocokDipilih: number | undefined): void {
 
   s.rng = rng.state;
   s.putaran = {
-    nomor: s.riwayat.length + 1,
+    nomor: jumlahPutaranSelesai(s) + 1,
     pengocok,
     arah: s.arah,
     kartuDibuka,
@@ -609,7 +619,7 @@ function selesaikanPutaran(
     if (p.kaldu && pementung !== null) s.alasanSelesai = 'kaldu';
   } else if (k.batasSkorAtas !== null && s.skor.some((x) => x >= k.batasSkorAtas!)) s.alasanSelesai = 'batasSkor';
   else if (k.batasSkorBawah !== null && s.skor.some((x) => x <= k.batasSkorBawah!)) s.alasanSelesai = 'batasSkor';
-  else if (k.batasPutaran !== null && s.riwayat.length >= k.batasPutaran) s.alasanSelesai = 'batasPutaran';
+  else if (k.batasPutaran !== null && jumlahPutaranSelesai(s) >= k.batasPutaran) s.alasanSelesai = 'batasPutaran';
   s.status = s.alasanSelesai ? 'selesai' : 'putaranSelesai';
   if (s.status === 'selesai') catat(s, 'Permainan selesai.');
   else if (p.kaldu) catat(s, 'Belum ada yang mentung, kaldu lagi.');

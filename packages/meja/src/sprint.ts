@@ -67,16 +67,18 @@ export interface HasilPutaranSprint {
 type RiwayatSprint = readonly Pick<HasilPutaran, 'pementung' | 'kepentung' | 'skorAkumulasi'>[];
 
 /**
- * Hasil putaran ke-`indeks` (0 = putaran pertama) untuk kursi `kursi` (kursi pemain sesudah urutan duduk
- * diacak). Skor putaran = selisih skor akumulasi dengan putaran sebelumnya, untuk semua kursi.
+ * Hasil putaran `riwayat[indeks]` untuk kursi `kursi` (kursi pemain sesudah urutan duduk diacak). Skor
+ * putaran = selisih skor akumulasi dengan putaran sebelumnya, untuk semua kursi. `dibuang` = putaran awal
+ * yang sudah dibuang dari riwayat (GameState.riwayatDibuang), jadi nomor putarannya `dibuang + indeks + 1`;
+ * kalau `dibuang` > 0, `indeks` 0 tidak bisa dihitung (putaran sebelumnya sudah tidak ada) dan tidak boleh diminta.
  */
-export function hasilPutaranSprint(riwayat: RiwayatSprint, indeks: number, kursi: number): HasilPutaranSprint {
+export function hasilPutaranSprint(riwayat: RiwayatSprint, indeks: number, kursi: number, dibuang = 0): HasilPutaranSprint {
   const h = riwayat[indeks];
   const sebelum = indeks > 0 ? riwayat[indeks - 1].skorAkumulasi : [];
   const skorPutaran = h.skorAkumulasi.map((s, i) => s - (sebelum[i] ?? 0));
   const skor = skorPutaran[kursi] ?? 0;
   return {
-    putaran: indeks + 1,
+    putaran: dibuang + indeks + 1,
     menang: skorPutaran.every((s, i) => i === kursi || skor >= s),
     skor,
     mentung: h.pementung === kursi ? 1 : 0,
@@ -84,37 +86,49 @@ export function hasilPutaranSprint(riwayat: RiwayatSprint, indeks: number, kursi
   };
 }
 
-/** Semua putaran sprint yang sudah selesai untuk kursi pemain. Menerima GameState maupun ViewPemain. */
-export function hasilSprint(game: Pick<GameState, 'riwayat'>, kursi: number): HasilPutaranSprint[] {
-  return game.riwayat.map((_, i) => hasilPutaranSprint(game.riwayat, i, kursi));
+/**
+ * Putaran sprint yang sudah selesai dan masih ada di riwayat, untuk kursi pemain. Menerima GameState maupun
+ * ViewPemain. Kalau riwayat awalnya sudah dibuang (riwayatDibuang), putaran tertua yang tersisa tidak ikut
+ * (skornya tidak bisa dihitung tanpa putaran sebelumnya).
+ */
+export function hasilSprint(game: Pick<GameState, 'riwayat' | 'riwayatDibuang'>, kursi: number): HasilPutaranSprint[] {
+  const dibuang = game.riwayatDibuang ?? 0;
+  return game.riwayat.flatMap((_, i) => (dibuang > 0 && i === 0 ? [] : [hasilPutaranSprint(game.riwayat, i, kursi, dibuang)]));
 }
 
-/** Berapa putaran terakhir yang rinciannya (kartu jadi dan kartu tangan tiap pemain) tetap utuh di meja sprint. */
+/** Berapa putaran terakhir yang tetap ada di riwayat meja sprint (dengan rincian kartu jadi dan kartu tangan). */
 export const PUTARAN_RINCI_SPRINT = 10;
 
 /**
- * Meja sprint tidak pernah selesai sendiri, jadi state permainannya (dan view yang dikirim tiap aksi,
- * simpanan meja, dan setiap salinannya) jangan tumbuh tanpa batas. Dipanggil meja sprint setiap putaran
- * baru dimulai; mengembalikan state baru, `g` tidak diubah (entri riwayat diganti salinan, tidak diubah).
+ * Meja sprint tidak pernah selesai sendiri (keputusan pemilik 27 Nov 2026: "jumlah mainnya bisa sampe
+ * ratusan"), jadi state permainannya (dan view yang dikirim tiap aksi, simpanan meja, dan setiap
+ * salinannya) tidak boleh tumbuh tiap putaran. Dipanggil meja sprint setiap putaran baru dimulai;
+ * mengembalikan state baru, `g` tidak diubah (entri riwayat tidak pernah diubah, hanya dibuang/disalin).
  * - `log`: hanya putaran yang sedang jalan dan putaran sebelumnya.
  * - `peristiwa`: hanya BATAS_PERISTIWA_VIEW terakhir (yang memang dikirim di view; id berikutnya tetap
  *   meneruskan id terakhir).
- * - `riwayat`: semua putaran tetap ada (nomor, cara, pementung, kepentung, skor, total tiap pemain:
- *   bahan papan sprint, tab Riwayat dan Peringkat), tapi kartu jadi dan kartu tangan di rincian hanya untuk
- *   PUTARAN_RINCI_SPRINT putaran terakhir.
+ * - `riwayat`: hanya PUTARAN_RINCI_SPRINT putaran terakhir; yang lebih lama dibuang dan dihitung di
+ *   `riwayatDibuang` (nomor putaran tetap lanjut, skor total tetap di `skor`). Putaran yang belum dicatat
+ *   server (indeks ≥ `putaranTercatat`) tidak pernah dibuang, begitu juga satu putaran tepat sebelumnya
+ *   (skor putaran = selisih skor akumulasi dengan putaran sebelumnya). Kalau pencatatan tertinggal,
+ *   putaran di luar PUTARAN_RINCI_SPRINT terakhir yang masih ditahan dibuang kartunya saja.
  * Meja biasa tidak pernah memakai ini (golden tetap).
  */
-export function rampingkanGameSprint(g: GameState): GameState {
-  const nomor = g.putaran?.nomor ?? g.riwayat.length + 1;
-  const batasRinci = g.riwayat.length - PUTARAN_RINCI_SPRINT;
+export function rampingkanGameSprint(g: GameState, putaranTercatat: number): GameState {
+  const dibuangLama = g.riwayatDibuang ?? 0;
+  const total = dibuangLama + g.riwayat.length;
+  const nomor = g.putaran?.nomor ?? total + 1;
+  const dibuang = Math.max(dibuangLama, Math.min(total - PUTARAN_RINCI_SPRINT, putaranTercatat - 1));
+  const sisa = dibuang > dibuangLama ? g.riwayat.slice(dibuang - dibuangLama) : g.riwayat;
+  const batasRinci = sisa.length - PUTARAN_RINCI_SPRINT;
   const ramping = (h: HasilPutaran): HasilPutaran =>
     h.rincian.every((r) => !r.kartuJadi.length && !r.tangan.length && !r.nilaiKartuTangan.length)
       ? h
       : { ...h, rincian: h.rincian.map((r) => ({ ...r, kartuJadi: [], tangan: [], nilaiKartuTangan: [] })) };
-  const riwayat = g.riwayat.map((h, i) => (i < batasRinci ? ramping(h) : h));
+  const riwayat = sisa.map((h, i) => (i < batasRinci ? ramping(h) : h));
   const log = g.log.filter((e) => e.putaran >= nomor - 1);
   const peristiwa = g.peristiwa.length > BATAS_PERISTIWA_VIEW ? g.peristiwa.slice(-BATAS_PERISTIWA_VIEW) : g.peristiwa;
-  return { ...g, riwayat, log, peristiwa };
+  return { ...g, riwayat, log, peristiwa, ...(dibuang > 0 ? { riwayatDibuang: dibuang } : {}) };
 }
 
 /**

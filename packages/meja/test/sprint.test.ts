@@ -4,7 +4,7 @@
 // di meja.ts.
 
 import { describe, expect, it } from 'vitest';
-import { BATAS_PERISTIWA_VIEW, periksaInvarian, Rng, type HasilPutaran } from '@remi/engine';
+import { BATAS_PERISTIWA_VIEW, jumlahPutaranSelesai, periksaInvarian, Rng, type HasilPutaran } from '@remi/engine';
 import {
   awalMingguWib,
   catatanSprint,
@@ -17,6 +17,8 @@ import {
   hasilSprint,
   juaraMingguan,
   Meja,
+  mingguSprint,
+  ringkasanLanjutSprint,
   NAMA_LAWAN_SPRINT,
   PENGATURAN_SPRINT,
   pialaSprint,
@@ -445,12 +447,11 @@ describe('meja sprint', () => {
     pulih.hentikan();
   });
 
-  it('state meja sprint dirampingkan tiap putaran baru: log, peristiwa, dan kartu di riwayat lama tidak menumpuk', () => {
+  it('state meja sprint dirampingkan tiap putaran baru: log, peristiwa, dan riwayat lama tidak menumpuk', () => {
     const ctx = mejaSprint({ acakDuduk: nol });
     const { meja, surat } = ctx;
     siapSemua(meja);
     const rng = new Rng(21);
-    const ukuran: number[] = [];
     const total = PUTARAN_RINCI_SPRINT + 4;
     for (let putaran = 1; putaran <= total; putaran++) {
       mainkanPutaran(ctx, rng);
@@ -459,28 +460,55 @@ describe('meja sprint', () => {
       siapSemua(meja);
       const g = meja.data.game!;
       expect(g.putaran!.nomor).toBe(putaran + 1);
-      expect(g.riwayat).toHaveLength(putaran);
+      expect(jumlahPutaranSelesai(g)).toBe(putaran);
+      // Riwayat hanya PUTARAN_RINCI_SPRINT putaran terakhir; yang lebih lama dihitung di riwayatDibuang.
+      expect(g.riwayat).toHaveLength(Math.min(putaran, PUTARAN_RINCI_SPRINT));
+      expect(g.riwayat.map((h) => h.nomor)).toEqual(Array.from({ length: g.riwayat.length }, (_, k) => putaran - g.riwayat.length + k + 1));
+      expect(g.riwayatDibuang ?? 0).toBe(Math.max(0, putaran - PUTARAN_RINCI_SPRINT));
+      expect(meja.data.sprint!.waktuPutaran).toHaveLength(g.riwayat.length);
+      expect(surat.view('p1').riwayatDibuang ?? 0).toBe(g.riwayatDibuang ?? 0);
       // Log hanya putaran yang sedang jalan dan sebelumnya; peristiwa paling banyak yang dikirim di view.
       expect(new Set(g.log.map((e) => e.putaran)).size).toBeLessThanOrEqual(2);
       expect(g.log.every((e) => e.putaran >= putaran)).toBe(true);
       expect(g.peristiwa.length).toBeLessThanOrEqual(BATAS_PERISTIWA_VIEW);
       expect(periksaInvarian(g)).toEqual([]);
-      // Kartu hanya untuk PUTARAN_RINCI_SPRINT putaran terakhir; skor dan total tetap.
-      g.riwayat.forEach((h, i) => {
-        const rinci = i >= putaran - PUTARAN_RINCI_SPRINT;
-        if (!rinci) expect(h.rincian.every((r) => !r.kartuJadi.length && !r.tangan.length && !r.nilaiKartuTangan.length)).toBe(true);
-      });
-      ukuran.push(JSON.stringify(surat.view('p1')).length);
+      // Skor total tetap dari awal: sama dengan skor akumulasi putaran terakhir.
+      expect(g.riwayat.at(-1)!.skorAkumulasi).toEqual(g.skor);
     }
-    // Papan sprint tetap bisa dihitung dari riwayat yang dirampingkan (sama dengan sebelum dirampingkan).
-    const { putaranTercatat: _, tercatat: __, ...tanpaTanda } = meja.data.sprint!;
-    expect(catatanSprint({ ...meja.data, sprint: tanpaTanda }, 0)).toHaveLength(total);
-    // Sesudah PUTARAN_RINCI_SPRINT putaran, view hanya bertambah sedikit per putaran (ringkasan skor).
-    const tambah = (ukuran[total - 1] - ukuran[PUTARAN_RINCI_SPRINT]) / (total - 1 - PUTARAN_RINCI_SPRINT);
-    expect(tambah).toBeLessThan(2_000);
-    expect(surat.errors('p1')).toEqual([]);
+    // Putaran berikutnya yang selesai dicatat dengan nomor yang benar (lanjut dari riwayat yang dibuang).
+    mainkanPutaran(ctx, rng);
+    const c = catatanSprint(meja.data, 0);
+    expect(c.map((x) => x.putaran)).toEqual([total + 1]);
+    expect(catatanSprintTerakhir(meja.data)!.putaran).toBe(total);
+    const g = meja.data.game!;
+    const k = meja.data.sprint!.kursi;
+    expect(c[0].skor).toBe(g.riwayat.at(-1)!.skorAkumulasi[k] - g.riwayat.at(-2)!.skorAkumulasi[k]);
     meja.hentikan();
-  }, 120_000);
+  });
+
+  it('putaran yang belum tercatat server tidak pernah dibuang dari riwayat (pencatatan tertinggal)', () => {
+    const ctx = mejaSprint({ acakDuduk: nol });
+    const { meja } = ctx;
+    siapSemua(meja);
+    const rng = new Rng(22);
+    const total = PUTARAN_RINCI_SPRINT + 3;
+    for (let putaran = 1; putaran <= total; putaran++) {
+      mainkanPutaran(ctx, rng);
+      // Server hanya sempat mencatat 2 putaran pertama (misalnya database galat sesudahnya).
+      if (putaran <= 2) meja.tandaiSprintTercatat(putaran);
+      meja.terima('p1', { t: 'putaranBerikut' });
+      siapSemua(meja);
+    }
+    const g = meja.data.game!;
+    // Putaran 1 boleh dibuang (putaran 2 sudah tercatat; putaran 2 ditahan sebagai "sebelumnya" putaran 3).
+    expect(g.riwayatDibuang).toBe(1);
+    expect(g.riwayat).toHaveLength(total - 1);
+    // Di luar PUTARAN_RINCI_SPRINT terakhir yang ditahan, kartunya saja yang dibuang.
+    expect(g.riwayat[0].rincian.every((r) => !r.kartuJadi.length && !r.tangan.length)).toBe(true);
+    const c = catatanSprint(meja.data, 0);
+    expect(c.map((x) => x.putaran)).toEqual(Array.from({ length: total - 2 }, (_, k) => k + 3));
+    meja.hentikan();
+  });
 
   it('rampingkanGameSprint tidak mengubah state masukan', () => {
     const ctx = mejaSprint();
@@ -493,14 +521,26 @@ describe('meja sprint', () => {
     }
     const g = ctx.meja.data.game!;
     const salinan = JSON.parse(JSON.stringify(g));
-    const r = rampingkanGameSprint({ ...g, riwayat: [...g.riwayat, ...Array.from({ length: PUTARAN_RINCI_SPRINT }, () => g.riwayat[0])] });
+    // Belum ada yang tercatat (0): tidak ada yang dibuang, hanya kartu di riwayat lama.
+    const r = rampingkanGameSprint({ ...g, riwayat: [...g.riwayat, ...Array.from({ length: PUTARAN_RINCI_SPRINT }, () => g.riwayat[0])] }, 0);
     expect(g).toEqual(salinan);
+    expect(r.riwayat).toHaveLength(2 + PUTARAN_RINCI_SPRINT);
+    expect('riwayatDibuang' in r).toBe(false);
     expect(r.riwayat[0].rincian.every((x) => !x.tangan.length && !x.kartuJadi.length)).toBe(true);
     expect(r.riwayat[0].skorAkumulasi).toEqual(g.riwayat[0].skorAkumulasi);
     expect(r.riwayat[0].rincian.map((x) => x.total)).toEqual(g.riwayat[0].rincian.map((x) => x.total));
     // Yang sudah ramping tidak disalin ulang.
-    const lagi = rampingkanGameSprint(r);
+    const lagi = rampingkanGameSprint(r, 0);
     expect(lagi.riwayat[0]).toBe(r.riwayat[0]);
+    // Semua tercatat: tinggal PUTARAN_RINCI_SPRINT terakhir, masukannya tetap utuh.
+    const salinanR = JSON.parse(JSON.stringify(r));
+    const buang = rampingkanGameSprint(r, 2 + PUTARAN_RINCI_SPRINT);
+    expect(r).toEqual(salinanR);
+    expect(buang.riwayat).toHaveLength(PUTARAN_RINCI_SPRINT);
+    expect(buang.riwayatDibuang).toBe(2);
+    expect(jumlahPutaranSelesai(buang)).toBe(2 + PUTARAN_RINCI_SPRINT);
+    // Tidak pernah mundur.
+    expect(rampingkanGameSprint(buang, 0).riwayatDibuang).toBe(2);
     ctx.meja.hentikan();
   });
 
@@ -517,5 +557,130 @@ describe('meja sprint', () => {
     expect(validasiPesan({ t: 'sprint', nama: 'Budi' })).toEqual({ t: 'sprint', nama: 'Budi' });
     expect(validasiPesan({ t: 'sprint', nama: 'Budi', lain: 1 })).toEqual({ t: 'sprint', nama: 'Budi' });
     for (const x of [{ t: 'sprint' }, { t: 'sprint', nama: 5 }, { t: 'sprint', nama: 'x'.repeat(101) }]) expect(validasiPesan(x)).toBeNull();
+    // Token sprint (27 Nov 2026): base64url 16–64 huruf.
+    const token = 'Ab-_' + 'x'.repeat(28);
+    expect(validasiPesan({ t: 'sprint', nama: 'Budi', lanjut: token })).toEqual({ t: 'sprint', nama: 'Budi', lanjut: token });
+    expect(validasiPesan({ t: 'sprint', nama: 'Budi', ganti: token })).toEqual({ t: 'sprint', nama: 'Budi', ganti: token });
+    for (const t of ['pendek', 'x'.repeat(65), 'a b'.repeat(8), 5, null, '+'.repeat(20)]) {
+      expect(validasiPesan({ t: 'sprint', nama: 'Budi', lanjut: t })).toBeNull();
+      expect(validasiPesan({ t: 'sprint', nama: 'Budi', ganti: t })).toBeNull();
+    }
   });
+});
+
+// Sprint bisa dilanjut (keputusan pemilik 27 Nov 2026): satu permainan sepanjang minggu WIB. Meja hanya
+// menyediakan bahannya (ringkasan, nama kursi, minggu); simpan-muat diatur server.
+describe('sprint yang dilanjut', () => {
+  it('ringkasan Lanjut sprint, minggu sprint, token kursi pemain', () => {
+    const ctx = mejaSprint({ acakDuduk: nol });
+    const { meja } = ctx;
+    siapSemua(meja);
+    expect(meja.pemainSprint).toBe('p1');
+    expect(mingguSprint(meja.data)).toBe(awalMingguWib(1_000_000));
+    expect(ringkasanLanjutSprint(meja.data)).toEqual({ putaran: 1, skor: 0 });
+    mainkanPutaran(ctx, new Rng(3));
+    const g = meja.data.game!;
+    // Hasil putaran masih tampil: nomornya putaran yang baru selesai (sama dengan bar atas meja).
+    expect(ringkasanLanjutSprint(meja.data)).toEqual({ putaran: 1, skor: g.skor[5] });
+    meja.terima('p1', { t: 'putaranBerikut' });
+    expect(ringkasanLanjutSprint(meja.data)).toEqual({ putaran: 2, skor: g.skor[5] });
+    // Meja biasa dan meja sprint 0.10.0 yang pemainnya sudah Keluar: tidak ada yang bisa dilanjut.
+    const { opsi } = siapkan();
+    const biasa = Meja.buat(opsi, 'h', 'Ani');
+    expect(ringkasanLanjutSprint(biasa.data)).toBeNull();
+    expect(mingguSprint(biasa.data)).toBeNull();
+    expect(biasa.pemainSprint).toBeNull();
+    meja.tinggalkan('p1');
+    expect(meja.pemainSprint).toBeNull();
+    expect(ringkasanLanjutSprint(meja.data)).toBeNull();
+    meja.hentikan();
+  });
+
+  it('nama kursi ikut nama sekarang, kecuali sama dengan warga kedai di meja (gayanya mengikuti nama)', () => {
+    const { meja } = mejaSprint();
+    meja.gantiNamaSprint('p1', '  Budi Baru  ');
+    expect(meja.data.kursi[0].nama).toBe('Budi Baru');
+    meja.gantiNamaSprint('p1', 'kipas dua');
+    expect(meja.data.kursi[0].nama).toBe('Budi Baru');
+    expect(meja.data.kursi[1].nama).toBe('Kipas Dua');
+    // Token lain tidak bisa mengganti apa pun.
+    meja.gantiNamaSprint('orang-lain', 'Maling');
+    expect(meja.data.kursi.map((k) => k.nama)).not.toContain('Maling');
+    meja.hentikan();
+  });
+
+  it('200 putaran: state, view, dan simpanan tetap kecil; dijeda lalu dimuat lagi di tengah putaran meneruskan permainan yang sama', () => {
+    // Warga kedai level Mudah hanya supaya test cepat; yang diuji ukuran state, bukan strategi.
+    const awal = mejaSprint({ acakDuduk: nol });
+    const data = awal.meja.data;
+    awal.meja.hentikan();
+    data.kursi = data.kursi.map((k) => (k.jenis === 'bot' ? { ...k, level: 'mudah' } : k));
+    let ctx = { ...awal, meja: new Meja(awal.opsi, data) };
+    siapSemua(ctx.meja);
+    const rng = new Rng(5);
+    const total = 200;
+    const galat: string[] = [];
+    const ukuranData: number[] = [];
+    const ukuranView: number[] = [];
+    for (let putaran = 1; putaran <= total; putaran++) {
+      if (putaran === 120) {
+        // Dijeda di tengah putaran (Keluar/putus lalu dilepas dari memori), dimuat lagi dari simpanannya.
+        for (let i = 0; i < 6; i++) if (!aksiManusia(ctx.meja, ctx.surat, 'p1', rng)) ctx.jam.langkah();
+        const sebelum = ctx.meja.data;
+        expect(sebelum.game!.status).toBe('putaranBerjalan');
+        const simpanan = JSON.parse(JSON.stringify(dataMejaDipulihkan(sebelum))) as DataMeja;
+        galat.push(...ctx.surat.errors('p1'));
+        ctx.meja.hentikan();
+        const baru = siapkan({ acakDuduk: nol });
+        baru.jam.waktu = ctx.jam.waktu;
+        const meja = new Meja(baru.opsi, simpanan);
+        // Tanpa pemain terhubung permainannya diam.
+        expect(baru.jam.langkah()).toBe(false);
+        meja.gantiNamaSprint('p1', 'Budi');
+        meja.masuk('p1', 'Budi');
+        ctx = { ...baru, meja };
+        const g = meja.data.game!;
+        expect(jumlahPutaranSelesai(g)).toBe(putaran - 1);
+        expect(g.riwayat.length).toBeLessThanOrEqual(PUTARAN_RINCI_SPRINT);
+        expect(g.putaran!.nomor).toBe(putaran);
+        expect(g.skor).toEqual(sebelum.game!.skor);
+        expect(g.putaran!.tangan).toEqual(sebelum.game!.putaran!.tangan);
+        expect(meja.data.sprint).toEqual(sebelum.sprint);
+      }
+      // Seperti mainkanPutaran, tapi membaca view terakhir (bukan salinan data meja tiap langkah) supaya cepat.
+      for (let i = 0; ; i++) {
+        const st = ctx.surat.view('p1').status;
+        if (st !== 'putaranBerjalan' && st !== 'susunAkhir') break;
+        if (i > 20_000) throw new Error('putaran tidak selesai');
+        if (!aksiManusia(ctx.meja, ctx.surat, 'p1', rng) && !ctx.jam.langkah()) throw new Error('macet');
+      }
+      const c = catatanSprint(ctx.meja.data, 0);
+      expect(c.map((x) => x.putaran)).toEqual([putaran]);
+      ctx.meja.tandaiSprintTercatat(putaran);
+      ctx.meja.terima('p1', { t: 'putaranBerikut' });
+      siapSemua(ctx.meja);
+      ukuranData.push(JSON.stringify(ctx.meja.data).length);
+      ukuranView.push(JSON.stringify(ctx.surat.view('p1')).length);
+      // Kotak surat dikosongkan tiap putaran (hanya info dan view terakhir), supaya pencariannya tidak melambat.
+      galat.push(...ctx.surat.errors('p1'));
+      ctx.surat.pesan.set('p1', [ctx.surat.terakhir('p1', 'meja')!, ctx.surat.terakhir('p1', 'view')!]);
+    }
+    const g = ctx.meja.data.game!;
+    expect(jumlahPutaranSelesai(g)).toBe(total);
+    expect(g.riwayat).toHaveLength(PUTARAN_RINCI_SPRINT);
+    expect(periksaInvarian(g)).toEqual([]);
+    expect(galat).toEqual([]);
+    // Tidak tumbuh tiap putaran: sesudah riwayat penuh (PUTARAN_RINCI_SPRINT), ukurannya hanya naik-turun
+    // menurut putaran yang sedang jalan (kartu di tangan, kartu jadi). Putaran 200 tidak lebih besar dari
+    // yang terbesar di putaran 15–50, ditambah sedikit (angka skor yang makin panjang).
+    const datar = (xs: number[]) => Math.max(...xs.slice(50)) - Math.max(...xs.slice(15, 50));
+    expect(datar(ukuranData)).toBeLessThan(5_000);
+    expect(datar(ukuranView)).toBeLessThan(5_000);
+    expect(ukuranData[total - 1]).toBeLessThan(150_000);
+    expect(ukuranView[total - 1]).toBeLessThan(150_000);
+    console.log(
+      `sprint 200 putaran: data ${ukuranData[total - 1]} B (maks 15-50: ${Math.max(...ukuranData.slice(15, 50))}, maks 50-200: ${Math.max(...ukuranData.slice(50))}), view ${ukuranView[total - 1]} B`,
+    );
+    ctx.meja.hentikan();
+  }, 120_000);
 });

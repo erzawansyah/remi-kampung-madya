@@ -89,9 +89,15 @@ export interface KeadaanKeluar {
   kompetisi?: boolean;
   /**
    * Meja sprint (26 Nov 2026, tanpa batas putaran): keluar kapan saja; putaran yang sudah selesai sudah
-   * tercatat, putaran yang sedang jalan tidak dihitung.
+   * tercatat. Sejak 27 Nov 2026 keluar hanya menjeda: sprint-nya (juga putaran yang sedang jalan) bisa
+   * dilanjut sampai Senin.
    */
   sprint?: boolean;
+  /**
+   * Meja sprint ini bisa dilanjut sesudah keluar (HP ini memegang token sprint minggu ini). False = meja sprint
+   * 0.10.0 tanpa token, atau minggunya sudah lewat: keluar menutupnya.
+   */
+  sprintLanjut?: boolean;
 }
 
 /** Ada minimal 2 kursi manusia (yang keluar sudah jadi warga kedai): permainannya masuk peringkat online. */
@@ -129,7 +135,9 @@ export function opsiKonfirmasiKeluar(k: KeadaanKeluar): OpsiKonfirmasi {
   if (k.sprint) {
     return k.selesai
       ? { judul: 'Keluar dari meja?', pesan: TEKS_SPRINT.keluarSelesai, ya: 'Keluar', tidak: 'Tetap di sini' }
-      : { judul: 'Udahan sprint-nya?', pesan: TEKS_SPRINT.keluarMain, ya: 'Keluar', tidak: 'Lanjut main' };
+      : k.sprintLanjut
+        ? { judul: TEKS_SPRINT.keluarJudul, pesan: TEKS_SPRINT.keluarMain, ya: 'Keluar', tidak: 'Lanjut main' }
+        : { judul: TEKS_SPRINT.keluarJudul, pesan: TEKS_SPRINT.keluarTutup, ya: 'Keluar', tidak: 'Lanjut main' };
   }
   if (k.selesai) {
     return {

@@ -804,7 +804,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
         butir: [
           `Sinyal putus? Aplikasi nyambung lagi sendiri. Giliranmu ditunggu ${DETIK_TENGGANG} detik; lewat itu warga kedai yang jalan sampai kamu kembali.`,
           'Waktu giliran habis: warga kedai menyelesaikan giliranmu.',
-          'Keluar meja di tengah permainan: kursimu diteruskan warga kedai sampai permainan selesai, dan nggak bisa diambil lagi. Kalau mejanya minimal 2 orang, di peringkat online kamu dihitung juru kunci. Sinyal putus atau aplikasi ketutup nggak dihitung keluar.',
+          'Keluar meja di tengah permainan: kursimu diteruskan warga kedai sampai permainan selesai, dan nggak bisa diambil lagi (kecuali sprint: Keluar cuma menjeda). Kalau mejanya minimal 2 orang, di peringkat online kamu dihitung juru kunci. Sinyal putus atau aplikasi ketutup nggak dihitung keluar.',
           'Host pergi: tugas host pindah ke pemain lain yang masih terhubung.',
           `Di hasil putaran, tombol host baru aktif ${DETIK_JEDA_LANJUT} detik kemudian supaya semua sempat lihat kartu. Sudah selesai lihat? Tekan ${TEKS_LANJUT.siap}.`,
           `Mau ngeledek? Di bagian bawah hasil putaran, ketuk nama orangnya di baris ${TEKS_LEDEK.judul}, lalu pilih ledekannya. Paling banyak ${MAKS_LEDEK_PER_PUTARAN} per putaran.`,
@@ -853,19 +853,22 @@ export const BAB_BANTUAN: BabBantuan[] = [
     id: 'sprint',
     judul: 'Sprint',
     ikon: '⏱️',
-    ringkas: 'Lawan 5 warga kedai level Suhu tanpa batas putaran, dan papan sprint.',
+    ringkas: 'Lawan 5 warga kedai level Suhu tanpa batas putaran, lanjut kapan saja sampai Senin, dan papan sprint.',
     isi: [
       {
         t: 'paragraf',
-        teks: `**${TEKS_SPRINT.judul}:** main sendiri lawan ${NAMA_LAWAN_SPRINT.length} warga kedai level Suhu (${NAMA_LAWAN_SPRINT.slice(0, -1).join(', ')}, dan ${NAMA_LAWAN_SPRINT.at(-1)}) sepuasnya, tanpa batas putaran. Tiap putaran yang selesai langsung masuk papan sprint. Tombolnya ada di panel Main online di beranda. Sprint butuh internet, karena permainannya jalan di server supaya rekornya nggak bisa diakali.`,
+        teks: `**${TEKS_SPRINT.judul}:** main sendiri lawan ${NAMA_LAWAN_SPRINT.length} warga kedai level Suhu (${NAMA_LAWAN_SPRINT.slice(0, -1).join(', ')}, dan ${NAMA_LAWAN_SPRINT.at(-1)}) sepuasnya, tanpa batas putaran. Tiap putaran yang selesai langsung masuk papan sprint. Tombol Sprint ada di panel Main online di beranda. Sprint butuh internet, karena permainannya jalan di server supaya rekornya nggak bisa diakali.`,
       },
       {
         t: 'daftar',
         butir: [
           'Aturan mejanya dikunci: 6 pemain, 2 deck, tanpa batas putaran, tanpa batas skor, tanpa batas waktu giliran, tanpa mode kaldu, dan urutan duduk diacak. Yang bisa diganti cuma tempo warga kedai (menu ☰, Pengaturan).',
-          'Nggak ada voting akhiri dan nggak ada Main lagi. Permainannya jalan terus sampai kamu Keluar.',
+          'Nggak ada voting akhiri dan nggak ada Main lagi. Permainannya jalan terus; Keluar cuma menjeda, nanti tinggal Lanjut sprint.',
           'Menang putaran: skormu di putaran itu nggak kalah dari kelima warga kedai. Skor sama dihitung menang.',
-          'Keluar kapan saja: putaran yang sudah selesai sudah masuk papan, putaran yang lagi jalan nggak dihitung.',
+          'Keluar kapan saja: sprint-mu disimpan, termasuk putaran yang lagi jalan. Ketuk tombol Sprint di beranda, lalu Lanjut sprint buat meneruskan permainan yang sama (putaran dan skornya lanjut). Putaran yang sudah selesai sudah masuk papan.',
+          'Mulai dari 0 menutup sprint yang sekarang dan memulai yang baru. Putaran yang sudah selesai tetap di papan.',
+          'Tiap Senin pukul 00.00 WIB sprint mulai dari 0 lagi. Sprint yang masih kamu mainkan saat itu boleh diteruskan sampai kamu keluar.',
+          'Sprint dikenali dari HP (browser) yang kamu pakai, bukan dari nama. Ganti HP atau hapus data browser = sprint baru.',
         ],
       },
       {

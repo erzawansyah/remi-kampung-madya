@@ -8,28 +8,26 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
-import WebSocket from 'ws';
-import { pilihAksiBot, Rng, type ViewPemain } from '@remi/engine';
-import { awalMingguWib, hasilPutaranSprint, TEKS_SPRINT_TERKUNCI, type InfoMeja, type Penjadwal } from '@remi/meja';
+import type { ViewPemain } from '@remi/engine';
+import { awalMingguWib, hasilPutaranSprint, TEKS_SPRINT_TERKUNCI } from '@remi/meja';
 import { bukaRiwayat, MIGRASI, type PenyimpanRiwayat } from '../src/riwayat.js';
 import { MAKS_BARIS_SPRINT, SKEMA_SPRINT, SKEMA_SPRINT_PUTARAN, type PapanSprint } from '../src/sprint.js';
+import { SKEMA_SPRINT_SIMPANAN } from '../src/sprintSimpanan.js';
 import { jalankanServer, UMUR_MAKS_SIMPANAN_MEJA_MS, type OpsiServer, type ServerRemi } from '../src/server.js';
-
-const tunggu = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** Penjadwal palsu yang ikut jam sungguhan, tapi bisa dimajukan (umur simpanan meja). */
-class JamGeser implements Penjadwal {
-  geser = 0;
-  setel(ms: number, fn: () => void): unknown {
-    return setTimeout(fn, ms);
-  }
-  batal(h: unknown): void {
-    clearTimeout(h as ReturnType<typeof setTimeout>);
-  }
-  sekarang(): number {
-    return Date.now() + this.geser;
-  }
-}
+import {
+  barisSprint,
+  dataSprintTersimpan,
+  errors,
+  infoTerakhir,
+  JamGeser,
+  klien,
+  pemainOtomatis,
+  putaranSelesai,
+  sampai,
+  tulisDataSprint,
+  tungguPesan,
+  viewTerakhir,
+} from './bantuSprint.js';
 
 const folder = mkdtempSync(join(tmpdir(), 'remi-sprint-'));
 let nomorDb = 0;
@@ -71,81 +69,20 @@ afterEach(async () => {
 });
 afterAll(() => rmSync(folder, { recursive: true, force: true }));
 
-type Pesan = { t: string; [k: string]: unknown };
-interface Klien {
-  ws: WebSocket;
-  pesan: Pesan[];
-  kirim(x: unknown): void;
-}
-async function klien(port: number, saatPesan?: (p: Pesan, k: Klien) => void): Promise<Klien> {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
-  const k: Klien = { ws, pesan: [], kirim: (x) => ws.send(JSON.stringify(x)) };
-  ws.on('message', (d) => {
-    const p = JSON.parse(d.toString()) as Pesan;
-    k.pesan.push(p);
-    saatPesan?.(p, k);
-  });
-  ws.on('error', () => undefined);
-  await new Promise((ok) => ws.on('open', ok));
-  return k;
-}
-async function tungguPesan(k: Klien, syarat: (p: Pesan) => boolean, ms = 5000): Promise<Pesan> {
-  const mulai = Date.now();
-  for (;;) {
-    const p = [...k.pesan].reverse().find(syarat);
-    if (p) return p;
-    if (Date.now() - mulai > ms) throw new Error(`pesan tidak datang; terakhir: ${JSON.stringify(k.pesan.slice(-3)).slice(0, 400)}`);
-    await tunggu(5);
-  }
-}
-async function sampai(syarat: () => boolean, ms = 5000): Promise<void> {
-  const mulai = Date.now();
-  while (!syarat()) {
-    if (Date.now() - mulai > ms) throw new Error('syarat tidak terpenuhi');
-    await tunggu(5);
-  }
-}
-const infoTerakhir = (k: Klien) => ([...k.pesan].reverse().find((p) => p.t === 'meja') as { info: InfoMeja } | undefined)?.info;
-const errors = (k: Klien) => k.pesan.filter((p) => p.t === 'error').map((p) => p.pesan);
-
 /**
- * Pemain "pura-pura" yang memainkan sprint: tekan OK joker, jalan di gilirannya (strategi normal), dan
- * mulai putaran berikutnya sampai putaran ke-n selesai (`sampai` boleh dinaikkan di tengah jalan).
+ * Jadikan sprint `kode` seperti meja sprint 0.10.0 (tanpa token): datanya dipindah ke meja_aktif, barisnya di
+ * sprint_simpanan dibuang. Server yang mulai sesudahnya memulihkannya lewat jalur lama.
  */
-function pemainOtomatis(berhenti: number | { sampai: number }) {
-  const batas = typeof berhenti === 'number' ? { sampai: berhenti } : berhenti;
-  const rng = new Rng(11);
-  const sudah = new Set<string>();
-  let info: InfoMeja | null = null;
-  return (p: Pesan, k: Klien) => {
-    if (p.t === 'meja') info = p.info as InfoMeja;
-    if (p.t !== 'view' || !info) return;
-    const v = p.view as ViewPemain;
-    const saya = v.saya!;
-    const sekali = (kunci: string, pesan: unknown) => {
-      if (sudah.has(kunci)) return;
-      sudah.add(kunci);
-      k.kirim(pesan);
-    };
-    if (info.menungguJoker.includes(saya)) return sekali(`joker:${v.putaran?.nomor}`, { t: 'siapJoker' });
-    if (v.status === 'putaranSelesai') {
-      if (v.riwayat.length >= batas.sampai) return;
-      return sekali(`lanjut:${v.riwayat.length}`, { t: 'putaranBerikut' });
-    }
-    const giliran = v.status === 'susunAkhir' ? !v.putaran!.selesaiSusun[saya] : v.status === 'putaranBerjalan' && v.putaran!.giliran === saya;
-    if (!giliran) return;
-    const kunci = JSON.stringify([v.status, v.putaran!.nomor, v.putaran!.tahap, v.peristiwa.at(-1)?.id ?? 0]);
-    const aksi = pilihAksiBot(v, 'normal', rng);
-    const { pemain: _, ...tanpaPemain } = aksi as typeof aksi & { pemain: number };
-    sekali(kunci, { t: 'aksi', aksi: tanpaPemain });
-  };
+function jadikanSprintLama(path: string, kode: unknown, token: unknown, ubah?: (d: { sprint: { putaranTercatat?: number } }) => void, umur = 0) {
+  const db = new DatabaseSync(path);
+  const data = dataSprintTersimpan<{ sprint: { putaranTercatat?: number; kursi: number }; kursi: { pemainId: unknown }[] }>(db, kode)!;
+  // Di sprint_simpanan token kursi hanya sebagai hash; meja 0.10.0 di meja_aktif memuat token aslinya.
+  data.kursi[data.sprint.kursi].pemainId = token;
+  ubah?.(data);
+  db.prepare('INSERT INTO meja_aktif (kode, data, pembuat_jaringan, diperbarui_pada) VALUES (?, ?, NULL, ?)').run(String(kode), JSON.stringify(data), Date.now() - umur);
+  db.prepare('DELETE FROM sprint_simpanan WHERE kode = ?').run(String(kode));
+  db.close();
 }
-
-const barisSprint = (db: DatabaseSync) =>
-  db.prepare('SELECT kode_meja, putaran, nama, kunci_nama, waktu, skor, menang, mentung, kepentung FROM sprint_putaran ORDER BY id').all() as Record<
-    string,
-    number | string
-  >[];
 const jumlahBarisLama = (db: DatabaseSync) => (db.prepare('SELECT COUNT(*) AS n FROM sprint').get() as { n: number }).n;
 
 /** Hasil putaran pemain (kursi k) dari riwayat view, persis aturan hasilPutaranSprint. */
@@ -153,17 +90,14 @@ function hasilDariView(v: ViewPemain, i: number, k: number) {
   const h = hasilPutaranSprint(v.riwayat, i, k);
   return { putaran: h.putaran, skor: h.skor, menang: h.menang ? 1 : 0, mentung: h.mentung, kepentung: h.kepentung };
 }
-const viewTerakhir = (k: Klien) => ([...k.pesan].reverse().find((p) => p.t === 'view') as unknown as { view: ViewPemain }).view;
-const putaranSelesai = (n: number) => (p: Pesan) =>
-  p.t === 'view' && (p.view as ViewPemain).status === 'putaranSelesai' && (p.view as ViewPemain).riwayat.length === n;
-
 const HARI = 86_400_000;
 
 describe('penyimpan sprint (migrasi v7 dan v8)', () => {
   it('v8 = tabel sprint_putaran; putaran yang sama tercatat sekali; baris v7 (0.8.0) ikut dijumlah; minggu per waktu putaran', () => {
-    expect(MIGRASI.length).toBe(8);
+    expect(MIGRASI.length).toBe(9);
     expect(MIGRASI[6]).toBe(SKEMA_SPRINT);
     expect(MIGRASI[7]).toBe(SKEMA_SPRINT_PUTARAN);
+    expect(MIGRASI[8]).toBe(SKEMA_SPRINT_SIMPANAN);
     const db = new DatabaseSync(':memory:');
     const r = bukaRiwayat(db);
     const senin = awalMingguWib(Date.UTC(2026, 10, 25, 5));
@@ -396,7 +330,7 @@ describe('sprint di server', () => {
     a.ws.close();
   }, 90_000);
 
-  it('restart dan sambung ulang: putaran tidak tercatat dua kali, meja yang dipulihkan tetap mencatat', async () => {
+  it('restart dan sambung ulang: putaran tidak tercatat dua kali, sprint yang dimuat lagi tetap mencatat', async () => {
     const path = dbBaru();
     const jam = new JamGeser();
     const s1 = await nyalakan({ penjadwal: jam, jedaSimpanMejaMs: 0 }, path);
@@ -415,25 +349,28 @@ describe('sprint di server', () => {
     await s1.matikan();
     // Seolah server mati sesudah putaran 1 masuk database tapi sebelum tandanya ikut tersimpan.
     const dbLuar = new DatabaseSync(path);
-    const baris = dbLuar.prepare('SELECT data FROM meja_aktif WHERE kode = ?').get(String(masuk.kode)) as { data: string };
-    const data = JSON.parse(baris.data) as { sprint: { putaranTercatat?: number } };
+    const data = dataSprintTersimpan<{ sprint: { putaranTercatat?: number } }>(dbLuar, masuk.kode)!;
     expect(data.sprint.putaranTercatat).toBe(1);
     data.sprint.putaranTercatat = 0;
-    dbLuar.prepare('UPDATE meja_aktif SET data = ? WHERE kode = ?').run(JSON.stringify(data), String(masuk.kode));
+    tulisDataSprint(dbLuar, masuk.kode, data);
+    // Sprint yang bisa dilanjut tidak pernah ditulis ke meja_aktif.
+    expect((dbLuar.prepare('SELECT COUNT(*) AS n FROM meja_aktif').get() as { n: number }).n).toBe(0);
     dbLuar.close();
 
-    // Server mulai lagi: mejanya dipulihkan, putaran 1 dicoba dicatat lagi tapi ditolak database.
+    // Server mulai lagi: sprint yang dijeda tidak dimuat ke memori sampai pemainnya kembali.
     const lanjut = { sampai: 1 };
     const s2 = await nyalakan({ penjadwal: jam, jedaSimpanMejaMs: 0 }, path);
-    expect(s2.server.jumlahMeja()).toBe(1);
-    expect(s2.log.some((l) => l.includes(`sprint meja ${masuk.kode} putaran 1 dicatat (1 sudah tercatat sebelumnya)`))).toBe(true);
-    expect(barisSprint(s2.db)).toHaveLength(1);
+    expect(s2.server.jumlahMeja()).toBe(0);
     const b = await klien(s2.server.port, pemainOtomatis(lanjut));
     b.kirim({ t: 'gabung', kode: masuk.kode, nama: 'Cici', token: masuk.token });
     const lagi = await tungguPesan(b, (p) => p.t === 'masuk');
     expect(lagi.kursi).toBe(masuk.kursi);
+    expect(s2.server.jumlahMeja()).toBe(1);
+    // Putaran 1 dicoba dicatat lagi saat dimuat, tapi ditolak database.
+    expect(s2.log.some((l) => l.includes(`sprint meja ${masuk.kode} putaran 1 dicatat (1 sudah tercatat sebelumnya)`))).toBe(true);
+    expect(barisSprint(s2.db)).toHaveLength(1);
     await tungguPesan(b, putaranSelesai(1));
-    // Main lagi di meja yang dipulihkan: putaran 2 tercatat seperti biasa.
+    // Main lagi di sprint yang dimuat: putaran 2 tercatat seperti biasa.
     lanjut.sampai = 2;
     b.kirim({ t: 'putaranBerikut' });
     await tungguPesan(b, (p) => p.t === 'sprintHasil' && p.putaran === 2, 40_000);
@@ -441,29 +378,29 @@ describe('sprint di server', () => {
     b.ws.close();
     await s2.matikan();
 
-    // Server mati lebih lama dari umur simpanan: simpanannya dibuang, tidak ada catatan baru.
-    jam.geser += UMUR_MAKS_SIMPANAN_MEJA_MS + 60_000;
+    // Server mati sampai minggu berganti: sprint-nya selesai (dibuang saat server mulai), tanpa catatan baru.
+    jam.geser += 8 * HARI;
     const s3 = await nyalakan({ penjadwal: jam }, path);
     expect(s3.server.jumlahMeja()).toBe(0);
+    expect((s3.db.prepare('SELECT COUNT(*) AS n FROM sprint_simpanan').get() as { n: number }).n).toBe(0);
     expect(barisSprint(s3.db).map((x) => [x.kode_meja, x.putaran, x.nama])).toEqual([
       [masuk.kode, 1, 'Cici'],
       [masuk.kode, 2, 'Cici'],
     ]);
   }, 120_000);
 
-  it('putaran selesai: simpanan meja ditulis sebelum putarannya masuk papan (tanpa menunggu jeda simpan)', async () => {
+  it('putaran selesai: simpanan sprint ditulis sebelum putarannya masuk papan (tanpa menunggu jeda simpan)', async () => {
     const { server, db } = await nyalakan({ jedaSimpanMejaMs: 60 * 60_000 });
     const a = await klien(server.port, pemainOtomatis(1));
     a.kirim({ t: 'sprint', nama: 'Gita' });
     const masuk = await tungguPesan(a, (p) => p.t === 'masuk');
     await tungguPesan(a, (p) => p.t === 'sprintHasil' && p.putaran === 1, 40_000);
     expect(barisSprint(db)).toHaveLength(1);
-    const baris = db.prepare('SELECT data FROM meja_aktif WHERE kode = ?').get(String(masuk.kode)) as { data: string } | undefined;
-    expect(baris).toBeDefined();
-    const data = JSON.parse(baris!.data) as { game: { riwayat: unknown[] }; sprint: { putaranTercatat?: number } };
+    const data = dataSprintTersimpan<{ game: { riwayat: unknown[] }; sprint: { putaranTercatat?: number } }>(db, masuk.kode);
+    expect(data).toBeDefined();
     // Simpanan sudah memuat putaran 1 (yang tercatat di papan), walau tanda tercatatnya belum ikut ditulis.
-    expect(data.game.riwayat).toHaveLength(1);
-    expect(data.sprint.putaranTercatat).toBe(0);
+    expect(data!.game.riwayat).toHaveLength(1);
+    expect(data!.sprint.putaranTercatat).toBe(0);
     a.ws.close();
   }, 60_000);
 
@@ -479,16 +416,47 @@ describe('sprint di server', () => {
     a.ws.close();
     await s1.matikan();
     const s2 = await nyalakan({ penjadwal: jam, jedaSimpanMejaMs: 0 }, path);
-    expect(s2.server.jumlahMeja()).toBe(1);
-    expect(s2.log.some((l) => l.includes('dicatat'))).toBe(false);
+    expect(s2.server.jumlahMeja()).toBe(0);
     const b = await klien(s2.server.port);
     b.kirim({ t: 'gabung', kode: masuk.kode, nama: 'Hana', token: masuk.token });
     expect(await tungguPesan(b, (p) => p.t === 'sprintHasil')).toEqual(h1);
+    expect(s2.log.some((l) => l.includes('dicatat'))).toBe(false);
     expect(barisSprint(s2.db)).toHaveLength(1);
     b.ws.close();
   }, 60_000);
 
-  it('simpanan yang tidak dipulihkan: putaran yang belum tercatat dicatat dengan waktu selesainya', async () => {
+  it('meja sprint 0.10.0 (tanpa token, di meja_aktif) tetap dipulihkan dan mencatat seperti dulu', async () => {
+    const path = dbBaru();
+    const jam = new JamGeser();
+    const s1 = await nyalakan({ penjadwal: jam, jedaSimpanMejaMs: 0 }, path);
+    const a = await klien(s1.server.port, pemainOtomatis(1));
+    a.kirim({ t: 'sprint', nama: 'Fajar' });
+    const masuk = await tungguPesan(a, (p) => p.t === 'masuk');
+    await tungguPesan(a, (p) => p.t === 'sprintHasil' && p.putaran === 1, 40_000);
+    await tungguPesan(a, putaranSelesai(1));
+    a.ws.close();
+    await s1.matikan();
+    jadikanSprintLama(path, masuk.kode, masuk.token);
+    const lanjut = { sampai: 1 };
+    const s2 = await nyalakan({ penjadwal: jam, jedaSimpanMejaMs: 0 }, path);
+    expect(s2.server.jumlahMeja()).toBe(1);
+    const b = await klien(s2.server.port, pemainOtomatis(lanjut));
+    b.kirim({ t: 'gabung', kode: masuk.kode, nama: 'Fajar', token: masuk.token });
+    await tungguPesan(b, putaranSelesai(1));
+    lanjut.sampai = 2;
+    b.kirim({ t: 'putaranBerikut' });
+    await tungguPesan(b, (p) => p.t === 'sprintHasil' && p.putaran === 2, 40_000);
+    // Tanpa token tidak ada sprintSaya, dan Keluar mengakhirinya seperti 0.10.0 (meja dibuang, tidak disimpan).
+    expect(b.pesan.some((p) => p.t === 'sprintSaya')).toBe(false);
+    b.kirim({ t: 'keluar' });
+    await sampai(() => s2.server.jumlahMeja() === 0);
+    expect(barisSprint(s2.db).map((x) => x.putaran)).toEqual([1, 2]);
+    expect((s2.db.prepare('SELECT COUNT(*) AS n FROM meja_aktif').get() as { n: number }).n).toBe(0);
+    expect((s2.db.prepare('SELECT COUNT(*) AS n FROM sprint_simpanan').get() as { n: number }).n).toBe(0);
+    b.ws.close();
+  }, 90_000);
+
+  it('simpanan 0.10.0 yang tidak dipulihkan: putaran yang belum tercatat dicatat dengan waktu selesainya', async () => {
     const path = dbBaru();
     const jam = new JamGeser();
     const s1 = await nyalakan({ penjadwal: jam, jedaSimpanMejaMs: 0 }, path);
@@ -503,11 +471,8 @@ describe('sprint di server', () => {
     const dbLuar = new DatabaseSync(path);
     const waktuAsli = Number(barisSprint(dbLuar)[0].waktu);
     dbLuar.exec('DELETE FROM sprint_putaran');
-    const baris = dbLuar.prepare('SELECT data FROM meja_aktif WHERE kode = ?').get(String(masuk.kode)) as { data: string };
-    const data = JSON.parse(baris.data) as { sprint: { putaranTercatat?: number } };
-    data.sprint.putaranTercatat = 0;
-    dbLuar.prepare('UPDATE meja_aktif SET data = ? WHERE kode = ?').run(JSON.stringify(data), String(masuk.kode));
     dbLuar.close();
+    jadikanSprintLama(path, masuk.kode, masuk.token, (d) => (d.sprint.putaranTercatat = 0));
     jam.geser += UMUR_MAKS_SIMPANAN_MEJA_MS + 60_000;
     const s2 = await nyalakan({ penjadwal: jam }, path);
     expect(s2.server.jumlahMeja()).toBe(0);
@@ -528,6 +493,8 @@ describe('sprint di server', () => {
     b.ws.close();
     await server.tutup();
     expect(barisSprint(db)).toMatchObject([{ nama: 'Dodi', putaran: 1 }]);
+    // Sprint tetap bisa dilanjut walau SIMPAN_MEJA=0: keduanya tersimpan di sprint_simpanan.
+    expect((db.prepare('SELECT COUNT(*) AS n FROM sprint_simpanan WHERE data IS NOT NULL').get() as { n: number }).n).toBe(2);
     await matikan();
   }, 50_000);
 

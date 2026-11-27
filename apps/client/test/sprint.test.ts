@@ -9,13 +9,13 @@ vi.hoisted(() => {
   Object.assign(globalThis, { __VERSI_APP__: '0.0.0', __BUILD_SHA__: 'dev', __BUILD_WAKTU__: '2026-11-25T00:00:00.000Z' });
 });
 
-import { NAMA_LAWAN_SPRINT, type BarisSprint } from '@remi/meja';
+import { awalMingguWib, NAMA_LAWAN_SPRINT, type BarisSprint } from '@remi/meja';
 import { BAB_BANTUAN } from '../src/konten/bantuan';
 import { TEKS_SPRINT, teksPiala } from '../src/konten/sprint';
 import { _setelUlangCache } from '../src/preferensi';
 import { renderBeranda, type AksiBeranda } from '../src/ui/beranda';
 import { tutupSemuaJendela } from '../src/ui/dom';
-import { htmlPapanSprint, rapikanPapanSprint, renderSprint } from '../src/ui/sprint';
+import { htmlPapanSprint, rapikanPapanSprint, rapikanSprintSaya, renderSprint, sprintBisaDilanjut } from '../src/ui/sprint';
 import { pasangMatchMediaPalsu } from './bantu';
 
 const BARIS: BarisSprint[] = [
@@ -118,7 +118,7 @@ describe('layar Sprint (renderSprint)', () => {
     );
     const akar = document.getElementById('ui')!;
     const main = vi.fn();
-    renderSprint(akar, { kembali: vi.fn(), main });
+    renderSprint(akar, { kembali: vi.fn(), main, lanjut: vi.fn() });
     expect(akar.querySelector('.judul p')!.textContent).toBe(TEKS_SPRINT.intro);
     expect(TEKS_SPRINT.intro).toContain('Lawan 5 warga kedai level Suhu pakai 2 deck');
     expect(TEKS_SPRINT.intro).toContain('tiap putaran langsung masuk papan');
@@ -151,7 +151,7 @@ describe('layar Sprint (renderSprint)', () => {
       }),
     );
     const akar = document.getElementById('ui')!;
-    renderSprint(akar, { kembali: vi.fn(), main: vi.fn() });
+    renderSprint(akar, { kembali: vi.fn(), main: vi.fn(), lanjut: vi.fn() });
     await tunggu();
     akar.querySelector<HTMLButtonElement>('[data-kolom="kepentung"]')!.click();
     akar.querySelector<HTMLButtonElement>('#tab-sprint-semua')!.click();
@@ -168,7 +168,7 @@ describe('layar Sprint (renderSprint)', () => {
       vi.fn(() => (gagal ? jawab({ error: 'x' }, false) : jawab({ periode: 'minggu', mulai: 0, baris: [] }))),
     );
     const akar = document.getElementById('ui')!;
-    renderSprint(akar, { kembali: vi.fn(), main: vi.fn() });
+    renderSprint(akar, { kembali: vi.fn(), main: vi.fn(), lanjut: vi.fn() });
     await tunggu();
     expect(akar.querySelector('#papan-sprint')!.textContent).toContain(TEKS_SPRINT.gagal);
     gagal = false;
@@ -183,7 +183,7 @@ describe('layar Sprint (renderSprint)', () => {
     vi.stubGlobal('fetch', f);
     const akar = document.getElementById('ui')!;
     const main = vi.fn();
-    renderSprint(akar, { kembali: vi.fn(), main });
+    renderSprint(akar, { kembali: vi.fn(), main, lanjut: vi.fn() });
     await tunggu();
     expect(f).not.toHaveBeenCalled();
     expect(akar.querySelector('#papan-sprint')!.textContent).toContain(TEKS_SPRINT.offline);
@@ -196,13 +196,130 @@ describe('layar Sprint (renderSprint)', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
     const akar = document.getElementById('ui')!;
     const kembali = vi.fn();
-    const layar = renderSprint(akar, { kembali, main: vi.fn() });
+    const layar = renderSprint(akar, { kembali, main: vi.fn(), lanjut: vi.fn() });
     expect(akar.querySelector('#papan-sprint')!.textContent).toContain(TEKS_SPRINT.memuat);
     akar.querySelector<HTMLButtonElement>('#main-sprint')!.click();
     layar.aturSibuk(false);
     expect(akar.querySelector('#main-sprint')!.hasAttribute('aria-busy')).toBe(false);
     akar.querySelector<HTMLButtonElement>('#kembali')!.click();
     expect(kembali).toHaveBeenCalled();
+  });
+});
+
+// Sprint bisa dilanjut (27 Nov 2026): HP yang punya sprint minggu ini melihat Lanjut sprint dan Mulai dari 0.
+describe('layar Sprint: Lanjut sprint', () => {
+  const TOKEN = 'T'.repeat(32);
+  const simpanSprint = (minggu = awalMingguWib(Date.now())) => localStorage.setItem('remi.sprintSaya', JSON.stringify({ token: TOKEN, minggu }));
+  /** fetch: papan kosong; /api/sprint/saya dijawab `saya`. */
+  function pasangFetch(saya: unknown) {
+    const panggilan: { url: string; init?: RequestInit }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        panggilan.push({ url, init });
+        return url === '/api/sprint/saya' ? jawab(saya) : jawab({ periode: 'minggu', mulai: 0, baris: [] });
+      }),
+    );
+    return panggilan;
+  }
+
+  it('sprint minggu ini: Lanjut sprint dengan putaran dan skor dari server, Mulai dari 0; Lanjut mengirim tokennya sekali', async () => {
+    simpanSprint();
+    const panggilan = pasangFetch({ ada: true, minggu: 1, putaran: 37, skor: -1240 });
+    const akar = document.getElementById('ui')!;
+    const lanjut = vi.fn();
+    const main = vi.fn();
+    renderSprint(akar, { kembali: vi.fn(), main, lanjut });
+    expect(akar.querySelector('#main-sprint')).toBeNull();
+    const tombol = akar.querySelector<HTMLButtonElement>('#lanjut-sprint')!;
+    expect(tombol.textContent).toBe(TEKS_SPRINT.tombolLanjut);
+    expect(akar.querySelector('#nol-sprint')!.textContent).toBe(TEKS_SPRINT.tombolMulaiNol);
+    expect(akar.querySelector('.aksi-sprint')!.textContent).toContain(TEKS_SPRINT.ketMulaiNol);
+    await tunggu();
+    // Token dikirim di isi POST, bukan di alamat.
+    const tanya = panggilan.find((x) => x.url === '/api/sprint/saya')!;
+    expect(tanya.init?.method).toBe('POST');
+    expect(JSON.parse(String(tanya.init?.body))).toEqual({ token: TOKEN });
+    expect(panggilan.every((x) => !x.url.includes(TOKEN))).toBe(true);
+    expect(tombol.querySelector('[data-ket-lanjut]')!.textContent).toBe('Putaran 37 · skor −1240');
+    tombol.click();
+    tombol.click();
+    expect(lanjut).toHaveBeenCalledTimes(1);
+    expect(lanjut).toHaveBeenCalledWith(TOKEN);
+    expect(main).not.toHaveBeenCalled();
+    expect(tombol.getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('Mulai dari 0: konfirmasi dulu; Batal tidak apa-apa, setuju = sprint baru yang menggantikan token lama', async () => {
+    simpanSprint();
+    pasangFetch({ ada: true, putaran: 2, skor: 10 });
+    const akar = document.getElementById('ui')!;
+    const main = vi.fn();
+    renderSprint(akar, { kembali: vi.fn(), main, lanjut: vi.fn() });
+    const dialog = () => document.querySelector<HTMLElement>('#lapisan-dialog .dialog');
+    akar.querySelector<HTMLButtonElement>('#nol-sprint')!.click();
+    expect(dialog()!.textContent).toContain(TEKS_SPRINT.konfirmasiMulaiNol.pesan);
+    dialog()!.querySelector<HTMLElement>('[data-tidak]')!.click();
+    await tunggu();
+    expect(main).not.toHaveBeenCalled();
+    akar.querySelector<HTMLButtonElement>('#nol-sprint')!.click();
+    dialog()!.querySelector<HTMLElement>('[data-ya]')!.click();
+    await tunggu();
+    expect(main).toHaveBeenCalledWith(TOKEN);
+  });
+
+  it('server bilang sudah tidak bisa dilanjut: token dilupakan, tombolnya jadi Main sprint', async () => {
+    simpanSprint();
+    pasangFetch({ ada: false });
+    const akar = document.getElementById('ui')!;
+    const layar = renderSprint(akar, { kembali: vi.fn(), main: vi.fn(), lanjut: vi.fn() });
+    await tunggu();
+    expect(localStorage.getItem('remi.sprintSaya')).toBeNull();
+    expect(akar.querySelector('#lanjut-sprint')).toBeNull();
+    expect(akar.querySelector('#main-sprint')).not.toBeNull();
+    // segarkanAksi (pesan sprintSaya dari server) menggambar ulang dari simpanan.
+    simpanSprint();
+    layar.segarkanAksi();
+    expect(akar.querySelector('#lanjut-sprint')).not.toBeNull();
+  });
+
+  it('token tidak dibuang karena jam HP: tetap Lanjut sprint, server yang memutuskan', async () => {
+    // Jam HP bilang minggunya sudah lewat (misalnya jam HP kecepetan), tapi server masih menganggapnya minggu ini.
+    simpanSprint(awalMingguWib(Date.now()) - 7 * 86_400_000);
+    const panggilan = pasangFetch({ ada: true, putaran: 2, skor: 10 });
+    const akar = document.getElementById('ui')!;
+    renderSprint(akar, { kembali: vi.fn(), main: vi.fn(), lanjut: vi.fn() });
+    await tunggu();
+    expect(localStorage.getItem('remi.sprintSaya')).not.toBeNull();
+    expect(akar.querySelector('#lanjut-sprint')).not.toBeNull();
+    expect(panggilan.some((x) => x.url === '/api/sprint/saya')).toBe(true);
+    expect(sprintBisaDilanjut()).toBe(false);
+  });
+
+  it('sprint minggu lalu: server bilang sudah tidak ada, baru dilupakan (Senin 00.00 WIB mulai dari 0)', async () => {
+    simpanSprint(awalMingguWib(Date.now()) - 7 * 86_400_000);
+    pasangFetch({ ada: false });
+    const akar = document.getElementById('ui')!;
+    renderSprint(akar, { kembali: vi.fn(), main: vi.fn(), lanjut: vi.fn() });
+    await tunggu();
+    expect(localStorage.getItem('remi.sprintSaya')).toBeNull();
+    expect(akar.querySelector('#main-sprint')).not.toBeNull();
+    expect(akar.querySelector('#lanjut-sprint')).toBeNull();
+  });
+
+  it('sprintBisaDilanjut: token minggu ini (jam HP), tanpa membuang apa pun', () => {
+    expect(sprintBisaDilanjut()).toBe(false);
+    simpanSprint();
+    expect(sprintBisaDilanjut()).toBe(true);
+    expect(sprintBisaDilanjut(Date.now() + 8 * 86_400_000)).toBe(false);
+    expect(localStorage.getItem('remi.sprintSaya')).not.toBeNull();
+  });
+
+  it('jawaban /api/sprint/saya dirapikan', () => {
+    expect(rapikanSprintSaya({ ada: false })).toEqual({ ada: false });
+    expect(rapikanSprintSaya({ ada: true, putaran: 3, skor: 50, minggu: 1 })).toEqual({ ada: true, putaran: 3, skor: 50 });
+    expect(rapikanSprintSaya({ ada: true, putaran: 3, skor: 'x' })).toEqual({ ada: true, putaran: 3, skor: 0 });
+    for (const x of [null, 5, {}, { ada: true }, { ada: true, putaran: 0 }, { ada: true, putaran: 1.5 }]) expect(rapikanSprintSaya(x)).toBeNull();
   });
 });
 
@@ -266,7 +383,7 @@ describe('ubin Sprint di beranda', () => {
 
 describe('Bantuan: bab Sprint', () => {
   const bab = () => BAB_BANTUAN.find((b) => b.id === 'sprint')!;
-  it('ada, sesudah Main online, dan memuat lawan, tanpa batas putaran, menang per putaran, keluar, papan, dan piala', () => {
+  it('ada, sesudah Main online, dan memuat lawan, tanpa batas putaran, menang per putaran, keluar = disimpan, Lanjut, Mulai dari 0, reset Senin, papan, dan piala', () => {
     const id = BAB_BANTUAN.map((b) => b.id);
     expect(id.indexOf('sprint')).toBe(id.indexOf('online') + 1);
     const t = JSON.stringify(bab());
@@ -278,14 +395,18 @@ describe('Bantuan: bab Sprint', () => {
       'level Suhu',
       'Menang putaran',
       'Skor sama dihitung menang',
-      'putaran yang lagi jalan nggak dihitung',
+      'sprint-mu disimpan, termasuk putaran yang lagi jalan',
+      TEKS_SPRINT.tombolLanjut,
+      TEKS_SPRINT.tombolMulaiNol,
+      'Tiap Senin pukul 00.00 WIB sprint mulai dari 0 lagi',
+      'bukan dari nama',
       TEKS_SPRINT.tabMinggu,
       TEKS_SPRINT.tabSemua,
       'Senin pukul 00.00 WIB',
       '🏆',
     ])
       expect(t, x).toContain(x);
-    expect(t).not.toMatch(/\d putaran|percobaan|Sprint lagi/);
+    expect(t).not.toMatch(/\d putaran|percobaan|Sprint lagi|lagi jalan nggak dihitung/);
     expect(t).not.toMatch(/\bbot\b/i);
   });
 

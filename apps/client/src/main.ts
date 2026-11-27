@@ -54,7 +54,7 @@ import {
 import { mejaMasukPeringkat, opsiKonfirmasiKeluar, renderLobi } from './ui/lobi';
 import { renderRiwayat } from './ui/riwayat';
 import { renderKompetisi } from './ui/kompetisi';
-import { renderSprint, type SprintTerpasang } from './ui/sprint';
+import { renderSprint, sprintBisaDilanjut, type SprintTerpasang } from './ui/sprint';
 import { TEKS_SPRINT } from './konten/sprint';
 import { bukaPengaturan } from './ui/pengaturan';
 import { bukaBantuan, bukaTentang, siapkanJendelaMalas } from './ui/jendelaMalas';
@@ -539,6 +539,7 @@ class Aplikasi implements AppUntukMeja {
         masukPeringkat: asal === 'meja' && !offline && mejaMasukPeringkat(this.info),
         kompetisi: !offline && !!this.info?.kompetisi,
         sprint: !offline && this.info?.sprint === true,
+        sprintLanjut: sprintBisaDilanjut(),
       }),
     );
     // Layar sudah berganti selagi dialog terbuka (mis. host memulai permainan dari lobi):
@@ -842,6 +843,12 @@ class Aplikasi implements AppUntukMeja {
         if (!this.tontonan) return;
         toast(p.alasan);
         return this.keluarTontonan();
+      case 'sprintSaya':
+        // Token sprint HP ini (27 Nov 2026): disimpan untuk Lanjut sprint; null = sudah tidak bisa dilanjut.
+        if (this.tontonan) break;
+        simpan.setSprintSaya(p.token === null ? null : { token: p.token, minggu: p.minggu });
+        if (this.layar === 'sprint') this.layarSprint?.segarkanAksi();
+        break;
       case 'sprintHasil':
         // Satu putaran sprint sudah tercatat: tampil sebaris di hasil putaran meja sprint.
         if (this.tontonan) break;
@@ -858,6 +865,12 @@ class Aplikasi implements AppUntukMeja {
         // Kursinya dipegang tab/perangkat lain: sesi disimpan (bisa masuk lagi lewat kode), tapi jangan
         // disambung ulang sendiri, nanti saling rebut.
         if (ditendang) this.sesiDitendang = true;
+        // Meja sprint ditutup dari HP lain ("Mulai dari 0") atau sudah lewat minggunya: ke layar Sprint.
+        if (this.info?.sprint === true && !this.tontonan) {
+          toast(p.alasan);
+          this.keluarMeja(!ditendang, undefined, true);
+          break;
+        }
         // Kompetisi ditutup sementara: jangan menyuruh ke layar Kompetisi, pemain dibawa ke beranda.
         if (!KOMPETISI_DIBUKA) {
           const alasan =
@@ -1163,22 +1176,33 @@ class Aplikasi implements AppUntukMeja {
         this.tampilkanBeranda();
         this.beranda?.fokusNav('sprint');
       },
-      main: () => this.mulaiSprint(),
+      main: (ganti) => this.mulaiSprint(ganti),
+      lanjut: (token) => this.lanjutSprint(token),
     });
     this.pastikanJaga();
   }
 
-  /** Meja sprint baru: server membuat mejanya dan langsung memulai permainan. */
-  private mulaiSprint() {
+  /**
+   * Meja sprint baru: server membuat mejanya dan langsung memulai permainan. `ganti` ("Mulai dari 0") = token
+   * sprint HP ini yang ditutup dulu.
+   */
+  private mulaiSprint(ganti?: string) {
     this.sesiDitendang = false;
-    this.kirimOnline({ t: 'sprint', nama: simpan.nama() || 'Pemain' });
+    this.kirimOnline({ t: 'sprint', nama: simpan.nama() || 'Pemain', ...(ganti ? { ganti } : {}) });
+  }
+
+  /** Lanjutkan sprint HP ini (27 Nov 2026): server memuat permainan yang sama dan mengirim `masuk`. */
+  private lanjutSprint(token: string) {
+    this.sesiDitendang = false;
+    this.kirimOnline({ t: 'sprint', nama: simpan.nama() || 'Pemain', lanjut: token });
   }
 
   /**
    * Tinggalkan meja sprint (Keluar dari menu atau Back, atau klasemen akhir meja sprint lama): putaran
-   * yang sudah selesai sudah tercatat; kursinya dilepas supaya server langsung membuang mejanya. Lalu ke
-   * papan sprint (`papan`) atau beranda. Kalau sinyal sedang putus, pesan keluar tidak dikirim: mejanya
-   * tetap dibuang server sesudah lama kosong, dan putaran yang sudah selesai tidak hilang.
+   * yang sudah selesai sudah tercatat. Sejak 27 Nov 2026 server hanya menjeda sprint-nya (disimpan, bisa
+   * dilanjut dari layar Sprint sampai Senin); meja sprint 0.10.0 dilepas kursinya seperti dulu. Lalu ke
+   * papan sprint (`papan`) atau beranda. Kalau sinyal sedang putus, pesan keluar tidak dikirim: server
+   * menyimpannya sendiri sesudah lama tidak tersambung, jadi tetap bisa dilanjut.
    */
   tinggalkanSprint(papan: boolean) {
     if (this.koneksi?.jenis === 'online' && this.koneksi.siapKirim()) this.koneksi.kirim({ t: 'keluar' });

@@ -32,6 +32,7 @@ import {
 import { buatPenyimpanUsulan, SKEMA_USULAN, type PenyimpanUsulan } from './usulan.js';
 import { buatPenyimpanMejaAktif, SKEMA_MEJA_AKTIF, SKEMA_MEJA_AKTIF_TONTON, type PenyimpanMejaAktif } from './mejaAktif.js';
 import { buatPenyimpanSprint, SKEMA_SPRINT, SKEMA_SPRINT_PUTARAN, type PenyimpanSprint } from './sprint.js';
+import { buatPenyimpanSprintSimpanan, SKEMA_SPRINT_SIMPANAN, type PenyimpanSprintSimpanan } from './sprintSimpanan.js';
 
 export interface PermainanTersimpan {
   id: number;
@@ -117,6 +118,8 @@ export interface PenyimpanRiwayat {
   mejaAktif: PenyimpanMejaAktif;
   /** Sprint: satu baris per putaran (sejak 26 Nov 2026), di database yang sama. Diatur server.ts. */
   sprint: PenyimpanSprint;
+  /** Sprint yang bisa dilanjut seminggu (27 Nov 2026), dikenali dari hash token HP. Diatur server.ts. */
+  sprintSimpanan: PenyimpanSprintSimpanan;
   tutup(): void;
 }
 
@@ -187,6 +190,9 @@ export const MIGRASI: readonly string[] = [
   // v8 (26 Nov 2026, keputusan pemilik: sprint tanpa batas putaran): satu baris per putaran sprint. Tabel
   // baru, karena UNIQUE tabel v7 (satu baris per meja) tidak bisa memuat beberapa putaran; baris v7 tetap.
   SKEMA_SPRINT_PUTARAN,
+  // v9 (27 Nov 2026, keputusan pemilik: sprint bisa dilanjut, reset tiap Senin): sprint yang dijeda,
+  // satu baris per sprint, dikenali dari hash token HP (tokennya sendiri tidak disimpan).
+  SKEMA_SPRINT_SIMPANAN,
 ];
 
 /** Jalankan fn dalam satu transaksi tulis; gagal = semuanya dibatalkan. */
@@ -276,6 +282,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
   const usulan = buatPenyimpanUsulan(db);
   const mejaAktif = buatPenyimpanMejaAktif(db);
   const sprint = buatPenyimpanSprint(db);
+  const sprintSimpanan = buatPenyimpanSprintSimpanan(db);
 
   const tambahPermainan = db.prepare(
     `INSERT INTO permainan (kode_meja, selesai_pada, alasan, jumlah_putaran, jumlah_pemain, jumlah_deck, jumlah_manusia, mode_kaldu)
@@ -464,6 +471,7 @@ export function bukaRiwayat(sumber: string | DatabaseSync, opsi: OpsiRiwayat = {
     usulan,
     mejaAktif,
     sprint,
+    sprintSimpanan,
     tutup() {
       if (milikSendiri) db.close();
     },

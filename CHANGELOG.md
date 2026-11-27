@@ -6,6 +6,22 @@ Tiap versi dibagi dua: **Untuk pemain** (yang terasa waktu main) dan **Teknis** 
 
 ## [Belum dirilis]
 
+## [0.10.1] - 2026-11-27
+
+Sprint bisa dilanjut sepanjang minggu. Aturan main tidak berubah.
+
+### Untuk pemain
+
+#### Diubah
+
+- **Sprint** bisa dilanjut: keluar dulu, nanti tinggal **Lanjut sprint**. Putaran dan skornya lanjut, termasuk putaran yang lagi jalan, juga kalau sinyal putus atau aplikasinya ditutup. Mulai dari 0 lagi tiap Senin pukul 00.00 WIB, atau kapan saja lewat **Mulai dari 0** (putaran yang sudah selesai tetap di papan). Sprint dikenali dari HP yang dipakai, bukan dari nama.
+
+### Teknis
+
+- Sprint yang bisa dilanjut (keputusan pemilik #65, 27 Nov 2026): satu sprint = satu permainan sepanjang minggu WIB. Server memberi token rahasia per sprint (pesan baru `sprintSaya`, hanya ke sambungan pemainnya; HP menyimpannya di `remi.sprintSaya`), dan database hanya menyimpan hash SHA-256-nya di tabel baru `sprint_simpanan` (migrasi v9) bersama data mejanya. Keluar, putus lebih dari 5 menit, dan restart hanya menjeda: mejanya disimpan lalu dilepas dari memori, dan dimuat lagi lewat `{t:'sprint', lanjut}` atau sambung ulang biasa (kode + token kursi). Kursi pemain tidak lagi diteruskan warga kedai saat Keluar. `{t:'sprint', ganti}` = Mulai dari 0. `POST /api/sprint/saya` memberi putaran dan skor untuk tombol Lanjut. Sprint minggu lalu dibuang sesudah putarannya tercatat; yang masih dimainkan saat Senin lewat jalan terus sampai pemainnya keluar. Sprint baru dibatasi per jaringan per jam dan jumlah tersimpannya. `GET /api/sprint`, `sprint_putaran`, dan meja sprint 0.10.0 (tanpa token) tidak berubah.
+- State meja sprint tidak lagi tumbuh tiap putaran: `rampingkanGameSprint` hanya menyimpan 10 putaran terakhir di `riwayat`, sisanya dihitung di field baru `GameState.riwayatDibuang` / `ViewPemain.riwayatDibuang` (hanya ditulis kalau > 0, golden tetap). Jumlah putaran selesai lewat `jumlahPutaranSelesai()` (engine), dipakai engine, meja, dan `KontrolMeja`. Tab Peringkat dan Riwayat di meja sprint memberi keterangan bahwa isinya 10 putaran terakhir.
+- `sprint_simpanan` juga tidak memuat token kursi pemain (diganti penanda, hash-nya di kolom `kursi_hash`, dicocokkan sebelum data dibaca) dan mencatat `putaran`. Memuat sprint ikut batas meja server, batas meja per jaringan, dan batas muat per jaringan per menit (gagal sementara tidak membuang token di HP); sprint yang ditinggal sambungannya ke meja lain langsung dilepas; paling banyak 40 sprint tersimpan per jaringan per minggu (yang belum pernah dimainkan dibuang duluan). HP tidak membuang token karena jam HP.
+
 ## [0.10.0] - 2026-11-26
 
 Ledek yang lebih ringkas, Sprint tanpa batas putaran, dan suara teman yang lebih keras. Aturan main biasa tidak berubah.
