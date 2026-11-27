@@ -853,7 +853,7 @@ export const BAB_BANTUAN: BabBantuan[] = [
     id: 'sprint',
     judul: 'Sprint',
     ikon: '⏱️',
-    ringkas: 'Lawan 5 warga kedai level Suhu tanpa batas putaran, dan papan sprint.',
+    ringkas: 'Lawan 5 warga kedai level Suhu tanpa batas putaran, lanjut kapan saja sampai Senin, dan papan sprint.',
     isi: [
       {
         t: 'paragraf',
@@ -865,7 +865,10 @@ export const BAB_BANTUAN: BabBantuan[] = [
           'Aturan mejanya dikunci: 6 pemain, 2 deck, tanpa batas putaran, tanpa batas skor, tanpa batas waktu giliran, tanpa mode kaldu, dan urutan duduk diacak. Yang bisa diganti cuma tempo warga kedai (menu ☰, Pengaturan).',
           'Nggak ada voting akhiri dan nggak ada Main lagi. Permainannya jalan terus sampai kamu Keluar.',
           'Menang putaran: skormu di putaran itu nggak kalah dari kelima warga kedai. Skor sama dihitung menang.',
-          'Keluar kapan saja: putaran yang sudah selesai sudah masuk papan, putaran yang lagi jalan nggak dihitung.',
+          'Keluar kapan saja: sprint-mu disimpan, termasuk putaran yang lagi jalan. Buka menu Sprint, lalu ketuk Lanjut sprint buat meneruskan permainan yang sama (putaran dan skornya lanjut). Putaran yang sudah selesai sudah masuk papan.',
+          'Mulai dari 0 menutup sprint yang sekarang dan memulai yang baru. Putaran yang sudah selesai tetap di papan.',
+          'Tiap Senin pukul 00.00 WIB sprint mulai dari 0 lagi. Sprint yang masih kamu mainkan saat itu boleh diteruskan sampai kamu keluar.',
+          'Sprint dikenali dari HP (browser) yang kamu pakai, bukan dari nama. Ganti HP atau hapus data browser = sprint baru.',
         ],
       },
       {

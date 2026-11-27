@@ -2689,7 +2689,7 @@ describe('meja sprint (25 Nov 2026, tanpa batas putaran sejak 26 Nov 2026)', () 
     expect(TEKS_SPRINT.menuMeja).not.toMatch(/5 putaran/);
   });
 
-  it('Keluar dari menu: konfirmasi sprint (putaran yang selesai sudah masuk papan), lalu ke papan sprint', async () => {
+  it('Keluar dari menu: konfirmasi sprint (disimpan, bisa dilanjut sampai Senin), lalu ke papan sprint', async () => {
     const tinggalkanSprint = vi.fn();
     meja = await mejaSprint({ tinggalkanSprint });
     meja.akar.querySelector<HTMLElement>('[data-a="menu"]')!.click();
@@ -2698,7 +2698,9 @@ describe('meja sprint (25 Nov 2026, tanpa batas putaran sejak 26 Nov 2026)', () 
     const harap = opsiKonfirmasiKeluar({ asal: 'meja', offline: false, sprint: true });
     expect(d.querySelector('h2')!.textContent).toBe(harap.judul);
     expect(d.querySelector('p')!.textContent).toBe(TEKS_SPRINT.keluarMain);
-    expect(d.querySelector('p')!.textContent).toMatch(/udah masuk papan/i);
+    expect(d.querySelector('p')!.textContent).toMatch(/disimpan/i);
+    expect(d.querySelector('p')!.textContent).toMatch(/Lanjut kapan saja/i);
+    expect(d.querySelector('p')!.textContent).not.toMatch(/nggak dihitung/i);
     d.querySelector<HTMLElement>('[data-ya]')!.click();
     await tunggu();
     expect(tinggalkanSprint).toHaveBeenCalledWith(true);

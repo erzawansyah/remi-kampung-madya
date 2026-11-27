@@ -3,11 +3,13 @@
 // Mentung, Kepentung, Skor; judul kolom bisa diketuk untuk mengurutkan (urutannya dari @remi/meja,
 // urutkanSprint, jadi aturan urutan tetap satu sumber). Piala juara mingguan di samping nama.
 // Sprint hanya online: permainannya dijalankan server supaya rekornya tidak bisa diakali dari HP.
+// Sejak 27 Nov 2026 satu sprint bisa dilanjut sepanjang minggu: kalau HP ini punya sprint minggu ini
+// (remi.sprintSaya), tombolnya "Lanjut sprint" (putaran dan skor dari POST /api/sprint/saya) dan "Mulai dari 0".
 
-import { KOLOM_SPRINT, kunciNama, urutkanSprint, type BarisSprint, type KolomSprint } from '@remi/meja';
-import { ariaPiala, TEKS_SPRINT as T, teksPiala } from '../konten/sprint';
-import { simpan } from '../penyimpanan';
-import { esc, toast } from './dom';
+import { awalMingguWib, KOLOM_SPRINT, kunciNama, urutkanSprint, type BarisSprint, type KolomSprint } from '@remi/meja';
+import { ariaPiala, TEKS_SPRINT as T, teksLanjutSprint, teksPiala } from '../konten/sprint';
+import { simpan, type SprintSaya } from '../penyimpanan';
+import { esc, konfirmasi, toast } from './dom';
 import { angkaSkor } from './rincianSkor';
 
 export type PeriodeSprint = 'minggu' | 'semua';
@@ -22,13 +24,20 @@ export interface PapanSprint {
 
 export interface AksiSprint {
   kembali(): void;
-  /** Mulai meja sprint baru (kirim {t:'sprint'} lewat jalur online yang sama dengan Buat meja). */
-  main(): void;
+  /**
+   * Mulai meja sprint baru (kirim {t:'sprint'} lewat jalur online yang sama dengan Buat meja). `ganti` = token
+   * sprint HP ini yang ditutup dulu ("Mulai dari 0").
+   */
+  main(ganti?: string): void;
+  /** Lanjutkan sprint HP ini ({t:'sprint', lanjut}). */
+  lanjut(token: string): void;
 }
 
 export interface SprintTerpasang {
-  /** Tombol Main sprint sedang menunggu jawaban server (atau tidak lagi). */
+  /** Tombol Main/Lanjut sprint sedang menunggu jawaban server (atau tidak lagi). */
   aturSibuk(sibuk: boolean): void;
+  /** Sprint HP ini berubah (misalnya server bilang sudah tidak bisa dilanjut): gambar ulang tombolnya. */
+  segarkanAksi(): void;
 }
 
 const MEDALI = ['🥇', '🥈', '🥉'];
@@ -90,6 +99,36 @@ export function htmlPapanSprint(baris: readonly BarisSprint[], kolom: KolomSprin
     </table></div>`;
 }
 
+/** Sprint HP ini yang masih minggu ini; yang minggunya sudah lewat dilupakan. */
+export function sprintMingguIni(sekarang = Date.now()): SprintSaya | null {
+  const s = simpan.sprintSaya();
+  if (s && s.minggu !== awalMingguWib(sekarang)) {
+    simpan.setSprintSaya(null);
+    return null;
+  }
+  return s;
+}
+
+/** Jawaban POST /api/sprint/saya (data dari jaringan, dirapikan). */
+export function rapikanSprintSaya(x: unknown): { ada: false } | { ada: true; putaran: number; skor: number } | null {
+  if (!x || typeof x !== 'object') return null;
+  const s = x as { ada?: unknown; putaran?: unknown; skor?: unknown };
+  if (s.ada === false) return { ada: false };
+  if (s.ada !== true || typeof s.putaran !== 'number' || !Number.isInteger(s.putaran) || s.putaran < 1) return null;
+  return { ada: true, putaran: s.putaran, skor: angka(s.skor) };
+}
+
+async function tanyaSprintSaya(token: string) {
+  const r = await fetch('/api/sprint/saya', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token }),
+    cache: 'no-store',
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return rapikanSprintSaya(await r.json());
+}
+
 async function ambilPapan(periode: PeriodeSprint): Promise<PapanSprint> {
   const r = await fetch(`/api/sprint?periode=${periode}`, { cache: 'no-store' });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -106,7 +145,7 @@ export function renderSprint(akar: HTMLElement, aksi: AksiSprint): SprintTerpasa
   akar.innerHTML = `
   <div class="layar layar-sprint"><div class="kolom">
     <div class="judul"><h1><span aria-hidden="true">⏱️</span> ${esc(T.judul)}</h1><p>${esc(T.intro)}</p></div>
-    <button type="button" class="utama besar penuh" id="main-sprint">${esc(T.tombolMain)}</button>
+    <div class="aksi-sprint"></div>
     <div class="tab" role="tablist" aria-label="Periode papan sprint">
       ${TAB.map(
         ([id, label]) =>
@@ -118,7 +157,7 @@ export function renderSprint(akar: HTMLElement, aksi: AksiSprint): SprintTerpasa
     <button type="button" id="kembali">${esc(T.kembali)}</button>
   </div></div>`;
   const q = <E extends HTMLElement>(s: string) => akar.querySelector<E>(s)!;
-  const tombolMain = q<HTMLButtonElement>('#main-sprint');
+  const aksiEl = q<HTMLElement>('.aksi-sprint');
   const papanEl = q<HTMLElement>('#papan-sprint');
   const tab = [...akar.querySelectorAll<HTMLButtonElement>('[role=tab]')];
   const namaSaya = simpan.nama().trim() || 'Pemain';
@@ -187,19 +226,70 @@ export function renderSprint(akar: HTMLElement, aksi: AksiSprint): SprintTerpasa
     b.focus();
   });
 
-  tombolMain.addEventListener('click', () => {
-    if (tombolMain.getAttribute('aria-busy') === 'true') return;
-    if (offline()) return toast(T.butuhInternet, true);
-    tombolMain.setAttribute('aria-busy', 'true');
-    aksi.main();
+  let sibuk = false;
+  /** Tombol aksi (Main sprint, atau Lanjut sprint + Mulai dari 0) sesuai sprint HP ini. */
+  const gambarAksi = () => {
+    const saya = sprintMingguIni();
+    aksiEl.innerHTML = saya
+      ? `<button type="button" class="utama besar penuh" id="lanjut-sprint"><span>${esc(T.tombolLanjut)}</span><span class="ket-lanjut" data-ket-lanjut></span></button>
+         <button type="button" class="penuh" id="nol-sprint">${esc(T.tombolMulaiNol)}</button>
+         <p class="redup rapat ket-sprint">${esc(T.ketMulaiNol)}</p>`
+      : `<button type="button" class="utama besar penuh" id="main-sprint">${esc(T.tombolMain)}</button>`;
+    aturSibuk(sibuk);
+    if (!saya || offline()) return;
+    // Putaran dan skor sprint yang dijeda; yang sudah tidak bisa dilanjut dilupakan (tombolnya jadi Main sprint).
+    tanyaSprintSaya(saya.token)
+      .then((r) => {
+        if (!r || !akar.contains(aksiEl) || simpan.sprintSaya()?.token !== saya.token) return;
+        if (!r.ada) {
+          simpan.setSprintSaya(null);
+          gambarAksi();
+          return;
+        }
+        const ket = aksiEl.querySelector<HTMLElement>('[data-ket-lanjut]');
+        if (ket) ket.textContent = teksLanjutSprint(r.putaran, angkaSkor(r.skor));
+      })
+      .catch(() => undefined);
+  };
+  const aturSibuk = (x: boolean) => {
+    sibuk = x;
+    for (const b of aksiEl.querySelectorAll<HTMLButtonElement>('button')) {
+      if (x) b.setAttribute('aria-busy', 'true');
+      else b.removeAttribute('aria-busy');
+    }
+  };
+  const bisaDitekan = (): boolean => {
+    if (sibuk) return false;
+    if (offline()) {
+      toast(T.butuhInternet, true);
+      return false;
+    }
+    return true;
+  };
+  aksiEl.addEventListener('click', (e) => {
+    const b = (e.target as Element | null)?.closest<HTMLButtonElement>('button');
+    if (!b || !bisaDitekan()) return;
+    const saya = simpan.sprintSaya();
+    if (b.id === 'main-sprint') {
+      aturSibuk(true);
+      aksi.main();
+    } else if (b.id === 'lanjut-sprint' && saya) {
+      aturSibuk(true);
+      aksi.lanjut(saya.token);
+    } else if (b.id === 'nol-sprint' && saya) {
+      void konfirmasi({ ...T.konfirmasiMulaiNol, bahaya: true }).then((ya) => {
+        if (!ya || !akar.contains(aksiEl) || !bisaDitekan()) return;
+        aturSibuk(true);
+        aksi.main(saya.token);
+      });
+    }
   });
   q('#kembali').addEventListener('click', aksi.kembali);
 
+  gambarAksi();
   pilih('minggu');
   return {
-    aturSibuk: (sibuk) => {
-      if (sibuk) tombolMain.setAttribute('aria-busy', 'true');
-      else tombolMain.removeAttribute('aria-busy');
-    },
+    aturSibuk,
+    segarkanAksi: gambarAksi,
   };
 }

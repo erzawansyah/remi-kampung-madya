@@ -36,7 +36,28 @@ const KUNCI = {
   tanpaPengingatSusun: 'remi.tanpaPengingatSusun',
   /** Versi aplikasi terakhir yang "Yang baru"-nya sudah dilihat (atau disimpan diam-diam untuk pemain baru). */
   versiDilihat: 'remi.versiDilihat',
+  /**
+   * Sprint HP ini yang bisa dilanjut (27 Nov 2026): token rahasia dari server (pesan `sprintSaya`) dan awal
+   * minggu WIB-nya. Hilang = sprint baru (server tidak mengenali pemain dari nama).
+   */
+  sprintSaya: 'remi.sprintSaya',
 } as const;
+
+/** Sprint HP ini (pesan sprintSaya dari server). */
+export interface SprintSaya {
+  token: string;
+  /** Awal minggu WIB sprint itu (ms epoch). */
+  minggu: number;
+}
+
+const rapikanSprintSaya = (x: unknown): SprintSaya | null | undefined => {
+  if (x === null) return null;
+  if (!x || typeof x !== 'object') return undefined;
+  const s = x as Partial<SprintSaya>;
+  return typeof s.token === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(s.token) && typeof s.minggu === 'number' && Number.isFinite(s.minggu)
+    ? { token: s.token, minggu: s.minggu }
+    : undefined;
+};
 
 /** Riwayat lokal yang disimpan (permainan terbaru di depan). */
 const BATAS_RIWAYAT = 30;
@@ -285,6 +306,9 @@ export const simpan = {
     tulis(KUNCI.tokenPenonton, baru);
     return baru;
   },
+  sprintSaya: () => baca<SprintSaya | null>(KUNCI.sprintSaya, null, rapikanSprintSaya),
+  /** null menghapus kuncinya (sprint-nya sudah tidak bisa dilanjut). */
+  setSprintSaya: (s: SprintSaya | null) => tulis(KUNCI.sprintSaya, s),
   sesi: () => baca<SesiOnline | null>(KUNCI.sesi, null, rapikanSesi),
   setSesi: (s: SesiOnline | null) => tulis(KUNCI.sesi, s),
 

@@ -27,6 +27,12 @@ const isObj = (x: unknown): x is Obj => typeof x === 'object' && x !== null && !
 const isInt = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x);
 const isStr = (x: unknown, maks = 200): x is string => typeof x === 'string' && x.length <= maks;
 
+/**
+ * Bentuk token sprint (27 Nov 2026): base64url, 16–64 huruf. Server membuatnya 32 huruf (24 byte acak,
+ * 192 bit); di database hanya hash SHA-256-nya.
+ */
+export const tokenSprintSah = (x: unknown): x is string => typeof x === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(x);
+
 /** Level warga kedai yang dikenal versi ini (DAFTAR_LEVEL_BOT di engine). */
 export const isLevel = (x: unknown): x is LevelBot => (DAFTAR_LEVEL_BOT as readonly unknown[]).includes(x);
 
@@ -261,9 +267,19 @@ export function validasiPesan(x: unknown): PesanKlien | null {
       const kompetisi = validasiTiket(x.kompetisi);
       return kompetisi ? { t: 'buat', nama: x.nama, pengaturan, kompetisi } : null;
     }
-    case 'sprint':
+    case 'sprint': {
       // Nama dicek sama seperti `buat`; dirapikan (rapikanNama) saat meja dibuat.
-      return isStr(x.nama, 100) ? { t: 'sprint', nama: x.nama } : null;
+      if (!isStr(x.nama, 100)) return null;
+      // Token sprint (27 Nov 2026): hanya bentuknya yang dicek di sini; isinya dicek server (hash).
+      if (x.lanjut !== undefined && !tokenSprintSah(x.lanjut)) return null;
+      if (x.ganti !== undefined && !tokenSprintSah(x.ganti)) return null;
+      return {
+        t: 'sprint',
+        nama: x.nama,
+        ...(x.lanjut !== undefined ? { lanjut: x.lanjut as string } : {}),
+        ...(x.ganti !== undefined ? { ganti: x.ganti as string } : {}),
+      };
+    }
     case 'gabung': {
       if (!isStr(x.kode, 20) || !isStr(x.nama, 100)) return null;
       if (x.token !== undefined && !isStr(x.token, 100)) return null;

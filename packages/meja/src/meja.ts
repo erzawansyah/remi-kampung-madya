@@ -60,7 +60,15 @@ import {
   type PengaturanKompetisi,
 } from './kompetisi.js';
 import { isiLedek, kunciNama, rapikanLevel, rapikanNama, validasiSinyalSuara } from './validasi.js';
-import { hasilPutaranSprint, LEVEL_SPRINT, NAMA_LAWAN_SPRINT, PENGATURAN_SPRINT, rampingkanGameSprint, type HasilPutaranSprint } from './sprint.js';
+import {
+  awalMingguWib,
+  hasilPutaranSprint,
+  LEVEL_SPRINT,
+  NAMA_LAWAN_SPRINT,
+  PENGATURAN_SPRINT,
+  rampingkanGameSprint,
+  type HasilPutaranSprint,
+} from './sprint.js';
 
 export interface Penjadwal {
   setel(ms: number, fn: () => void): unknown;
@@ -560,6 +568,31 @@ export class Meja {
   /** Meja sprint? */
   get sprint(): boolean {
     return !!this.d.sprint;
+  }
+
+  /**
+   * Sprint: token (pemainId) kursi pemainnya, kalau kursinya masih kursi manusia. Null = bukan meja sprint,
+   * atau pemainnya sudah Keluar (meja sprint 0.10.0, kursinya diteruskan warga kedai).
+   */
+  get pemainSprint(): string | null {
+    const s = this.d.sprint;
+    const k = s ? this.d.kursi[s.kursi] : undefined;
+    return k?.jenis === 'manusia' && k.pemainId ? k.pemainId : null;
+  }
+
+  /**
+   * Sprint dilanjut (27 Nov 2026): nama kursi pemain ikut nama yang dipakainya sekarang (nama dikunci
+   * seminggu di HP, #49). Kalau nama barunya sama dengan nama salah satu warga kedai di meja ini, nama
+   * lama dipertahankan (nama warga kedai menentukan gayanya, #47, jadi tidak diganti di tengah permainan).
+   * Tidak menyiarkan apa pun; pemanggil memanggil `masuk` sesudahnya.
+   */
+  gantiNamaSprint(pemainId: string, nama: string): void {
+    const i = this.kursiDari(pemainId);
+    if (i === null || !this.d.sprint || i !== this.d.sprint.kursi) return;
+    const baru = rapikanNama(nama);
+    const kunci = kunciNama(baru);
+    if (this.d.kursi.some((k, j) => j !== i && kunciNama(k.nama) === kunci)) return;
+    this.d.kursi[i].nama = baru;
   }
 
   /**
@@ -2415,6 +2448,34 @@ export function catatanSprintTerakhir(data: DataMeja): CatatanSprint | null {
   if (n < 1 || !k) return null;
   return { ...hasilPutaranSprint(riwayat, n - 1, s.kursi), kode: data.kode, mulaiPada: s.mulaiPada, nama: k.nama, waktu: s.waktuPutaran?.[n - 1] ?? 0 };
 }
+
+/** Minggu WIB sprint ini (awalMingguWib saat mejanya dibuat); null = bukan meja sprint. */
+export function mingguSprint(data: Pick<DataMeja, 'sprint'>): number | null {
+  return data.sprint ? awalMingguWib(data.sprint.mulaiPada) : null;
+}
+
+/** Ringkasan sprint yang dijeda untuk tombol "Lanjut sprint" (27 Nov 2026). */
+export interface RingkasanLanjutSprint {
+  /** Nomor putaran yang sedang (atau akan) dimainkan, sama dengan bar atas meja ("Putaran N"). */
+  putaran: number;
+  /** Skor total pemain sejauh ini. */
+  skor: number;
+}
+
+/** Null = bukan meja sprint, belum mulai, atau kursi pemainnya bukan kursi manusia lagi. `data` tidak diubah. */
+export function ringkasanLanjutSprint(data: DataMeja): RingkasanLanjutSprint | null {
+  const s = data.sprint;
+  const g = data.game;
+  if (!s || !g || data.kursi[s.kursi]?.jenis !== 'manusia') return null;
+  return { putaran: g.putaran?.nomor ?? g.riwayat.length + 1, skor: g.skor[s.kursi] ?? 0 };
+}
+
+/** Keluar dari meja sprint yang bisa dilanjut (27 Nov 2026): permainannya disimpan, bukan diteruskan warga kedai. */
+export const TEKS_SPRINT_DIJEDA = 'Sprint-mu disimpan. Lanjut kapan saja minggu ini dari menu Sprint, Bos.';
+/** Token sprint yang diminta dilanjut sudah tidak bisa dipakai (minggunya lewat, ditutup, atau tidak ada). */
+export const TEKS_SPRINT_TAK_BISA_LANJUT = 'Sprint yang kemarin udah nggak bisa dilanjut. Mulai baru dari 0, ya.';
+/** Sprint ini ditutup dari HP yang sama lewat "Mulai dari 0" (dikirim ke sambungan yang masih memegangnya). */
+export const TEKS_SPRINT_DITUTUP = 'Sprint ini udah ditutup karena kamu mulai dari 0.';
 
 /** Penolakan di meja sprint (aturannya dikunci). */
 export const TEKS_SPRINT_TERKUNCI = 'Aturan sprint udah dikunci, Bos. Yang bisa diganti cuma tempo warga kedai.';

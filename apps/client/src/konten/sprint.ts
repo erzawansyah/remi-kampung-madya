@@ -1,6 +1,7 @@
 // Teks layar Sprint dan meja sprint (keputusan pemilik 25 Nov 2026, diubah 26 Nov 2026: tanpa batas
-// putaran, lima lawan, 2 deck). Data saja; aturan sprint (pengaturan, hasil per putaran, urutan papan,
-// juara mingguan) hanya di @remi/meja (sprint.ts). Dijaga apps/client/test/antislop.test.ts.
+// putaran, lima lawan, 2 deck; diubah 27 Nov 2026: satu sprint bisa dilanjut sepanjang minggu). Data saja;
+// aturan sprint (pengaturan, hasil per putaran, urutan papan, juara mingguan) hanya di @remi/meja
+// (sprint.ts). Dijaga apps/client/test/antislop.test.ts.
 
 import type { KolomSprint } from '@remi/meja';
 
@@ -9,8 +10,20 @@ export const TEKS_SPRINT = {
   /** Tombol di panel Main online beranda. */
   tombolBeranda: 'Sprint',
   /** Satu kalimat pembuka di layar Sprint. */
-  intro: 'Lawan 5 warga kedai level Suhu pakai 2 deck. Main sepuasnya, tiap putaran langsung masuk papan.',
+  intro: 'Lawan 5 warga kedai level Suhu pakai 2 deck. Main sepuasnya, tiap putaran langsung masuk papan. Keluar dulu juga boleh, nanti tinggal lanjut.',
   tombolMain: 'Main sprint',
+  /** Ada sprint minggu ini di HP ini (27 Nov 2026): lanjutkan permainan yang sama. */
+  tombolLanjut: 'Lanjut sprint',
+  /** Tutup sprint yang sekarang lalu mulai baru (pakai konfirmasi). */
+  tombolMulaiNol: 'Mulai dari 0',
+  /** Keterangan kecil di bawah Lanjut sprint. */
+  ketMulaiNol: 'Sprint mulai dari 0 lagi tiap Senin pukul 00.00 WIB.',
+  konfirmasiMulaiNol: {
+    judul: 'Mulai dari 0?',
+    pesan: 'Sprint yang sekarang ditutup dan nggak bisa dilanjut lagi. Putaran yang sudah selesai tetap di papan.',
+    ya: 'Mulai dari 0',
+    tidak: 'Batal',
+  },
   /** Toast kalau tombol Sprint atau Main sprint diketuk tanpa internet. */
   butuhInternet: 'Sprint cuma bisa dimainkan online, Bos. Sambungkan internet dulu.',
   tabMinggu: 'Minggu ini',
@@ -31,7 +44,7 @@ export const TEKS_SPRINT = {
   labelAtas: 'Sprint',
   /** Menu ☰ di meja sprint. */
   menuMeja:
-    'Sprint: lawan 5 warga kedai level Suhu, 2 deck, tanpa batas putaran. Tiap putaran yang selesai langsung masuk papan. Aturannya dikunci, yang bisa diganti cuma tempo warga kedai (Pengaturan).',
+    'Sprint: lawan 5 warga kedai level Suhu, 2 deck, tanpa batas putaran. Tiap putaran yang selesai langsung masuk papan. Keluar kapan saja, sprint-nya disimpan dan bisa dilanjut sampai Senin. Aturannya dikunci, yang bisa diganti cuma tempo warga kedai (Pengaturan).',
   /** Satu baris di hasil putaran meja sprint, sebelum pesan sprintHasil putaran itu datang dari server. */
   mencatat: 'Lagi dicatat di papan…',
   /** Hasil putaran meja sprint sesudah tercatat. */
@@ -39,10 +52,14 @@ export const TEKS_SPRINT = {
   kalahPutaran: 'Putaran ini udah masuk papan.',
   /** Klasemen akhir meja sprint (hanya meja sprint lama yang masih punya batas putaran). */
   papanSprint: 'Papan sprint',
-  /** Konfirmasi keluar meja sprint (lewat opsiKonfirmasiKeluar). */
-  keluarMain: 'Putaran yang sudah selesai udah masuk papan. Putaran yang lagi jalan nggak dihitung.',
+  /** Konfirmasi keluar meja sprint (lewat opsiKonfirmasiKeluar). Sejak 27 Nov 2026 keluar hanya menjeda. */
+  keluarJudul: 'Udahan dulu?',
+  keluarMain: 'Sprint-mu disimpan, termasuk putaran yang lagi jalan. Lanjut kapan saja dari menu Sprint sampai Senin pukul 00.00 WIB.',
   keluarSelesai: 'Hasil sprint ini sudah dicatat di papan.',
 } as const;
+
+/** Keterangan tombol Lanjut sprint: putaran yang sedang jalan dan skor sejauh ini. */
+export const teksLanjutSprint = (putaran: number, skor: string): string => `Putaran ${putaran} · skor ${skor}`;
 
 /** Posisi di papan minggu ini, dari pesan sprintHasil. */
 export const teksPeringkatMinggu = (n: number): string => `Peringkat ${n} minggu ini`;
